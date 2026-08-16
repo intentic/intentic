@@ -89,6 +89,8 @@ test("an unpinned wake keeps the full toolbox even though it has lost every acco
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
     expect(persona.powers.files).toBe("write");
     expect(persona.powers.shell).toBe(true);
+    // Both execution backends — the JS backend defaults open like every other shelf.
+    expect(persona.powers.code).toBe(true);
     expect(personaDisallowedTools(persona)).toEqual([]);
     // Connectors, computers and MCP connections all pass, because "absent" means "every one of them".
     expect(persona.allows(connector("github"))).toBe(true);
@@ -107,6 +109,8 @@ test("naming a persona no card carries denies everything — accounts and tools 
     expect(persona.allows(browser("reddit-work"))).toBe(false);
     expect(persona.allows(connector("github"))).toBe(false);
     expect(persona.powers.shell).toBe(false);
+    // Both execution backends fail closed — the JS backend is then never mounted (turn-plan reads this field).
+    expect(persona.powers.code).toBe(false);
     expect(personaDisallowedTools(persona)).toContain("Bash");
     expect(personaDisallowedTools(persona)).toContain("Read");
 });

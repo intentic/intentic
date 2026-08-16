@@ -56,7 +56,7 @@ describe(`powersDraftOf`, () => {
         const card: Persona = {
             id: `visitor`,
             capabilities: [],
-            powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: false, computers: [] },
+            powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: false, computers: [] },
         };
         expect(storedPowers(powersDraftOf(card))).toEqual(card.powers);
     });

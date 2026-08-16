@@ -183,7 +183,7 @@ it(`keeps the powers of a bounded card`, async () => {
         {
             id: `visitor`,
             capabilities: [],
-            powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: false },
+            powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: false },
             workspace: { startIn: `docs` },
         },
     ];
@@ -197,6 +197,7 @@ it(`keeps the powers of a bounded card`, async () => {
     expect(save.mock.calls[0]![0].powers).toEqual({
         files: `read`,
         shell: false,
+        code: false,
         web: true,
         browser: true,
         delegate: false,
@@ -224,7 +225,7 @@ it(`points an existing persona at this folder, keeping everything else about it`
             label: `Docs bot`,
             capabilities: [`reddit-work`],
             repos: [`intentic`],
-            powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: true },
+            powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: true },
             workspace: { startIn: `docs`, folders: [`docs`] },
         },
     ];
@@ -241,7 +242,7 @@ it(`points an existing persona at this folder, keeping everything else about it`
         label: `Docs bot`,
         capabilities: [`reddit-work`],
         repos: [`intentic`],
-        powers: { files: `read`, shell: false, web: true, browser: true, delegate: false, sandbox: true },
+        powers: { files: `read`, shell: false, code: false, web: true, browser: true, delegate: false, sandbox: true },
         // The one field the mode is about. The fence it was given stays the fence it was given.
         workspace: { startIn: `knowledge`, folders: [`docs`] },
     });

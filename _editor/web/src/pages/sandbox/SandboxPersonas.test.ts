@@ -349,8 +349,8 @@ it(`gives every permission row an icon`, async () => {
 
     // A switch row is a <label> with a checkbox in it — ToggleSwitch under its skin.
     const rows = [...el.querySelectorAll(`label`)].filter((row) => row.querySelector(`input[type="checkbox"]`) !== null);
-    // One workspace shelf, four outward ones, three grant groups.
-    expect(rows).toHaveLength(8);
+    // One workspace shelf, five outward ones (the two execution backends among them), three grant groups.
+    expect(rows).toHaveLength(9);
     for (const row of rows) {
         expect(row.querySelector(`i[data-icon]`)).not.toBeNull();
     }
@@ -551,7 +551,11 @@ it(`saves no powers block for a card nobody has bounded`, async () => {
  * reader scanning six cards is which of them are limited at all. */
 it(`shows how bounded a card is on its row`, () => {
     personas.value = [
-        { id: `visitor`, capabilities: [], powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false } },
+        {
+            id: `visitor`,
+            capabilities: [],
+            powers: { files: `read`, shell: false, code: false, web: false, browser: false, delegate: false, sandbox: false },
+        },
     ];
     expect(text(mount())).toContain(`Read-only`);
 });

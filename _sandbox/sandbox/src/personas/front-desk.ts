@@ -38,10 +38,12 @@ const FRONT_DESK_CARD: Persona = {
     // here — which is also the safe direction: it arrives able to answer questions and unable to post as anyone.
     capabilities: [],
     // The smallest toolbox in the product, because a stranger on a website is driving the prompt. Read and
-    // search, nothing else — no shell, no web fetches, no sub-agents, no edits, no accounts to speak through.
+    // search, nothing else — no shell, no code runs, no web fetches, no sub-agents, no edits, no accounts to
+    // speak through.
     powers: {
         files: "read",
         shell: false,
+        code: false,
         web: false,
         browser: false,
         delegate: false,

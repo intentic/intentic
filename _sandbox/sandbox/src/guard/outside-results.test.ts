@@ -59,6 +59,28 @@ describe("outsideSourceOf — what counts as outside", () => {
             expect(outsideSourceOf("Bash", null)).toBeUndefined();
         });
     });
+
+    /* The JS execution backend, under Bash's rule word for word: the script is the agent's own program, the
+     * page a fetching one brings back is the internet. The `code` server being INTERNAL is what makes the
+     * explicit branch the only wrapper — without it every `console.log(2+2)` result would arrive wrapped,
+     * telling the model its own platform is a stranger and tainting the turn on its own arithmetic. */
+    describe("JS runs — only when the script actually reached out", () => {
+        test("a script fetching the open internet is outside", () => {
+            expect(outsideSourceOf("mcp__code__run", { code: 'const r = await fetch("https://example.com/api");' })).toBe("code-fetch");
+            expect(outsideSourceOf("mcp__code__run", { code: 'child_process.execSync("curl https://example.com")' })).toBe("code-fetch");
+        });
+
+        test("a script working locally is the agent's own output", () => {
+            for (const code of ["console.log(2 + 2)", 'await fs.readFile("package.json")', 'await fetch("http://localhost:3000/x")']) {
+                expect(outsideSourceOf("mcp__code__run", { code }), code).toBeUndefined();
+            }
+        });
+
+        test("a malformed tool input is left alone rather than guessed at", () => {
+            expect(outsideSourceOf("mcp__code__run", {})).toBeUndefined();
+            expect(outsideSourceOf("mcp__code__run", null)).toBeUndefined();
+        });
+    });
 });
 
 describe("mcpServerOf", () => {

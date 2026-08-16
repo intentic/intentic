@@ -317,10 +317,29 @@ test("every turn wires the ui ask server, the AskUserQuestion alias, and the per
     // question tool at all, which is why the model fell back to prose options.
     await collect(request, capture);
     expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
-    expect(captured.at(-1)?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask" });
+    // Two aliases now: the ask card's, and the JS execution backend's plain name (execution/js-tool.ts).
+    expect(captured.at(-1)?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask", Code: "mcp__code__run" });
     expect(captured.at(-1)?.canUseTool).toBeTypeOf("function");
     expect(captured.at(-1)?.permissionMode).toBe("bypassPermissions");
     expect(captured.at(-1)?.allowDangerouslySkipPermissions).toBe(true);
+});
+
+/* The JS execution backend mounts from its own request field, and ONLY from it: no plan (a card that switched
+ * it off, a runtime that doesn't host it — turn-plan decides both) means no server, which is the absence the
+ * persona layer promises. */
+test("the code server rides the jsExecution field: present with a plan, absent without one", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect(request, capture);
+    expect(captured.at(-1)?.mcpServers?.["code"]).toBeUndefined();
+
+    const jsExecution = { cwd: WORKSPACE_ROOT, env: {}, readRoots: [WORKSPACE_ROOT], writeRoots: [WORKSPACE_ROOT], allowSpawn: true };
+    await collect({ ...request, jsExecution }, capture);
+    expect(captured.at(-1)?.mcpServers?.["code"]).toBeDefined();
 });
 
 test("the request's tools become remote http MCP servers alongside the ui server, in every mode", async () => {

@@ -29,7 +29,7 @@ import { DETAIL_MAX } from "../secrets/secret-uses.js";
 
 export interface SecretUseReport {
     readonly name: string;
-    readonly lane: "shell" | "browser";
+    readonly lane: "shell" | "code" | "browser";
     readonly detail?: string;
 }
 
@@ -52,8 +52,12 @@ export type ResolvedCommand = { readonly command: string } | { readonly refusal:
 /* Resolve a command's references against the registry, reporting each name used. Reads the registry only when
  * a token is present at all — the overwhelmingly common command names no secret and must not pay a vault read.
  * A registry that cannot be read refuses rather than passing the token through: both roads lose the command,
- * and this one says why. */
-export const resolveCommandSecrets = async (command: string, secrets: SecretAccess): Promise<ResolvedCommand> => {
+ * and this one says why.
+ *
+ * The JS execution backend is the second caller and the reason `lane` is a parameter: a script is the same
+ * kind of transit a command line is — the reference resolves on the way into the subprocess, the audit row
+ * says which exit spent it. */
+export const resolveCommandSecrets = async (command: string, secrets: SecretAccess, lane: "shell" | "code" = "shell"): Promise<ResolvedCommand> => {
     if (!hasSecretReferences(command)) {
         return { command };
     }
@@ -73,7 +77,7 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
         };
     }
     for (const name of used) {
-        secrets.used({ name, lane: "shell", detail: commandDetail(command) });
+        secrets.used({ name, lane, detail: commandDetail(command) });
     }
     return { command: text };
 };

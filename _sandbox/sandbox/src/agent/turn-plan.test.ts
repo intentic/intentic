@@ -1,5 +1,14 @@
+import { tmpdir } from "node:os";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { type AgentTurn, type SandboxSettings, RESUME_NOTES, SandboxSettingsSchema, withResumeNote } from "@intentic/sandbox-contract";
+import {
+    type AgentTurn,
+    type Persona,
+    type SandboxSettings,
+    PersonaPowersSchema,
+    RESUME_NOTES,
+    SandboxSettingsSchema,
+    withResumeNote,
+} from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -296,6 +305,43 @@ test("the Claude Code loop keeps every mode — it is the runtime that honours t
     const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "acceptEdits" }));
 
     expect((plan as { request: AgentRequest }).request.permissionMode).toBe("acceptEdits");
+});
+
+// --- the JS execution backend: planned with the request, only where the runtime hosts it ------------------
+
+test("a Claude turn carries the JS backend's plan — the turn tree, spawn beside its shell", async () => {
+    const plan = await planTurn(harnessServices(), turn(), context);
+
+    expect((plan as { request: AgentRequest }).request.jsExecution).toMatchObject({
+        cwd: ROOT,
+        readRoots: [ROOT, tmpdir()],
+        writeRoots: [ROOT],
+        allowSpawn: true,
+    });
+});
+
+/* The user's own three-card sketch, as a test: code without bash is a real posture (the backend mounts, Bash
+ * goes), and a card that switches code off keeps its shell — two switches, not one under two names. */
+test("a card decides each backend on its own: code-only, and shell-only, both plan exactly what they say", async () => {
+    const cards: Persona[] = [
+        { id: "code-only", capabilities: [], powers: PersonaPowersSchema.parse({ shell: false }) },
+        { id: "shell-only", capabilities: [], powers: PersonaPowersSchema.parse({ code: false }) },
+    ];
+    const services = harnessServices({ personas: unstubbed<Services["personas"]>("personas", { list: async () => cards }) });
+
+    const codeOnly = (await planTurn(services, turn({ actsAs: "code-only" }), context)) as { request: AgentRequest };
+    expect(codeOnly.request.jsExecution).toMatchObject({ allowSpawn: false });
+    expect(codeOnly.request.disallowedTools).toContain("Bash");
+
+    const shellOnly = (await planTurn(services, turn({ actsAs: "shell-only" }), context)) as { request: AgentRequest };
+    expect(shellOnly.request.jsExecution).toBeUndefined();
+    expect(shellOnly.request.disallowedTools ?? []).not.toContain("Bash");
+});
+
+test("a runtime that hosts no js backend is handed no plan for it, whatever the card says", async () => {
+    const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
+
+    expect((plan as { request: AgentRequest }).request.jsExecution).toBeUndefined();
 });
 
 // Codex forwards reasoning effort (modelReasoningEffort); OpenCode takes a model id and a prompt and nothing

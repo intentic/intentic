@@ -88,6 +88,17 @@ const WORKSPACE_SHELVES = [
 // below is the only sentence on this card printed in a warning tone.
 const OUTWARD_SHELVES = [
     { key: `shell` as const, icon: `terminal` as const, label: `Run commands`, hint: `Shell, tests, builds, and every CLI on the image.` },
+    /* The second execution backend, directly under the first: the two are one question asked twice ("what may
+     * a session RUN"), and a reader deciding one wants the other in view. Its hint says what makes it the
+     * smaller grant — the runtime itself fences its reads and writes to the Files answer above, and it cannot
+     * start programs unless Run commands is also on — because that difference is the whole reason a card
+     * would keep this on while switching the shell off. */
+    {
+        key: `code` as const,
+        icon: `code` as const,
+        label: `Run code`,
+        hint: `JavaScript runs fenced by the runtime: files follow the Files answer, no programs without Run commands.`,
+    },
     /* A globe ALSO stands for a browser account whose site has no logo of its own, a section up in the editor.
      * The collision is real and the globe stays here anyway, because the alternative is worse: that mark comes
      * from useBrowserAccounts, which exists precisely so one account wears one mark everywhere, and moving it

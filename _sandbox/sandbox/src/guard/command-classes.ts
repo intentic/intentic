@@ -53,7 +53,15 @@ const PACKAGE_PUBLISH = [
 
 // The sandbox talks to itself over loopback constantly — the host bridge, a dev server the agent just started —
 // and none of that leaves the container, so the class is about reaching OUT rather than about curl.
-const NETWORK_OUTBOUND = [/\b(?:curl|wget)\b[^|;&]*\bhttps?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/];
+const NETWORK_OUTBOUND = [
+    /\b(?:curl|wget)\b[^|;&]*\bhttps?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/,
+    /* The JS execution backend's curl: a literal non-loopback URL handed to `fetch(`. The classifier reads
+     * scripts with the same substring honesty it reads shell (the gate feeds it both — see command-gate's
+     * EXECUTION_SOURCES), so an owner's rule about reaching out covers both ways of doing it, and the
+     * outside-content seam wraps what a fetching script brings back exactly as it wraps a fetching curl's. A
+     * URL assembled at runtime walks past this, as the header already admits for shell variables. */
+    /\bfetch\(\s*[`"']https?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/,
+];
 
 // The verb of an `rm` invocation and the flag words that follow it. Read as FLAGS rather than matched as text,
 // so every spelling of a recursive-force delete lands the same: `-rf`, `-fr`, `-r -f`, `--recursive --force`.

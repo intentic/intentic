@@ -54,6 +54,9 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
      * that produced it: before the field existed, every runtime was composed for as though it were the Claude
      * Code loop, and five of the six silently dropped the owner's prompt. */
     instructions: "enforced",
+    // turn-plan.ts (honoured) plans the JS backend only where "js" is declared, so a runtime without it is
+    // handed no `jsExecution` and mounts no Code tool — the same drop-what-you-can't-honour rule as `effort`.
+    execution: "enforced",
 
     /* DESCRIPTIVE — true of the runtime, and nothing consults them. Each describes behaviour that is emergent
      * rather than gated: an agent that never emits `question` frames simply never asks, one that publishes no

@@ -43,6 +43,8 @@ import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { outsideResultHooks } from "../guard/outside-results.js";
 import { createTurnTaint } from "../guard/turn-taint.js";
 import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
+import type { JsExecutionPlan } from "../execution/js-runtime.js";
+import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../execution/js-tool.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -146,6 +148,13 @@ export interface AgentRequest {
     // Env vars for the agent's shell from cli-kind capabilities (e.g. DISCORD_BOT_TOKEN) — the stored
     // credentials their CLI tools read. Merged into the SDK `env` each turn; absent ⇒ no extra env.
     readonly cliEnv?: Record<string, string>;
+    /* The JS execution backend's plan for this turn (execution/js-runtime.ts) — what a script may read, write
+     * and start, resolved from the persona's card where every runtime's request is assembled (turn-plan's
+     * honoured) and carried as a first-class peer of `cliEnv` and `isolation`. Absent ⇒ the backend is not
+     * mounted at all: the card switched it off, or the serving runtime doesn't host it
+     * (AgentCapabilities.execution). This loop projects it as the `Code` tool below, under the same command
+     * gate and secret exit its Bash runs through. */
+    readonly jsExecution?: JsExecutionPlan;
     /* The owner's rules standing at `turn.ending` (rules/rules.ts), plus the way to run one's command. Their
      * conditions are read at the Stop rather than here — a turn is planned before it runs, so nothing yet knows
      * which files it will touch (rules/turn-ending.ts).
@@ -926,10 +935,29 @@ export async function* runAgent(
                           push,
                       }),
                   }),
+            /* The JS execution backend, mounted from its own request field the way `ui` and `terminal` are
+             * from theirs — never through the generic server bags below, whose entries the backend is not one
+             * of. Its PreToolUse gate is already wired (commandGateHooks reads the script), its results ride
+             * the matcher-less redaction, and its `{{secret:name}}` exit runs in the handler. */
+            // `code` is the literal JS_SERVER_NAME, spelled out (and first inside its brace) because the
+            // outside-results conformance scan reads this block textually — a computed key, or a comment
+            // between the brace and the key, hides the mount from it.
+            ...(request.jsExecution === undefined
+                ? {}
+                : {
+                      code: jsExecutionServer({
+                          plan: request.jsExecution,
+                          placement: request.isolation,
+                          signal: request.signal,
+                          ...(request.secrets === undefined ? {} : { secrets: request.secrets }),
+                      }),
+                  }),
             ...request.sdkServers,
             ...mcpServersOf(request.tools ?? []),
         },
-        toolAliases: { AskUserQuestion: "mcp__ui__ask" },
+        // `Code` beside the built-in alias: skills and prompts can address the execution backend the way they
+        // address Bash, whichever name the model emits.
+        toolAliases: { AskUserQuestion: "mcp__ui__ask", [JS_TOOL_ALIAS]: JS_TOOL_NAME },
         // Our card renders markdown, so option previews should arrive as markdown (the CLI default, pinned
         // here because the web-SDK default is HTML and would render as escaped source in the card).
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },

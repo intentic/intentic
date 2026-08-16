@@ -32,6 +32,7 @@ import {
     turnPersona,
 } from "../personas/personas.js";
 import { personaScopeOf } from "../personas/persona-scope.js";
+import { jsExecutionPlanOf } from "../execution/js-runtime.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
@@ -428,6 +429,15 @@ const honoured = (
     const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
     const dependencyDir = startIn ?? "";
     const dependencyInstallAllowed = persona.powers.files === "write" && persona.powers.shell;
+    /* THE JS EXECUTION BACKEND'S PLAN, resolved here because this is the point where the persona, the turn's
+     * tree and the filtered environment are all in hand at once — the same reason the shelves are applied here.
+     * Gated on the runtime actually hosting the backend (AgentCapabilities.execution), so an adapter only ever
+     * reads a request it fully honours; gated on the card inside jsExecutionPlanOf, so an ungranted backend is
+     * absent from the request rather than present-and-refused. Its environment is the same filtered one the
+     * shell gets — a script must not read a credential the command line could not. */
+    const jsExecution = capabilities.execution.includes("js")
+        ? jsExecutionPlanOf(persona, { root: context.effectiveCwd, cwd: startPath ?? context.base.cwd }, { ...shellEnv, ...context.delegation?.env })
+        : undefined;
     /* The folder limit and the sandbox switch, carried on the request for the runtime that can enforce them.
      * The folders resolve against the workspace root rather than `startPath` — the card spells them
      * workspace-relative, and a persona that starts in one repo while being allowed to read a sibling is an
@@ -452,6 +462,7 @@ const honoured = (
         ...(startPath !== undefined ? { cwd: startPath } : {}),
         ...(scope !== undefined ? { personaScope: scope } : {}),
         ...(shellEnv !== undefined && Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
+        ...(jsExecution !== undefined ? { jsExecution } : {}),
         ...(denied.length > 0 ? { disallowedTools: denied } : {}),
         // A "plan" runtime knows two postures: propose-then-approve, or run. Every other mode names the second
         // one, so it travels as the absence it already meant.
@@ -810,7 +821,9 @@ export const planHarnessTurn = async (
                   watch: watchServer({
                       conversationId: input.conversationId,
                       cwd: context.localCwd,
-                      env: context.cliEnv,
+                      // The BASE's env — the persona-filtered one — for the same reason shellEnv below reads
+                      // it: a check must not run with a credential the card withheld from the turn that arms it.
+                      env: context.base.cliEnv ?? {},
                       commandRules,
                       turn: {
                           ...(input.agent !== undefined ? { agent: input.agent } : {}),
@@ -837,10 +850,14 @@ export const planHarnessTurn = async (
             },
         }),
     };
-    // CODEX_HOME and the local bearer, for the one loop whose Bash can delegate. The NOTE that goes with them
-    // is already in this turn's instructions — both were resolved above the provider split (planTurn), because
-    // an agent told it may delegate and handed no credential is worse than one never told.
-    const shellEnv = { ...context.cliEnv, ...context.delegation?.env };
+    /* CODEX_HOME and the local bearer, for the one loop whose Bash can delegate. The NOTE that goes with them
+     * is already in this turn's instructions — both were resolved above the provider split (planTurn), because
+     * an agent told it may delegate and handed no credential is worse than one never told.
+     *
+     * Merged over the BASE's env, not the context's raw one: the base is where `honoured` already withheld the
+     * connector credentials this persona was not granted (personaCliEnv), and rebuilding from the raw context
+     * env here was silently handing every one of them back to the harness arm alone. */
+    const shellEnv = { ...context.base.cliEnv, ...context.delegation?.env };
     // The turn's user message: attachment note folded in as before.
     const promptWithAttachments =
         context.attachmentPaths.length > 0 ? withAttachmentNote(context.base.prompt, [...context.attachmentPaths]) : context.base.prompt;

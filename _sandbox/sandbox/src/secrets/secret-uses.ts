@@ -19,7 +19,9 @@ export const DETAIL_MAX = 80;
 const SecretUseSchema = z.object({
     // The registry name the reference carried — `CLOUDFLARE_API_TOKEN`, `reddit/password`.
     name: z.string(),
-    lane: z.enum(["shell", "browser"]),
+    // Which exit spent it: resolved into a shell command, resolved into a JS run's script, or typed into a
+    // browser field.
+    lane: z.enum(["shell", "code", "browser"]),
     // Where it went, in the reader's terms: the head of the agent's command line, or the page's host.
     detail: z.string().optional(),
     // Epoch ms — the store's clock, stamped at record time.

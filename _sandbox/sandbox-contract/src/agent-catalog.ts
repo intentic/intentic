@@ -186,6 +186,12 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
  *
  * Adding a provider is a row here, not a hunt for literals; agent-catalog.test.ts walks PROVIDERS × HARNESSES
  * and demands one, so a pair can never be silently absent. */
+
+// An execution backend: one way a turn runs work of its own, named for the AgentCapabilities.execution axis
+// and for the persona switch that grants it. Adding a language is a member here and a backend in the daemon's
+// execution/ module — never a new one-off tool wired where nothing else can see it.
+export type ExecutionBackend = "shell" | "js";
+
 export interface AgentCapabilities {
     // Which agentic loop actually serves the turn — the question "is the harness `claude-code`" only looks like.
     // Claude is always its own Claude Code loop and Kimi has no native runtime, so both run it whatever harness
@@ -208,6 +214,17 @@ export interface AgentCapabilities {
     // checkouts + the browser servers; "http" = the http MCP tools alone, and only if the agent advertises http
     // MCP support; "none" = the runtime has no seam for them at all.
     readonly mcp: "full" | "http" | "none";
+    /* WHICH EXECUTION BACKENDS THE RUNTIME HOSTS — the ways a turn RUNS things, as opposed to the tools it is
+     * handed. "shell" is the runtime's own command tool (Bash on the Claude Code loop, each foreign loop's
+     * equivalent); "js" is the sandbox's JavaScript backend (execution/ in the daemon): the model writes a
+     * script instead of a command line, and the daemon runs it in a permission-fenced Node subprocess.
+     *
+     * A first-class axis rather than a corollary of `mcp`, because the two answer different questions: `mcp`
+     * says which TOOLS reach the model's context, this says which ways of EXECUTING the daemon can stand
+     * behind for this runtime — with the same guard, secret and persona seams the shell gets. A runtime that
+     * cannot host a backend simply never shows it, and the persona switch for it (PersonaPowersSchema.code)
+     * then has nothing to grant there. */
+    readonly execution: readonly ExecutionBackend[];
     // Reasoning-effort selection is forwarded to the model.
     readonly effort: boolean;
     /* The runtime can serve a turn at fast speed when asked (AgentTurn.fast). A statement about the LOOP, not
@@ -262,6 +279,9 @@ const CLAUDE_CODE: AgentCapabilities = {
     permissions: "modes",
     questions: true,
     mcp: "full",
+    // The one loop with a seam the daemon can put its own backend through — so it hosts the JS backend beside
+    // its Bash. Every other runtime below hosts only its own shell.
+    execution: ["shell", "js"],
     effort: true,
     fastMode: true,
     isolation: "namespace",
@@ -280,6 +300,7 @@ const CODEX: AgentCapabilities = {
     permissions: "plan",
     questions: false,
     mcp: "none",
+    execution: ["shell"],
     effort: true,
     fastMode: false,
     isolation: "cwd",
@@ -301,6 +322,7 @@ const OPENCODE: AgentCapabilities = {
     permissions: "plan",
     questions: false,
     mcp: "none",
+    execution: ["shell"],
     effort: false,
     fastMode: false,
     isolation: "cwd",
@@ -340,6 +362,7 @@ const ACP: AgentCapabilities = {
     permissions: "plan",
     questions: false,
     mcp: "http",
+    execution: ["shell"],
     effort: false,
     fastMode: false,
     isolation: "cwd",
@@ -369,6 +392,7 @@ const PI: AgentCapabilities = {
     permissions: "plan",
     questions: false,
     mcp: "none",
+    execution: ["shell"],
     effort: true,
     fastMode: false,
     isolation: "cwd",
@@ -436,6 +460,7 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.questions ? [] : ["no clarifying questions"]),
     ...(capabilities.steering ? [] : ["no mid-turn steering"]),
     ...(capabilities.mcp === "none" ? ["no MCP tools or plugins"] : capabilities.mcp === "http" ? ["MCP tools only — no plugins or browser"] : []),
+    ...(capabilities.execution.includes("js") ? [] : ["no code runs — its shell is the one way to execute"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),
     ...(capabilities.terminals ? [] : ["no terminal panel"]),

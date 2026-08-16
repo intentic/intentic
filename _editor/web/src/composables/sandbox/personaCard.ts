@@ -37,6 +37,7 @@ export const grantablesFrom = (capabilities: readonly { id: string; kind: string
 export interface PersonaPowersDraft {
     files: `none` | `read` | `write`;
     shell: boolean;
+    code: boolean;
     web: boolean;
     browser: boolean;
     delegate: boolean;
@@ -54,6 +55,7 @@ export interface PersonaPowersDraft {
 export const FULL_POWERS: PersonaPowersDraft = {
     files: `write`,
     shell: true,
+    code: true,
     web: true,
     browser: true,
     delegate: true,
@@ -78,6 +80,7 @@ export const personaSlug = (name: string): string =>
 export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     files: persona.powers?.files ?? FULL_POWERS.files,
     shell: persona.powers?.shell ?? FULL_POWERS.shell,
+    code: persona.powers?.code ?? FULL_POWERS.code,
     web: persona.powers?.web ?? FULL_POWERS.web,
     browser: persona.powers?.browser ?? FULL_POWERS.browser,
     delegate: persona.powers?.delegate ?? FULL_POWERS.delegate,
@@ -94,6 +97,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
     const bounded =
         draft.files !== `write` ||
         !draft.shell ||
+        !draft.code ||
         !draft.web ||
         !draft.browser ||
         !draft.delegate ||
@@ -107,6 +111,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
     return {
         files: draft.files,
         shell: draft.shell,
+        code: draft.code,
         web: draft.web,
         browser: draft.browser,
         delegate: draft.delegate,

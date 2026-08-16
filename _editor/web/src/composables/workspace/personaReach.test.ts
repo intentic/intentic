@@ -46,7 +46,9 @@ it(`does not read a same-prefix sibling as being inside the fence`, () => {
 
 // File access `none` outranks the fence: a card that cannot read reaches nothing, however generous its folders.
 it(`refuses everything for a card with no file access`, () => {
-    const reach = reachOf(card({ folders: [`docs`] }, { files: `none`, shell: true, web: true, browser: true, delegate: true, sandbox: true }));
+    const reach = reachOf(
+        card({ folders: [`docs`] }, { files: `none`, shell: true, code: true, web: true, browser: true, delegate: true, sandbox: true }),
+    );
     expect(reach.refuses(`docs`)).toBe(true);
     expect(reachSentence(`test`, reach)).toContain(`no file access`);
 });

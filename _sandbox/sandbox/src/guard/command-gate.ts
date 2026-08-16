@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AdmissionRule, AgentEvent, CommandClass } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
+import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
 import { classifyCommand, COMMAND_CLASS_LABELS } from "./command-classes.js";
 import { guard, type GuardVerdict } from "./guard.js";
@@ -71,73 +72,85 @@ const decide = (
     return held;
 };
 
+/* WHAT THE GATE READS — every tool whose input IS a program this turn is about to run, and the field that
+ * carries it. Bash and the JS execution backend are one question to the owner's rulebook, judged by the one
+ * classifier: its patterns are unanchored substrings, so a `.env` path or an `npm publish` inside a script's
+ * spawn call lands in the same class it would on a command line — and a script that assembles the string at
+ * runtime walks past it, which is exactly the honesty the classifier already claims for creatively quoted
+ * shell. One gate over both backends, or a rule the owner wrote for "commands" would silently not apply to
+ * the other way of running things. */
+const EXECUTION_SOURCES = [
+    { matcher: "Bash", field: "command", displayName: "Run command" },
+    { matcher: JS_TOOL_NAME, field: "code", displayName: "Run code" },
+] as const;
+
 export const commandGateHooks = (options: CommandGateOptions): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     /* WHAT "ALWAYS" REMEMBERS — the classes the user has already said yes to, for the rest of THIS TURN. The
      * closure is built once per turn, and the button's label says so rather than promising a memory that is not
      * kept: the alternative is writing `allow` into the owner's own commandRules from a card, which is a
      * configuration change they did not come to the card to make. A turn that deletes twenty directories asks
-     * once; the next turn asks again, which is the honest reading of a rule that still says hold. */
+     * once; the next turn asks again, which is the honest reading of a rule that still says hold.
+     *
+     * SHARED ACROSS BOTH SOURCES on purpose: the grant is about a CLASS of consequence ("delete files", "reach
+     * the network"), not about which backend would produce it — a yes to force-pushing from Bash answered the
+     * consequence, and asking again because the next attempt is a script would be the same card twice. */
     const granted = new Set<CommandClass>();
+    const gateFor =
+        (source: (typeof EXECUTION_SOURCES)[number]) =>
+        async (input: { hook_event_name: string; tool_input?: unknown }): Promise<Record<string, unknown>> => {
+            if (input.hook_event_name !== "PreToolUse") {
+                return {};
+            }
+            const command = (input.tool_input as Record<string, unknown>)[source.field];
+            if (typeof command !== "string") {
+                return {};
+            }
+            const classes = classifyCommand(command).filter((commandClass) => !granted.has(commandClass));
+            const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());
+            if (held === undefined) {
+                return {};
+            }
+            if (held.verdict.effect === "deny") {
+                return refuse(held.verdict.reason);
+            }
+            if (options.unattended) {
+                return refuse(
+                    `${held.verdict.reason}, and this turn is running unattended — there is nobody to approve it. ` +
+                        `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
+                );
+            }
+            const { id, wait } = createRequest("permission", {
+                kind: "permission",
+                requestId: "",
+                decision: "deny",
+                feedback: "The turn ended before you answered.",
+            });
+            options.push({
+                kind: "permission",
+                requestId: id,
+                toolName: source.matcher,
+                title: `This ${source.matcher === "Bash" ? "command" : "script"} would ${COMMAND_CLASS_LABELS[held.commandClass]}`,
+                displayName: source.displayName,
+                description: command.slice(0, SHOWN),
+                reason: held.verdict.reason,
+                alwaysLabel: `Allow everything that would ${COMMAND_CLASS_LABELS[held.commandClass]} this turn`,
+            });
+            const { reply, resolved } = await wait(options.signal);
+            options.push(resolved);
+            if (reply.decision === "deny") {
+                // A denial with feedback is a redirection and the turn takes it; a bare one is the user
+                // stopping this command, so say that rather than inviting a way around it.
+                return refuse(
+                    reply.feedback?.trim() ||
+                        `The user declined this. Do not run it, and do not look for another way to achieve the same thing — wait for them to say how to proceed.`,
+                );
+            }
+            if (reply.decision === "always") {
+                granted.add(held.commandClass);
+            }
+            return {};
+        };
     return {
-        PreToolUse: [
-            {
-                matcher: "Bash",
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name !== "PreToolUse") {
-                            return {};
-                        }
-                        const command = (input.tool_input as { command?: unknown }).command;
-                        if (typeof command !== "string") {
-                            return {};
-                        }
-                        const classes = classifyCommand(command).filter((commandClass) => !granted.has(commandClass));
-                        const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());
-                        if (held === undefined) {
-                            return {};
-                        }
-                        if (held.verdict.effect === "deny") {
-                            return refuse(held.verdict.reason);
-                        }
-                        if (options.unattended) {
-                            return refuse(
-                                `${held.verdict.reason}, and this turn is running unattended — there is nobody to approve it. ` +
-                                    `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
-                            );
-                        }
-                        const { id, wait } = createRequest("permission", {
-                            kind: "permission",
-                            requestId: "",
-                            decision: "deny",
-                            feedback: "The turn ended before you answered.",
-                        });
-                        options.push({
-                            kind: "permission",
-                            requestId: id,
-                            toolName: "Bash",
-                            title: `This command would ${COMMAND_CLASS_LABELS[held.commandClass]}`,
-                            displayName: "Run command",
-                            description: command.slice(0, SHOWN),
-                            reason: held.verdict.reason,
-                            alwaysLabel: `Allow every command that would ${COMMAND_CLASS_LABELS[held.commandClass]} this turn`,
-                        });
-                        const { reply, resolved } = await wait(options.signal);
-                        options.push(resolved);
-                        if (reply.decision === "deny") {
-                            // A denial with feedback is a redirection and the turn takes it; a bare one is the user
-                            // stopping this command, so say that rather than inviting a way around it.
-                            return refuse(
-                                reply.feedback?.trim() ||
-                                    `The user declined this command. Do not run it, and do not look for another way to achieve the same thing — wait for them to say how to proceed.`,
-                            );
-                        }
-                        if (reply.decision === "always") {
-                            granted.add(held.commandClass);
-                        }
-                        return {};
-                    },
-                ],
-            },
-        ],
+        PreToolUse: EXECUTION_SOURCES.map((source) => ({ matcher: source.matcher, hooks: [gateFor(source)] })),
     };
 };

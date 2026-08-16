@@ -87,6 +87,7 @@ const FULL: PersonaPowers = PersonaPowersSchema.parse({});
 const NONE_POWERS: PersonaPowers = {
     files: "none",
     shell: false,
+    code: false,
     web: false,
     browser: false,
     delegate: false,

@@ -72,10 +72,21 @@ reports the profile.
   to the real value only at the exits: spliced into a shell command as it runs (a Komodo config payload, a curl
   body) or typed into a focused browser field (`type_secret`). Files at rest keep the reference; every
   resolution lands on a use ledger the Secrets view shows as each entry's "last used".
+- Run the agent's JavaScript, not only its shell (src/execution). The JS execution backend is the second way a
+  turn runs work of its own — declared per runtime (`AgentCapabilities.execution`), granted per persona card
+  beside the shell switch, planned into the one request every runtime builds on, and served on the Claude Code
+  loop as the `Code` tool. The model writes an ES module instead of a grep/curl pipeline; the daemon runs it
+  in a Node subprocess under Node's permission model, which is what makes this fence real where the shell's is
+  advisory: reads and writes are granted per directory from the card's files answer and folder scope, and
+  starting other programs is granted only when the card also holds the shell — so "code yes, commands no" is a
+  posture that actually holds. Scripts ride the same seams commands do: the command gate classifies them
+  against the owner's rulebook, `{{secret:name}}` resolves on the way into the process and lands on the use
+  ledger's code lane, results are masked, and a script that fetched the open internet has its output wrapped
+  as outside content exactly as a fetching curl's is. The one stated gap: the fence cannot cut the network.
 - Decide who a session IS, what it may do and what it is TOLD, once per turn and above the choice of runtime
   (src/personas). A persona card names the connected accounts a session may speak through, which shelves of its
-  toolbox are open — files, shell, web, browser, connectors, computers, MCP connections, delegation, changing
-  the sandbox — where in the workspace it works, and which system prompt it runs on. Accounts, connectors,
+  toolbox are open — files, shell, code runs, web, browser, connectors, computers, MCP connections, delegation,
+  changing the sandbox — where in the workspace it works, and which system prompt it runs on. Accounts, connectors,
   computers and MCP connections are enforced by ABSENCE: the credential is never injected and the server never
   mounted, so nothing depends on the model cooperating. The plain switches take their tools out of the turn,
   and the folder limit refuses file tool calls that point outside. Naming no persona keeps the full toolbox and

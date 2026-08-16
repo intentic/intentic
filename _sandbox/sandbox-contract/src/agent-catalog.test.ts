@@ -42,6 +42,11 @@ describe("every provider/harness pair declares what it can do", () => {
         expect(["claude-code", "codex", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "http", "none"]).toContain(capabilities.mcp);
+        // Every runtime executes SOMETHING — a record listing no backend would hide the shell every loop has.
+        expect(capabilities.execution).toContain("shell");
+        for (const backend of capabilities.execution) {
+            expect(["shell", "js"]).toContain(backend);
+        }
         expect(["namespace", "cwd"]).toContain(capabilities.isolation);
         expect(["replace", "append", "none"]).toContain(capabilities.instructions);
         // The permission modes offered must include the mode a clamp falls back to — a floor that isn't in the
@@ -159,6 +164,7 @@ test("every axis a record can lack has words for it", () => {
         permissions: "plan",
         questions: false,
         mcp: "none",
+        execution: ["shell"],
         effort: false,
         fastMode: false,
         isolation: "cwd",
@@ -168,11 +174,11 @@ test("every axis a record can lack has words for it", () => {
         instructions: "none",
     };
 
-    // Ten DISCLOSABLE axes, ten sentences: an axis added to the interface without one would silently never be
-    // disclosed. fastMode is the deliberate eleventh — a record alone can't tell the truth about it (a
+    // Eleven DISCLOSABLE axes, eleven sentences: an axis added to the interface without one would silently
+    // never be disclosed. fastMode is the deliberate twelfth — a record alone can't tell the truth about it (a
     // translator-routed turn reads true here and still can't go fast), so it is answered by fastAllowed
     // instead. Anything else added to the interface has to move this number.
-    expect(limitationsOf(nothing)).toHaveLength(10);
+    expect(limitationsOf(nothing)).toHaveLength(11);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
 });
 
@@ -188,6 +194,16 @@ test("the instruction axis discloses its two weaker answers, differently", () =>
     expect(acp).toContain("isn't applied");
     // Codex on its own runtime replaces, like the Claude Code loop — so it has nothing to disclose here.
     expect(limitationsOf(capabilitiesOf("codex", "native")).join(" ")).not.toContain("system prompt");
+});
+
+/* The JS backend is hosted by the one loop the daemon can put its own execution seam through. Pinned as a test
+ * rather than left to the records because turn planning gates the backend on this axis — a runtime gaining it
+ * here without a seam behind it would advertise code runs that can never execute. */
+test("only the Claude Code loop hosts the js execution backend", () => {
+    for (const { provider, harness } of pairs) {
+        const capabilities = capabilitiesOf(provider, harness);
+        expect(capabilities.execution.includes("js")).toBe(capabilities.runtime === "claude-code");
+    }
 });
 
 // The mode vocabulary is the contract's own PermissionMode, so a mode added to the wire can't be quietly absent

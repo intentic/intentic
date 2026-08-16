@@ -112,7 +112,7 @@ it(`says how bounded a card is`, () => {
         {
             id: `visitor`,
             capabilities: [`reddit-work`],
-            powers: { files: `read`, shell: false, web: false, browser: false, delegate: false, sandbox: false },
+            powers: { files: `read`, shell: false, code: false, web: false, browser: false, delegate: false, sandbox: false },
         },
     ];
     expect(text(mount())).toContain(`Read-only`);

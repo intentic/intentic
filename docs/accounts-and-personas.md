@@ -111,6 +111,24 @@ Two places, and the difference between them is the supervision above.
 A chat that names a persona whose accounts are all still signed out says so under the box. The turn would run
 and simply reach nothing — the one persona state a pill cannot show by wearing a name.
 
+## The two ways a session runs things
+
+A card answers "may it run commands" twice, because there are two execution backends and they are not the
+same grant:
+
+- **Run commands** — the shell. Everything on the image, with everything the image can reach. The card's own
+  form says the honest thing about it: while it is on, every other limit is a strong default rather than a
+  wall, because a command can read a credential the card never granted.
+- **Run code** — the JavaScript backend. The agent writes a script instead of a command line, and the daemon
+  runs it in a subprocess whose fence is the runtime's own: file reads and writes follow the card's **Files**
+  answer and its folder scope, and the script cannot start other programs unless **Run commands** is also on.
+  So "code yes, commands no" is a real posture — execution without a shell — with one stated gap: the fence
+  cannot cut the network, so a script can fetch whatever the web shelf says.
+
+Both run under the same owner's rulebook: a script that would read a credential file or reach the open
+internet is classified and gated exactly as the command that would. Which runtimes can host the second
+backend is declared per runtime (`AgentCapabilities.execution`); today that is the Claude Code loop.
+
 ## Two very different things both called "account"
 
 The one confusion worth naming out loud, because the two words sit one line apart on the same form:
@@ -176,6 +194,7 @@ there) and mildly confusing to read.
 | --- | --- |
 | The two shapes | [schemas.ts](../_sandbox/sandbox-contract/src/schemas.ts) — `CapabilitySchema` (`browser` kind) and `PersonaSchema` |
 | The rule about which accounts a turn gets | [personas.ts](../_sandbox/sandbox/src/personas/personas.ts) |
+| The JS execution backend a card can grant | [js-runtime.ts](../_sandbox/sandbox/src/execution/js-runtime.ts) (the fence and the runner) · [js-tool.ts](../_sandbox/sandbox/src/execution/js-tool.ts) (the `Code` tool the Claude Code loop mounts) |
 | The disk state behind a login | [session-store.ts](../_sandbox/sandbox/src/browser/session-store.ts) |
 | Adding / removing a site login | [handlers/browser.ts](../_sandbox/sandbox/src/capabilities/handlers/browser.ts) |
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |

@@ -2,6 +2,7 @@ import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
+import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGateOptions } from "./command-gate.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 
@@ -9,16 +10,19 @@ const FORCE_PUSH = "git push --force origin main";
 
 interface Harness {
     readonly run: (command: unknown) => Promise<SyncHookJSONOutput>;
+    // The same gate's second source: a JS run, the script in tool_input.code (EXECUTION_SOURCES).
+    readonly runCode: (code: unknown) => Promise<SyncHookJSONOutput>;
     readonly events: AgentEvent[];
     readonly abort: () => void;
 }
 
-// Drive the PreToolUse hook the way the SDK does: one Bash call, the command in tool_input. The gate is built
-// once per harness, which is what makes the "always" grant observable across two calls.
+// Drive the PreToolUse hooks the way the SDK does: one Bash call with the command in tool_input, or one JS
+// run with the script. The gate is built once per harness, which is what makes the "always" grant observable
+// across two calls — and across the two sources.
 const harness = (options: Partial<CommandGateOptions>): Harness => {
     const events: AgentEvent[] = [];
     const controller = new AbortController();
-    const matcher = commandGateHooks({
+    const matchers = commandGateHooks({
         rules: {},
         unattended: false,
         push: (event) => events.push(event),
@@ -26,16 +30,23 @@ const harness = (options: Partial<CommandGateOptions>): Harness => {
         // Untainted unless a test says otherwise — the ordinary turn, working on the owner's own material.
         taint: NO_TAINT,
         ...options,
-    }).PreToolUse?.[0];
-    const hook = matcher?.hooks[0];
-    if (hook === undefined) {
-        throw new Error("gate wired no PreToolUse hook");
-    }
+    }).PreToolUse;
+    const hookFor = (toolName: string): ((input: unknown, id: undefined, context: { signal: AbortSignal }) => Promise<unknown>) => {
+        const hook = matchers?.find((matcher) => matcher.matcher === toolName)?.hooks[0];
+        if (hook === undefined) {
+            throw new Error(`gate wired no PreToolUse hook for ${toolName}`);
+        }
+        return hook as unknown as (input: unknown, id: undefined, context: { signal: AbortSignal }) => Promise<unknown>;
+    };
     return {
         events,
         abort: () => controller.abort(),
         run: (command) =>
-            hook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } } as Parameters<typeof hook>[0], undefined, {
+            hookFor("Bash")({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }, undefined, {
+                signal: controller.signal,
+            }) as Promise<SyncHookJSONOutput>,
+        runCode: (code) =>
+            hookFor(JS_TOOL_NAME)({ hook_event_name: "PreToolUse", tool_name: JS_TOOL_NAME, tool_input: { code } }, undefined, {
                 signal: controller.signal,
             }) as Promise<SyncHookJSONOutput>,
     };
@@ -216,5 +227,45 @@ describe("command gate: the outside-content floor", () => {
             expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
         }
         expect(gate.events).toEqual([]);
+    });
+});
+
+/* THE SECOND SOURCE: the JS execution backend runs under the same gate, same rulebook, same cards — a rule
+ * the owner wrote about "commands" applies to both ways of running things, or it is not a rule (command-gate's
+ * EXECUTION_SOURCES). The classifier reads the script with the substring honesty it reads shell. */
+describe("the gate over JS runs", () => {
+    test("a denied class refuses the script before it runs", async () => {
+        const out = await harness({ rules: { "network.outbound": "deny" } }).runCode('await fetch("https://api.example.com/x")');
+        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+    });
+
+    test("an unclassified script passes untouched, and so does a non-string input", async () => {
+        const gate = harness({ rules: { "git.destructive": "deny", "network.outbound": "deny" } });
+        expect(await gate.runCode('console.log(2 + 2); await fetch("http://localhost:3000/api")')).toEqual({});
+        expect(await gate.runCode(undefined)).toEqual({});
+    });
+
+    test("a held class parks on a card that says it is a script, not a command", async () => {
+        const gate = harness({ rules: { "secrets.access": "hold" } });
+        const script = 'const env = await fs.readFile(".env", "utf8");';
+        const pending = gate.runCode(script);
+        await settled();
+        const card = cardOf(gate.events);
+        expect(card).toMatchObject({ toolName: JS_TOOL_NAME, displayName: "Run code", description: script });
+        expect(card.title).toContain("script");
+        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe(true);
+        expect(await pending).toEqual({});
+    });
+
+    /* The grant is about a CLASS of consequence, not about which backend produces it: a yes to reaching the
+     * network from Bash answered the consequence, so the same class from a script must not ask again. */
+    test("an 'always' granted on a Bash card covers the same class from a script", async () => {
+        const gate = harness({ rules: { "network.outbound": "hold" } });
+        const pending = gate.run("curl https://example.com/data");
+        await settled();
+        expect(resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "always" })).toBe(true);
+        await pending;
+        expect(await gate.runCode('await fetch("https://example.com/data")')).toEqual({});
+        expect(gate.events.filter((event) => event.kind === "permission")).toHaveLength(1);
     });
 });

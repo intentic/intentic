@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { classifyCommand } from "./command-classes.js";
 import { wrapOutsideContent } from "./outside-content.js";
 
@@ -58,6 +59,12 @@ export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
     // daemon's own sentence and the owner's note stay plain while the screen text carries the envelope —
     // the "wrap the fields that carry content, not the whole result" rule this module's header states.
     "terminal",
+    /* execution/js-tool.ts — the JS execution backend, mounted from AgentRequest.jsExecution. Internal for
+     * the same reason Bash is not wrapped by default: the output is the agent's OWN script's, running in this
+     * container. The Bash exception applies to it too, and by the same classifier — a script whose text
+     * reached the open internet has its result wrapped (see the explicit branch in outsideSourceOf, ahead of
+     * the server fallback this listing bypasses). */
+    "code",
 ]);
 
 // `mcp__<server>__<tool>` — the SDK's naming for every MCP tool. Anything else is a native tool.
@@ -82,6 +89,16 @@ export const outsideSourceOf = (toolName: string, toolInput: unknown): string | 
         // The same classifier the command gate runs BEFORE the command: if it reached the open internet, what
         // came back is the open internet's words. Loopback is excluded by the class itself.
         return classifyCommand(command).includes("network.outbound") ? "shell-fetch" : undefined;
+    }
+    // The JS execution backend, by the same rule word for word: the script is the agent's own program, the
+    // PAGE a fetching one brings back is the internet. Checked ahead of the server fallback because the `code`
+    // server is INTERNAL — this branch is the one place its results are ever wrapped.
+    if (toolName === JS_TOOL_NAME) {
+        const code = (toolInput as { code?: unknown } | null)?.code;
+        if (typeof code !== "string") {
+            return undefined;
+        }
+        return classifyCommand(code).includes("network.outbound") ? "code-fetch" : undefined;
     }
     const server = mcpServerOf(toolName);
     if (server === undefined || INTERNAL_SERVERS.has(server)) {

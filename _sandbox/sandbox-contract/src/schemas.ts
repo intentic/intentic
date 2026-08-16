@@ -3665,6 +3665,11 @@ export const PersonaPowersSchema = z.object({
     // Shell commands, and with them the terminals, the test runs, and every CLI on the image. See the header:
     // this is the switch the others' strength depends on.
     shell: z.boolean().default(true),
+    /* The JS execution backend (AgentCapabilities.execution): the model writes a script instead of a command
+     * line, run in a permission-fenced Node subprocess. Its fence is REAL where the shell's is not — reads and
+     * writes follow the `files` answer, and it can start no other program unless `shell` is also on — with one
+     * stated gap: the fence cannot cut the network, so a script can fetch whatever `web` says. */
+    code: z.boolean().default(true),
     // Fetch a page, run a search.
     web: z.boolean().default(true),
     // The credential-free browser. The SIGNED-IN browsers are `capabilities` below — a different question, and
@@ -3785,6 +3790,7 @@ export const personaBounds = (persona: Persona): string => {
     }
     const limits = [
         resolved.files === "none",
+        !resolved.code,
         !resolved.web,
         !resolved.browser,
         !resolved.delegate,
@@ -6020,10 +6026,11 @@ export const SecretInventoryEntrySchema = z.object({
     revealable: z.boolean(),
     // Forgejo Actions replication state, present only after adopt on env|generated entries.
     ci: z.object({ synced: z.boolean(), pushedAt: z.string().optional() }).optional(),
-    /* The newest row of the use ledger that concerns this entry — when the agent last SPENT it, on which lane,
-     * and where it went (the head of the shell command, or the page's host). Names and destinations only,
-     * never values. Absent while a secret has never been used, which most never are. */
-    lastUse: z.object({ at: z.number(), lane: z.enum(["shell", "browser"]), detail: z.string().optional() }).optional(),
+    /* The newest row of the use ledger that concerns this entry — when the agent last SPENT it, on which lane
+     * (a shell command, a JS run's script, a browser field), and where it went (the head of the command or
+     * script, or the page's host). Names and destinations only, never values. Absent while a secret has never
+     * been used, which most never are. */
+    lastUse: z.object({ at: z.number(), lane: z.enum(["shell", "code", "browser"]), detail: z.string().optional() }).optional(),
 });
 export type SecretInventoryEntry = z.infer<typeof SecretInventoryEntrySchema>;
 export const SecretInventorySchema = z.object({ entries: z.array(SecretInventoryEntrySchema) });
