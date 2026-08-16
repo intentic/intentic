@@ -95,6 +95,10 @@ export const machineReport = async (): Promise<MachineReport | undefined> => {
     return raw === null ? undefined : (JSON.parse(raw) as MachineReport);
 };
 export const workspaceOpen = (): Promise<void> => invoke(`workspace_open`);
+/* Which face this window is wearing. The setup screen is an OVERLAY over the workspace — chromeless, over
+ * the frame it was started from, with the workspace left on screen behind it — and the manager is an
+ * ordinary window; windows.rs does the moving, this says which is up. */
+export const setupFrame = (overlay: boolean): Promise<void> => invoke(`setup_frame`, { overlay });
 // `remember` is the dialog's "always do this": it makes this answer the × from now on, and takes the question
 // away for good. Without it the answer applies to this close only.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
@@ -106,11 +110,24 @@ export const onPendingRecreate = (handler: () => void): Promise<UnlistenFn> => l
 export const onUpdateAvailable = (handler: (version: string) => void): Promise<UnlistenFn> =>
     listen<string>(`desktop://update-available`, (event) => handler(event.payload));
 
-/* The scripts already narrate themselves — every step they take is an `intentic: …` line, and connect.sh's
- * output IS the progress model the terminal path has always shown. So the launcher does not invent a second
- * one: it promotes those lines to headings and keeps the rest as the detail log behind them. Anything else
- * (docker's own pull output, a build's layer chatter) is noise the user asked to see, not a step. */
-const STEP_PREFIX = `intentic: `;
+/* THE SCRIPTS NARRATE THEMSELVES, AND NAME WHAT THEY ARE NARRATING. Every phase of an install is announced
+ * as `intentic: [<phase>] <sentence>` — connect.sh's step(), connect.ps1's Write-Step, ic's util::step, one
+ * contract in three languages — so this window never has to recognise a sentence to know where a run is.
+ * That is the whole point of the id being there: the prose is reworded whenever it reads better, and a
+ * progress bar that moves when somebody fixes a typo is worse than no progress bar.
+ *
+ * Everything printed WITHOUT a phase (docker's layer chatter, a build's output, ic's closing prose) is
+ * detail under whichever step is running — shown in the log behind "Show detail", never a step of its own. */
+const STEP = /^intentic: \[([a-z-]+)\] (.*)$/;
 
-export const isStep = (line: string): boolean => line.startsWith(STEP_PREFIX);
-export const stepLabel = (line: string): string => line.slice(STEP_PREFIX.length).trim();
+export interface Step {
+    /** The phase id — the same vocabulary the platform's setup report uses. */
+    readonly phase: string;
+    /** What the script said it was doing, for the reader watching one step. */
+    readonly message: string;
+}
+
+export const parseStep = (line: string): Step | undefined => {
+    const found = STEP.exec(line);
+    return found === null ? undefined : { phase: found[1] ?? ``, message: (found[2] ?? ``).trim() };
+};

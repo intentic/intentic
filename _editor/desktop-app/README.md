@@ -6,12 +6,18 @@ A Windows and Linux desktop app that installs the sandbox, and the thing that up
 sign in, click **Run on this computer**.
 
 ```
-        ONE WINDOW, TWO SCREENS — whichever is up takes the other's frame
+   ONE WINDOW — the manager takes the workspace's frame; an install covers it
 
-┌─ Intentic ────────────────────────────┐   ┌─ Intentic — Setting up your sandbox ──┐
-│  app.intentic.dev — the hosted SPA    │ ⇄ │  ⚡ pulling the sandbox image…        │
-│  no IPC · intentic:// links only      │   │  ● work    ▶ ■  update  logs         │
-└───────────────────────────────────────┘   └──────────────────────────────────────┘
+┌─ Intentic ────────────────────────────┐   ┌─ Intentic — This computer ───────────┐
+│  app.intentic.dev — the hosted SPA    │   │  ● work     ▶ ■  update  logs        │
+│  ┌─ Setting up work ───────────× ┐    │ ⇄ │  folders · ports · image · agent     │
+│  │ Step 5 of 10   ~3 min   31%   │    │   └──────────────────────────────────────┘
+│  │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░ │    │
+│  │ ✓ Check Docker                │    │
+│  │ ⟳ Download the sandbox image  │    │
+│  │ ○ Start your sandbox          │    │
+│  └───────────────────────────────┘    │
+└───────────────────────────────────────┘
                     │                                       │
                     └──────────── Rust shell ───────────────┘
                          windows · tray · deep link · updater
@@ -60,7 +66,22 @@ being read, which is where first-time users stopped.
 
 So `windows.rs` keeps exactly one of them on screen: whichever screen is being shown first takes the other's
 position and size, then the other hides. The title follows the content (`App.vue` sets it), the frame does
-not, and clicking a handoff reads as the window changing screens. Two consequences worth knowing:
+not, and clicking a handoff reads as the window changing screens.
+
+**An install is the one thing that does not swap, and that is the same rule rather than a hole in it.** Setting
+up a sandbox is not somewhere the user went, it is something happening to the app they are already in — so the
+launcher face *covers* the workspace instead of replacing it: same rectangle, decorations off, the workspace
+still on screen and dimmed by the card drawn over it (`set_setup_frame`, and the window is built
+`transparent` from birth because that cannot be turned on later). Two mapped windows, one thing on screen,
+which is what the rule was always about. It wore a full window once — title bar, taskbar entry, no way out in
+the corner — and read as a second application that had opened itself on top of the first. The card carries the
+**×** every installer has; it closes the overlay and nothing else, because the script is a process on this
+machine rather than something the window is holding up.
+
+Both smoke tiers assert the geometry rather than a window count, since "same rectangle" is the only part of
+this a test outside the process can see.
+
+Three more consequences worth knowing:
 
 - **A cold start with the SPA's own link opens no workspace first.** `intentic://setup` in argv means the setup
   screen is what appears — otherwise the app would load the SPA only to cover it a frame later.
@@ -93,8 +114,8 @@ own window is not decoration: it is the only way to draw the thing silently, and
 than one button. Three things follow from it:
 
 - **It is a dialog, not a third face.** Off the taskbar, owned by the frame it is about, centred over it, and
-  destroyed on answer — so the one-window rule the smoke tier asserts still holds. It is titled `Close
-  Intentic?`, which deliberately does not start with the workspace title those assertions match on.
+  destroyed on answer — so it is one thing on screen for the same reason the install overlay is. It is titled
+  `Close Intentic?`, which deliberately does not start with the workspace title those assertions match on.
 - **Two answers, and remembering one retires the question.** *Keep it in the tray* and *Quit Intentic*, with
   **always do this** storing the choice in `close-action.json` — outside `Settings`, which the launcher UI
   overwrites wholesale, so changing an origin there cannot put the question back. Escape, Cancel and the
@@ -134,6 +155,33 @@ cannot be, however long the runner has kept its checkout. The trade is that an *
 script does not reach a local installer or `tauri dev`; commit it. A release of the app is cut from one
 commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`; the shims fetch the newest released `ic` at run time,
 which is how flow fixes reach app users between app updates.
+
+### The scripts say which phase they are in, not just what they are doing
+
+Every phase of an install is announced as `intentic: [<phase>] <sentence>` — `connect.sh`'s `step()`,
+`connect.ps1`'s `Write-Step`, `ic`'s `util::step`, one contract in three languages, and the ids are the same
+vocabulary the platform's setup report uses (`SetupReportSchema.stage`), so this window's bar and the
+browser's wait screen name the same phase. Anything printed *without* one is detail under the step that is
+running.
+
+That id is what makes a progress bar possible at all. The window used to show one line — whatever the script
+last said — with the log behind a disclosure, which is enough to *read* a run and nothing like enough to
+*wait* through one: the two questions somebody in front of a four-minute image pull actually has, is it stuck
+and how long, were both unanswerable. `setupPlan.ts` answers them:
+
+- **The whole plan is drawn before the first line of output**, and only the steps that will run on this
+  machine are in it — no `Install Docker` row where Docker is already up, no `Set up folder sync` where the
+  setup link carried no folder. Nothing on the list is ever skipped in front of the reader.
+- **The bar is weighted by how long each step takes**, not by how many there are. A step counter alone sits at
+  "6 of 10" through the longest part of an install and then finishes four steps in as many seconds.
+- **The image pull reports real progress.** Spawned without a terminal, `docker pull` cannot draw its bars and
+  prints one line per layer per state change instead, which is better for us: counting them is honest
+  progress through the biggest download in the install. The bar is clamped monotonic, because the layer total
+  only becomes known as docker announces it.
+- **Silent steps still move**, on the step's own weight against the clock, capped short of the end — only the
+  script gets to say a step is over.
+- **The estimate is the plan corrected by the run.** Remaining weight at the pace this machine has actually
+  managed so far, so a slow disk stretches the number instead of being contradicted by it.
 
 ## Sign-in never happens in the webview
 
@@ -256,12 +304,13 @@ report anything.
 
 ## Layout
 
-- `src/` — the app's own UI (Vue + `@intentic/ui`): the setup screen and the sandbox manager, switched on
-  whether a setup is in hand. One component of its own (`RunLog.vue`, the setup narration), one bridge module
-  (`desktop.ts`) and one reporter (`analytics.ts`); the sandbox rows, their verbs and their output pane all
-  come from the kit, so this app has no second opinion about them. The archived three-persona wizard is not
-  here.
-- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the one-window swap + link interception), `scripts.rs`
+- `src/` — the app's own UI (Vue + `@intentic/ui`): the setup overlay and the sandbox manager, switched on
+  whether a setup is in hand. One component of its own (`SetupProgress.vue`, the install's plan and bar) over
+  one pure model (`setupPlan.ts`), one bridge module (`desktop.ts`) and one reporter (`analytics.ts`); the
+  sandbox rows, their verbs and their output pane all come from the kit, so this app has no second opinion
+  about them. The archived three-persona wizard is not here.
+- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the frame swap, the install overlay and link
+  interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
   `setup_link.rs`.
 - `scripts/stage-local-downloads.sh` — build installers from this checkout into `_site/site/public/desktop/`

@@ -13,10 +13,16 @@ use crate::state::CloseAction;
  *
  * What the user is owed is not one webview but one WINDOW, and that is what `swap_in` enforces: whichever face
  * is being shown first takes the other's frame — same position, same size — and the other steps aside. Only
- * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So "Set
- * up on this computer" reads as the window moving on rather than as a second app arriving on top of the first.
+ * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So the
+ * sandbox manager reads as the window moving on rather than as a second app arriving on top of the first.
  * Before this, a first-time install ended with an unasked-for window called "Sandbox Manager" in front of the
- * one the user was reading, which is where they stopped. */
+ * one the user was reading, which is where they stopped.
+ *
+ * THE ONE EXCEPTION IS THE SETUP OVERLAY, and it is the rule rather than a hole in it. An install is not
+ * somewhere the user went, it is something happening to the app they are in, so the launcher covers the
+ * workspace instead of replacing it: same rectangle, no decorations, the workspace still on screen and dimmed
+ * by the card drawn over it (`set_setup_frame`). Two mapped windows, one thing on screen — which is what the
+ * rule was always about. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
@@ -272,17 +278,23 @@ pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
     apply_close(app, action);
 }
 
-/// The app's own face — the setup it was handed, and the sandboxes on this machine afterwards. The title here
-/// is only what it wears until its UI boots: this face has two screens and App.vue names whichever is up.
-pub fn show_launcher(app: &AppHandle) {
+/// The app's own face, built once and shown by whichever of its two screens is asking (`show_launcher` for
+/// the manager, `set_setup_frame` for the setup overlay). Never shown from here: the two want the window in
+/// two different places, and a window that appears before it has been put somewhere flashes in the old one.
+fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
-        swap_in(&window, app.get_webview_window(WORKSPACE));
-        return;
+        return Some(window);
     }
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("Intentic")
         .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
         .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+        /* TRANSPARENT FROM BIRTH, because there is no making it transparent afterwards — it is a window
+         * flag, not a property. The setup face needs it: it is a dim OVER the workspace rather than a screen
+         * instead of it, and the workspace showing through is the whole of what makes it read as one thing
+         * happening to the app rather than a second app arriving. The manager face paints an opaque surface
+         * across the whole window, so it neither notices nor pays for this. */
+        .transparent(true)
         .visible(false)
         .build();
     match result {
@@ -296,9 +308,76 @@ pub fn show_launcher(app: &AppHandle) {
                     show_workspace(&handle);
                 }
             });
-            swap_in(&window, app.get_webview_window(WORKSPACE));
+            Some(window)
         }
-        Err(error) => eprintln!("launcher window failed to open: {error}"),
+        Err(error) => {
+            eprintln!("launcher window failed to open: {error}");
+            None
+        }
+    }
+}
+
+/// The MANAGER screen — the sandboxes on this machine. An ordinary window, in the workspace's place.
+pub fn show_launcher(app: &AppHandle) {
+    if let Some(window) = launcher(app) {
+        set_setup_frame(app, false);
+        swap_in(&window, app.get_webview_window(WORKSPACE));
+    }
+}
+
+/* THE SETUP SCREEN IS AN OVERLAY, NOT A SCREEN — the correction this window most needed.
+ *
+ * It used to arrive the way the manager does: the launcher took the workspace's frame and the workspace
+ * stepped aside. That is right for a manager, which is somewhere you GO, and wrong for an install, which is
+ * something that HAPPENS to the app you are already in. Wearing a title bar, a taskbar entry and a full
+ * window's worth of chrome, it read as a second application that had opened itself on top of the first —
+ * with the one thing every installer has, a way out in the corner, nowhere to be found.
+ *
+ * So the setup face keeps the workspace on screen and covers it: same rectangle, no decorations, and
+ * App.vue draws the dim and the card with its × (the window is transparent from birth for exactly this).
+ * Nothing is hidden, so there is nothing to bring back — closing the card is the overlay stepping off the
+ * window it was over.
+ *
+ * Driven from App.vue rather than fixed at open, because which face is up is that screen's own state: a
+ * setup can arrive at a manager window, and a finished one hands the window back.
+ */
+pub fn set_setup_frame(app: &AppHandle, overlay: bool) {
+    let Some(window) = app.get_webview_window(LAUNCHER) else {
+        return;
+    };
+    let _ = window.set_decorations(!overlay);
+    let _ = window.set_resizable(!overlay);
+    if !overlay {
+        let _ = window.set_always_on_top(false);
+        return;
+    }
+    // Over the workspace exactly, so the dim lands on the window it is dimming. With none on screen (a link
+    // that opened this app cold) the overlay is simply the window, and its own dim is its background.
+    if let Some(behind) = app
+        .get_webview_window(WORKSPACE)
+        .filter(|behind| behind.is_visible().unwrap_or(false))
+    {
+        if let Ok(position) = behind.outer_position() {
+            let _ = window.set_position(position);
+        }
+        /* The OUTER size, where `swap_in` takes the inner one — the difference is the whole reason this is not
+         * that function. Two windows wearing the same decorations cover each other when their inner sizes
+         * match; this one has just taken its decorations OFF, so its inner size IS its outer size, and asking
+         * for the workspace's inner size would leave the height of a title bar of it showing below. */
+        if let Ok(size) = behind.outer_size() {
+            let _ = window.set_size(size);
+        }
+    }
+    // On top of the window it is about, the way a modal is — and only for as long as it is one.
+    let _ = window.set_always_on_top(true);
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Bring the setup overlay up over the workspace. The parked request is already in state; this is the frame.
+pub fn show_overlay(app: &AppHandle) {
+    if launcher(app).is_some() {
+        set_setup_frame(app, true);
     }
 }
 
@@ -334,13 +413,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     }
 }
 
-/// Hand a setup to the launcher face, which runs it on arrival (App.vue says why).
+/// Hand a setup to the launcher face, which runs it on arrival (App.vue says why) — as an overlay over the
+/// workspace that asked for it, rather than in its place.
 fn park_setup(app: &AppHandle, args: SetupArgs) {
     *app.state::<crate::state::AppState>()
         .pending
         .lock()
         .unwrap() = Some(args);
-    show_launcher(app);
+    show_overlay(app);
     let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
 }
 

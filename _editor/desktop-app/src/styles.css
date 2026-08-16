@@ -16,6 +16,12 @@
     body {
         overscroll-behavior: none;
         user-select: none;
+        /* THE WINDOW IS TRANSPARENT AND THE PAGE HAS TO LET IT BE (windows.rs). The kit paints the page
+         * canvas, which is right everywhere it is read in a browser and wrong here: the setup face is a dim
+         * over the workspace behind this window, and a body with a colour of its own is an opaque sheet
+         * between the two. Each screen paints its own surface instead — the manager an opaque one, setup a
+         * translucent one — so what shows through is each face's decision rather than the kit's. */
+        background: transparent;
     }
     code,
     pre,

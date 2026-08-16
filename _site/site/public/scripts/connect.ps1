@@ -29,13 +29,23 @@ param(
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
+# A PHASE OF THE INSTALL, ANNOUNCED ONCE - prose for a terminal, and a name for anything watching.
+#
+# The desktop app spawns this script and turns its stdout into a progress bar, so it has to know WHICH phase
+# started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
+# connect.sh's step() and ic's util::step, and the same vocabulary - anything written WITHOUT a phase is
+# detail under the step that is running, never a step of its own.
+function Write-Step($Phase, $Message) {
+    Write-Host "intentic: [$Phase] $Message"
+}
+
 # Explicit params (direct file invocation) win; else the env vars the `irm | iex` one-liner carries. The env
 # spelling is also what rides through to ic, so set it back for anything a param supplied.
 if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
 if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
 
-Write-Host 'intentic: checking Docker...'
+Write-Step 'checking-docker' 'checking Docker...'
 $DockerInstalled = $false
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     # Best-effort guided install: winget can install Docker Desktop, but a first WSL2 setup may require a
@@ -51,7 +61,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         Write-Error 'docker is not installed and winget is unavailable - install Docker Desktop (https://docs.docker.com/get-docker/), then re-run.'
         exit 1
     }
-    Write-Host 'intentic: installing Docker Desktop (winget, ~500 MB)...'
+    Write-Step 'installing-docker' 'installing Docker Desktop (winget, ~500 MB)...'
     winget install --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
     if ($LASTEXITCODE -ne 0) {
         Write-Error 'Docker Desktop install failed - install it manually (https://docs.docker.com/get-docker/), then re-run.'
@@ -69,7 +79,7 @@ if ($LASTEXITCODE -ne 0) {
         Write-Error 'the docker daemon is not running. Start Docker Desktop, then re-run.'
         exit 1
     }
-    Write-Host 'intentic: waiting for Docker Desktop (accept the first-run dialog if shown)...'
+    Write-Step 'installing-docker' 'waiting for Docker Desktop (accept the first-run dialog if shown)...'
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 5
         docker info *> $null
@@ -92,7 +102,7 @@ if (-not $Ic) {
     New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
     $IcDest = "$IcDir\ic.exe"
     $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
-    Write-Host 'intentic: fetching the ic CLI...'
+    Write-Step 'fetching-ic' 'fetching the ic CLI...'
     try {
         Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
         Move-Item -Force "$IcDest.tmp" $IcDest

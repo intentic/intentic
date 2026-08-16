@@ -14,25 +14,26 @@ import {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
-import { computed, onMounted, onUnmounted, ref, watchEffect } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track } from "./analytics";
-import RunLog from "./components/RunLog.vue";
+import SetupProgress from "./components/SetupProgress.vue";
+import { advance, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
     desktopInfo,
-    isStep,
     machineReport,
     onPendingRecreate,
     onPendingSetup,
     onRun,
     onUpdateAvailable,
+    parseStep,
     pendingSetup,
     sandboxList,
     sandboxLogs,
     sandboxPower,
     sandboxRecreate,
     sandboxRemove,
+    setupFrame,
     setupRun,
-    stepLabel,
     takePendingRecreate,
     workspaceOpen,
     type DesktopInfo,
@@ -51,10 +52,14 @@ import {
  *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
  *   • manage the containers on THIS machine afterwards — the sandbox rows and their verbs
  *
- * They are two SCREENS rather than two sections, and a setup is the whole window while it is happening
- * (`setupMode`). It arrives in the frame the SPA was filling a moment ago (windows.rs), and the manager's
- * furniture beside it — a container list, a version, an "Open workspace" button — would be a set of decisions
- * to make about a machine whose sandbox is still being built.
+ * They are two SCREENS rather than two sections, and they are not the same KIND of thing. The manager is
+ * somewhere you go: an ordinary window, in the frame the workspace was filling. A setup is something that
+ * happens to the app you are already in, so it is an OVERLAY — a dim and a card over the workspace, which
+ * stays on screen behind it (windows.rs). It wore a full window once, title bar and taskbar entry and all,
+ * and read as a second application that had opened itself on top of the first.
+ *
+ * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
+ * button would be a set of decisions to make about a machine whose sandbox is still being built.
  *
  * The archived version had three personas here (a wizard, an environment checklist, a manager) in 527 lines.
  * The checklist is gone because the scripts do the reconciling and narrate it as they go; the wizard is gone
@@ -103,13 +108,46 @@ const running = computed(() => activeRun.value !== undefined);
 // includes having failed, because a failure is the one state the user most needs undivided.
 const setupMode = computed(() => pending.value !== undefined || activeRun.value === `setup`);
 
-/* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs swaps them into each
- * other's place), so the title is not decoration: it is the taskbar entry, the alt-tab label, and the only
- * thing outside this process that can say which screen is up — which is what the desktop smoke tier asserts
- * against, having deliberately no test hook to read instead. */
+/* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs), so the title is not
+ * decoration: it is the taskbar entry, the alt-tab label, and the only thing outside this process that can
+ * say which screen is up — which is what the desktop smoke tier asserts against, having deliberately no test
+ * hook to read instead.
+ *
+ * The FRAME follows it too, and for the same reason it is decided here: setup is an overlay over the
+ * workspace and the manager is an ordinary window, and which of the two is up is this file's state — a setup
+ * can arrive at a manager window, and a finished one hands the window back. */
 watchEffect(() => {
     void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — This computer`);
+    void setupFrame(setupMode.value);
 });
+
+/* --- HOW FAR THROUGH THE INSTALL IT IS (setupPlan.ts) ---
+ *
+ * The plan is built before the script starts, so the first frame of this screen already says what will
+ * happen and how many steps there are; the run's own `intentic: [phase] …` lines then move a cursor down it.
+ * `now` is only here so a long silent step still moves: a pull that says nothing for four minutes is the
+ * normal case, and a bar frozen through it is the screen this replaced. */
+const progress = ref<Progress | undefined>(undefined);
+const now = ref(Date.now());
+const progressShown = computed(() => (progress.value === undefined ? undefined : progressView(progress.value, now.value)));
+
+let ticker: ReturnType<typeof setInterval> | undefined;
+watch(
+    () => activeRun.value === `setup`,
+    (live) => {
+        clearInterval(ticker);
+        ticker = undefined;
+        if (!live) {
+            return;
+        }
+        ticker = setInterval(() => {
+            now.value = Date.now();
+            if (progress.value !== undefined) {
+                progress.value = tick(progress.value, now.value);
+            }
+        }, 1000);
+    },
+);
 
 const refresh = async (): Promise<void> => {
     try {
@@ -158,23 +196,25 @@ const hasRows = computed(() => sandboxes.value.length > 0 || (report.value?.pair
 
 /* HOW A FINISHED RUN IS REPORTED — the outcome, and where it stopped, and nothing else.
  *
- * The scripts narrate themselves in `intentic: …` lines (desktop.ts), so the last one before a failure is the
- * most specific thing anybody can say about where an install died — and it is a string this repo writes rather
- * than machine output, which is what makes it safe to send. The log beside it is full of paths, names and
- * tokens and none of that leaves here. */
-const isStepLine = (event: RunEvent): boolean => event.kind === `line` && event.stream === `stdout` && isStep(event.text);
+ * The scripts narrate themselves in `intentic: [phase] …` lines (desktop.ts), so the last phase before a
+ * failure is the most specific thing anybody can say about where an install died — and it is the PHASE ID
+ * rather than the sentence, so the same failure reports the same word after the copy is next reworded, and
+ * two releases' funnels can be compared at all. The log beside it is full of paths, names and tokens and
+ * none of that leaves here. */
+const stepOf = (event: RunEvent): string | undefined =>
+    event.kind === `line` && event.stream === `stdout` ? parseStep(event.text)?.phase : undefined;
 
 const runOutcome = (id: string, ok: boolean, startedAt: number): Record<string, unknown> => {
     const events = eventsOf(id);
     const exit = events.findLast((event) => event.kind === `exit`);
-    const last = events.findLast(isStepLine);
+    const phases = events.map(stepOf).filter((phase): phase is string => phase !== undefined);
     return {
         ok,
         durationMs: Date.now() - startedAt,
         exitCode: exit?.kind === `exit` ? exit.code : null,
-        steps: events.filter(isStepLine).length,
+        steps: phases.length,
         // Only on the way out: on a run that worked, the last step is just the last step.
-        ...(ok || last?.kind !== `line` ? {} : { failedStep: stepLabel(last.text) }),
+        ...(ok || phases.length === 0 ? {} : { failedStep: phases[phases.length - 1] }),
     };
 };
 
@@ -201,6 +241,12 @@ const runSetup = async (): Promise<void> => {
         return;
     }
     const startedAt = Date.now();
+    /* The plan, before the first line of output — that is the point of it. A machine with Docker already up
+     * is not shown the step that installs it, and a setup that carries no folder is not shown the one that
+     * pairs one: the list on screen is what WILL run here, so nothing on it is ever skipped in front of the
+     * reader. Rebuilt per run, so "Try again" starts a clean bar rather than resuming a dead one's. */
+    progress.value = startProgress(setupPlan({ dockerReady: info.value?.dockerReady ?? true, syncing: (args.syncDir ?? ``) !== `` }), startedAt);
+    now.value = startedAt;
     track(`desktop_install_started`, { dockerReady: info.value?.dockerReady ?? null, sync: (args.syncDir ?? ``) !== `` });
     setupError.value = await start(`setup`, () => setupRun(args));
     const ok = setupError.value === undefined;
@@ -348,6 +394,12 @@ onMounted(async () => {
     stop = await Promise.all([
         onRun((event) => {
             runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
+            // Folded as it arrives rather than derived from the whole log afterwards: the model needs to know
+            // WHEN each phase started to estimate anything, and a line carries no clock of its own.
+            if (event.run === `setup` && progress.value !== undefined) {
+                now.value = Date.now();
+                progress.value = advance(progress.value, event, now.value);
+            }
         }),
         onPendingSetup(() => void loadPending()),
         onPendingRecreate(() => void drainRecreate()),
@@ -357,131 +409,136 @@ onMounted(async () => {
     // exactly once — by the event above or by these, whichever finds the request still there.
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
 });
-onUnmounted(() => stop.forEach((unlisten) => unlisten()));
+onUnmounted(() => {
+    clearInterval(ticker);
+    stop.forEach((unlisten) => unlisten());
+});
 </script>
 
 <template>
-    <div class="h-dvh overflow-auto bg-surface text-content">
-        <!-- A column, not a stretched form: this face inherits the workspace's frame (windows.rs), which is a
-             wide window, and everything on either screen is a short list of short things. Setup is ONE card in
-             that frame, so it sits in the middle of it — pinned to the top it reads as a page that failed to
-             load the rest of itself. -->
-        <div :class="['mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5', setupMode && 'justify-center']">
-            <!-- SETUP — the whole window while it runs. Everything shown here was decided in the SPA; this
-                 screen is where the part that touches the machine happens, and says so as it goes. -->
-            <template v-if="setupMode">
-                <Card class="flex flex-col gap-3">
-                    <div class="flex items-start gap-2.5">
-                        <Icon name="bolt" class="mt-0.5 text-primary-400" />
-                        <div class="min-w-0 flex-1">
-                            <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
-                            <p class="text-2xs text-subtle">
-                                Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
-                                workspace once it answers.
-                            </p>
-                        </div>
-                    </div>
-                    <p v-if="info && !info.dockerReady" class="flex items-start gap-2 text-2xs text-warning">
-                        <Icon name="box" class="mt-0.5 shrink-0" />
-                        <span v-if="info.os === `windows`"
-                            >Docker isn't running yet — setup installs Docker Desktop first, which is a large download.</span
-                        >
-                        <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
+    <!-- SETUP — an OVERLAY over the workspace, not a screen instead of it (windows.rs). The window is
+         chromeless and transparent over the frame the workspace is still filling, so this dim and this card
+         are the whole of what the user sees change: the app they were in, with an installer over it. Which
+         is also why the card carries its own × — a window with no title bar that cannot be dismissed from
+         inside is the one shape worse than the one this replaced. -->
+    <div v-if="setupMode" class="flex h-dvh items-center justify-center overflow-auto bg-black/55 p-6 text-content">
+        <Card class="flex w-full max-w-lg flex-col gap-3 shadow-2xl">
+            <div class="flex items-start gap-2.5">
+                <Icon name="bolt" class="mt-0.5 text-primary-400" />
+                <div class="min-w-0 flex-1">
+                    <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
+                    <p class="text-2xs text-subtle">
+                        Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your workspace
+                        once it answers.
                     </p>
-                    <RunLog
-                        v-if="activeRun === `setup` || eventsOf(`setup`).length > 0"
-                        :events="eventsOf(`setup`)"
-                        :running="activeRun === `setup`"
-                    />
-                    <Notice v-if="setupError" tone="danger" class="text-2xs">{{ setupError }}</Notice>
-                    <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this
-                         app can strand someone, and "try again" as the only control is a dead end wearing a
-                         button. -->
-                    <div v-if="setupError" class="flex flex-wrap items-center gap-2">
-                        <Button label="Try again" :disabled="running" @click="runSetup">
-                            <template #icon><Icon name="bolt" /></template>
-                        </Button>
-                        <Button severity="secondary" :text="true" label="Back to your workspace" @click="workspaceOpen">
-                            <template #icon><Icon name="arrow-up-right" /></template>
-                        </Button>
-                    </div>
-                </Card>
-            </template>
+                </div>
+                <!-- Where every installer keeps it. It closes the overlay and nothing else: the script is a
+                     process on this machine, not something this window is holding up. -->
+                <button
+                    type="button"
+                    aria-label="Close"
+                    class="-m-1 shrink-0 rounded-md p-1 text-subtle hover:bg-canvas hover:text-content"
+                    @click="workspaceOpen"
+                >
+                    <Icon name="times" />
+                </button>
+            </div>
+            <p v-if="info && !info.dockerReady" class="flex items-start gap-2 text-2xs text-warning">
+                <Icon name="box" class="mt-0.5 shrink-0" />
+                <span v-if="info.os === `windows`">Docker isn't running yet — setup installs Docker Desktop first, which is a large download.</span>
+                <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
+            </p>
+            <SetupProgress v-if="progressShown" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
+            <Notice v-if="setupError" tone="danger" class="text-2xs">{{ setupError }}</Notice>
+            <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this app can
+                 strand someone, and "try again" as the only control is a dead end wearing a button. -->
+            <div v-if="setupError" class="flex flex-wrap items-center gap-2">
+                <Button label="Try again" :disabled="running" @click="runSetup">
+                    <template #icon><Icon name="bolt" /></template>
+                </Button>
+                <Button severity="secondary" :text="true" label="Back to your workspace" @click="workspaceOpen">
+                    <template #icon><Icon name="arrow-up-right" /></template>
+                </Button>
+            </div>
+        </Card>
+    </div>
 
-            <!-- THE MANAGER — what this machine is running, once nothing is being handed over. -->
-            <template v-else>
-                <header class="flex items-center gap-3">
-                    <h1 class="flex-1 text-base font-semibold">This computer</h1>
-                    <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
-                    <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
-                        <template #icon><Icon name="refresh" /></template>
-                    </Button>
-                </header>
+    <div v-else class="h-dvh overflow-auto bg-surface text-content">
+        <!-- A column, not a stretched form: this face inherits the workspace's frame (windows.rs), which is a
+             wide window, and everything on this screen is a short list of short things. -->
+        <!-- THE MANAGER — what this machine is running, once nothing is being handed over. -->
+        <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 p-5">
+            <header class="flex items-center gap-3">
+                <h1 class="flex-1 text-base font-semibold">This computer</h1>
+                <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
+                <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
+                    <template #icon><Icon name="refresh" /></template>
+                </Button>
+            </header>
 
-                <!-- The app updates itself; this is the notice, not a gate. -->
-                <Notice v-if="updateVersion" tone="info" class="items-center">
-                    Intentic {{ updateVersion }} is available — it installs the next time you quit.
-                </Notice>
+            <!-- The app updates itself; this is the notice, not a gate. -->
+            <Notice v-if="updateVersion" tone="info" class="items-center">
+                Intentic {{ updateVersion }} is available — it installs the next time you quit.
+            </Notice>
 
-                <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
-                    <Icon name="box" class="mt-0.5 shrink-0" />
-                    <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
-                </p>
-                <p v-else-if="!hasRows" class="text-2xs text-muted">
-                    No sandboxes here yet. Set one up from your workspace — this screen is where you manage it afterwards.
-                </p>
+            <p v-if="listError" class="flex items-start gap-2 text-2xs text-muted">
+                <Icon name="box" class="mt-0.5 shrink-0" />
+                <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
+            </p>
+            <p v-else-if="!hasRows" class="text-2xs text-muted">
+                No sandboxes here yet. Set one up from your workspace — this screen is where you manage it afterwards.
+            </p>
 
-                <!-- WHAT THIS COMPUTER IS RUNNING — one row per sandbox, carrying its folder, its ports, its
+            <!-- WHAT THIS COMPUTER IS RUNNING — one row per sandbox, carrying its folder, its ports, its
                      image and its verbs, exactly as the SPA's Computers tab draws the same machine.
                      `syncDir` rides the setup link into connect.sh and was never heard from again, so the app
                      whose whole premise is not needing a terminal could say a container was up and nothing about
                      the sync the same setup had just configured — the folders and ports below are that half, and
                      they belong ON the sandbox they are for rather than under a heading of their own. -->
-                <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
-                    <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                    <MachineDetail :pairings="report?.pairings" :ports="report?.ports" :sandboxes="sandboxRows" :watcher="report?.watcher">
-                        <!-- What the list is, and the state of the agent behind it, on one line — the watcher is
+            <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
+                <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
+                <MachineDetail :pairings="report?.pairings" :ports="report?.ports" :sandboxes="sandboxRows" :watcher="report?.watcher">
+                    <!-- What the list is, and the state of the agent behind it, on one line — the watcher is
                              a fact about the MACHINE rather than about any row under it. -->
-                        <template #heading>
-                            <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
-                                Sandboxes on this computer
-                                <span v-if="report?.agents.sync" class="font-mono normal-case">agent v{{ report.agents.sync }}</span>
-                            </span>
-                        </template>
-                        <template #actions="{ group }">
-                            <SandboxVerbs
-                                v-if="group.sandbox"
-                                :running="group.sandbox.running"
-                                :busy="busyVerb(group)"
-                                :disabled="running || busy !== undefined"
-                                :logs-open="logOpen(group)"
-                                @act="(verb) => act(group, verb)"
-                            />
-                        </template>
-                        <!-- The machine's own output: while a row works, and afterwards for as long as a log tail
+                    <template #heading>
+                        <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
+                            Sandboxes on this computer
+                            <span v-if="report?.agents.sync" class="font-mono normal-case">agent v{{ report.agents.sync }}</span>
+                        </span>
+                    </template>
+                    <template #actions="{ group }">
+                        <SandboxVerbs
+                            v-if="group.sandbox"
+                            :running="group.sandbox.running"
+                            :busy="busyVerb(group)"
+                            :disabled="running || busy !== undefined"
+                            :logs-open="logOpen(group)"
+                            @act="(verb) => act(group, verb)"
+                        />
+                    </template>
+                    <!-- The machine's own output: while a row works, and afterwards for as long as a log tail
                              is being read. -->
-                        <template #footer="{ group }">
-                            <MachineRunLog
-                                v-if="busyVerb(group) || logOpen(group)"
-                                :lines="paneLines(group)"
-                                :running="busyVerb(group) !== undefined"
-                                empty="Starting on this computer…"
-                                note="Running on this computer — it keeps going even if you close this window."
-                            />
-                            <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
-                                {{ rowFailure.message }}
-                            </Notice>
-                        </template>
-                    </MachineDetail>
-                </section>
+                    <template #footer="{ group }">
+                        <MachineRunLog
+                            v-if="busyVerb(group) || logOpen(group)"
+                            :lines="paneLines(group)"
+                            :running="busyVerb(group) !== undefined"
+                            empty="Starting on this computer…"
+                            note="Running on this computer — it keeps going even if you close this window."
+                        />
+                        <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
+                            {{ rowFailure.message }}
+                        </Notice>
+                    </template>
+                </MachineDetail>
+            </section>
 
-                <footer class="mt-auto flex items-center gap-2 pt-2">
-                    <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">
-                        <template #icon><Icon name="arrow-up-right" /></template>
-                    </Button>
-                    <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
-                </footer>
-            </template>
+            <footer class="mt-auto flex items-center gap-2 pt-2">
+                <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">
+                    <template #icon><Icon name="arrow-up-right" /></template>
+                </Button>
+                <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
+            </footer>
         </div>
     </div>
 </template>

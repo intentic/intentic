@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::util::{bail, kv_lines, Result};
+use crate::util::{bail, kv_lines, step, Result};
 
 /* The setup-code claim. The platform's one-liner carries ONE short-lived code instead of raw tokens (nothing
  * secret lands in shell history or `ps`); redeeming it answers KEY=value lines — CONNECT_TOKEN plus either
@@ -62,7 +62,7 @@ pub fn agent_for(platform_url: &str) -> ureq::Agent {
 
 /// POST `<platform>/setup/claim` with the code.
 pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
-    println!("intentic: redeeming the setup code…");
+    step("claiming-code", "redeeming the setup code…");
     let agent = agent_for(platform_url);
     let url = format!("{platform_url}/setup/claim");
     let body = match agent.post(&url).send_form([("code", code)]) {

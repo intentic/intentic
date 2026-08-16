@@ -22,6 +22,22 @@ macro_rules! bail {
 }
 pub(crate) use bail;
 
+/* A PHASE OF THE FLOW, ANNOUNCED ONCE — prose for the terminal, and a name for anything watching.
+ *
+ * The connect flow is read by two audiences at once: a person watching a terminal, and the desktop app,
+ * which spawns this binary and turns its stdout into a progress bar (desktop-app/src/setupPlan.ts). The
+ * second one needs to know WHICH phase started, and it cannot be asked to recognise the sentence: every
+ * rewording of a step's prose would silently move somebody's progress bar, which is the one thing a
+ * progress bar must never do.
+ *
+ * So a step carries its phase id in front of the sentence, and the id is the same vocabulary the platform's
+ * setup report uses (SetupReportSchema.stage) — the browser's wait screen and the app's bar name the same
+ * phase because they read the same word. Anything printed WITHOUT one is ordinary narration: detail under
+ * whichever step is running, never a step of its own. */
+pub fn step(phase: &str, message: &str) {
+    println!("intentic: [{phase}] {message}");
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);

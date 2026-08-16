@@ -30,6 +30,16 @@ if ! command -v curl >/dev/null 2>&1; then
     exit 1
 fi
 
+# A PHASE OF THE INSTALL, ANNOUNCED ONCE — prose for a terminal, and a name for anything watching.
+#
+# The desktop app spawns this script and turns its stdout into a progress bar, so it has to know WHICH phase
+# started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
+# ic's util::step, and the same vocabulary — anything echoed WITHOUT a phase is detail under the step that is
+# running, never a step of its own.
+step() {
+    echo "intentic: [$1] $2"
+}
+
 # Peek at the args only as far as the failure messages need (the first non-flag positional is the setup
 # code); everything is forwarded to ic untouched, which owns the real parsing.
 SETUP_CODE_PEEK=""
@@ -98,7 +108,7 @@ confirm_install_docker() {
 # caller guards), so nothing here escalates behind the user's back.
 install_docker_linux() {
     confirm_install_docker "intentic: Docker is not installed. Install it now via get.docker.com?"
-    echo "intentic: installing Docker Engine (get.docker.com)…"
+    step installing-docker "installing Docker Engine (get.docker.com)…"
     curl -fsSL https://get.docker.com | sh
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
         systemctl enable --now docker >/dev/null 2>&1 || true
@@ -117,9 +127,9 @@ install_docker_macos() {
         *) dmg_arch="amd64" ;;
     esac
     dmg="$(mktemp -d)/Docker.dmg"
-    echo "intentic: downloading Docker Desktop (~1.5 GB)…"
+    step installing-docker "downloading Docker Desktop (~1.5 GB)…"
     curl -fL "https://desktop.docker.com/mac/main/${dmg_arch}/Docker.dmg" -o "$dmg"
-    echo "intentic: installing Docker Desktop…"
+    step installing-docker "installing Docker Desktop…"
     hdiutil attach "$dmg" -nobrowse -quiet
     /Volumes/Docker/Docker.app/Contents/MacOS/install --accept-license --user="${SUDO_USER:-$USER}"
     hdiutil detach /Volumes/Docker -quiet || true
@@ -132,7 +142,7 @@ install_docker_macos() {
     fi
 }
 
-echo "intentic: checking Docker…"
+step checking-docker "checking Docker…"
 if ! command -v docker >/dev/null 2>&1; then
     # Installing Docker is the ONE thing here that needs root, so it is also the one thing that can fail on a
     # deliberately sudo-less run — say so with the remedy instead of escalating behind the user's back.
@@ -148,7 +158,7 @@ if ! command -v docker >/dev/null 2>&1; then
     # A freshly installed daemon takes a moment (Docker Desktop: first-run dialog + VM boot) — wait up to
     # 5 min. An already-installed-but-unreachable daemon is diagnosed by ic instead (it can tell a stopped
     # daemon from one this user may not talk to).
-    echo "intentic: waiting for the Docker daemon (accept Docker Desktop's first-run dialog if shown)…"
+    step installing-docker "waiting for the Docker daemon (accept Docker Desktop's first-run dialog if shown)…"
     i=0
     until docker version --format '{{.Server.Version}}' >/dev/null 2>&1; do
         i=$((i + 1))
@@ -194,7 +204,7 @@ case "${SANDBOX_IMAGE:-}" in
     *)
         repo_root="$CHECKOUT"
         if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
-            echo "intentic: building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
+            step pulling-image "building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…"
             if ! (cd "$repo_root" && bash _tools/scripts/prepare-image-trees.sh &&
                 node _tools/scripts/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard &&
                 docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
@@ -217,7 +227,7 @@ IC="${IC_BIN:-}"
 if [ -z "$IC" ] && [ -n "$CHECKOUT" ]; then
     ic_manifest="$CHECKOUT/_sandbox/ic/Cargo.toml"
     if [ -f "$ic_manifest" ] && command -v cargo >/dev/null 2>&1; then
-        echo "intentic: building the checkout's ic CLI…"
+        step fetching-ic "building the checkout's ic CLI…"
         if cargo build --quiet --manifest-path "$ic_manifest"; then
             IC="$CHECKOUT/_sandbox/ic/target/debug/ic"
         else
@@ -249,7 +259,7 @@ if [ -z "$IC" ]; then
         dest="$HOME/.intentic/ic/bin/ic"
         mkdir -p "$(dirname "$dest")"
     fi
-    echo "intentic: fetching the ic CLI…"
+    step fetching-ic "fetching the ic CLI…"
     # Download beside the target and rename into place: overwriting a running executable fails outright
     # ("Text file busy"), and a half-downloaded binary must never be what runs.
     if curl -fsSL "${IC_URL:-https://github.com/intentic/intentic/releases/latest/download}/ic-${os}-${arch}" -o "${dest}.tmp"; then

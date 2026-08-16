@@ -38,6 +38,7 @@
  * browser reading the product's own docs is titled `Intentic …` — gets counted as the app's. See `appWindows`.
  */
 
+import type { WindowInfo } from "@intentic/desktop";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";
@@ -68,6 +69,9 @@ const SCREEN_SECONDS = 30;
  * It has to be named because the one-window rule counts the app's windows BY OWNING PROGRAM, and by that
  * measure a perfectly ordinary app is always showing two. What the rule means is windows a person can see. */
 const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
+
+/** One window's rectangle as a string, so two of them can be compared (and printed) as one value. */
+const box = (window: WindowInfo): string => `${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
 
 const describeWindows = async (): Promise<string> => {
     const titles = await windowTitles();
@@ -237,13 +241,27 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.detail(await describeWindows());
         }
 
-        // …IN the workspace's frame, not beside it. The whole window model as one assertion, and worth one because
-        // the failure it guards is invisible to every other assertion here: a setup screen that opens as a SECOND
-        // window satisfies the search above, and what the user gets is an unasked-for window in front of the one
-        // they were reading. Taken after the search, so the swap has landed.
-        const visibleWindows = async (): Promise<number> =>
-            (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW).length;
-        if (!(await harness.untilTrue(15, `the workspace stepped aside — one window, not two`, async () => (await visibleWindows()) === 1))) {
+        /* …OVER the workspace, covering it exactly. The whole window model as one assertion, and worth one
+         * because the failure it guards is invisible to every other assertion here: a setup screen that opens
+         * as a second window somewhere else on screen satisfies the search above perfectly well, and what the
+         * user gets is an unasked-for window beside the one they were reading.
+         *
+         * Setup is an OVERLAY — the workspace stays up and this sits on its frame — so "same rectangle" is the
+         * property, and comparing bounds is the only thing that can tell the two apart from outside the
+         * process. Taken after the search, so the move has landed. */
+        const rectangles = async (): Promise<{ setup?: string; workspace?: string }> => {
+            const own = (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
+            const setup = own.find((window) => window.title.includes(SETUP_TITLE));
+            // Everything that is not the setup screen is the workspace: this app has exactly two faces, and
+            // the manager's is not up while a setup is.
+            const workspace = own.find((window) => !window.title.includes(SETUP_TITLE));
+            return { ...(setup && { setup: box(setup) }), ...(workspace && { workspace: box(workspace) }) };
+        };
+        const overlaid = async (): Promise<boolean> => {
+            const { setup, workspace } = await rectangles();
+            return setup !== undefined && setup === workspace;
+        };
+        if (!(await harness.untilTrue(15, `the setup screen covers the workspace — an overlay, not a second window`, overlaid))) {
             harness.detail(await describeWindows());
         }
 

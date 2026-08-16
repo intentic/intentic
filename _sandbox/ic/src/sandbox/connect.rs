@@ -7,7 +7,7 @@ use crate::logfile::Log;
 use crate::platform;
 use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX};
 use crate::tty;
-use crate::util::{bail, kv_lines, slug_from_token, Result};
+use crate::util::{bail, kv_lines, slug_from_token, step, Result};
 
 /* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's
  * post-Docker half. The bootstrap shim keeps the one thing that genuinely needs a dependency-free start
@@ -109,7 +109,7 @@ fn connect(
             checks::check_cloudflare(&token)
         }));
     }
-    let findings = checks::run("preflight — checking this machine…", list);
+    let findings = checks::run("preflight", "preflight — checking this machine…", list);
     if let Some(summary) = checks::failure_summary(&findings) {
         reporter.findings_failed("preflight", checks::wire_failures(&findings));
         bail!("{summary}");
@@ -253,7 +253,7 @@ fn connect(
     // access` — a NAT'd local machine the sandbox can't reach by IP.
     #[cfg(unix)]
     if self_host {
-        println!("intentic: creating the host SSH tunnel…");
+        step("creating-tunnel", "creating the host SSH tunnel…");
         let mut host_args: Vec<String> = vec![
             "run".into(),
             "--rm".into(),
@@ -289,7 +289,7 @@ fn connect(
         );
     }
 
-    println!("intentic: starting sandbox…");
+    step("starting-sandbox", "starting sandbox…");
     reporter.stage("starting-sandbox");
     // The sandbox's own network, created first because the container joins it: a Windows self-host target
     // (the dind container above) is reached by name on it, and nothing else on this machine is.
@@ -383,7 +383,10 @@ fn connect(
     // No connector container: the sandbox's own entrypoint enables against the hub with the grant below and
     // serves its share from inside. One less container per sandbox, and the token never sits beside the box.
 
-    println!("intentic: waiting for the sandbox daemon to come up…");
+    step(
+        "waiting-health",
+        "waiting for the sandbox daemon to come up…",
+    );
     reporter.stage("waiting-health");
     health::wait_answering(&container, &log, "")?;
 
@@ -393,7 +396,10 @@ fn connect(
      * workspace, and nothing anywhere named the broken link. Verify end to end, with patience (a name still
      * propagating and an in-box agent still coming up are ordinary states of a new setup), and fail NAMING
      * the link rather than let it look set up when it is not. */
-    println!("intentic: verifying the sandbox is reachable end to end…");
+    step(
+        "verifying",
+        "verifying the sandbox is reachable end to end…",
+    );
     reporter.stage("verifying");
     let findings = doctor::verify_chain(
         &slug,
@@ -489,12 +495,18 @@ fn is_registryless(image: &str) -> bool {
 fn ensure_image(image: &str, log: &Log) -> Result<()> {
     if is_registryless(image) {
         if docker::image_exists(image) {
-            println!("intentic: using the existing local sandbox image {image}.");
+            step(
+                "pulling-image",
+                &format!("using the existing local sandbox image {image}."),
+            );
             return Ok(());
         }
         bail!("'{image}' is a local dev tag that isn't built — run 'pnpm build:sandbox' in the intentic repo (or its dev-sandbox wrapper), or unset SANDBOX_IMAGE to use the published image.");
     }
-    println!("intentic: pulling sandbox image {image} (first run can take a minute)…");
+    step(
+        "pulling-image",
+        &format!("pulling sandbox image {image} (first run can take a minute)…"),
+    );
     docker::pull(image, log)
 }
 
@@ -503,7 +515,10 @@ fn ensure_image(image: &str, log: &Log) -> Result<()> {
 /// user's Mutagen daemon). The sync agent connects over the public URL and retries transient tunnel errors
 /// itself, so this local gate need not wait for the tunnel.
 fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_dir: &str) -> bool {
-    println!("intentic: waiting for your sandbox to come online to set up desktop sync…");
+    step(
+        "desktop-sync",
+        "waiting for your sandbox to come online to set up desktop sync…",
+    );
     if !wait_local_health(container) {
         return false;
     }
@@ -533,8 +548,9 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
 /// arrives allowed to start, stop and update this machine's sandboxes and nothing else — no shell, no files,
 /// no screen. Widening it is a switch on the computer's own card.
 fn run_host_agent(container: &str, public_url: &str, pair_token: &str) -> bool {
-    println!(
-        "intentic: connecting this computer so you can manage its sandboxes from your browser…"
+    step(
+        "connecting-machine",
+        "connecting this computer so you can manage its sandboxes from your browser…",
     );
     if !wait_local_health(container) {
         return false;

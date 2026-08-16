@@ -336,14 +336,27 @@ else
     cat "$LOG" >&2 || true
 fi
 
-# ...IN the workspace's frame, not beside it. This is the whole window model as one assertion, and the reason
-# it is worth an assertion is that the failure it guards is invisible to every other one here: a setup screen
-# that opens as a SECOND window still satisfies the search above, and what the user gets is an unasked-for
-# window in front of the one they were reading. The count is taken after the search, so the swap has landed.
-until_true 15 "the workspace stepped aside — one window, not two" \
-    bash -c '[ "$(xdotool search --onlyvisible --name "^Intentic" | wc -l)" -eq 1 ]' || {
+# ...OVER the workspace, covering it exactly — which is the whole window model as one assertion, and worth one
+# because the failure it guards is invisible to every other assertion here. A setup screen that opens as a
+# second window somewhere else on screen satisfies the title search above perfectly well, and what the user
+# gets is an unasked-for window beside the one they were reading. Setup is an OVERLAY: the workspace stays up
+# and this sits on its frame, so "same rectangle" is the property, and a geometry comparison is the only thing
+# that can tell the two apart from outside the process.
+overlays_workspace() {
+    local setup workspace
+    setup=$(window_titled "$SETUP_TITLE" | head -1)
+    workspace=$(xdotool search --onlyvisible --name "^Intentic$" | head -1)
+    [ -n "$setup" ] && [ -n "$workspace" ] || return 1
+    # --shell prints X=/Y=/WIDTH=/HEIGHT= assignments; compare the four as one string rather than eval'ing
+    # window geometry into this shell.
+    [ "$(xdotool getwindowgeometry --shell "$setup" | grep -E '^(X|Y|WIDTH|HEIGHT)=')" = \
+        "$(xdotool getwindowgeometry --shell "$workspace" | grep -E '^(X|Y|WIDTH|HEIGHT)=')" ]
+}
+until_true 15 "the setup screen covers the workspace — an overlay, not a second window" overlays_workspace || {
     echo "--- mapped windows ---" >&2
-    mapped_windows | while read -r id; do echo "$id $(xdotool getwindowname "$id" 2>/dev/null)" >&2; done
+    mapped_windows | while read -r id; do
+        echo "$id $(xdotool getwindowname "$id" 2>/dev/null) $(xdotool getwindowgeometry --shell "$id" 2>/dev/null | tr '\n' ' ')" >&2
+    done
 }
 
 # Single instance: the link must be handled by the app that was already running, not by a second copy of it.

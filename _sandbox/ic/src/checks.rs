@@ -74,8 +74,10 @@ pub fn print_row(finding: &Finding) {
 
 /// Run every check in order, printing each verdict as it lands — the user watches the diagnosis happen
 /// rather than staring at a silent pause. Returns ALL findings; nothing short-circuits.
-pub fn run(header: &str, checks: Vec<Check>) -> Vec<Finding> {
-    println!("intentic: {header}");
+///
+/// `phase` names the run for anything counting steps (util::step); the rows under it are that step's detail.
+pub fn run(phase: &str, header: &str, checks: Vec<Check>) -> Vec<Finding> {
+    crate::util::step(phase, header);
     let mut findings = Vec::with_capacity(checks.len());
     for check in checks {
         let finding = Finding {
