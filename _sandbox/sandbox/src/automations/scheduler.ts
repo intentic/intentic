@@ -209,6 +209,15 @@ export const fireAutomation = async (services: Services, automation: AutomationR
     return turn;
 };
 
+/* Wait for whatever fire is running for one automation, if any. The tick fires DETACHED, so seeing a run
+ * recorded is not the same as the automation being free again: the record is written inside the fire, and the
+ * overlap lock only releases once the fire returns. Anything that must fire the same automation a second time
+ * and mean it (a test's next tick, a caller driving two fires in a row) awaits this in between — otherwise the
+ * second fire lands in that window and is dropped as overlapping. */
+export const automationIdle = async (id: string): Promise<void> => {
+    await inFlight.get(id);
+};
+
 // Guard (payload visible) → wake the agent (payload appended to the prompt) → record the run. Reached only
 // through fireAutomation, which guarantees no two runs of one automation are ever inside this at once.
 const runFire = async (

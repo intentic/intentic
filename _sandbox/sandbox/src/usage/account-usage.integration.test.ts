@@ -13,7 +13,11 @@ const tempStore = () => {
 };
 
 const SECOND = 1000;
-const inAnHour = (): number => Math.floor((Date.now() + 3600 * SECOND) / SECOND);
+// Anchored to one instant for the whole file: read off the wall clock at each call site, two reads of "an hour
+// from now" that straddle a second boundary differ by one, and an assertion comparing a stored reset to a
+// freshly computed one fails for no reason at all.
+const NOW = Date.now();
+const inAnHour = (): number => Math.floor((NOW + 3600 * SECOND) / SECOND);
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, resetsAt: inAnHour(), ...over });
 const snapshot = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: Date.now(), ...over });
 

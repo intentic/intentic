@@ -9,7 +9,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
-import { createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
+import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
 
 // The scheduler only touches automations/approvals/activity/turnJournal/workspace/logger/sandboxSettings —
 // plus, for the countdown scan, the registry's liveSessionIds (`live` mutates in place, as a test's fleet
@@ -77,6 +77,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     expect(prompts).toEqual([]);
 
     // Editing the guard keeps the history; the next due tick now wakes and prepends a completed run.
+    await automationIdle("guarded");
     await services.automations.upsert(automation("guarded", { guard: "true" }));
     await scheduler.tick(pastDue() + 61_000);
     await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2));
@@ -180,6 +181,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     expect((await services.approvals.list())[0]?.automationId).toBe("gated");
 
     // Approving replays it with cleared: "both": both gates are bypassed, the agent wakes, a run is recorded.
+    await automationIdle("gated");
     const record = (await services.automations.get("gated")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
     expect(prompts).toEqual(["wake:gated"]);
@@ -463,6 +465,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing �
     expect(prompts).toEqual([]);
 
     // The owner's approval replays it — the grant satisfies the hold.
+    await automationIdle("plain");
     const record = (await services.automations.get("plain")) as AutomationRecord;
     await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
     expect(prompts).toEqual(["wake:plain"]);
