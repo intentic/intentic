@@ -1949,7 +1949,7 @@ export const loadAccountStatus = async (): Promise<void> => {
  *
  * A failure leaves the previous figures rather than zeroing them: the count is a courtesy, and a picker that
  * flashed "0 left" because one poll missed would tell a user their trial had ended when it had not. */
-const loadTrialStatus = async (): Promise<void> => {
+export const loadTrialStatus = async (): Promise<void> => {
     try {
         trialStatus.value = (await sandboxJson(`/endpoints/trial/status`)) as TrialStatusResponse;
     } catch {

@@ -15,13 +15,20 @@ import { CapabilityIdParamSchema, ModelsSchema } from "../schemas.js";
  * `available` false is the ordinary answer, not an error: most sandboxes run against a platform that serves no
  * trial, and the picker simply has no trial row to badge.
  */
+const TrialHealthSchema = z.enum(["unknown", "healthy", "degraded", "unavailable"]);
+export type TrialHealth = z.infer<typeof TrialHealthSchema>;
+
 export const TrialStatusSchema = z.object({
     available: z.boolean(),
     allowance: z.number().int().nonnegative(),
     used: z.number().int().nonnegative(),
     remaining: z.number().int().nonnegative(),
+    // The shared trial pool's last real chat outcome. `unknown` means no recent turn has measured it.
+    health: TrialHealthSchema,
     // ISO stamp of the next reset, absent until the platform has answered once.
     resetsAt: z.string().optional(),
+    // Earliest known time a quarantined upstream key can be tried again.
+    retryAt: z.string().optional(),
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 

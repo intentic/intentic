@@ -1,8 +1,8 @@
-import type { ProviderRefusal } from "@intentic/sandbox-contract";
+import { type ProviderRefusal, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import type { SeatRefusal } from "../claude/claude-seats.js";
-import { services } from "../route-testing.js";
+import { services, withTranslator } from "../route-testing.js";
 import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
 /* What a harness process is told about models, and the reason it matters beyond the turn's own `--model`: a
@@ -39,6 +39,33 @@ test("every harness TURN is told to ride out a provider outage rather than give 
     for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
         expect(harnessEnv(credentials)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
     }
+});
+
+test("a free-trial turn uses the platform's bounded key walk instead of the long harness watchdog", () => {
+    const env = harnessEnv({ baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gemini-flash-latest", trial: true });
+    expect(env["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
+    expect(env["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
+});
+
+test("the reserved free-trial endpoint carries its bounded policy into the resolved credential", async () => {
+    const sandbox = services({
+        config: withTranslator,
+        endpointModels: {
+            models: async () => ({ models: [{ id: "gemini-flash-latest", label: "Gemini Flash" }], default: "gemini-flash-latest" }),
+            forget: async () => {},
+        },
+    });
+    await sandbox.capabilities.upsert({
+        id: TRIAL_ENDPOINT_ID,
+        kind: "endpoint",
+        config: { baseUrl: "https://platform.test/trial/v1", protocol: "openai", apiKey: "connect-token" },
+    });
+    const result = await resolveHarnessCredentials(
+        sandbox,
+        { agent: `endpoint/${TRIAL_ENDPOINT_ID}`, model: "gemini-flash-latest" },
+    );
+
+    expect(result.ok && result.credentials.trial).toBe(true);
 });
 
 test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {

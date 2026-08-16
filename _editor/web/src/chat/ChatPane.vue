@@ -29,7 +29,7 @@ import { creditSummary, formatCredits } from "../composables/membership/creditMe
 import { useMembership } from "../composables/membership/useMembership";
 import { useToolCalls } from "../composables/chat/useToolCalls";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
-import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { conversationView, hydrateOnce, loadTrialStatus, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
@@ -261,6 +261,7 @@ const activeAccountReauth = computed(() => {
  * number is cheaper than letting somebody discover it by watching twelve become seven. */
 const onTrial = computed(() => isTrialProvider(provider.value));
 const trialLeft = computed(() => trialStatus.value.remaining);
+const trialHealthIssue = computed(() => trialStatus.value.health === `degraded` || trialStatus.value.health === `unavailable`);
 const trialNotice = computed(() => {
     if (!onTrial.value) {
         return undefined;
@@ -268,9 +269,19 @@ const trialNotice = computed(() => {
     if (trialExhausted(provider.value)) {
         return `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`;
     }
+    if (trialStatus.value.health === `unavailable`) {
+        return `Free trial temporarily unavailable — failed messages aren’t counted.`;
+    }
+    if (trialStatus.value.health === `degraded`) {
+        return `Free trial service is degraded — another upstream key may still answer, and failed messages aren’t counted.`;
+    }
     const left = `${trialLeft.value} free ${trialLeft.value === 1 ? `message` : `messages`} left today`;
     return `${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
 });
+const retryTrial = async (): Promise<void> => {
+    await loadTrialStatus();
+    await props.conversation.resume();
+};
 
 /* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
  * instant and nothing anyone can do before it, so the transcript notice naming that instant says everything
@@ -1775,15 +1786,29 @@ watch(
                              be the person who picked, and a conversation can outlive the click that started it.
                              Exhausted, the same strip becomes the signpost to the free Google sign-in — the next
                              rung, and the one with no daily cap. -->
-                        <button
+                        <div
                             v-if="trialNotice"
-                            type="button"
-                            class="flex items-start gap-2 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
-                            @click="router.push({ path: '/sandbox/agent', query: { connect: 'gemini' } })"
+                            class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
                         >
                             <Icon name="sparkles" class="mt-0.5 shrink-0 text-link" />
-                            <span>{{ trialNotice }}</span>
-                        </button>
+                            <span class="min-w-0 flex-1">{{ trialNotice }}</span>
+                            <button
+                                v-if="trialHealthIssue"
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                                :disabled="streaming"
+                                @click="retryTrial"
+                            >
+                                Retry
+                            </button>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                @click="router.push({ path: '/sandbox/agent', query: { connect: 'gemini' } })"
+                            >
+                                Connect Google
+                            </button>
+                        </div>
                         <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
                          refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->
                         <button

@@ -658,7 +658,7 @@ export const planHarnessTurn = async (
     if (!resolved.ok) {
         return { ok: false, ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
     }
-    const { oauthToken, refreshOauthToken, endpoint, allowance } = resolved.credentials;
+    const { oauthToken, refreshOauthToken, endpoint, allowance, trial } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
     const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
@@ -914,6 +914,7 @@ export const planHarnessTurn = async (
                       authToken: endpoint.authToken,
                       model: endpoint.model,
                       ...(allowance !== undefined ? { allowance } : {}),
+                      ...(trial === true ? { trial: true } : {}),
                   }
                 : {
                       ...(input.model === undefined && services.config.intenticAgentModel !== ""

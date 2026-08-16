@@ -166,6 +166,20 @@ export class TurnFailures {
             case `provider-outage`:
                 this.applyOutageError(error, turn);
                 return;
+            case `trial-unavailable`:
+            case `trial-model-unavailable`:
+            case `trial-exhausted`:
+                // The platform did not deliver this message and has already refunded it. Hold the user's words
+                // for an explicit retry; trial failures never enter the generic outage auto-resume loop.
+                this.host.requeue(turn.userMessageId);
+                this.host.transcript.notice(`${message} Your message is held below.`);
+                void import(`./useChat`).then(async (chat) => {
+                    await chat.loadTrialStatus();
+                    if (code === `trial-model-unavailable`) {
+                        await chat.loadProviderModels(this.host.provider.value);
+                    }
+                });
+                return;
             case `grok-model-invalid`:
             case `codex-model-invalid`:
                 // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI

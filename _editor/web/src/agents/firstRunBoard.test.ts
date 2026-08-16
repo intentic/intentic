@@ -65,7 +65,7 @@ beforeEach(() => {
     providerAccounts.value = { ...providerAccounts.value, claude: [], grok: [] };
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     endpointProviders.value = [];
-    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0 };
+    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
 const mount = (component: unknown): HTMLElement => {
@@ -164,7 +164,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
  * above the trial, with no daily cap, and hiding it until the allowance ran out would hide the better deal. */
 it(`chats on the free trial rather than demanding a sign-in first`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
-    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12 };
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
     // The repoint pass is a watcher: it moves the untouched conversation onto the trial on the next flush.
     await nextTick();
 
@@ -184,7 +184,7 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
 // back — the one press that removes the daily cap, at the moment it becomes the only way on.
 it(`hands the screen back to the offer once the trial is used up`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
-    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0 };
+    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };
     await nextTick();
 
     const board = mount(AgentsView);

@@ -1,4 +1,5 @@
 import { request } from "node:https";
+import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "../platform/local-tls.js";
 
@@ -18,8 +19,10 @@ export interface TrialStatus {
     readonly allowance: number;
     readonly used: number;
     readonly remaining: number;
+    readonly health: TrialHealth;
     // ISO stamp of the next UTC midnight — the browser renders it in local time.
     readonly resetsAt: string;
+    readonly retryAt?: string;
 }
 
 export interface TrialService {
@@ -67,13 +70,11 @@ const getJson = (config: Config, path: string): Promise<{ status: number; json: 
     });
 
 const isStatus = (value: unknown): value is TrialStatus => {
-    const candidate = value as Partial<TrialStatus> | undefined;
-    return (
-        typeof candidate?.allowance === "number" &&
-        typeof candidate.used === "number" &&
-        typeof candidate.remaining === "number" &&
-        typeof candidate.resetsAt === "string"
-    );
+    if (typeof value !== "object" || value === null) {
+        return false;
+    }
+    const parsed = TrialStatusSchema.safeParse({ ...value, available: true });
+    return parsed.success && typeof parsed.data.resetsAt === "string";
 };
 
 export const createTrialService = (config: Config, get = getJson): TrialService => {

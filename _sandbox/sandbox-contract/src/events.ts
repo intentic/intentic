@@ -671,6 +671,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // backoff (provider-health.ts): the frame is a notice about a turn that is coming back, and
                 // reaches the client as a plain failure only once the attempts are spent.
                 "provider-outage",
+                // The platform-owned free-trial pool failed after its bounded key walk. Unlike provider-outage,
+                // this is never auto-resumed: failed calls are refunded and the user's message is held to retry.
+                "trial-unavailable",
+                // The trial answered, but the selected upstream model/request cannot run through this sandbox.
+                "trial-model-unavailable",
+                // This account's platform-owned daily trial allowance is spent until its UTC reset.
+                "trial-exhausted",
                 // The harness read the message as a slash command it doesn't have, and discarded everything
                 // after the name — the model never saw the message. Nothing was processed, so the client holds
                 // the text back instead of leaving the user to retype it (same treatment as claude-reauth).

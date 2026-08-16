@@ -23,8 +23,11 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 // A model-invalid error dynamically imports useChat to reload the provider's live catalog; stub it (and spy) so
 // the test doesn't pull in the whole useChat module (router/sandbox side effects). vi.hoisted so the spy exists
 // when the hoisted vi.mock factory runs.
-const { loadProviderModelsMock } = vi.hoisted(() => ({ loadProviderModelsMock: vi.fn(async () => {}) }));
-vi.mock("./useChat", () => ({ loadProviderModels: loadProviderModelsMock }));
+const { loadProviderModelsMock, loadTrialStatusMock } = vi.hoisted(() => ({
+    loadProviderModelsMock: vi.fn(async () => {}),
+    loadTrialStatusMock: vi.fn(async () => {}),
+}));
+vi.mock("./useChat", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
 
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
@@ -1690,6 +1693,26 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toContain(`500`);
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.queued.value.some((message) => message.text === `hello`)).toBe(true);
+    });
+
+    it(`holds and refunds a failed free-trial message without arming generic outage recovery`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.provider.value = `endpoint/free-trial`;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable — failed messages aren’t counted.` },
+                { kind: `done` },
+            ]),
+        );
+
+        await conversation.send(`hello`, { ...settings, agent: `endpoint/free-trial` });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(conversation.queued.value.map((message) => message.text)).toContain(`hello`);
+        expect(conversation.messages.value.at(-1)?.role).toBe(`notice`);
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.failures.outageResume.value).toBeUndefined();
+        expect(loadTrialStatusMock).toHaveBeenCalled();
     });
 
     it(`offers turning outage auto-resume on when the daemon only remembered the turn`, async () => {

@@ -53,6 +53,7 @@ import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals
 import { terminalHelpServer } from "../terminal/terminal-help.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
+import { trialUnavailableFrame } from "./error-frames.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
 import { workloadStamp } from "../platform/leftovers.js";
 import { opt } from "./opt.js";
@@ -115,6 +116,8 @@ export interface AgentRequest {
     // which sees only that a 429 came back. Set alongside `baseUrl` by harness-credentials; absent on a native
     // Claude turn. See TurnAllowance.
     readonly allowance?: TurnAllowance;
+    // Platform-owned free trial: bound retries and use trial-specific failure frames/copy.
+    readonly trial?: boolean;
     // The selected Codex account's CODEX_HOME for this turn (Codex path only). Absent ⇒ the adapter's default
     // base dir, which resolves the container's OPENAI_API_KEY fallback.
     readonly codexHome?: string;
@@ -1005,6 +1008,7 @@ export async function* runAgent(
                 redeliver,
                 readUsage,
                 allowance: request.allowance,
+                trial: request.trial === true,
                 subagents,
             })) {
                 // The turn's shell lives under the id this frame carries (agent-terminals.ts names the tmux
@@ -1015,7 +1019,7 @@ export async function* runAgent(
                 push(event);
             }
         } catch (error) {
-            push({ kind: "error", message: errorMessage(error, stderr) });
+            push(request.trial === true ? trialUnavailableFrame() : { kind: "error", message: errorMessage(error, stderr) });
         } finally {
             /* Any child still marked live goes to `killed` as the turn ends. Nothing else can say so: a stopped
              * turn, or a CLI that died under one, reports no terminal status for the children it was running, and

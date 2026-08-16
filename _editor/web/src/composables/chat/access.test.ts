@@ -20,7 +20,7 @@ beforeEach(() => {
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     acpProviders.value = [];
     endpointProviders.value = [];
-    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0 };
+    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 });
 
 it(`counts a configured endpoint as ready — it carries its own credential`, () => {
@@ -42,18 +42,18 @@ it(`serves the trial while there is allowance left, and stops when there is none
     // trial is read, because offering an allowance that may not exist costs the user their first message.
     expect(providerReady(TRIAL_PROVIDER)).toBe(false);
 
-    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12 };
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
     expect(providerReady(TRIAL_PROVIDER)).toBe(true);
     expect(providerReadyOn(TRIAL_PROVIDER, `claude-code`)).toBe(true);
 
-    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0 };
+    trialStatus.value = { available: true, allowance: 12, used: 12, remaining: 0, health: `healthy` };
     expect(providerReady(TRIAL_PROVIDER)).toBe(false);
 });
 
 it(`does not invent a trial the daemon never provisioned`, () => {
     // The allowance says yes and the endpoint isn't there. That combination means the capability read hasn't
     // landed yet, and a chat pointed at a provider with no catalog sends an empty model id.
-    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12 };
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
 
     expect(providerReady(TRIAL_PROVIDER)).toBe(false);
 });

@@ -5,6 +5,7 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     PROVIDER_VENDOR,
+    TRIAL_ENDPOINT_ID,
 } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { unversionedBase } from "../endpoints/endpoint-config.js";
@@ -78,6 +79,9 @@ export interface HarnessCredentials {
     // Set on a routed turn only: see TurnAllowance. A native Claude turn leaves it absent and the harness's own
     // reporting stands.
     readonly allowance?: TurnAllowance;
+    // This endpoint is the platform-owned free trial. It gets a bounded retry/error policy instead of inheriting
+    // the long-lived provider watchdog used by user-owned subscriptions and endpoints.
+    readonly trial?: boolean;
 }
 
 /* ONE ENDPOINT, ONE MODEL — the rule that makes everything a harness turn can spawn reachable.
@@ -129,6 +133,7 @@ export const harnessEnv = (credentials: {
      *
      * Defaults to the turn's policy, so a caller that has not thought about it gets the safe-for-work answer. */
     readonly helper?: boolean;
+    readonly trial?: boolean;
 }): Record<string, string> => ({
     IS_SANDBOX: "1",
     /* RIDE OUT A PROVIDER BLIP INSIDE THE TURN, rather than dying and being resumed from outside it.
@@ -154,7 +159,7 @@ export const harnessEnv = (credentials: {
      * next model in the chain, the commit-message draft ground through the harness's own backoff for the better
      * part of a minute (measured at 35–73s per landing, against ~2s for the same prompt answered directly). The
      * chain behind it exists precisely so a bad rung costs nothing; the watchdog is what stopped it working. */
-    ...(credentials.helper === true ? {} : { CLAUDE_CODE_RETRY_WATCHDOG: "1" }),
+    ...(credentials.helper === true || credentials.trial === true ? {} : { CLAUDE_CODE_RETRY_WATCHDOG: "1" }),
     ...(credentials.baseUrl !== undefined
         ? {
               ANTHROPIC_BASE_URL: credentials.baseUrl,
@@ -168,7 +173,7 @@ export const harnessEnv = (credentials: {
 
 export type HarnessCredentialsResult =
     | { readonly ok: true; readonly credentials: HarnessCredentials }
-    | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth"; readonly message: string };
+    | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth" | "trial-unavailable"; readonly message: string };
 
 // The label a routed provider's missing subscription is named by — the vendor's own noun, matching the connect
 // prompts (PROVIDER_ACCESS.requirement).
@@ -234,8 +239,16 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
  * an empty model — which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
  * never heard of it. */
 const resolveEndpointCredentials = async (services: Services, id: string, model: string | undefined): Promise<HarnessCredentialsResult> => {
+    const trial = id === TRIAL_ENDPOINT_ID;
     const capability = await services.capabilities.get(id);
     if (capability === undefined || capability.kind !== "endpoint") {
+        if (trial) {
+            return {
+                ok: false,
+                code: "trial-unavailable",
+                message: "The free trial is no longer available from this sandbox. Connect Google in Sandbox ▸ Agent to keep going for free.",
+            };
+        }
         return { ok: false, message: `Unknown model endpoint "${id}" — add it as an Endpoint capability first.` };
     }
     const config = capability.config;
@@ -243,7 +256,10 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (catalog.models.length === 0) {
         return {
             ok: false,
-            message: `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
+            ...(trial ? { code: "trial-unavailable" as const } : {}),
+            message: trial
+                ? "Free trial temporarily unavailable — its model catalog could not be read. Retry shortly or connect Google in Sandbox ▸ Agent."
+                : `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
         };
     }
     const resolved = routedModel(catalog, model);
@@ -256,8 +272,11 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (services.config.translator.url === "") {
         return {
             ok: false,
+            ...(trial ? { code: "trial-unavailable" as const } : {}),
             message:
-                "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
+                trial
+                    ? "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent."
+                    : "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
         };
     }
     return {
@@ -268,6 +287,7 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
                 authToken: services.config.translator.token,
                 model: endpointModelId(id, resolved),
             },
+            ...(trial ? { trial: true } : {}),
         },
     };
 };

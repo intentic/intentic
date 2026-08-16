@@ -786,6 +786,72 @@ test("a retry with no HTTP status behind it omits the status instead of faking o
     ]);
 });
 
+test("a free-trial retry ends immediately with trial-specific recovery instead of starting a long provider wait", async () => {
+    const events = await collect(
+        { ...request, trial: true },
+        fakeQuery(
+            {
+                type: "system",
+                subtype: "api_retry",
+                session_id: "s",
+                attempt: 1,
+                max_retries: 10,
+                retry_delay_ms: 1_000,
+                error_status: 502,
+                error: "server_error",
+            },
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
+        ),
+    );
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "trial-unavailable", message: expect.stringContaining("failed messages aren’t counted") },
+        { kind: "done" },
+    ]);
+});
+
+test("a free-trial rate limit names the trial allowance and never Claude", async () => {
+    const events = await collect(
+        { ...request, trial: true },
+        fakeQuery({
+            type: "system",
+            subtype: "api_retry",
+            session_id: "s",
+            attempt: 1,
+            max_retries: 10,
+            retry_delay_ms: 1_000,
+            error_status: 429,
+            error: "rate_limit",
+        }),
+    );
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "trial-exhausted", message: expect.stringContaining("Free trial used up") },
+        { kind: "done" },
+    ]);
+    expect(events.map((event) => JSON.stringify(event)).join(` `)).not.toContain(`Claude`);
+});
+
+test("a deterministic free-trial model refusal keeps the upstream detail and suggests another model", async () => {
+    const explained = `API Error: 400 This model only supports the Interactions API`;
+    const events = await collect(
+        { ...request, trial: true },
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: explained }] } }),
+    );
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        {
+            kind: "error",
+            code: "trial-model-unavailable",
+            message: expect.stringMatching(/Interactions API.*Choose another model/),
+        },
+        { kind: "done" },
+    ]);
+});
+
 test("a usage-limit retry parks the turn at its reset instead of masquerading as a provider outage", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-30T20:00:00.000Z"));
@@ -1462,6 +1528,14 @@ test("a thrown error from the SDK is reported as an error event, then done", asy
     expect(await collect(request, throwing)).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "error", message: "stream blew up" },
+        { kind: "done" },
+    ]);
+});
+
+test("a thrown error from a free-trial SDK turn uses the refundable trial failure", async () => {
+    expect(await collect({ ...request, trial: true }, throwing)).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "trial-unavailable", message: expect.stringContaining("failed messages aren’t counted") },
         { kind: "done" },
     ]);
 });

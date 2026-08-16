@@ -7,6 +7,20 @@ import { opt } from "./opt.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 
+export const trialUnavailableFrame = (): ErrorEvent => ({
+    kind: "error",
+    code: "trial-unavailable",
+    message: "Free trial temporarily unavailable — failed messages aren’t counted. Retry shortly or connect Google in Sandbox ▸ Agent.",
+});
+
+const trialExhaustedFrame = (message?: string): ErrorEvent => ({
+    kind: "error",
+    code: "trial-exhausted",
+    message: message ?? "Free trial used up for today. Connect Google in Sandbox ▸ Agent to keep going for free.",
+});
+
+export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_limit" ? trialExhaustedFrame() : trialUnavailableFrame());
+
 // What the UI shows for an API-level failure. The SDK's `error` field is only a CATEGORY, and 'unknown' is its
 // catch-all for everything it can't bucket — every 4xx lands there. The synthetic assistant message carrying it
 // holds the API's actual sentence in its text block ("API Error: 400 output_config.effort 'max' is not supported
@@ -107,7 +121,26 @@ export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named
  *
  * Everything else stays uncoded and reads as the red line it is: 4xx all land in the SDK's `unknown` bucket, and
  * a malformed request re-sent on a timer is a loop, not a recovery. */
-export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance | undefined): Promise<ErrorEvent> => {
+export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance | undefined, trial = false): Promise<ErrorEvent> => {
+    if (trial) {
+        const explained = apiErrorMessage(message);
+        if (explained.includes(`trial_exhausted`) || /free trial used up/i.test(explained)) {
+            return trialExhaustedFrame(explained);
+        }
+        if (
+            message.error === "rate_limit" ||
+            message.error === "server_error" ||
+            message.error === "overloaded" ||
+            explained.includes(`trial_unavailable`)
+        ) {
+            return trialUnavailableFrame();
+        }
+        return {
+            kind: "error",
+            code: "trial-model-unavailable",
+            message: `This model couldn't run through the free trial. ${explained} Choose another model or connect Google in Sandbox ▸ Agent. The failed message wasn't counted.`,
+        };
+    }
     // rate_limit is the subscription usage cap, not a workspace fault — tag it so the UI can render it as a
     // "wait and retry" notice instead of a red crash line (see conversation.ts). A limit hit the SDK filed under
     // another category keeps its own sentence (the CLI's "You've hit your session limit · resets …" names the

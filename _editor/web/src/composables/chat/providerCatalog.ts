@@ -7,6 +7,7 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     providerLabel,
+    type TrialHealth,
 } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 
@@ -92,11 +93,20 @@ export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
  * `available` false is the ordinary answer — most sandboxes run against a platform that serves no trial — and
  * it is also the pre-load state, which is the safe way round: a picker that has not heard yet offers no trial
  * rather than promising an allowance that may not exist. */
-export const trialStatus = ref<{ available: boolean; allowance: number; used: number; remaining: number; resetsAt?: string }>({
+export const trialStatus = ref<{
+    available: boolean;
+    allowance: number;
+    used: number;
+    remaining: number;
+    health: TrialHealth;
+    resetsAt?: string;
+    retryAt?: string;
+}>({
     available: false,
     allowance: 0,
     used: 0,
     remaining: 0,
+    health: "unknown",
 });
 
 // Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids — loaded on the

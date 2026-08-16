@@ -16,7 +16,7 @@ import { screenshotImage } from "../browser/browser-artifacts.js";
 import { browserServerOfTool } from "../browser/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
-import { errorFrame, rateLimitFrame } from "./error-frames.js";
+import { errorFrame, rateLimitFrame, trialRetryFrame } from "./error-frames.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import { opt } from "./opt.js";
 import { noteDelegation, noteSubagentSpawn, noteSubagentTask, settleDelegation, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
@@ -234,6 +234,8 @@ export interface StreamSdkArgs {
     // Whose allowance this turn spends and when it reopens; absent on a native Claude turn, whose harness
     // answers both by itself. See TurnAllowance.
     readonly allowance: TurnAllowance | undefined;
+    // A platform-owned trial turn has already walked its whole key pool before a retry reaches this stream.
+    readonly trial: boolean;
     // The turn handle children are filed under; absent ⇒ no conversation to file them against (the bench).
     readonly subagents: SubagentTurn | undefined;
 }
@@ -416,7 +418,7 @@ class TurnFold {
     // verbs, which are tool calls we render as their own live list).
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
         if (message.error !== undefined) {
-            yield await errorFrame(message, this.args.allowance);
+            yield await errorFrame(message, this.args.allowance, this.args.trial);
             return;
         }
         const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
@@ -696,6 +698,12 @@ class TurnFold {
                 return false;
             }
             case "api_retry": {
+                // The platform has already exhausted its bounded key pool. Letting the harness begin another
+                // backoff cycle turns a refunded failure into the indefinite "provider not responding" spinner.
+                if (this.args.trial) {
+                    yield trialRetryFrame(message.error);
+                    return true;
+                }
                 /* A spent allowance is not an outage to ride out in a live process. The SDK names it directly
                  * and sets its retry delay to the closed window's remaining lifetime; turn that into the same
                  * terminal rate_limit frame as an assistant refusal, carrying the reset instant so the daemon's

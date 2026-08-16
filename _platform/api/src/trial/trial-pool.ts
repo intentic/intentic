@@ -1,3 +1,4 @@
+import type { TrialHealth } from "@intentic/sandbox-contract";
 import type { Config } from "../config.js";
 
 /* THE POOL OF INTENTIC'S OWN MODEL KEYS, and the rule for picking one that will actually answer.
@@ -7,20 +8,20 @@ import type { Config } from "../config.js";
  * and the user meets a 429 on the first message of a product they have not decided about yet. So the trial holds
  * several keys and moves to the next when one refuses.
  *
- * FAILOVER IS ON THE RESPONSE, not on a health table. A key's quota state is upstream's opinion and it changes
- * minute to minute, so anything we cached about it would be wrong by the time we read it; asking is one round
- * trip and it is always right. `keyOrder` supplies the only memory worth having — a rotating start index, so a
- * steady trickle of one-message trials spreads across the pool instead of hammering the first key until it
- * refuses and only then discovering the second. */
+ * FAILOVER IS ON THE RESPONSE. A refusal briefly quarantines that key so the next user does not pay again to
+ * rediscover a 401, quota window or dead connection; it is deliberately a cooldown rather than a durable health
+ * table, because upstream is still the authority and every key is retried after the condition can have changed.
+ * Rotation spreads steady traffic across the healthy pool instead of hammering the first key until it refuses. */
 
-/* A response worth trying the NEXT key for: the quota refusals (429) and upstream's own failures (5xx). Anything
- * else — a malformed request, an unsupported model, a rejected prompt — is about THIS request and would be
- * refused identically by every key in the pool, so it comes back as-is rather than burning the whole pool.
+/* A response worth trying the NEXT key for: a key the upstream rejects (401/403), quota refusals (429), and the
+ * upstream's own failures (5xx). Anything else — a malformed request, an unsupported model, a rejected prompt —
+ * is about THIS request and would be refused identically by every key in the pool, so it comes back as-is rather
+ * than burning the whole pool.
  *
  * Read after the pool has been walked, the same predicate answers a second question the caller needs: whether
  * NOBODY served the message. That is why it is exported — the allowance must not be spent on a turn the pool
  * refused, and a user meeting intentic's quota ceiling has done nothing to be billed for. */
-export const poolRefused = (status: number): boolean => status === 429 || status >= 500;
+export const poolRefused = (status: number): boolean => status === 401 || status === 403 || status === 429 || status >= 500;
 
 /* AN INLINE `#` COMMENT IS NOT PART OF THE VALUE, which the two settings below have to say themselves.
  *
@@ -103,20 +104,6 @@ export const trialFloorModels = (config: Config): readonly string[] => {
     return declared.length > 0 ? declared : FALLBACK_TRIAL_MODELS;
 };
 
-/* The pool, rotated so consecutive requests start on different keys. Module state rather than per-request,
- * because the whole point is that request N+1 remembers where request N started; a counter is enough — it needs
- * to be fair, not unpredictable. */
-let cursor = 0;
-
-const keyOrder = (keys: readonly string[]): string[] => {
-    if (keys.length === 0) {
-        return [];
-    }
-    const start = cursor % keys.length;
-    cursor = (cursor + 1) % keys.length;
-    return [...keys.slice(start), ...keys.slice(0, start)];
-};
-
 export type Fetcher = typeof fetch;
 
 /* HOW THE SAME KEY IS PRESENTED, and why it is a choice rather than a constant.
@@ -137,45 +124,161 @@ export interface UpstreamAttempt {
     readonly tried: number;
 }
 
-/* Send one request upstream, walking the pool until a key answers something worth returning.
- *
- * The LAST response wins when every key refuses, rather than a synthesized "all keys exhausted": upstream's own
- * 429 carries its own retry hint and its own words, and replacing them with ours would strip the one part of the
- * answer that tells the user when to come back. `body` is a string, not a stream, precisely because it may be
- * sent several times — a request body that can only be read once cannot be retried. */
-export const callUpstream = async (
-    config: Config,
-    fetchFn: Fetcher,
-    path: string,
-    init: { method: string; body?: string; url?: string; auth?: UpstreamAuth },
-): Promise<UpstreamAttempt | undefined> => {
-    const keys = keyOrder(trialKeys(config));
-    if (keys.length === 0) {
+export interface TrialServiceStatus {
+    readonly health: TrialHealth;
+    readonly retryAt?: string;
+}
+
+export interface TrialPool {
+    readonly call: (
+        path: string,
+        init: { method: string; body?: string; url?: string; auth?: UpstreamAuth; observeHealth?: boolean },
+    ) => Promise<UpstreamAttempt | undefined>;
+    readonly status: () => TrialServiceStatus;
+}
+
+// The pool is allowed several short attempts, but one bad upstream may not hold a trial turn open indefinitely.
+const ATTEMPT_TIMEOUT_MS = 8_000;
+const POOL_DEADLINE_MS = 20_000;
+const AUTH_QUARANTINE_MS = 5 * 60_000;
+const QUOTA_QUARANTINE_MS = 30_000;
+const FAILURE_QUARANTINE_MS = 10_000;
+
+const retryAfterMs = (response: Response, now: number): number | undefined => {
+    const value = response.headers.get(`retry-after`)?.trim();
+    if (value === undefined || value === ``) {
         return undefined;
     }
-    let last: Response | undefined;
-    let tried = 0;
-    for (const key of keys) {
-        tried += 1;
-        const response = await fetchFn(init.url ?? `${config.trial.baseUrl}${path}`, {
-            method: init.method,
-            headers: { ...authHeaders(init.auth ?? `bearer`, key), "content-type": `application/json` },
-            ...(init.body === undefined ? {} : { body: init.body }),
-        }).catch(() => undefined);
-        // A key whose request never completed is indistinguishable from a key that 503'd, and is treated the
-        // same: try the next one. If it was the last, the caller gets the previous refusal, or a 502 below.
-        if (response === undefined) {
-            continue;
-        }
-        /* Drain the refusal this one supersedes — an unread body holds its connection open for the rest of the
-         * pool's walk, which is the one way this loop could turn a slow upstream into a slow platform. Only ever
-         * the SUPERSEDED one: the newest refusal is what the caller gets if no key answers, and a body that has
-         * already been cancelled is a response that streams nothing. */
-        await last?.body?.cancel().catch(() => undefined);
-        if (!poolRefused(response.status)) {
-            return { response, tried };
-        }
-        last = response;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+        return seconds * 1_000;
     }
-    return last === undefined ? undefined : { response: last, tried };
+    const at = Date.parse(value);
+    return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+};
+
+const quarantineMs = (response: Response, now: number): number | undefined => {
+    if (response.status === 401 || response.status === 403) {
+        return AUTH_QUARANTINE_MS;
+    }
+    if (response.status === 429) {
+        return retryAfterMs(response, now) ?? QUOTA_QUARANTINE_MS;
+    }
+    return response.status >= 500 ? FAILURE_QUARANTINE_MS : undefined;
+};
+
+/* One live pool. Its rotation, quarantine and health belong to the route instance rather than to the module: a
+ * test app (and any future second platform app in one process) gets an independent view of its own keys.
+ *
+ * A timeout covers RESPONSE HEADERS only. Once fetch resolves, the timer is cleared and the streamed body is
+ * allowed to live for the turn; aborting it on the pool deadline would cut off healthy long responses. */
+export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => number = Date.now): TrialPool => {
+    const keys = trialKeys(config);
+    const quarantine = new Map<string, number>();
+    let cursor = 0;
+    let service: { health: TrialHealth; retryAt?: number } = { health: `unknown` };
+
+    const orderedKeys = (at: number): string[] => {
+        if (keys.length === 0) {
+            return [];
+        }
+        const start = cursor % keys.length;
+        cursor = (cursor + 1) % keys.length;
+        return [...keys.slice(start), ...keys.slice(0, start)].filter((key) => (quarantine.get(key) ?? 0) <= at);
+    };
+
+    const nextRetry = (at: number): number | undefined => {
+        const times = keys.map((key) => quarantine.get(key) ?? at).filter((retry) => retry > at);
+        return times.length === 0 ? undefined : Math.min(...times);
+    };
+
+    const unavailable = (at: number): void => {
+        service = { health: `unavailable`, retryAt: nextRetry(at) ?? at + FAILURE_QUARANTINE_MS };
+    };
+
+    const responseWithin = async (
+        key: string,
+        path: string,
+        init: { method: string; body?: string; url?: string; auth?: UpstreamAuth },
+        timeoutMs: number,
+    ): Promise<Response | undefined> => {
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const expired = new Promise<undefined>((resolve) => {
+            timer = setTimeout(() => {
+                controller.abort();
+                resolve(undefined);
+            }, timeoutMs);
+        });
+        const requested = Promise.resolve()
+            .then(() =>
+                fetchFn(init.url ?? `${config.trial.baseUrl}${path}`, {
+                    method: init.method,
+                    headers: { ...authHeaders(init.auth ?? `bearer`, key), "content-type": `application/json` },
+                    ...(init.body === undefined ? {} : { body: init.body }),
+                    signal: controller.signal,
+                }),
+            )
+            .catch(() => undefined);
+        try {
+            return await Promise.race([requested, expired]);
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
+    const call: TrialPool["call"] = async (path, init) => {
+        const started = now();
+        const deadline = started + POOL_DEADLINE_MS;
+        const ordered = orderedKeys(started);
+        if (ordered.length === 0) {
+            if (init.observeHealth === true) {
+                unavailable(started);
+            }
+            return undefined;
+        }
+        let last: Response | undefined;
+        let tried = 0;
+        for (const key of ordered) {
+            const remaining = deadline - now();
+            if (remaining <= 0) {
+                break;
+            }
+            tried += 1;
+            const response = await responseWithin(key, path, init, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
+            const at = now();
+            if (response === undefined) {
+                quarantine.set(key, at + FAILURE_QUARANTINE_MS);
+                continue;
+            }
+            await last?.body?.cancel().catch(() => undefined);
+            if (!poolRefused(response.status)) {
+                quarantine.delete(key);
+                if (init.observeHealth === true) {
+                    service = { health: tried === 1 && quarantine.size === 0 ? `healthy` : `degraded` };
+                }
+                return { response, tried };
+            }
+            quarantine.set(key, at + (quarantineMs(response, at) ?? FAILURE_QUARANTINE_MS));
+            last = response;
+        }
+        if (init.observeHealth === true) {
+            unavailable(now());
+        }
+        return last === undefined ? undefined : { response: last, tried };
+    };
+
+    return {
+        call,
+        status: () => {
+            const at = now();
+            if (service.health === `unavailable` && service.retryAt !== undefined && service.retryAt <= at) {
+                service = { health: `unknown` };
+            }
+            return {
+                health: service.health,
+                ...(service.retryAt === undefined ? {} : { retryAt: new Date(service.retryAt).toISOString() }),
+            };
+        },
+    };
 };

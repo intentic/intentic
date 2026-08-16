@@ -389,6 +389,20 @@ test("fast speed is withheld from a routed turn, whose endpoint the harness woul
     expect(request.fast).toBeUndefined();
 });
 
+test("the free-trial credential's bounded policy reaches the harness request", async () => {
+    credentials.mockResolvedValue({
+        ok: true,
+        credentials: {
+            endpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "free-trial/gemini-flash-latest" },
+            trial: true,
+        },
+    });
+
+    const plan = await planTurn(harnessServices(), turn({ agent: "endpoint/free-trial", harness: "claude-code" }), context);
+
+    expect((plan as { request: AgentRequest }).request.trial).toBe(true);
+});
+
 test("fast speed is withheld from every runtime that isn't the Claude Code loop", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ fast: true }));
     expect((codex as { request: AgentRequest }).request.fast).toBeUndefined();

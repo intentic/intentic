@@ -3,7 +3,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
-import { callUpstream, type Fetcher, nativeModelsUrl, poolRefused, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
+import { createTrialPool, type Fetcher, nativeModelsUrl, poolRefused, type TrialPool, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
 import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
 
 /* THE FREE TRIAL, served as a model API — the one place the platform sits ON the command path, and the reason
@@ -38,12 +38,12 @@ const bareId = (name: unknown): string | undefined => (typeof name === `string` 
  * unfiltered. Publishing it unfiltered is the bug this exists for: Imagen, Veo, Lyria, the embedding and TTS
  * endpoints and the Interactions-only previews all sorted ABOVE the Gemini rows (nothing about their ids says
  * "not a chat model"), so a fresh conversation defaulted to one and every first message failed. */
-const chatCapableIds = async (config: Config, fetchFn: Fetcher): Promise<Set<string> | undefined> => {
+const chatCapableIds = async (config: Config, pool: TrialPool): Promise<Set<string> | undefined> => {
     const url = nativeModelsUrl(config);
     if (url === undefined) {
         return undefined;
     }
-    const attempt = await callUpstream(config, fetchFn, ``, { method: `GET`, url, auth: `goog` });
+    const attempt = await pool.call(``, { method: `GET`, url, auth: `goog` });
     if (attempt?.response.ok !== true) {
         return undefined;
     }
@@ -84,6 +84,7 @@ const connectToken = (authorization: string | undefined, header: string | undefi
 
 export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new Date() }: TrialDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
+    const pool = createTrialPool(config, fetchFn, () => now().getTime());
 
     /* Resolve the caller to the account that pays, or refuse. 404 rather than 401 for an unknown token, and for
      * a trial that is switched off: both are "there is nothing here", and a 401 would confirm to a probe that a
@@ -107,7 +108,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        return c.json(await trialStatus(prisma, config, ownerId, now()));
+        return c.json({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
     });
 
     /* The model list: discovery first, floor underneath — a ladder, like every other catalog in this product,
@@ -138,8 +139,8 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         }
         const narrowedTo = trialModels(config);
         const [attempt, chatCapable] = await Promise.all([
-            callUpstream(config, fetchFn, `/models`, { method: `GET` }),
-            chatCapableIds(config, fetchFn),
+            pool.call(`/models`, { method: `GET` }),
+            chatCapableIds(config, pool),
         ]);
         const body =
             attempt?.response.ok === true
@@ -164,9 +165,9 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         return c.json({ object: `list`, data: floor.map(modelEntry) });
     });
 
-    /* One trial message. The allowance is spent BEFORE the upstream call and refunded if the call never
-     * produced an answer, because the alternative — bill on success — cannot be made atomic across a streamed
-     * response that may fail halfway, and a meter that can be raced is not a meter. */
+    /* One trial message. The allowance is spent BEFORE the upstream call and refunded unless it returns a
+     * successful completion response, because the alternative — bill on success — cannot be made atomic across
+     * a streamed response that may fail halfway, and a meter that can be raced is not a meter. */
     app.post(`/v1/chat/completions`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
@@ -197,14 +198,20 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
          * was billed a message nobody answered, so a "12 left today" that had served eight was simply untrue;
          * and Google's refusal tells the reader to "check your plan and billing details", which belongs to
          * intentic's key, not to a user who has no plan with Google and never asked for one. */
-        const attempt = await callUpstream(config, fetchFn, `/chat/completions`, { method: `POST`, body });
+        const attempt = await pool.call(`/chat/completions`, { method: `POST`, body, observeHealth: true });
         if (attempt === undefined || poolRefused(attempt.response.status)) {
+            await attempt?.response.body?.cancel().catch(() => undefined);
             await refundTrialMessage(prisma, ownerId, at);
             c.get(`logger`)?.warn({ tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0 }, `trial: no key answered`);
             return c.json(
                 { error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } },
                 502,
             );
+        }
+        // Any non-successful completion is a message the user did not receive. Request-scoped 4xx answers are
+        // preserved so the sandbox can explain that model/request failure, but they do not consume allowance.
+        if (!attempt.response.ok) {
+            await refundTrialMessage(prisma, ownerId, at);
         }
         /* Streamed straight through. The body is upstream's own — SSE frames for a streaming request, JSON for a
          * plain one — and re-encoding it here would mean owning a wire format that is not ours and re-shipping

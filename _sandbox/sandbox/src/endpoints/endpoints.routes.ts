@@ -30,9 +30,17 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
             await services.trial.refresh();
             const status = services.trial.status();
             if (!services.trial.available() || status === undefined) {
-                return { available: false, allowance: 0, used: 0, remaining: 0 };
+                return { available: false, allowance: 0, used: 0, remaining: 0, health: "unknown" as const };
             }
-            return { available: true, allowance: status.allowance, used: status.used, remaining: status.remaining, resetsAt: status.resetsAt };
+            return {
+                available: true,
+                allowance: status.allowance,
+                used: status.used,
+                remaining: status.remaining,
+                health: status.health,
+                resetsAt: status.resetsAt,
+                ...(status.retryAt === undefined ? {} : { retryAt: status.retryAt }),
+            };
         }),
     };
 };

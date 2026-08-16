@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
 import type { Config } from "../config.js";
+import { createTrialPool } from "./trial-pool.js";
 
 /* THE TRIAL IS THE ONE ROUTE FAMILY THAT SPENDS INTENTIC'S OWN MONEY, so the things worth pinning here are the
  * ones that cost something when they break: the allowance actually stopping a caller, a refused key moving to
@@ -89,7 +90,7 @@ describe("the free trial", () => {
         const response = await call(baseConfig, prisma, `/trial/status`);
 
         expect(response.status).toBe(200);
-        expect(await response.json()).toMatchObject({ allowance: 2, used: 0, remaining: 2 });
+        expect(await response.json()).toMatchObject({ allowance: 2, used: 0, remaining: 2, health: `unknown` });
     });
 
     it("spends one message per turn and passes the upstream answer straight through", async () => {
@@ -150,6 +151,34 @@ describe("the free trial", () => {
         // Both keys tried, and the user is not billed for a turn nobody served.
         expect(fetchFn).toHaveBeenCalledTimes(2);
         expect(spent()).toBe(0);
+        vi.unstubAllGlobals();
+    });
+
+    it("gives the message back when upstream rejects the model or request", async () => {
+        const { prisma, spent } = fakePrisma();
+        const fetchFn = vi.fn(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));
+        vi.stubGlobal(`fetch`, fetchFn);
+
+        const response = await chat(baseConfig, prisma);
+
+        // Preserve the actionable upstream response, but do not charge for a completion that never happened.
+        expect(response.status).toBe(404);
+        expect(await response.text()).toContain(`model not supported`);
+        expect(spent()).toBe(0);
+        vi.unstubAllGlobals();
+    });
+
+    it("publishes service health from real chat traffic", async () => {
+        const { prisma } = fakePrisma();
+        vi.stubGlobal(`fetch`, vi.fn(async () => new Response(`{}`, { status: 503 })));
+        const app = createApp(baseConfig, prisma, logger).app;
+        const headers = { authorization: `Bearer tok`, "content-type": `application/json` };
+
+        const failed = await app.request(`/trial/v1/chat/completions`, { method: `POST`, headers, body: `{"model":"m"}` });
+        const status = await app.request(`/trial/status`, { headers });
+
+        expect(failed.status).toBe(502);
+        expect(await status.json()).toMatchObject({ health: `unavailable`, retryAt: expect.any(String) });
         vi.unstubAllGlobals();
     });
 
@@ -318,9 +347,8 @@ describe("the free trial", () => {
     });
 
     /* The same paste on the setting above it, where it costs more: a note glued to the last key makes that key
-     * a credential no upstream knows, and 401 is not one of the refusals the pool walks past — so the user is
-     * handed someone's documentation as an auth error. One key here, so the answer cannot depend on where the
-     * pool's rotating cursor happened to start. */
+     * a credential no upstream knows. One key here, so the answer cannot depend on where the pool's rotating
+     * cursor happened to start. */
     it("keeps a key a pasted note was glued to", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = vi.fn(async (_url: string, init: RequestInit) =>
@@ -335,6 +363,78 @@ describe("the free trial", () => {
 
         expect(response.status).toBe(200);
         vi.unstubAllGlobals();
+    });
+});
+
+describe("the free-trial key pool", () => {
+    it("reports healthy when the first selected key answers", async () => {
+        const pool = createTrialPool(baseConfig, vi.fn(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
+
+        await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
+
+        expect(pool.status()).toEqual({ health: `healthy` });
+    });
+
+    it("times out a stuck key and advances to the next one", async () => {
+        vi.useFakeTimers();
+        try {
+            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+                const auth = (init?.headers as Record<string, string>)[`authorization`];
+                return auth === `Bearer k1`
+                    ? new Promise<Response>(() => {})
+                    : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
+            });
+            const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+            const pending = pool.call(`/chat/completions`, { method: `POST`, body: `{}`, observeHealth: true });
+
+            await vi.advanceTimersByTimeAsync(8_000);
+
+            expect((await pending)?.response.status).toBe(200);
+            expect(fetchFn).toHaveBeenCalledTimes(2);
+            expect(pool.status().health).toBe(`degraded`);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("fails over on a rejected key and quarantines it for later calls", async () => {
+        const auths: string[] = [];
+        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+            const auth = (init?.headers as Record<string, string>)[`authorization`];
+            auths.push(auth);
+            return new Response(`{}`, { status: auth === `Bearer k1` ? 401 : 200 });
+        });
+        const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
+
+        expect((await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true }))?.response.status).toBe(200);
+        await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
+        await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
+
+        // The third rotation would start on k1 again; quarantine skips it and goes straight to the good key.
+        expect(auths).toEqual([`Bearer k1`, `Bearer k2`, `Bearer k2`, `Bearer k2`]);
+        expect(pool.status().health).toBe(`degraded`);
+    });
+
+    it("honours Retry-After when quarantining a rate-limited key", async () => {
+        let at = Date.parse(`2026-08-16T00:00:00.000Z`);
+        const auths: string[] = [];
+        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+            const auth = (init?.headers as Record<string, string>)[`authorization`];
+            auths.push(auth);
+            return new Response(`{}`, auth === `Bearer k1` ? { status: 429, headers: { "retry-after": `120` } } : { status: 200 });
+        });
+        const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch, () => at);
+
+        await pool.call(`/chat/completions`, { method: `POST` });
+        at += 119_000;
+        await pool.call(`/chat/completions`, { method: `POST` });
+        await pool.call(`/chat/completions`, { method: `POST` });
+        expect(auths.filter((auth) => auth === `Bearer k1`)).toHaveLength(1);
+
+        at += 1_000;
+        await pool.call(`/chat/completions`, { method: `POST` });
+        await pool.call(`/chat/completions`, { method: `POST` });
+        expect(auths.filter((auth) => auth === `Bearer k1`)).toHaveLength(2);
     });
 });
 
