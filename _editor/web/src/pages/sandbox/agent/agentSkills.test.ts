@@ -308,3 +308,25 @@ test(`delete waits for a second press, under the fold`, async () => {
     await nextTick();
     expect(removeMutate).toHaveBeenCalledWith(`scratch`);
 });
+
+/* THE ROW THAT OPENS INTO THE FORM IS THE ONE MOST LIKELY TO NEED THIS, and it was the one row that never offered
+ * it: a skill the reader wrote themselves opens straight into the editor, and the delete used to live inside the
+ * branch that renders somebody ELSE's skill. So the only skills a person is allowed to delete — their own, and
+ * every skill on a persona's card, which is this row too — had no way to be deleted from the app at all. */
+test(`a skill the reader owns offers delete under its editor`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    const host = mount();
+
+    rows(host)[0]?.click();
+    await settle();
+
+    // The editor is what opened — and the delete sits below it rather than instead of it.
+    expect(button(host, `Save changes`)).toBeDefined();
+    button(host, `Delete this skill`)?.click();
+    await nextTick();
+    expect(removeMutate).not.toHaveBeenCalled();
+
+    button(host, `Delete`)?.click();
+    await nextTick();
+    expect(removeMutate).toHaveBeenCalledWith(`notes`);
+});

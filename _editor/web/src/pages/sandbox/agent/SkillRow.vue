@@ -28,6 +28,13 @@ import { provenanceOf } from "./skillWords";
  * skill the reader may have spent an afternoon on, hidden inside a menu that gave no clue which rows even offer
  * it; here it sits beside the text it would delete, and says what it is about to remove.
  *
+ * AND IT SITS UNDER BOTH VIEWS, not only the read one. It used to live inside the branch that renders somebody
+ * else's skill, which meant the rows that are actually the reader's — their own skills, and every skill on a
+ * persona's card — opened straight into the form and offered no way to delete at all. The one kind of skill a
+ * person can delete was the one kind that never showed the button. So the strip is a sibling of the two views:
+ * whichever one the row opened in, the last thing under it is the destructive action, on its own side of a
+ * rule.
+ *
  * READING IS THE DEFAULT AND IT IS RENDERED. A skill is markdown — headings, numbered steps, fenced commands —
  * and it used to open as a grey monospace block, i.e. as the one thing a skill is not: source to be inspected.
  * So someone else's skill renders as the document it is, with its raw text one pill away for whoever wants to
@@ -131,53 +138,66 @@ watch(
                 <Icon name="spinner" class="animate-spin text-xs" />
                 Reading…
             </p>
-            <!-- The reader's own skill: the form IS how they read it. -->
-            <SkillForm
-                v-else-if="editing !== undefined"
-                :skill="editing"
-                :disabled="disabled"
-                @save="emit(`save`, $event)"
-                @cancel="emit(`toggle`)"
-            />
-            <div v-else class="flex flex-col gap-3">
-                <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                    <!-- Someone else's skill states its trigger line in full: it is the half a reader is most
-                         likely to be checking, and it is the half the closed row had to cut. A shipped skill is
-                         allowed to declare none, and the blank is worth naming here too — it is why the agent
-                         will hardly ever reach for this one, and the open row is where somebody would look. -->
-                    <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
-                        {{ skill.description === `` ? `No description — the agent rarely picks a skill without one.` : skill.description }}
-                    </p>
-                    <SegmentedControl
-                        v-model="view"
-                        size="xs"
-                        class="shrink-0"
-                        :options="[
-                            { label: `Read`, value: `preview` },
-                            { label: `Source`, value: `source`, title: `The file exactly as its author wrote it` },
-                        ]"
+            <template v-else>
+                <!-- The reader's own skill: the form IS how they read it. -->
+                <SkillForm
+                    v-if="editing !== undefined"
+                    :skill="editing"
+                    :disabled="disabled"
+                    @save="emit(`save`, $event)"
+                    @cancel="emit(`toggle`)"
+                />
+                <div v-else class="flex flex-col gap-3">
+                    <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                        <!-- Someone else's skill states its trigger line in full: it is the half a reader is most
+                             likely to be checking, and it is the half the closed row had to cut. A shipped skill is
+                             allowed to declare none, and the blank is worth naming here too — it is why the agent
+                             will hardly ever reach for this one, and the open row is where somebody would look. -->
+                        <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
+                            {{ skill.description === `` ? `No description — the agent rarely picks a skill without one.` : skill.description }}
+                        </p>
+                        <SegmentedControl
+                            v-model="view"
+                            size="xs"
+                            class="shrink-0"
+                            :options="[
+                                { label: `Read`, value: `preview` },
+                                { label: `Source`, value: `source`, title: `The file exactly as its author wrote it` },
+                            ]"
+                        />
+                    </div>
+                    <Markdown v-if="view === `preview`" :source="body" style="--prose-measure: 76ch" />
+                    <!-- Markdown's own colours, read-only: this is somebody else's file, and editing it here would
+                         be undone the next time the thing that ships it reconciles. -->
+                    <CodeField
+                        v-else
+                        :model-value="body"
+                        lang="markdown"
+                        readonly
+                        :aria-label="`${skill.name} source`"
+                        class="max-h-96 overflow-auto rounded-md border border-line bg-canvas p-2.5"
                     />
                 </div>
-                <Markdown v-if="view === `preview`" :source="body" style="--prose-measure: 76ch" />
-                <!-- Markdown's own colours, read-only: this is somebody else's file, and editing it here would
-                     be undone the next time the thing that ships it reconciles. -->
-                <CodeField
-                    v-else
-                    :model-value="body"
-                    lang="markdown"
-                    readonly
-                    :aria-label="`${skill.name} source`"
-                    class="max-h-96 overflow-auto rounded-md border border-line bg-canvas p-2.5"
-                />
-                <div v-if="skill.removable" class="flex items-center gap-3 border-t border-line/60 pt-3">
-                    <Button v-if="!confirmRemove" size="small" severity="danger" text label="Delete this skill" @click="confirmRemove = true" />
+
+                <!-- BELOW WHICHEVER VIEW OPENED, and below the form's own Save/Cancel when that is the view: the
+                     safe actions and the one that cannot be undone do not share a row. -->
+                <div v-if="skill.removable" class="mt-3 flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+                    <Button
+                        v-if="!confirmRemove"
+                        size="small"
+                        severity="danger"
+                        text
+                        label="Delete this skill"
+                        :disabled="disabled"
+                        @click="confirmRemove = true"
+                    />
                     <template v-else>
                         <span class="text-2xs text-muted">Delete “{{ skill.name }}”? The agent stops being handed it.</span>
-                        <Button size="small" severity="danger" label="Delete" @click="emit(`remove`)" />
+                        <Button size="small" severity="danger" label="Delete" :disabled="disabled" @click="emit(`remove`)" />
                         <Button size="small" severity="secondary" text label="Keep it" @click="confirmRemove = false" />
                     </template>
                 </div>
-            </div>
+            </template>
         </div>
     </div>
 </template>
