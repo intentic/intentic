@@ -43,7 +43,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 
 // A mint that never settles: the silent attempt going quiet is exactly the case these tests are about, and it
 // is what leaves the first frame standing still to be read.
-const getIdToken = vi.fn(() => new Promise<never>(() => {}));
+const getIdToken = vi.fn<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
 const renderButton = vi.fn().mockResolvedValue(undefined);
 vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
 vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
@@ -93,12 +93,17 @@ it(`puts Google's button on the first frame, with no timer between`, async () =>
     expect(renderButton.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
 });
 
-it(`asks for the token without the shared sign-in overlay`, async () => {
+it(`asks for the token without the shared sign-in overlay, and only one with real life left`, async () => {
     await mount();
 
     // `gate: false` is what removes the five-second guard: the overlay it would raise is a second Google
     // button on a page whose own button is already up.
-    expect(getIdToken).toHaveBeenCalledWith({ gate: false });
+    //
+    // `usableFor` is the other half, and it is about what happens AFTER this page. The credential leaves for
+    // another process that cannot spend it until it has a daemon to spend it on — a whole setup away after a
+    // fresh install. A cached token a minute from death satisfies this page and strands the app.
+    expect(getIdToken).toHaveBeenCalledWith({ gate: false, usableFor: expect.any(Number) });
+    expect(getIdToken.mock.calls[0]?.[0]?.usableFor).toBeGreaterThanOrEqual(10 * 60 * 1000);
 });
 
 it(`says what the button is for while the sign-in is outstanding`, async () => {

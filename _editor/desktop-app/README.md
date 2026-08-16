@@ -156,7 +156,15 @@ spends the Better Auth one-time token at `/api/auth/one-time-token/verify` — w
 webview's own jar exactly as it would in a browser. The Google ID token is spent once at the daemon's
 `system.session` for a daemon session that renews silently, so Google reappears only when that cannot renew.
 Credentials and the verifier never ride the deep link: a deep link is delivered as a process argument,
-readable by anything else on the machine, so only the row's id travels that way. The browser receives only a
+readable by anything else on the machine, so only the row's id travels that way.
+
+**"When that cannot renew" needs a door, and for a long time it had none.** The login screen offered this
+hand-off; the workspace's own sandbox sign-in gate did not — it rendered Google's button, which in this
+webview appears, accepts clicks, and does nothing. A person whose adopted ID token expired before a daemon
+existed to spend it on (an install that goes on to create and boot a sandbox takes longer than Google's hour)
+met that card with no way past it and no way to sign out from behind it. The gate now offers
+`intentic://signin` in this app, and the browser page re-mints rather than passing on a nearly-dead cached
+token, so the hour is spent where it is useful. The browser receives only a
 hash of the verifier; the desktop process retains the secret until the webview redeems the handoff. Racing the
 public id therefore cannot collect or consume the credentials intended for the app.
 

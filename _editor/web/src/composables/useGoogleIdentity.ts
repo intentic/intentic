@@ -200,13 +200,17 @@ const mint = async (gate: boolean): Promise<string | undefined> => {
     return result;
 };
 
-// The cached credential while it is still valid past the near-expiry guard, re-reading storage first when the
+// Never serve a token about to die mid-flight. A caller that will SPEND it here needs only that; one handing
+// it to another process needs much more, and says so (see `usableFor`).
+const NEAR_EXPIRY_MS = 60_000;
+
+// The cached credential while it is still valid past the caller's guard, re-reading storage first when the
 // in-memory copy is missing or near expiry — another tab may have renewed it. Undefined means a mint is due.
-const cached = (): string | undefined => {
-    if (token === undefined || Date.now() >= expiresAt - 60_000) {
+const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
+    if (token === undefined || Date.now() >= expiresAt - margin) {
         token = restore();
     }
-    return token !== undefined && Date.now() < expiresAt - 60_000 ? token : undefined;
+    return token !== undefined && Date.now() < expiresAt - margin ? token : undefined;
 };
 
 /* A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
@@ -216,9 +220,15 @@ const cached = (): string | undefined => {
  * second button on top of the first, and the timer that raises it would be five seconds of nothing first — so
  * the silent attempt simply races the caller's button, and whichever produces a credential settles this call.
  * The consequence is that a suppressed prompt leaves this pending until that button is clicked, which is only
- * safe because its one caller — the desktop-auth page — is a whole window with no other caller in it. */
-const getIdToken = async (options?: { readonly gate?: boolean }): Promise<string | undefined> => {
-    const valid = cached();
+ * safe because its one caller — the desktop-auth page — is a whole window with no other caller in it.
+ *
+ * `usableFor` is how long the caller needs the token to still be good, and it exists because one caller does
+ * not spend it here: the desktop hand-off ships it to another process, which cannot use it until a daemon
+ * exists to exchange it — sometimes a whole setup later. A cached token one minute from death satisfies every
+ * caller that acts immediately and strands that one, which is a workspace asking for Google again on the
+ * screen right after a fresh install. Costing a mint here is the cheaper mistake. */
+const getIdToken = async (options?: { readonly gate?: boolean; readonly usableFor?: number }): Promise<string | undefined> => {
+    const valid = cached(options?.usableFor ?? NEAR_EXPIRY_MS);
     if (valid !== undefined) {
         return valid;
     }

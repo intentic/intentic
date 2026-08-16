@@ -40,6 +40,12 @@ const stage = ref<`signin` | `handing` | `done`>(`signin`);
 
 const googleButton = ref<HTMLElement>();
 
+/* How much life the credential must have left to be worth handing over. Google's tokens live about an hour,
+ * so this asks for most of one — enough to cover an install that goes on to create and boot a sandbox before
+ * anything can spend it. It is not a guarantee (nothing here can extend a Google token), which is why the
+ * workspace's own sign-in gate now offers this same hand-off when the hour does run out. */
+const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
+
 const hand = async (): Promise<void> => {
     const state = route.query[`state`];
     const challenge = route.query[`challenge`];
@@ -54,8 +60,13 @@ const hand = async (): Promise<void> => {
         /* The daemon's credential. `gate: false` because the button is already ON this page: the shared
          * overlay's job is to interrupt a screen that was doing something else, and this screen is doing
          * nothing else. The silent attempt (auto re-auth for a returning user) races that button — whichever
-         * produces a credential first resolves this, so a returning user never sees the button used. */
-        const idToken = await getIdToken({ gate: false });
+         * produces a credential first resolves this, so a returning user never sees the button used.
+         *
+         * `usableFor` because this token LEAVES: the app cannot spend it until it has a daemon to spend it
+         * on, which after a fresh install is a whole setup away. A cached one with minutes left would satisfy
+         * this page and strand the app — so anything shorter than the window below is re-minted here, where
+         * Google is available and usually silent, rather than in the app's webview, where it is neither. */
+        const idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS });
         if (idToken === undefined) {
             error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
