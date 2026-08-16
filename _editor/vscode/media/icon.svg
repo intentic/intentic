@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-  <!-- The fleet mark: three agent lanes converging on a landed change. -->
-  <path d="M4 5v6a3 3 0 0 0 3 3h4" />
-  <path d="M20 5v6a3 3 0 0 1-3 3h-4" />
-  <path d="M12 3v11" />
-  <path d="m8 17 4 4 4-4" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 326 326" fill="currentColor">
+  <!-- The Intentic mark, monochrome so VS Code can apply the active theme colour. -->
+  <path d="M128 0h69v34l-69 66V0Z" />
+  <path d="m197 83-69 65v178h69V83Z" />
 </svg>
