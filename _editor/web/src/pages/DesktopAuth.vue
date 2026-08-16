@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ui, Notice, type NoticeModel } from "@intentic/ui";
+import { useTheme, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
@@ -12,8 +12,12 @@ import { useGoogleIdentity } from "../composables/useGoogleIdentity";
  *
  * The app opened it with `opener` because Google refuses OAuth from an embedded webview and Google Identity
  * Services is FedCM-based, which the Linux webview does not implement (see environments/desktop.ts). Here,
- * both are ordinary: requireAuth has already run the Better Auth sign-in, and GIS mints an ID token the way
- * it does on every other screen.
+ * both are ordinary: the route's guard has already run the Better Auth sign-in, and GIS mints an ID token the
+ * way it does on every other screen.
+ *
+ * EVERYTHING ON THIS PAGE IS A WAIT, so the two things that end one start as early as they can: the router
+ * kicks the Google mint off before the session round trip (router/index.ts), and the button below is on
+ * screen from the first frame instead of behind a timer. What the user sees is the whole product here.
  *
  * The two credentials are then parked on the platform for one pickup, and the app is handed the row's id —
  * NOT the credentials. A deep link is delivered as a process argument, readable by anything else running on
@@ -24,11 +28,17 @@ import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 
 const route = useRoute();
 const { user } = useAuth();
-const { getIdToken } = useGoogleIdentity();
+const { getIdToken, renderButton } = useGoogleIdentity();
+const { scheme } = useTheme();
 
 const error = ref<NoticeModel | undefined>(undefined);
-const handedOff = ref(false);
 const working = ref(false);
+/* Which of the two waits the user is in. They are different lengths and only one of them is theirs to end:
+ * `signin` is Google (and may need a click), `handing` is one call to the platform. Naming them apart is what
+ * lets the Google button stand on the page during the first without lingering through the second. */
+const stage = ref<`signin` | `handing` | `done`>(`signin`);
+
+const googleButton = ref<HTMLElement>();
 
 const hand = async (): Promise<void> => {
     const state = route.query[`state`];
@@ -39,16 +49,20 @@ const hand = async (): Promise<void> => {
     }
     working.value = true;
     error.value = undefined;
+    stage.value = `signin`;
     try {
-        // The daemon's credential. Not silent: this page exists BECAUSE the user asked to sign in, so the
-        // Google gate appearing here is the thing they asked for rather than an interruption.
-        const idToken = await getIdToken();
+        /* The daemon's credential. `gate: false` because the button is already ON this page: the shared
+         * overlay's job is to interrupt a screen that was doing something else, and this screen is doing
+         * nothing else. The silent attempt (auto re-auth for a returning user) races that button — whichever
+         * produces a credential first resolves this, so a returning user never sees the button used. */
+        const idToken = await getIdToken({ gate: false });
         if (idToken === undefined) {
             error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
         }
+        stage.value = `handing`;
         const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
-        handedOff.value = true;
+        stage.value = `done`;
         globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
     } catch (err) {
         error.value = noticeFrom(err, `Couldn't finish signing in to the app.`);
@@ -56,6 +70,20 @@ const hand = async (): Promise<void> => {
         working.value = false;
     }
 };
+
+/* Google's own button, on screen from the first frame rather than after a timer decides the silent attempt
+ * failed. It costs nothing when it goes unused, and it is the only thing that can end the wait when the
+ * silent attempt is blocked — which is the ordinary case in a browser that suppresses the FedCM prompt.
+ * Re-rendered whenever the container reappears (a retry) or the colour scheme flips. */
+watch(
+    [stage, scheme, googleButton],
+    () => {
+        if (stage.value === `signin` && googleButton.value) {
+            void renderButton(googleButton.value, scheme.value === `dark`);
+        }
+    },
+    { flush: `post`, immediate: true },
+);
 
 // Automatic, because arriving here already means the user pressed a button in the app; a second "yes" between
 // the two would be a step whose only content is that a redirect happened. The button below is the retry.
@@ -78,17 +106,25 @@ onMounted(() => void hand());
             </header>
 
             <Notice v-if="error" :of="error" />
-            <p v-else-if="handedOff" class="flex items-start gap-2 text-xs text-muted">
+            <p v-else-if="stage === `done`" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
                 <span>Sent to the app — you can close this tab. If nothing happened, make sure Intentic is running and try again.</span>
             </p>
-            <p v-else class="flex items-start gap-2 text-xs text-muted">
+            <p v-else-if="stage === `handing`" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="spinner" spin class="mt-0.5 shrink-0" />
                 <span>Handing your sign-in to the app…</span>
             </p>
+            <!-- The sign-in wait. Google may answer it on its own (auto re-auth for a returning user, no click
+                 at all); when it doesn't, this button is the only thing that can, so it is here from the start.
+                 color-scheme:light matches Google's light-scheme button iframe so the browser paints no opaque
+                 (white) canvas behind it; the button stays dark via its theme param. -->
+            <template v-else>
+                <p class="text-xs text-muted">Continue with Google to hand this sign-in to the app.</p>
+                <div ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
+            </template>
 
             <Button
-                v-if="error || handedOff"
+                v-if="error || stage === `done`"
                 :label="error ? `Try again` : `Send it again`"
                 severity="secondary"
                 class="self-start"

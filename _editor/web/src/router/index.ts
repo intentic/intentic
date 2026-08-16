@@ -1,3 +1,4 @@
+import type { User } from "@intentic-app/api-contract";
 import { useDevice } from "@intentic/ui";
 import {
     createMemoryHistory,
@@ -9,6 +10,7 @@ import {
 } from "vue-router";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
+import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { type LocalPosture, localPosture } from "../environments/posture";
 import { hostPresent, postToHost } from "../local/hostBridge";
@@ -22,23 +24,51 @@ declare module "vue-router" {
 
 // Resolve the session once (Better Auth cookie) and redirect to /login only when the platform AUTHORITATIVELY
 // says none. An unavailable platform gets its own retry screen; it is not evidence that the user signed out.
-// With a user in hand,
-// hydrate the query cache from IndexedDB (per-user buster) before any route mounts — a reload paints the
-// last-known workspace instead of blocking on the daemon.
-const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
+type Resolved = { readonly user: User } | { readonly redirect: RouteLocationRaw };
+
+const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
     const { user, refresh } = useAuth();
     let current = user.value;
     if (current === null) {
         try {
             current = await refresh();
         } catch {
-            return { path: `/platform-unavailable`, query: { returnTo: to.fullPath } };
+            return { redirect: { path: `/platform-unavailable`, query: { returnTo: to.fullPath } } };
         }
     }
-    if (!current) {
-        return `/login`;
+    return current ? { user: current } : { redirect: `/login` };
+};
+
+// Signed in, with a user in hand — and hydrate the query cache from IndexedDB (per-user buster) before any
+// route mounts, so a reload paints the last-known workspace instead of blocking on the daemon.
+const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
+    const resolved = await resolveUser(to);
+    if (!(`user` in resolved)) {
+        return resolved.redirect;
     }
-    await restorePersistedQueries(current.id);
+    await restorePersistedQueries(resolved.user.id);
+    return true;
+};
+
+// Signed in and NOTHING else, for a page that mounts no query of its own. /desktop-auth is the one that
+// cares: it reads nothing from the cache, and hydrating a whole workspace's worth of it would be a disk read
+// standing between the user and the Google prompt that page exists to show.
+const requireSession = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
+    const resolved = await resolveUser(to);
+    return `user` in resolved ? true : resolved.redirect;
+};
+
+/* GOOGLE FIRST, SESSION SECOND. Minting the ID token needs nothing from the platform, so letting it wait for
+ * the session round trip — and then for this page's own chunk to arrive, and then for it to mount — is dead
+ * time charged to the one screen whose entire content is a person waiting for Google to appear. Synchronous:
+ * it returns in the same tick, and the awaited guard after it runs against a prompt already in flight.
+ *
+ * Only with the app's handoff parameters in hand. Someone who lands here by hand has nothing to hand off, and
+ * a Google prompt on a page that is about to say so would be a prompt nobody asked for. */
+const startGoogleMint = (to: RouteLocationNormalized): true => {
+    if (typeof to.query[`state`] === `string` && typeof to.query[`challenge`] === `string`) {
+        void useGoogleIdentity().getIdToken({ gate: false });
+    }
     return true;
 };
 
@@ -77,7 +107,7 @@ const routes: RouteRecordRaw[] = [
         path: `/desktop-auth`,
         name: `desktop-auth`,
         meta: { title: `Sign in to Intentic` },
-        beforeEnter: [requireAuth],
+        beforeEnter: [startGoogleMint, requireSession],
         component: () => import(`../pages/DesktopAuth.vue`),
     },
     {

@@ -26,7 +26,7 @@ watch(
     [needsSignIn, scheme],
     () => {
         if (needsSignIn.value && btn.value) {
-            renderButton(btn.value, scheme.value === `dark`);
+            void renderButton(btn.value, scheme.value === `dark`);
         }
     },
     { flush: `post` },

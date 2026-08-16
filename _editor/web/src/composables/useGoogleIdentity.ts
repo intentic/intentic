@@ -106,14 +106,29 @@ const restore = (): string | undefined => {
     return stored;
 };
 
-// The gsi/client script loads async (see index.html); poll briefly for it.
+/* The gsi/client script loads async (see index.html). Wait on its OWN load event rather than polling for
+ * `window.google`: a poll only notices the script between ticks, and on the desktop-auth page — where the
+ * whole screen is one person waiting for Google to appear — that dead time is charged straight to them. The
+ * short settle poll after the event is the belt-and-braces half (the tag can be absent in a test DOM, and a
+ * load event is not a promise that the global is assigned in the same task). */
+const GIS_SRC = `https://accounts.google.com/gsi/client`;
+
 const waitForGis = async (): Promise<GoogleAccountsId> => {
-    for (let attempt = 0; attempt < 50; attempt++) {
-        const id = window.google?.accounts?.id;
+    const ready = (): GoogleAccountsId | undefined => window.google?.accounts?.id;
+    const script = document.querySelector<HTMLScriptElement>(`script[src^="${GIS_SRC}"]`);
+    if (script !== null && ready() === undefined) {
+        await new Promise<void>((resolve) => {
+            script.addEventListener(`load`, () => resolve(), { once: true });
+            script.addEventListener(`error`, () => resolve(), { once: true });
+            setTimeout(resolve, 5000);
+        });
+    }
+    for (let attempt = 0; attempt < 20; attempt++) {
+        const id = ready();
         if (id !== undefined) {
             return id;
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new Error(`Google Identity Services failed to load`);
 };
@@ -144,13 +159,15 @@ const SILENT_GUARD_MS = 5000;
 // First attempt of a mint: FedCM One Tap / auto re-authentication (auto_select). Raise the rendered-button
 // gate when the prompt is skipped (cooldown / no session), dismissed without a credential, or silent past the
 // guard. Returns the guard timer so mint() clears it once the credential (or a cancel) settles.
-const trySilent = (): ReturnType<typeof setTimeout> => {
+const trySilent = (gate: boolean): ReturnType<typeof setTimeout> | undefined => {
     const raiseGate = (): void => {
-        if (settle !== undefined) {
+        if (settle !== undefined && gate) {
             needsSignIn.value = true;
         }
     };
-    const guard = setTimeout(raiseGate, SILENT_GUARD_MS);
+    // No guard when the caller shows its own button: the timer exists only to raise the shared overlay, and a
+    // caller that is ALREADY showing a Google button would be made to wait five seconds for a second one.
+    const guard = gate ? setTimeout(raiseGate, SILENT_GUARD_MS) : undefined;
     window.google?.accounts?.id?.prompt((moment) => {
         if (moment.isSkippedMoment() || (moment.isDismissedMoment() && moment.getDismissedReason() !== `credential_returned`)) {
             clearTimeout(guard);
@@ -160,9 +177,9 @@ const trySilent = (): ReturnType<typeof setTimeout> => {
     return guard;
 };
 
-// One mint: init GIS (wires the shared credential callback + the gate's rendered button), try the silent
-// prompt, fall back to the gate, and wait for the credential — from either surface — via `settle`.
-const mint = async (): Promise<string | undefined> => {
+// One mint: init GIS (wires the shared credential callback + whichever button is rendered), try the silent
+// prompt, fall back to the gate when this mint owns one, and wait for the credential via `settle`.
+const mint = async (gate: boolean): Promise<string | undefined> => {
     try {
         await ensureInitialized();
     } catch {
@@ -173,7 +190,7 @@ const mint = async (): Promise<string | undefined> => {
         settle = resolve;
     });
     acceptingCredential = true;
-    const guard = trySilent();
+    const guard = trySilent(gate);
     const result = await minted;
     clearTimeout(guard);
     settle = undefined;
@@ -192,14 +209,20 @@ const cached = (): string | undefined => {
     return token !== undefined && Date.now() < expiresAt - 60_000 ? token : undefined;
 };
 
-// A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
-// sign-in gate. Never hangs on a suppressed prompt — the guard surfaces the gate and waits for a real click.
-const getIdToken = async (): Promise<string | undefined> => {
+/* A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
+ * sign-in gate. Never hangs on a suppressed prompt — the guard surfaces the gate and waits for a real click.
+ *
+ * `gate: false` says the CALLER is already showing a Google button of its own. The shared overlay would be a
+ * second button on top of the first, and the timer that raises it would be five seconds of nothing first — so
+ * the silent attempt simply races the caller's button, and whichever produces a credential settles this call.
+ * The consequence is that a suppressed prompt leaves this pending until that button is clicked, which is only
+ * safe because its one caller — the desktop-auth page — is a whole window with no other caller in it. */
+const getIdToken = async (options?: { readonly gate?: boolean }): Promise<string | undefined> => {
     const valid = cached();
     if (valid !== undefined) {
         return valid;
     }
-    inflight ??= mint();
+    inflight ??= mint(options?.gate ?? true);
     return inflight;
 };
 
@@ -227,10 +250,16 @@ const clearCredential = (): void => {
     window.google?.accounts?.id?.disableAutoSelect?.();
 };
 
-// Render the real Google button into the gate's container; a click fires the shared callback above, which
-// caches the credential and resolves the waiting getIdToken(). `dark` picks the filled-black theme so the
-// button matches the app's dark surfaces instead of showing as a white card.
-const renderButton = (parent: HTMLElement, dark: boolean): void => {
+// Render the real Google button into a container; a click fires the shared callback above, which caches the
+// credential and resolves the waiting getIdToken(). `dark` picks the filled-black theme so the button matches
+// the app's dark surfaces instead of showing as a white card. Awaits GIS itself, because the callers that
+// show a button UP FRONT (rather than behind the gate) reach here before any mint has initialized it.
+const renderButton = async (parent: HTMLElement, dark: boolean): Promise<void> => {
+    try {
+        await ensureInitialized();
+    } catch {
+        return; // GIS never loaded — the caller's own error path owns the message.
+    }
     window.google?.accounts?.id?.renderButton(parent, {
         type: `standard`,
         theme: dark ? `filled_black` : `outline`,

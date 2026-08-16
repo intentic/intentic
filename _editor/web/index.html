@@ -54,7 +54,11 @@
             } catch (e) {}
         </script>
         <!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. Loads async;
-             useGoogleIdentity waits for window.google before initializing. -->
+             useGoogleIdentity waits on this tag's load event before initializing. The preconnects open the two
+             connections that flow costs before it can show anything: the script's own origin, and the account
+             endpoint the prompt then talks to. On /desktop-auth the entire screen is that wait. -->
+        <link rel="preconnect" href="https://accounts.google.com" crossorigin />
+        <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
         <script src="https://accounts.google.com/gsi/client" async></script>
         <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
