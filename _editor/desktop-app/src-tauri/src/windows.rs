@@ -33,7 +33,7 @@ const MIN_SIZE: (f64, f64) = (900.0, 600.0);
 /// against the rendered content rather than guessed, with slack for a wider font. Taller on Windows, the one
 /// platform where the tray option has to say where the icon goes (CloseConfirm.vue).
 const CONFIRM_SIZE: (f64, f64) = if cfg!(target_os = "windows") {
-    (460.0, 332.0)
+    (460.0, 360.0)
 } else {
     (460.0, 300.0)
 };
