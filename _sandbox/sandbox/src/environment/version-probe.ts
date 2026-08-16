@@ -21,9 +21,12 @@ const execFileAsync = promisify(execFile);
 // missing — the difference decides whether the row says "arrives after rebuild".
 const VERSION_FLAGS = ["--version", "-version"];
 
-// Long enough for a JVM-ish cold start, short enough that a hung binary cannot hold the whole view. A probe that
-// times out reads as "no version", the same as one that answers nothing.
-const PROBE_TIMEOUT_MS = 3_000;
+/* Long enough for a JVM-ish cold start on a machine that is busy — the whole view probes dozens of commands at
+ * once, and a box already running a build spawns them far slower than an idle one. A probe that times out reads
+ * as "no version", the same as one that answers nothing, so a deadline set for an idle machine quietly turns a
+ * present tool into a versionless one; that is a wrong statement, not a slow one, which is why this is generous
+ * and why a timeout is never cached (see probeVersion). Still bounded, so a hung binary cannot hold the view. */
+const PROBE_TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 64 * 1024;
 
 // Re-probed after this, so a tool an agent installed mid-session stops being reported as pending forever. The
@@ -53,14 +56,15 @@ export const parseVersion = (output: string): string | undefined => /(\d+\.\d+(?
  * the command exists, which is why those fall through to the next flag and then to "present, version unknown"
  * rather than to "missing". Reporting a tool as absent because it dislikes `--version` would put a working
  * toolchain behind a "needs a rebuild" badge. */
-const probeOnce = async (bin: string): Promise<Probe> => {
+const probeOnce = async (bin: string): Promise<Probe & { readonly timedOut: boolean }> => {
     let found = false;
+    let timedOut = false;
     for (const flag of VERSION_FLAGS) {
         try {
             const { stdout, stderr } = await execFileAsync(bin, [flag], { timeout: PROBE_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
             const version = parseVersion(stdout) ?? parseVersion(stderr);
             if (version !== undefined) {
-                return { version, found: true, at: Date.now() };
+                return { version, found: true, at: Date.now(), timedOut: false };
             }
             found = true;
         } catch (error) {
@@ -68,17 +72,19 @@ const probeOnce = async (bin: string): Promise<Probe> => {
             // flag still printed its usage from a real binary, and often its version with it.
             const code = (error as { code?: unknown }).code;
             if (code === "ENOENT" || code === "EACCES") {
-                return { version: undefined, found: false, at: Date.now() };
+                return { version: undefined, found: false, at: Date.now(), timedOut: false };
             }
             const output = `${(error as { stdout?: string }).stdout ?? ""}\n${(error as { stderr?: string }).stderr ?? ""}`;
             const version = parseVersion(output);
             if (version !== undefined) {
-                return { version, found: true, at: Date.now() };
+                return { version, found: true, at: Date.now(), timedOut: false };
             }
+            // A killed process answered nothing because we stopped asking, not because it had nothing to say.
+            timedOut = timedOut || (error as { killed?: boolean }).killed === true || code === "ETIMEDOUT";
             found = true;
         }
     }
-    return { version: undefined, found, at: Date.now() };
+    return { version: undefined, found, at: Date.now(), timedOut };
 };
 
 const probeVersion = async (bin: string): Promise<Probe> => {
@@ -86,8 +92,12 @@ const probeVersion = async (bin: string): Promise<Probe> => {
     if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
         return cached;
     }
-    const probe = await probeOnce(bin);
-    cache.set(bin, probe);
+    const { timedOut, ...probe } = await probeOnce(bin);
+    // A timeout is an unanswered question rather than an answer, so it is not kept: caching it would hold a
+    // present tool at "version unknown" for the rest of the window over one busy moment.
+    if (!timedOut) {
+        cache.set(bin, probe);
+    }
     return probe;
 };
 
