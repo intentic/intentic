@@ -216,7 +216,27 @@ const SHELL_TOOLS = ["Bash", "BashOutput", "KillShell"];
 const WEB_TOOLS = ["WebFetch", "WebSearch"];
 const DELEGATE_TOOLS = ["Agent", "Task", "Workflow"];
 
-export const personaDisallowedTools = (persona: TurnPersona): string[] => {
+/* THE SKILL OF A CAPABILITY THIS TURN CANNOT REACH, spelled as the runtime's own permission rule. Skill files
+ * are written once per workspace (`.agents/skills/<capability id>`), so every turn discovers all of them —
+ * including the ones for accounts this card was refused. Leaving those listed is how absence gets misread: an
+ * unattended publish turn was offered the Reddit skill, followed it to tools that were never mounted for it,
+ * searched, found nothing, and concluded the ACCOUNT was disconnected. It then failed two approved posts with
+ * that sentence, and the sentence was wrong — the account was connected and simply not this turn's to use.
+ *
+ * `Skill(<name>)` is the same rule the SDK's own `skills` option compiles to, taken here as a DENYLIST because
+ * the allowlist form would have to name every other skill the turn should keep: the workspace's, each plugin's,
+ * and the ones the image bakes in. That list is exactly the kind that goes stale by silently removing something,
+ * which is the failure this whole change exists to stop repeating.
+ *
+ * EVERY denied kind, not just accounts. A connector's cheatsheet without its credential and a computer's skill
+ * without its server fail the same way — the skill reads as an offer and the tools behind it are not there. */
+const deniedSkills = (persona: TurnPersona, capabilities: readonly Capability[]): string[] =>
+    capabilities.filter((capability) => !persona.allows(capability)).map((capability) => `Skill(${capability.id})`);
+
+// `capabilities` is the INSTALLED manifest, not the granted one: the whole point is to name what was filtered
+// out of it. Passing the granted list would deny nothing, silently — which is why it is required rather than
+// defaulted, so a call site cannot fall into that by omission.
+export const personaDisallowedTools = (persona: TurnPersona, capabilities: readonly Capability[]): string[] => {
     const { powers } = persona;
     return [
         ...(powers.files === "none" ? [...READ_TOOLS, ...EDIT_TOOLS] : []),
@@ -224,6 +244,7 @@ export const personaDisallowedTools = (persona: TurnPersona): string[] => {
         ...(powers.shell ? [] : SHELL_TOOLS),
         ...(powers.web ? [] : WEB_TOOLS),
         ...(powers.delegate ? [] : DELEGATE_TOOLS),
+        ...deniedSkills(persona, capabilities),
     ];
 };
 

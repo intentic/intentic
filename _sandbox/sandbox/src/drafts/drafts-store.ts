@@ -56,6 +56,7 @@ the app and the daemon sends it when it comes due. One JSON file per draft: ${DR
 
 {
   "platform": "x",
+  "actsAs": "social-poster",
   "content": "exact post text",
   "title": "…",
   "target": "r/webdev",
@@ -65,8 +66,14 @@ the app and the daemon sends it when it comes due. One JSON file per draft: ${DR
   "createdAt": 1767800000000
 }
 
-Only "platform" and "content" are required; everything else is optional.
+Only "platform" and "content" are required; everything else is optional — except "actsAs", which every
+platform that posts through a logged-in browser needs (see below).
 - platform: the skill that will post it — "x", "reddit", "youtube", "discord", …
+- actsAs: WHOSE NAME THIS GOES OUT UNDER — the id of a persona in .intentic/personas.json, one that holds an
+  account for this platform. Read that file and pick; if none of them fits, say so to the owner rather than
+  guessing. Sending happens with nobody watching, and a turn that names no persona is given NO logged-in
+  account at all — so a browser-published draft without this is failed unsent, with that reason written into
+  it. Discord and anything else the daemon posts through a stored key needs no persona and ignores this.
 - title (a new reddit post or a YouTube upload needs one) and target — where on the platform this goes.
 - A target that is a URL makes the draft a REPLY to whatever is at it: a thread, a video, a tweet, or ONE
   PERSON'S COMMENT (on reddit that is the comment's own permalink, .../comments/<post>/<slug>/<comment>/). The

@@ -5199,6 +5199,22 @@ export const DraftSchema = z.object({
     // Which skill posts it: "x" | "reddit" | "youtube" | "discord" | … — a bare string so new platforms need
     // no contract change; an unknown platform simply fails at posting time.
     platform: z.string().min(1),
+    /* WHOSE NAME THIS GOES OUT UNDER — a PersonaSchema id, handed to the publish turn as AgentTurnSchema.actsAs.
+     * Required in practice for every platform outside DIRECT_PUBLISH_PLATFORMS, and the reason is the whole
+     * shape of turnPersona: publishing through a browser needs a logged-in account, and an UNATTENDED turn that
+     * names no persona is denied every account there is. Without this field the publisher could only wake such a
+     * turn — one structurally unable to reach the login the post needs, which read from inside the turn as "this
+     * account is not connected" and cost two approved posts before anyone traced it back here.
+     *
+     * A PERSONA RATHER THAN AN ACCOUNT ID, because that is the vocabulary the rest of the system already speaks:
+     * `actsAs` is the only pin turnPersona honours, and a card carries the workspace scope the turn also needs to
+     * write this file's own status back. Naming the account directly would invent a second way to say the same
+     * thing, and the two would disagree the first time a card's accounts changed.
+     *
+     * The daemon never guesses it. One site can be connected several times over — five Reddit logins here — and
+     * picking for the owner means picking wrong in public, with no undo. A draft that needs a turn and names
+     * nobody is failed with that sentence instead of sent. */
+    actsAs: entryId.optional(),
     content: z.string().min(1),
     // Reddit posts / YouTube uploads need one.
     title: z.string().optional(),

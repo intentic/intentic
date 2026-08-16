@@ -413,7 +413,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     <RowGroup v-if="failed.length > 0" label="Failed to post" :count="failed.length">
                         <Row v-for="draft in failed" :key="draft.id">
                             <template #lead><BrandMark :size="28" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
-                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
+                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" :acts-as="draft.actsAs" /></template>
                             <template #control>
                                 <!-- A post that failed for being too long can only be retried at the length that failed,
                                      unless the words themselves can be changed — so the pencil is here too. -->
@@ -491,6 +491,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <DraftMeta
                                     :name="platformName(draft)"
                                     :target="draft.target"
+                                    :acts-as="draft.actsAs"
                                     :note="draft.createdAt === undefined ? undefined : `proposed ${timeAgo(draft.createdAt)}`"
                                 />
                             </template>
@@ -569,7 +570,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     <RowGroup v-if="goingOut.length > 0" label="Going out" :count="goingOut.length">
                         <Row v-for="draft in goingOut" :key="draft.id" density="compact">
                             <template #lead><BrandMark :size="22" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
-                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
+                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" :acts-as="draft.actsAs" /></template>
                             <template #meta>
                                 <!-- Handed over: the daemon is mid-send, so there is nothing left to stop and the row
                                      says so instead of offering a button that would lose the race. -->
@@ -602,7 +603,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     <RowGroup v-if="scheduled.length > 0" label="Scheduled" :count="scheduled.length">
                         <Row v-for="draft in scheduled" :key="draft.id" density="compact">
                             <template #lead><BrandMark :size="22" :name="platformName(draft)" :logo="platformLogo(draft)" /></template>
-                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
+                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" :acts-as="draft.actsAs" /></template>
                             <template #control>
                                 <div v-if="canShip" class="text-2xs text-subtle">
                                     <ScheduleControl
@@ -643,7 +644,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     <RowGroup v-if="posted.length > 0" label="Posted" :count="posted.length">
                         <Row v-for="draft in posted" :key="draft.id" density="compact">
                             <template #lead><BrandMark :size="22" :name="platformName(draft)" :logo="platformLogo(draft)" :idle="true" /></template>
-                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" /></template>
+                            <template #description><DraftMeta :name="platformName(draft)" :target="draft.target" :acts-as="draft.actsAs" /></template>
                             <template #meta>
                                 <span v-if="draft.postedAt !== undefined" v-tooltip.top="formatTimestamp(draft.postedAt)">{{
                                     timeAgo(draft.postedAt)

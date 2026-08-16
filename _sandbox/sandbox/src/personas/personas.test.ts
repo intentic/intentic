@@ -91,7 +91,7 @@ test("an unpinned wake keeps the full toolbox even though it has lost every acco
     expect(persona.powers.shell).toBe(true);
     // Both execution backends — the JS backend defaults open like every other shelf.
     expect(persona.powers.code).toBe(true);
-    expect(personaDisallowedTools(persona)).toEqual([]);
+    expect(personaDisallowedTools(persona, [])).toEqual([]);
     // Connectors, computers and MCP connections all pass, because "absent" means "every one of them".
     expect(persona.allows(connector("github"))).toBe(true);
     expect(persona.allows(computer("laptop"))).toBe(true);
@@ -111,8 +111,8 @@ test("naming a persona no card carries denies everything — accounts and tools 
     expect(persona.powers.shell).toBe(false);
     // Both execution backends fail closed — the JS backend is then never mounted (turn-plan reads this field).
     expect(persona.powers.code).toBe(false);
-    expect(personaDisallowedTools(persona)).toContain("Bash");
-    expect(personaDisallowedTools(persona)).toContain("Read");
+    expect(personaDisallowedTools(persona, [])).toContain("Bash");
+    expect(personaDisallowedTools(persona, [])).toContain("Read");
 });
 
 test("a card's shelves become the tools taken out of the turn", () => {
@@ -123,7 +123,7 @@ test("a card's shelves become the tools taken out of the turn", () => {
         actsAs: "reader",
         unattended: true,
     });
-    const denied = personaDisallowedTools(persona);
+    const denied = personaDisallowedTools(persona, []);
     // Reading survives; changing, running, fetching and delegating do not.
     expect(denied).not.toContain("Read");
     expect(denied).toEqual(expect.arrayContaining(["Edit", "Write", "Bash", "WebFetch", "Agent"]));
@@ -131,7 +131,44 @@ test("a card's shelves become the tools taken out of the turn", () => {
 
 test("files: none takes the reading tools away too", () => {
     const persona = turnPersona({ personas: [card("blind", [], { powers: powers({ files: "none" }) })], actsAs: "blind", unattended: true });
-    expect(personaDisallowedTools(persona)).toEqual(expect.arrayContaining(["Read", "Grep", "Glob", "Edit", "Write"]));
+    expect(personaDisallowedTools(persona, [])).toEqual(expect.arrayContaining(["Read", "Grep", "Glob", "Edit", "Write"]));
+});
+
+// ── The skill of a capability this turn cannot reach ────────────────────────────────────────────────────────
+
+/* Skill files are written once per workspace, so a turn discovers every account's instructions whether or not
+ * it may use that account. An unattended publish turn read the Reddit skill, went after tools that were never
+ * mounted for it, found none, and reported the ACCOUNT as disconnected — failing two approved posts over a
+ * login that was connected the whole time. The instructions have to go with the tools. */
+test("an unattended wake loses the skills of the accounts it lost", () => {
+    const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
+    const denied = personaDisallowedTools(persona, [browser("reddit-work"), connector("github")]);
+    expect(denied).toContain("Skill(reddit-work)");
+    // The connector survives: an unpinned wake keeps everything that is not an account, so its cheatsheet is
+    // still usable and hiding it would take away a working tool.
+    expect(denied).not.toContain("Skill(github)");
+});
+
+test("a card keeps its own accounts' skills and loses everyone else's", () => {
+    const persona = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
+    const denied = personaDisallowedTools(persona, [browser("reddit-work"), browser("reddit-personal"), browser("npmjs")]);
+    expect(denied).not.toContain("Skill(reddit-work)");
+    // Both of these: one belongs to another card, one to no card at all. Same answer — this turn cannot post
+    // from either, so it should not be reading how.
+    expect(denied).toEqual(expect.arrayContaining(["Skill(reddit-personal)", "Skill(npmjs)"]));
+});
+
+test("every denied kind loses its skill, not just accounts", () => {
+    // A cheatsheet whose credential was stripped from the shell, and a computer whose server was never
+    // mounted, are unusable in exactly the way an account's browser is.
+    const persona = turnPersona({
+        personas: [card("narrow", ["github"], { powers: powers({ connectors: ["github"], computers: [], mcp: [] }) })],
+        actsAs: "narrow",
+        unattended: true,
+    });
+    const denied = personaDisallowedTools(persona, [connector("github"), connector("linear"), computer("laptop"), mcp("notion")]);
+    expect(denied).not.toContain("Skill(github)");
+    expect(denied).toEqual(expect.arrayContaining(["Skill(linear)", "Skill(laptop)", "Skill(notion)"]));
 });
 
 // ── The manifest, narrowed once ─────────────────────────────────────────────────────────────────────────────

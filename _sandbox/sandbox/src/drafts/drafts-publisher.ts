@@ -105,16 +105,60 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
                 }
             }
 
-            if (forTurn.length > 0) {
-                /* One turn for the batch. `posting` goes on before it starts for the same reason the direct
-                 * path writes it before its request: the turn is detached and may die, and a draft still
-                 * reading `approved` after that would be sent again by the next sweep. */
-                await Promise.all(forTurn.map((draft) => mark(draft, { status: `posting`, postingAt: Date.now() })));
+            /* A DRAFT THAT NEEDS A TURN AND NAMES NOBODY IS FAILED, NOT SENT. The turn this would wake is
+             * unattended, and an unattended turn with no persona is denied every logged-in account (personas.ts
+             * spells out why: at 3am the prompt's wording is the only thing standing between a stranger and a
+             * public post). So the turn would open the platform in a browser signed into nothing, meet the wall
+             * a cold profile always meets, and report the account as disconnected — which is what happened
+             * before this check existed, and it cost two approved posts and an afternoon to trace.
+             *
+             * Failing here says the true thing in the one place the owner reads. Guessing the persona instead is
+             * the alternative worth naming and rejecting: one site is often connected several times over, and a
+             * post that goes out under the wrong face is public and has no undo. */
+            const cast = new Set((await services.personas.list()).map((card) => card.id));
+            for (const draft of forTurn.filter((entry) => entry.actsAs === undefined || !cast.has(entry.actsAs))) {
+                /* A NAME THAT RESOLVES TO NOBODY IS THE SAME FAILURE AS NO NAME, and deliberately not a softer
+                 * one: turnPersona answers an unknown card by denying everything, so the turn arrives with no
+                 * account exactly as the unpinned one does. A card can go missing for ordinary reasons — renamed
+                 * on one side only, a workspace cloned before its personas were committed — which is why this is
+                 * worth saying in the queue rather than leaving to be rediscovered from inside a turn. */
+                await mark(draft, {
+                    status: `failed`,
+                    error:
+                        draft.actsAs === undefined
+                            ? `Nobody is named to post this. ${draft.platform} publishes through a logged-in browser, and this draft does not say which persona's account to use — so nothing was sent. Set "actsAs" to a persona that holds the right ${draft.platform} account, then approve it again.`
+                            : `No persona called "${draft.actsAs}" exists, so nothing was sent. A turn wearing a card nobody carries reaches no account at all. Point "actsAs" at a persona that holds the right ${draft.platform} account, then approve it again.`,
+                });
+            }
+
+            /* ONE TURN PER PERSONA, not one per batch. A turn wears exactly one face, so two drafts going out
+             * under different names are two turns however close together they came due — batching them would
+             * hand the second draft to an account that cannot post it. Within one face the batch still holds,
+             * because the expensive thing about a turn is that it exists. */
+            const byPersona = new Map<string, DraftSummary[]>();
+            for (const draft of forTurn) {
+                // Same condition as the failures above, read the other way round — a draft is either sendable or
+                // already written off, never both and never neither.
+                if (draft.actsAs !== undefined && cast.has(draft.actsAs)) {
+                    byPersona.set(draft.actsAs, [...(byPersona.get(draft.actsAs) ?? []), draft]);
+                }
+            }
+
+            let batch = 0;
+            for (const [actsAs, wearing] of byPersona) {
+                /* `posting` goes on before the turn starts for the same reason the direct path writes it before
+                 * its request: the turn is detached and may die, and a draft still reading `approved` after that
+                 * would be sent again by the next sweep. */
+                await Promise.all(wearing.map((draft) => mark(draft, { status: `posting`, postingAt: Date.now() })));
                 const turn: AgentTurn & { conversationId: string } = {
-                    prompt: publishTurnPrompt(forTurn),
-                    conversationId: `publish-drafts-${now.toString(36)}`,
+                    prompt: publishTurnPrompt(wearing),
+                    // Short by construction: a persona id may be 60 characters and a conversation id may be 64,
+                    // so the batch counter distinguishes the turns rather than the name they act as.
+                    conversationId: `publish-drafts-${now.toString(36)}-${(batch += 1).toString(36)}`,
                     unattended: true,
-                    title: forTurn.length === 1 ? `Publish 1 post` : `Publish ${forTurn.length} posts`,
+                    // The whole point of this pass: the turn wakes holding that persona's accounts.
+                    actsAs,
+                    title: wearing.length === 1 ? `Publish 1 post` : `Publish ${wearing.length} posts`,
                 };
                 /* The same detached boundary POST /agent uses — it registers the run, journals it so a daemon
                  * death resumes it, and gives the publish an ordinary card in the fleet instead of work that

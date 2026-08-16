@@ -47,8 +47,12 @@ reports the profile.
   edges (`deps.broken`/`deps.fixed`) that wake the seeded fix chore — every step in a visible terminal panel and
   the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts → src/automations).
 - Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/drafts/`, src/drafts),
-  the owner approves them on the Drafts page, and the daemon fires the seeded publisher automation the moment a
-  draft is approved and due — a future-dated approval waits for the publisher's sweep instead.
+  the owner approves them on the Drafts page, and the daemon itself sends each one the moment it comes due —
+  sleeping on one timer until then rather than sweeping, since it is the process that wrote the deadline. A
+  platform with a real API goes out as an authenticated request; one that is only a logged-in browser goes out
+  as an agent turn, pinned to the persona the draft NAMES (`actsAs`). That pin is the difference between a post
+  and a failure: an unattended turn that names no persona is denied every account, so a browser-published draft
+  without one is failed unsent rather than handed to a turn that cannot reach the login.
 - Gate what runs without the owner, in two layers that share one decision seam (src/guard). Before a session
   starts: every outside-driven wake (automations, listeners, the Doorbell, the workflow release gate) is
   allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls

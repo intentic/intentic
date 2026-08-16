@@ -23,16 +23,22 @@
 import { computed } from "vue";
 import { destinationOf } from "./postText";
 
-const { name, target, note } = defineProps<{
+const { name, target, actsAs, note } = defineProps<{
     /** The platform's display name — capitalized here, since an unknown platform arrives as its bare id. */
     name: string;
     target?: string;
+    /* WHOSE NAME IT GOES OUT UNDER (the draft's `actsAs` persona), because the row it sits on carries an
+     * Approve button and this is the one fact that button cannot be taken back on. Between the place and the
+     * time on purpose: the reader wants where before who, and who before when. */
+    actsAs?: string;
     /** One trailing fact the section cares about ("proposed 3h ago"). */
     note?: string;
 }>();
 
 const destination = computed(() => (target === undefined ? undefined : destinationOf(target)));
-const full = computed<string | undefined>(() => (target === undefined ? undefined : [name, target, note].filter(Boolean).join(` · `)));
+const full = computed<string | undefined>(() =>
+    target === undefined ? undefined : [name, target, actsAs === undefined ? undefined : `as ${actsAs}`, note].filter(Boolean).join(` · `),
+);
 </script>
 
 <template>
@@ -46,6 +52,7 @@ const full = computed<string | undefined>(() => (target === undefined ? undefine
             </a>
             <template v-else>{{ destination.label }}</template>
         </template>
+        <template v-if="actsAs"> <span class="text-subtle"> · </span>as {{ actsAs }} </template>
         <template v-if="note"> <span class="text-subtle"> · </span>{{ note }} </template>
     </span>
 </template>

@@ -42,6 +42,10 @@ fail-safe half of the distinction `ESSENTIAL_EXTENSIONS` draws.
 - A draft's `platform` is a bare string naming the capability whose skill posts it; the display name and brand
   come from the installed pack's own catalog entry, and a platform with no installed connector still renders as
   a monogram — a draft can be proposed for somewhere this sandbox cannot yet post.
+- A row shows the persona the draft goes out AS (`actsAs`, in the meta line between the place and the time),
+  because the button beside it is Approve and whose name is on a public post is the one thing that click cannot
+  take back. The drafting agent writes that field and this surface only displays it: changing it means editing
+  the draft file, since the extension API has no personas listing to build a picker from.
 - Editing is a plain field on the same upsert every other action uses, offered only where changing the words is
   still worth anything: waiting on a yes, or already failed. Rows on their way out get "back to review" instead,
   so nothing is rewritten on a row the publisher may already be reading.

@@ -417,7 +417,7 @@ const honoured = (
     const shellEnv = cliEnv === undefined ? undefined : personaCliEnv(cliEnv, installed, persona, envSuffix);
     // The shelves that are not capability-shaped, as tool names the runtime knows. Concatenated with whatever
     // the request already carried (the hashline swap sets its own) rather than replacing it.
-    const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona)];
+    const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona, installed)];
     /* WHERE THE CARD SAYS TO STAND — a folder under the turn's own root, which is the worktree for an isolated
      * turn and the workspace for a shared one, so "start in this repo" means the same thing either way.
      *
