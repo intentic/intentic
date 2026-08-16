@@ -52,6 +52,31 @@ const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
     await client.signIn.social({ provider: `google`, callbackURL: `${globalThis.location.origin}${callbackPath}` });
 };
 
+/* THE SAME SIGN-IN, DONE IN THE BROWSER — where the credential can be kept.
+ *
+ * The redirect above proves the user to the platform and leaves this window with nothing, so the sandbox had
+ * to ask for Google a second time: the daemon authenticates the end user against Google directly (it does not
+ * trust us, by design), and only the browser can hand it a Google-signed token. Minting that token HERE and
+ * spending it on the platform too collapses the two asks into one.
+ *
+ * Deliberately one-directional: this sends a Google credential the browser already holds INTO the platform.
+ * The platform never hands one back, so nothing the sandbox trusts depends on the platform being honest — a
+ * daemon that is forked, older, or modified to distrust the platform entirely sees exactly what it sees today.
+ *
+ * Throws when the platform will not take it (a self-hosted build without the endpoint, a client-id mismatch,
+ * a token Google will not vouch for). Callers fall back to the redirect; the Google credential is NOT cleared
+ * on the way out, because a platform that rejects it says nothing about whether the sandbox will. */
+const signInWithGoogleCredential = async (idToken: string): Promise<void> => {
+    const { error } = await client.$fetch(`/one-tap/callback`, { method: `POST`, body: { idToken } });
+    if (error) {
+        throw new Error(error.message ?? `Google sign-in was refused.`);
+    }
+    // The session cookie is set by the call above; this only fills the shared `user` ref early. A failure here
+    // is a blip AFTER a sign-in that already happened, and throwing would tell the caller the opposite — so
+    // let the route guard resolve the session on the way in, as it does on every reload.
+    await refresh().catch(() => undefined);
+};
+
 const signOut = async (): Promise<void> => {
     // The server session goes first. Local storage being blocked must never prevent the authoritative logout.
     const { error } = await client.signOut();
@@ -101,5 +126,5 @@ globalThis.document?.addEventListener(`visibilitychange`, () => {
 });
 
 export function useAuth() {
-    return { user, refresh, signInWithGoogle, signOut, updateProfile, deleteAccount };
+    return { user, refresh, signInWithGoogle, signInWithGoogleCredential, signOut, updateProfile, deleteAccount };
 }

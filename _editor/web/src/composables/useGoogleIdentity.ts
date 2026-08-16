@@ -254,13 +254,19 @@ const clearCredential = (): void => {
 // credential and resolves the waiting getIdToken(). `dark` picks the filled-black theme so the button matches
 // the app's dark surfaces instead of showing as a white card. Awaits GIS itself, because the callers that
 // show a button UP FRONT (rather than behind the gate) reach here before any mint has initialized it.
-const renderButton = async (parent: HTMLElement, dark: boolean): Promise<void> => {
+// Answers whether a button is actually standing there: a caller whose ONLY sign-in control this is (the login
+// page) has to offer something else when Google's script never arrived, and silence would leave a blank panel.
+const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean> => {
     try {
         await ensureInitialized();
     } catch {
-        return; // GIS never loaded — the caller's own error path owns the message.
+        return false; // GIS never loaded — the caller decides what to show instead.
     }
-    window.google?.accounts?.id?.renderButton(parent, {
+    const id = window.google?.accounts?.id;
+    if (id === undefined) {
+        return false;
+    }
+    id.renderButton(parent, {
         type: `standard`,
         theme: dark ? `filled_black` : `outline`,
         size: `large`,
@@ -268,6 +274,7 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<void> =
         shape: `pill`,
         logo_alignment: `center`,
     });
+    return true;
 };
 
 // User dismissed the gate without signing in: let the awaiting call resolve undefined (the caller surfaces

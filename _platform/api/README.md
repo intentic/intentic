@@ -15,7 +15,7 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 
 ## Routes (see [src/app.ts](src/app.ts))
 
-- `/api/auth/**` — Better Auth (Google OAuth, session).
+- `/api/auth/**` — Better Auth (Google OAuth redirect, the browser-minted Google ID token at `one-tap/callback`, session).
 - `${API_BASE_PATH}/*` — the oRPC OpenAPI handler ([src/router.ts](src/router.ts): `me`, `setup.connect`, `setup.zones`, `setup.bind`, `setup.binding`). `bind` stores the browser-derived `daemonUrl`; `binding` reads it back.
 - `/trial/*` — the free trial's model API (`/trial/status`, `/trial/v1/models`, `/trial/v1/chat/completions`), authenticated by the sandbox connect token. 404s entirely when `TRIAL_KEYS` is unset.
 - `/pool/*` — the creator pool's non-browser routes: the daemon's ledger report + premium probe (connect-token), the services catalog + metered `POST /pool/services/:slug/run` (connect-token), Stripe's webhook (signature), and the public `GET /pool/transparency`. The browser half (membership state + credits, checkout, portal) rides the oRPC contract. 404s entirely when the pool is unconfigured.
@@ -25,7 +25,11 @@ The **platform backend** — Hono + oRPC + Prisma + Better Auth. The platform is
 
 - [src/main.ts](src/main.ts) — entrypoint: `serve(...)`.
 - [src/app.ts](src/app.ts) — the Hono app factory + all route wiring; [src/router.ts](src/router.ts) + [src/context.ts](src/context.ts) — oRPC.
-- [src/auth.ts](src/auth.ts) — Better Auth (Google sign-in + the desktop one-time-token handoff).
+- [src/auth.ts](src/auth.ts) — Better Auth (Google sign-in + the desktop one-time-token handoff). Sign-in has
+  two doors on purpose: the OAuth redirect, and `one-tap/callback`, which takes a Google ID token the BROWSER
+  minted. The second exists because the sandbox authenticates people against Google itself and does not trust
+  this platform — so only a credential the browser holds can serve both, and asking for Google twice was
+  costing sign-ups. It makes the platform a second CONSUMER of that credential, never its issuer.
 - [src/sandbox/cloud/index.ts](src/sandbox/cloud/index.ts) — the cloud lane's provider switch; one plain-fetch adapter per provider beside it (Oracle's request signing in [src/sandbox/cloud/oci-sign.ts](src/sandbox/cloud/oci-sign.ts), the first-boot script in [src/sandbox/cloud/user-data.ts](src/sandbox/cloud/user-data.ts)).
 - [src/config.ts](src/config.ts) — `@puristic/env` config; [src/prisma.ts](src/prisma.ts) — client factory; [src/types.ts](src/types.ts) — the shared Prisma type.
 

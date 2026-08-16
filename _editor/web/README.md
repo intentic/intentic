@@ -22,7 +22,11 @@ drill-in, and the accounts surface — [src/local/](src/local)). The posture is 
   - `useAuth.ts` — the reactive Better Auth session, cross-tab sign-in/out, profile + account deletion. Guards live in the router.
   - `useApi.ts` — the oRPC `ContractRouterClient` singleton; the platform surface is just `setup.*` (+ `me`).
   - `sandbox/useSandbox.ts` — the browser's sandbox state: `daemonUrl` (from `setup.binding`) + `reachable` (the live SSE probe in `useSandboxLiveness.ts`); the browser alone judges liveness.
-  - `useGoogleIdentity.ts` — Google Identity Services: acquires a fresh ID token only when an explicit daemon authorization needs one.
+  - `useGoogleIdentity.ts` — Google Identity Services: mints the Google ID token, cached until it expires. ONE
+    credential with two consumers — the daemon (which verifies it against Google, never against the platform) and
+    the platform's own sign-in, which `Login.vue` establishes from the same mint. That is what removed the second
+    Google prompt people used to meet right after signing in. Only the browser can produce it, so the direction is
+    fixed: it goes out to both, and neither hands one back.
   - `sandbox/sandboxSession.ts` + `sandbox/sandboxAuthFetch.ts` — establish and renew the per-daemon bearer session, synchronize it across tabs, and give every client the same one-retry recovery after an authoritative 401.
   - `sandbox/sandboxClient.ts` — the browser→daemon-direct client (`sandboxRequest`/`sandboxJson`/`sandboxBlob`): snapshots one sandbox target and uses the shared authenticated-fetch policy for `${daemonUrl}${path}`.
   - `useChat.ts` + `conversation.ts` — the Claude agent, daemon-direct (`/agent`, `/agent/decision`, `/agent/answer`, `/sessions`, `/claude/*`).

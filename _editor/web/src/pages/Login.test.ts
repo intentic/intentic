@@ -1,0 +1,168 @@
+// @vitest-environment jsdom
+//
+// ONE GOOGLE SIGN-IN INSTEAD OF TWO, which is the whole subject of this page now. Signing in used to bounce
+// off to Google and back, which proves the user to the platform and leaves the browser holding NOTHING — so
+// the sandbox, which authenticates people against Google itself and does not trust the platform, had to ask
+// for Google a second time. People read that second ask as a bug and some left at it.
+//
+// The page now mints the Google credential HERE and spends it twice: once on the platform, once (from the
+// cache it already lives in) on the sandbox. These tests hold the two things that must stay true — that the
+// token handed to the platform is the one the BROWSER minted, never the other way round, and that all three
+// ways this can fail land on the old redirect rather than on a dead page.
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+
+// The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
+// environment.ts reads window.env and throws without it.
+vi.hoisted(() => {
+    globalThis.matchMedia ??= ((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    })) as unknown as typeof globalThis.matchMedia;
+    globalThis.window.env ??= {
+        production: false,
+        api: { url: `http://localhost` },
+        auth: { googleClientId: `` },
+        analytics: { posthogKey: ``, posthogHost: `` },
+        afterSignOut: ``,
+    };
+});
+
+const push = vi.fn();
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRouter: () => ({ push, replace: vi.fn() }) as never,
+}));
+
+const signInWithGoogle = vi.fn().mockResolvedValue(undefined);
+const signInWithGoogleCredential = vi.fn().mockResolvedValue(undefined);
+vi.mock(`../composables/useAuth`, () => ({
+    useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
+}));
+
+const getIdToken = vi.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
+const renderButton = vi.fn<() => Promise<boolean>>();
+vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
+vi.mock(`../environments/desktop`, () => ({
+    DESKTOP_SIGN_IN_LINK: ``,
+    desktopVersion: () => undefined,
+    openDesktopLink: vi.fn(),
+}));
+
+const { default: Login } = await import("./Login.vue");
+
+let app: App | undefined;
+const mount = async (): Promise<HTMLElement> => {
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ render: () => h(Login) });
+    app.component(
+        `Icon`,
+        defineComponent({
+            props: { name: String, spin: Boolean },
+            render() {
+                return h(`i`, { "data-icon": this.name });
+            },
+        }),
+    );
+    app.mount(el);
+    // The sign-in chain is several awaits deep — a macrotask flushes it where a fixed count of ticks goes stale.
+    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
+    await nextTick();
+    return el;
+};
+
+// The old redirect control, found by its label — its presence IS the fallback being offered.
+const redirectButton = (): HTMLButtonElement | undefined =>
+    [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Continue with Google`));
+
+beforeEach(() => {
+    push.mockReset();
+    signInWithGoogle.mockReset().mockResolvedValue(undefined);
+    signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
+    // The steady state: Google's button renders, and a credential arrives from it.
+    renderButton.mockReset().mockResolvedValue(true);
+    getIdToken.mockReset().mockResolvedValue(`google-id-token`);
+});
+
+afterEach(() => {
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+});
+
+it(`signs in to the platform with the token the browser minted`, async () => {
+    await mount();
+
+    // The DIRECTION is the security property: a Google credential this window already holds goes INTO the
+    // platform. Nothing comes back out, so what the sandbox trusts never depends on the platform being honest.
+    expect(signInWithGoogleCredential).toHaveBeenCalledWith(`google-id-token`);
+    expect(push).toHaveBeenCalledWith(`/`);
+});
+
+it(`asks Google without raising the shared overlay, since its own button is the gate`, async () => {
+    await mount();
+
+    expect(getIdToken).toHaveBeenCalledWith({ gate: false });
+});
+
+it(`renders Google's own button rather than the redirect`, async () => {
+    getIdToken.mockReturnValue(new Promise<never>(() => {}));
+
+    await mount();
+
+    expect(renderButton).toHaveBeenCalled();
+    expect(redirectButton()).toBeUndefined();
+});
+
+it(`falls back to the redirect when Google's script never arrives`, async () => {
+    renderButton.mockResolvedValue(false);
+    getIdToken.mockResolvedValue(undefined);
+
+    await mount();
+
+    expect(redirectButton()).toBeDefined();
+    expect(signInWithGoogleCredential).not.toHaveBeenCalled();
+});
+
+it(`falls back to the redirect when the platform refuses a token Google signed`, async () => {
+    signInWithGoogleCredential.mockRejectedValue(new Error(`no such endpoint`));
+
+    const el = await mount();
+
+    // A platform that will not take it (an older self-hosted build, a client-id mismatch) says NOTHING about
+    // whether the sandbox will, so the user gets the other way in rather than a dead page.
+    expect(redirectButton()).toBeDefined();
+    expect(el.textContent).toContain(`Continue with Google below instead`);
+    expect(push).not.toHaveBeenCalled();
+});
+
+it(`always offers a way in that does not depend on Google's embedded button`, async () => {
+    getIdToken.mockReturnValue(new Promise<never>(() => {}));
+
+    const el = await mount();
+    const escape = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Trouble signing in`));
+    escape?.click();
+    await nextTick();
+
+    // The ways that button can fail silently (a blocked frame, a popup policy) are invisible from this page,
+    // and each of them looks like a sign-in page that simply does nothing.
+    expect(escape).toBeDefined();
+    expect(signInWithGoogle).toHaveBeenCalled();
+});
+
+it(`leaves the page usable when the user dismisses Google`, async () => {
+    getIdToken.mockResolvedValue(undefined);
+
+    const el = await mount();
+
+    expect(signInWithGoogleCredential).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    // Nothing is said about a dismissal — the button the user turned away from is still standing there.
+    expect(el.textContent).not.toContain(`Continue with Google below instead`);
+});

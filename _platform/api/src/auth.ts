@@ -3,7 +3,7 @@ import { LEGAL_VERSION } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
-import { oneTimeToken } from "better-auth/plugins";
+import { oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
 import type { PrismaClient } from "@intentic-app/prisma";
@@ -84,5 +84,24 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
          * /one-time-token/verify spends it and answers with the session cookie — so the webview obtains its
          * cookie through an ordinary HTTP round trip, and nothing hand-rolls a session or forges a cookie.
          * Three minutes by default, which is the right order for a link the app opens the instant it arrives. */
-        plugins: [oneTimeToken()],
+        plugins: [
+            oneTimeToken(),
+            /* ONE GOOGLE SIGN-IN FOR BOTH SIDES. The redirect flow above proves the user to THIS platform and
+             * leaves the browser holding nothing, so the sandbox — which authenticates the end user against
+             * Google itself, never against us — had to ask for Google a second time. People read that second
+             * ask as a bug, and some leave at it.
+             *
+             * This endpoint takes the Google ID token the BROWSER minted (POST /api/auth/one-tap/callback)
+             * and establishes the platform session from it. The browser keeps the same token for its sandbox,
+             * so one Google interaction now settles both. Audience is socialProviders.google.clientId — the
+             * same OAuth client the sandbox verifies against, which is what makes one token serve two
+             * verifiers (see .env.example: one client, the SPA as origin, the API as redirect URI).
+             *
+             * NOTHING ABOUT WHAT THE SANDBOX TRUSTS CHANGES HERE, and that is the point: the daemon still
+             * receives a Google-signed token it verifies against Google's JWKS, so a sandbox running an older,
+             * forked, or deliberately platform-distrusting build is unaffected. This platform is a second
+             * CONSUMER of that credential, never its issuer. The redirect flow stays as the fallback for any
+             * browser that cannot mint one. */
+            oneTap(),
+        ],
     });

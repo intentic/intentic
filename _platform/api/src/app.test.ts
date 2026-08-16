@@ -281,3 +281,29 @@ describe(`POST /sandbox/boot-report`, () => {
 // The connect-token host-tunnel mint (the in-sandbox infra panel's path). The CF provisioning itself is the
 // shared provisionHostSshTunnel (covered by cloudflare.test.ts); these lock the auth + guard paths that run
 // before any Cloudflare call.
+
+/* THE ONE-GOOGLE-SIGN-IN ENDPOINT. The browser mints a Google ID token, signs into the platform with it, and
+ * keeps the same token for its sandbox — which is what removed the second Google ask. This holds the only
+ * thing a unit test can hold about it usefully: that the route is MOUNTED and verifying. It was absent
+ * entirely until the one-tap plugin was added, and a missing route is indistinguishable from a broken one
+ * from the browser's side — both send the user down the redirect fallback, silently, forever. */
+describe(`POST /api/auth/one-tap/callback`, () => {
+    const post = (idToken: string) =>
+        createApp(
+            { ...config, google: { clientId: `client-id.apps.googleusercontent.com`, clientSecret: `s` } } as Config,
+            fakePrisma({}),
+            logger,
+        ).app.request(`/api/auth/one-tap/callback`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ idToken }),
+        });
+
+    it(`is mounted, and refuses a token Google did not sign`, async () => {
+        const response = await post(`not-a-google-token`);
+        // Anything but 404: a 404 is the plugin missing, which is the regression this exists to catch. The
+        // refusal itself is Google's verifier talking, and its exact status is that library's business.
+        expect(response.status).not.toBe(404);
+        expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+});

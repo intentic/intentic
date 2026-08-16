@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic/ui";
+import { useTheme, Notice, type IconName, type NoticeModel } from "@intentic/ui";
+import { noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
-import { computed } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
+import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { DESKTOP_SIGN_IN_LINK, desktopVersion, openDesktopLink } from "../environments/desktop";
 
-const { signInWithGoogle } = useAuth();
+const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
+const { getIdToken, renderButton } = useGoogleIdentity();
+const { scheme } = useTheme();
+const router = useRouter();
 
 /* Inside the desktop app, the button below CANNOT work: Google refuses OAuth from an embedded webview, and
  * the redirect would dead-end on a `disallowed_useragent` page with no way back. So the app gets a different
@@ -41,13 +47,78 @@ const features: readonly { icon: IconName; title: string; description: string }[
     },
 ];
 
-const signIn = async (): Promise<void> => {
+/* ONE GOOGLE SIGN-IN, NOT TWO.
+ *
+ * The redirect below proves the user to the platform and leaves this window holding nothing — which is why
+ * the sandbox then asked for Google all over again: the daemon authenticates people against Google itself and
+ * only the browser can hand it a Google-signed token. Minting that token HERE, and spending it on the
+ * platform as well, means the second ask never happens.
+ *
+ * The credential the sandbox eventually receives is byte-for-byte what it receives today, so a daemon that is
+ * older, forked, or deliberately built to distrust the platform is not affected by any of this.
+ *
+ * Google's own button is the control, because it is the one surface that works when One Tap does not. Four
+ * things can go wrong. Three are observable and each answers with the redirect rather than a dead page:
+ * Google's script never arrives (nothing renders), the user dismisses whatever Google shows, or the platform
+ * refuses the token. The fourth — a button that renders but cannot work, behind a blocked frame or a popup
+ * policy — is invisible from here, which is why the escape link below it is unconditional. */
+const googleButton = ref<HTMLElement>();
+/* Whether Google's own button is standing there. It starts TRUE off the desktop so the container is in the
+ * DOM for the very first render — the button cannot be rendered into an element that does not exist — and
+ * flips to false the moment Google's script proves absent or the platform refuses what it signed. Inside the
+ * desktop app it starts false: Google's script cannot run in that webview at all, which is why that window
+ * has always had a single button that hands the whole sign-in to the real browser. */
+const googleReady = ref(!desktop.value);
+const error = ref<NoticeModel | undefined>();
+
+const redirectSignIn = async (): Promise<void> => {
     if (desktop.value) {
         openDesktopLink(DESKTOP_SIGN_IN_LINK);
         return;
     }
     await signInWithGoogle();
 };
+
+/* The mint, started on mount so a click has something to resolve — and so a returning user is signed in with
+ * no click at all, which is what Google's automatic re-authentication is for. It can only fire for someone
+ * who has signed in this way here BEFORE, so a first-ever account still passes a visible Google surface and
+ * the consent line under it. */
+const signInWithCredential = async (): Promise<void> => {
+    if (desktop.value) {
+        return;
+    }
+    try {
+        // `gate: false` — this page's own button IS the gate; the shared overlay would be a second one.
+        const idToken = await getIdToken({ gate: false });
+        if (idToken === undefined) {
+            return; // Dismissed, or Google unavailable. The fallback below is already on screen.
+        }
+        await signInWithGoogleCredential(idToken);
+        await router.push(`/`);
+    } catch {
+        /* The platform would not take a token Google did in fact sign — a build without the endpoint, or a
+         * client-id mismatch between this app and that platform. The redirect does not depend on either, so
+         * hand the user that rather than a dead end. The Google credential stays cached on purpose: the
+         * sandbox may well accept what the platform just refused, and re-minting would be a third ask. */
+        googleReady.value = false;
+        error.value = noticeOf(`Couldn't finish that sign-in. Continue with Google below instead.`);
+    }
+};
+
+onMounted(() => void signInWithCredential());
+
+// Google's button, rendered as soon as its container exists (and re-rendered when the colour scheme flips,
+// since its theme is baked in at render). A click resolves the mint above.
+watch(
+    [googleButton, scheme],
+    async () => {
+        if (googleButton.value === undefined) {
+            return;
+        }
+        googleReady.value = await renderButton(googleButton.value, scheme.value === `dark`);
+    },
+    { flush: `post` },
+);
 </script>
 
 <template>
@@ -115,14 +186,37 @@ const signIn = async (): Promise<void> => {
                     <p class="mt-2 text-sm text-muted">Sign in to your intentic workspace.</p>
                 </div>
 
+                <Notice v-if="error" :of="error" class="mb-4" />
+
+                <!-- Google's own button, which is also where the credential the sandbox needs comes from — one
+                     sign-in doing both jobs. color-scheme:light matches Google's light-scheme button iframe so
+                     the browser paints no opaque (white) canvas behind it; the button stays dark via its theme
+                     param. Kept mounted (hidden) rather than removed when it fails to render, so nothing can
+                     race the container away from under it. -->
+                <div v-show="googleReady" ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
+
                 <Button
+                    v-if="!googleReady"
                     :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
                     severity="secondary"
                     class="w-full justify-center"
-                    @click="signIn"
+                    @click="redirectSignIn"
                 >
                     <template #icon><Icon name="google" /></template>
                 </Button>
+
+                <!-- The escape hatch, always there while the embedded button is. Some of the ways that button
+                     can fail are invisible from here — an extension that blocks its frame, a policy that lets
+                     it render but not open — and every one of them looks to the visitor like a sign-in page
+                     that does nothing. This is the way in that depends on none of it. -->
+                <button
+                    v-if="googleReady && !desktop"
+                    type="button"
+                    class="mt-4 w-full text-center text-xs text-subtle transition-colors hover:text-content"
+                    @click="redirectSignIn"
+                >
+                    Trouble signing in? Use Google's own page.
+                </button>
 
                 <p class="mt-8 text-center text-xs leading-relaxed text-subtle">
                     <!-- Acceptable Use is named here rather than left to the Terms that incorporate it: it is the
