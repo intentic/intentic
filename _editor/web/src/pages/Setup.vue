@@ -112,6 +112,11 @@ const resuming = ref(false);
 const name = ref(``);
 const creating = ref(false);
 const error = ref<NoticeModel | null>(null);
+/* Has the arrival read answered yet. `created === null && !creating` is the shape of a FAILED create, and it is
+ * also the shape of the first frame of every visit — so without this the card opens on its own error state and
+ * corrects itself a round-trip later. Set once, in a finally, so a mount read that throws still lands on a card
+ * that offers the retry rather than spinning forever. */
+const loaded = ref(false);
 
 // The rename box, open only when asked for. The name is a default nobody typed, so changing it has to be one
 // click away — and it must never be a gate: setup runs to completion whether or not this is ever touched.
@@ -1326,8 +1331,8 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
  *
  * Owned only — a member can't mint someone else's setup code, so their id gets them a sandbox of their own
  * instead. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
-onMounted(async () => {
-    const [loaded, offer, address] = await Promise.all([
+const arrive = async (): Promise<void> => {
+    const [rows, offer, address] = await Promise.all([
         sandbox.list(),
         // An older platform without the route reads as "doesn't host" — the classic lanes carry on unchanged.
         // Resolve-then-call so even a client missing the method entirely lands in the catch, not in mount.
@@ -1350,10 +1355,10 @@ onMounted(async () => {
         machine.value = `hosted`;
     }
     const requested = route.query[`sandbox`];
-    const named = typeof requested === `string` ? loaded.find((entry) => entry.id === requested) : undefined;
-    const unfinished = loaded.some((entry) => entry.lastSeenAt !== null)
+    const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
+    const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
         ? undefined
-        : loaded.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
+        : rows.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         await autoCreate();
@@ -1383,6 +1388,16 @@ onMounted(async () => {
         cloudMachine.value = found.cloud;
     }
     fallBackToAttach();
+};
+
+onMounted(async () => {
+    try {
+        await arrive();
+    } finally {
+        // Whatever happened, the page now knows as much as it is ever going to: a read that threw leaves a card
+        // offering the retry, which is the truth, rather than a spinner that never stops.
+        loaded.value = true;
+    }
 });
 
 // Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
@@ -1747,10 +1762,19 @@ watch(commandReady, (ready) => {
                          two facts on a line do not need a step's padding around them, and every pixel this card
                          spends is pushing the only decision on the page further down it. -->
                     <section v-else class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 md:px-5 md:py-4">
+                        <!-- BEFORE THE MOUNT READ HAS ANSWERED there is no story to tell yet, and telling the
+                             one below would be telling the wrong one: `created` is null and `creating` is false
+                             on the first frame of every visit, which is the shape of a create that FAILED. So
+                             the card opened on "Try again" for the fraction of a second the list took to land —
+                             an error the reader saw, could not read, and never had. A spinner with no words on
+                             it is the honest thing to show while the answer is in flight. -->
+                        <p v-if="!loaded" class="flex items-center gap-2 text-xs text-muted">
+                            <Icon name="spinner" spin class="text-info" />
+                        </p>
                         <!-- No row yet, which on this lane means the arrival create is in flight or has failed —
                              never a form waiting to be filled in. Both states are one line, because neither is
                              something the user has to do anything about. -->
-                        <template v-if="created === null">
+                        <template v-else-if="created === null">
                             <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
                                 Setting one up for you. Nothing to fill in.

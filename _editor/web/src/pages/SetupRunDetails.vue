@@ -15,7 +15,13 @@
 <script setup lang="ts">
 import { CopyButton } from "@intentic/ui";
 import Button from "primevue/button";
-import { DESKTOP_DOWNLOADS } from "../environments/desktop";
+import { computed } from "vue";
+import { DESKTOP_DOWNLOADS, desktopVersion } from "../environments/desktop";
+
+// Read INSIDE the desktop app, this panel is being read in the very thing it offers to download — so the two
+// installers are hidden there. Nothing else about the panel changes: what the command does, and how to undo
+// it, are the same facts whichever window is reading them.
+const desktop = computed(() => desktopVersion() !== undefined);
 
 // `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself. Nothing else
 // here varies: this panel used to take the sync opt-in too, to name the folder the command writes outside
@@ -44,7 +50,7 @@ const { cleanup } = defineProps<{ cleanup: string }>();
         <!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed
              before somebody commits to the command. The Linux vanity URL serves the AppImage, which works
              across distributions without asking the reader to choose a package format here. -->
-        <div class="flex flex-col gap-2 border-t border-line pt-3">
+        <div v-if="!desktop" class="flex flex-col gap-2 border-t border-line pt-3">
             <p class="text-xs text-subtle">Or use the desktop app</p>
             <div class="grid grid-cols-2 gap-2">
                 <Button

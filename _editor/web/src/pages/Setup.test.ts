@@ -203,6 +203,31 @@ it(`creates the sandbox on arrival, with no name asked for`, async () => {
     expect(buttonLabelled(`Create`)).toBeUndefined();
 });
 
+/* THE FIRST FRAME, WHICH USED TO BE AN ERROR SCREEN. "No row, and not creating one" is the shape of a create
+ * that FAILED — and it is also the shape of every visit before the arrival read has answered, so the card
+ * opened on "Try again" and corrected itself a round-trip later. In the desktop app, where this page IS the
+ * window that just opened, that read as an error flashing on launch. Nothing is claimed until something is
+ * known. */
+it(`says nothing about the sandbox until the arrival read answers`, async () => {
+    let answer: (rows: SandboxSummary[]) => void = () => {};
+    list.mockReset().mockImplementation(async () => new Promise<SandboxSummary[]>((resolve) => (answer = resolve)));
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ render: () => h(Setup) });
+    app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    await nextTick();
+    expect(buttonLabelled(`Try again`)).toBeUndefined();
+    expect(el.textContent).not.toContain(`Connect it by domain`);
+    // …and once it does answer, the page is itself again.
+    answer([]);
+    await vi.waitFor(() => expect(create).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve));
+    await nextTick();
+    expect(nameRow()).toContain(`workspace`);
+});
+
 // "Add sandbox" from a shell that already has one: the default counts past the names the account holds rather
 // than colliding with them.
 it(`numbers the next sandbox instead of colliding with the first`, async () => {
