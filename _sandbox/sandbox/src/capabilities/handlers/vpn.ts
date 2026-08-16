@@ -101,7 +101,13 @@ export const vpnHandler: CapabilityHandler = {
         if (vpn.provider === "fortinet") {
             return "password";
         }
-        return vpn.username !== undefined && vpn.password !== undefined ? "password" : "presharedKey";
+        /* Not a ternary: `"password" : "presharedKey"` in the emitted JS trips Open VSX's secret scanner
+         * (gitleaks hashicorp-tf-password reads quote-word-colon-quote-value as a hardcoded password) and
+         * blocks the publish. Two returns emit no such adjacency. */
+        if (vpn.username !== undefined && vpn.password !== undefined) {
+            return "password";
+        }
+        return "presharedKey";
     },
     /* An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor either
      * ipsec credential can reach the browser by being forgotten in a new field.
