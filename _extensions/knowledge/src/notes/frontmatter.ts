@@ -71,8 +71,35 @@ const flowItems = (inner: string): string[] => {
     return items.map(scalar).filter((item) => item !== "");
 };
 
-const KEY_LINE = /^([A-Za-z_][\w.-]*)[ \t]*:[ \t]*(.*)$/;
-const BLOCK_ITEM = /^[ \t]+-[ \t]*(.*)$/;
+const KEY_NAME = /^[A-Za-z_][\w.-]*$/;
+
+const keyLine = (line: string): readonly [name: string, inline: string] | undefined => {
+    const colon = line.indexOf(":");
+    if (colon === -1) {
+        return undefined;
+    }
+    let nameEnd = colon;
+    while (line[nameEnd - 1] === " " || line[nameEnd - 1] === "\t") {
+        nameEnd--;
+    }
+    const name = line.slice(0, nameEnd);
+    return KEY_NAME.test(name) ? [name, line.slice(colon + 1).trim()] : undefined;
+};
+
+const blockItem = (line: string): string | undefined => {
+    let dash = 0;
+    while (line[dash] === " " || line[dash] === "\t") {
+        dash++;
+    }
+    if (dash === 0 || line[dash] !== "-") {
+        return undefined;
+    }
+    let valueStart = dash + 1;
+    while (line[valueStart] === " " || line[valueStart] === "\t") {
+        valueStart++;
+    }
+    return line.slice(valueStart);
+};
 
 export const parseFrontmatter = (content: string): Frontmatter => {
     const match = FRONTMATTER.exec(content);
@@ -89,12 +116,11 @@ export const parseFrontmatter = (content: string): Frontmatter => {
         if (line.trim() === "" || line.trimStart().startsWith("#") || /^[ \t]/.test(line)) {
             continue;
         }
-        const key = KEY_LINE.exec(line);
-        if (key === null) {
+        const key = keyLine(line);
+        if (key === undefined) {
             continue;
         }
-        const name = key[1] ?? "";
-        const inline = (key[2] ?? "").trim();
+        const [name, inline] = key;
         const flow = /^\[(.*)\]$/s.exec(inline);
         if (flow !== null) {
             fields.set(name, flowItems(flow[1] ?? ""));
@@ -112,11 +138,11 @@ export const parseFrontmatter = (content: string): Frontmatter => {
             if (next.trim() === "") {
                 continue;
             }
-            const item = BLOCK_ITEM.exec(next);
-            if (item === null) {
+            const item = blockItem(next);
+            if (item === undefined) {
                 break;
             }
-            const value = scalar(item[1] ?? "");
+            const value = scalar(item);
             if (value !== "") {
                 items.push(value);
             }

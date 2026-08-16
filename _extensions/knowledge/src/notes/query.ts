@@ -1,5 +1,6 @@
 import type { NoteEdge, KnowledgeIndex } from "./index-notes.js";
 import { factsOf, type ParsedNote } from "./note.js";
+import { wikiLinksIn } from "./wiki-links.js";
 
 /* ASKING THE KNOWLEDGE BASE THINGS — search, filter, and the neighbourhood around one note.
  *
@@ -53,9 +54,19 @@ const BODY = 100;
  * `**client-generated**` and `[[Checkout API]]` read as damage rather than as emphasis and a link — the markers
  * mean something only to a renderer, and this is not one. The words are left exactly as written; only the
  * punctuation that was never meant to be read comes off. */
+const withoutWikiMarkers = (line: string): string => {
+    const plain: string[] = [];
+    let cursor = 0;
+    for (const link of wikiLinksIn(line)) {
+        plain.push(line.slice(cursor, link.start), (link.label ?? link.target).trim());
+        cursor = link.end;
+    }
+    plain.push(line.slice(cursor));
+    return plain.join("");
+};
+
 const plainly = (line: string): string =>
-    line
-        .replace(/\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g, (_all, target: string, label?: string) => (label ?? target).trim())
+    withoutWikiMarkers(line)
         .replace(/`([^`]*)`/g, "$1")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
         .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$|[.,;:!?])/g, "$1$2")

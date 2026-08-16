@@ -1,6 +1,6 @@
-import { mkdtempSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { cleanTranscription, createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
@@ -136,6 +136,8 @@ test("a failed download does not poison later polls — the next status retries 
 
 test("transcribe serializes whisper runs, passes the language explicitly, and answers silence as empty text", async () => {
     const outputs = ["first words", "[BLANK_AUDIO]"];
+    const wavPaths: string[] = [];
+    const wavBytes: string[] = [];
     let active = 0;
     let maxActive = 0;
     const exec: ExecFn = async (command, args) => {
@@ -146,6 +148,12 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
         // whisper-cli defaults to -l en — the language must always be passed explicitly.
         expect(args).toContain("-l");
         expect(args[args.indexOf("-l") + 1]).toBe("pl");
+        const wavPath = args[args.indexOf("-f") + 1];
+        if (wavPath === undefined) {
+            throw new Error("whisper-cli was not given an utterance path");
+        }
+        wavPaths.push(wavPath);
+        wavBytes.push(readFileSync(wavPath, "utf8"));
         active += 1;
         maxActive = Math.max(maxActive, active);
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -157,4 +165,7 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
     expect(maxActive).toBe(1); // one whisper-cli at a time
     expect(first).toBe("first words");
     expect(second).toBe(""); // noise-only output is "nothing said", not an error
+    expect(wavBytes.toSorted()).toEqual(["RIFF1", "RIFF2"]);
+    expect(new Set(wavPaths.map(dirname)).size).toBe(2);
+    expect(wavPaths.every((path) => !existsSync(dirname(path)))).toBe(true);
 });

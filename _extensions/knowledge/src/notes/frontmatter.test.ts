@@ -75,6 +75,11 @@ country: NO
     it(`tolerates windows line endings, which a synced knowledge base will have`, () => {
         expect(fields(`---\r\ntype: person\r\n---\r\nbody`)).toEqual({ type: [`person`] });
     });
+
+    it(`reads long whitespace around keys and block items without regex backtracking`, () => {
+        const tabs = "\t".repeat(50_000);
+        expect(fields(`---\nname:${tabs}Ada\ntags:\n\t-${tabs}colleague\n---\n`)).toEqual({ name: [`Ada`], tags: [`colleague`] });
+    });
 });
 
 describe(`formatFrontmatter`, () => {

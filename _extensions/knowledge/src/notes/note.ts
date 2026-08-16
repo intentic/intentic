@@ -1,4 +1,5 @@
 import { parseFrontmatter } from "./frontmatter.js";
+import { wikiLinksIn } from "./wiki-links.js";
 
 /* WHAT ONE NOTE IS. Pure — text in, facts out — so the same function answers for the backend serving a panel,
  * the CLI answering the agent, and the unit tests. Nothing here touches a filesystem; see read-notes.ts.
@@ -12,9 +13,6 @@ import { parseFrontmatter } from "./frontmatter.js";
 // The header keys that describe the NOTE rather than connect it to another one. A field outside this set that
 // holds a link is a relation (see `relations` below); one that holds no link is a plain fact shown beside it.
 const RESERVED = new Set(["type", "title", "aliases", "tags", "created", "updated", "types", "relations"]);
-
-// `[[target]]` or `[[target|what to call it]]`. The same syntax the memory notes already use between themselves.
-const WIKI_LINK = /\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g;
 
 // An inline `#tag` in prose: preceded by start-of-line or whitespace, so a `#` inside a word or a URL fragment
 // is not one, and a markdown heading (`# Ada`) is not either — a heading has a space after the hash.
@@ -71,16 +69,32 @@ export const titleFromSlug = (slug: string): string => {
     return words === "" ? slug : words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-const firstHeading = (body: string): string | undefined => /^#[ \t]+(.+)$/m.exec(body)?.[1]?.trim();
+const firstHeading = (body: string): string | undefined => {
+    for (const line of body.split(/\r?\n/)) {
+        if (!line.startsWith("#")) {
+            continue;
+        }
+        let textStart = 1;
+        while (line[textStart] === " " || line[textStart] === "\t") {
+            textStart++;
+        }
+        if (textStart > 1) {
+            const heading = line.slice(textStart).trim();
+            if (heading !== "") {
+                return heading;
+            }
+        }
+    }
+    return undefined;
+};
 
 // Every link in a piece of text, tagged with the relation that carried it.
 const linksIn = (text: string, relation: string | undefined): NoteLink[] => {
     const links: NoteLink[] = [];
-    WIKI_LINK.lastIndex = 0;
-    for (let match = WIKI_LINK.exec(text); match !== null; match = WIKI_LINK.exec(text)) {
-        const target = (match[1] ?? "").trim();
+    for (const match of wikiLinksIn(text)) {
+        const target = match.target.trim();
         if (target !== "") {
-            links.push({ target, label: match[2]?.trim(), relation });
+            links.push({ target, label: match.label?.trim(), relation });
         }
     }
     return links;

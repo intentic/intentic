@@ -62,6 +62,14 @@ describe(`search`, () => {
         expect(search(marked, { query: `uuid` })[0]?.snippet).toBe(`The client-generated UUID sent to the API, not stripe.key.`);
     });
 
+    it(`leaves a long unfinished wiki link intact without regex backtracking`, () => {
+        const line = `needle ${"[[Z|\\".repeat(20_000)}`;
+        const malformed = buildIndex([file(`a.md`, `---\ntype: term\n---\n${line}`)]);
+        const snippet = search(malformed, { query: `needle` })[0]?.snippet;
+        expect(snippet?.length).toBe(line.length);
+        expect(snippet?.startsWith("needle [[Z|\\")).toBe(true);
+    });
+
     it(`filters by kind and by tag`, () => {
         expect(paths(search(index, { type: `person` }))).toEqual([`people/ada-lovelace.md`, `people/charles-babbage.md`]);
         expect(paths(search(index, { tag: `work` }))).toEqual([`projects/intentic.md`]);

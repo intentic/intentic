@@ -12,6 +12,10 @@ describe(`parseNote`, () => {
         expect(note(`no header at all`).title).toBe(`Ada lovelace`);
     });
 
+    it(`treats a long whitespace-only heading as empty without regex backtracking`, () => {
+        expect(note(`#${"\t".repeat(50_000)}`).title).toBe(`Ada lovelace`);
+    });
+
     /* THE ONTOLOGY, READ OUT OF THE FORMAT THE NOTES ALREADY HAD. A link in a header field is a typed edge; the
      * same link in the prose is an untyped one. Nothing else distinguishes them, which is why no sidecar and no
      * schema is needed to have a graph. */

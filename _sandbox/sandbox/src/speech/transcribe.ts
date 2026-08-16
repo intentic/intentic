@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -199,9 +199,12 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                 throw new SpeechModelNotReadyError();
             }
             return serialize(async () => {
-                const wavPath = join(tmpdir(), `intentic-utterance-${randomUUID()}.wav`);
-                await writeFile(wavPath, wav);
+                // A private directory created atomically keeps another local process from pre-creating the
+                // utterance path as a symlink. The file name can be fixed because the directory is unique.
+                const wavDir = await mkdtemp(join(tmpdir(), "intentic-utterance-"));
+                const wavPath = join(wavDir, "utterance.wav");
                 try {
+                    await writeFile(wavPath, wav, { mode: 0o600 });
                     // whisper-cli defaults to -l en, silently mangling other languages — always pass one.
                     const { stdout } = await exec(
                         "whisper-cli",
@@ -210,7 +213,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
                     );
                     return cleanTranscription(stdout) ?? "";
                 } finally {
-                    await rm(wavPath, { force: true });
+                    await rm(wavDir, { force: true, recursive: true });
                 }
             });
         },
