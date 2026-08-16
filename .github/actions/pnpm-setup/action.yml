@@ -30,7 +30,29 @@ runs:
 
     - name: Install
       shell: bash
-      run: pnpm install --frozen-lockfile --store-dir "$PNPM_STORE"
+      run: |
+        # DROP PNPM'S "nothing changed" SHORTCUT FIRST, because on these runners it is wrong in a way that
+        # cannot be recovered from. The workspace is `injectWorkspacePackages: true`, so an in-repo package is
+        # not symlinked into its consumers — it is COPIED (hard-linked) into the virtual store at install time.
+        # A checkout REPLACES a changed file rather than writing through it, so the store copy keeps the old
+        # inode and the old contents, and pnpm re-syncs an injected package only after that package's own
+        # `build` script (syncInjectedDepsAfterScripts) — which the 16 extensions consumed as SOURCE do not
+        # have. Their copies were therefore frozen at whatever the runner installed first.
+        #
+        # And this state file is what stopped the install from noticing: with the lockfile and every manifest
+        # unchanged it answers "Already up to date" in 0.3s without looking at a single file, so the copies
+        # could never be repaired by running the install again — not even with --force, which was measured
+        # taking the same shortcut. Main deadlocked on exactly that: `cmp` was renamed to `ui` across the ui
+        # kit and its call sites in one commit, every runner kept typechecking web against a copy of the
+        # preview extension that still said `cmp`, typecheck failed before `build` could run, and the build was
+        # the only thing that would have re-synced anything. Two pipelines died on source that was correct in
+        # git, and no re-run could have gone green.
+        #
+        # Removing the file costs the install its shortcut — ~5s of real work against 0.3s of assertion — and
+        # is what makes a fresh checkout produce a node_modules that matches it. The persistent workspace
+        # (`clean: false`, which is worth minutes elsewhere) is precisely why this cannot be left to chance.
+        rm -f node_modules/.pnpm-workspace-state-v1.json
+        pnpm install --frozen-lockfile --store-dir "$PNPM_STORE"
 
     # Bound the shared turbo cache: drop entries untouched for 14 days (rebuilt + re-cached if needed). The
     # directory outlives the job, so nothing else evicts from it — this line is load-bearing, not hygiene.
