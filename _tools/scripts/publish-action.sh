@@ -12,9 +12,10 @@
 # built. Idempotent like publish-npm.sh: a version already tagged on the action repo is SKIPPED, so a re-run
 # only completes whatever didn't land (the floating major tag, the Release).
 #
-# CI setup: GATE_ACTION_TOKEN, a fine-grained PAT with Contents: read+write on intentic/gate-action. Missing,
-# this SKIPS — loudly, even in CI: the sync is meant to stay inert until the public repo and the secret exist,
-# and a red release train over an optional artifact would teach everyone to ignore red. The first Marketplace
+# CI setup: GATE_ACTION_TOKEN, a fine-grained PAT with Contents: read+write on intentic/gate-action. Missing —
+# or present but unable to write, which reads identically from here — this SKIPS — loudly, even in CI: the sync
+# is meant to stay inert until the public repo and a usable secret exist, and a red release train over an
+# optional artifact would teach everyone to ignore red. The write check is the probe below. The first Marketplace
 # listing itself is a one-time manual step on the repo's first release (the developer agreement and categories
 # can only be accepted in the UI); every release after that shows up on the listing by itself.
 #   bash _tools/scripts/publish-action.sh 1.187.0
@@ -44,6 +45,38 @@ api() {
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git clone --quiet --depth 1 "https://x-access-token:${GATE_ACTION_TOKEN}@github.com/${ACTION_REPO}.git" "$work/repo"
+
+# A TOKEN THAT CANNOT WRITE IS THE SAME SITUATION AS NO TOKEN, and until this probe existed it was not treated
+# like one: the sync ran to the first push and died there with exit 128, taking the release train red over the
+# one artifact this file's header calls optional. The clone above proves nothing, because the action repo is
+# PUBLIC — git sends no credential for a read that is not challenged, so a token that is expired, scoped to the
+# wrong account, or simply missing Contents: write clones perfectly and is refused three commands later
+# ("Permission to ${ACTION_REPO} denied to <user>", 403). Worse than red: the refusal can land BETWEEN pushes,
+# leaving the public repo with a commit whose version tag never arrived.
+#
+# `push --dry-run` is that check and there is no lighter one. It negotiates git-receive-pack — the write
+# service, so the 403 comes back exactly as it would for the real push — while HEAD is still the ref we cloned,
+# so there is nothing to send and nothing that can be written by the probe itself. An API permission read would
+# be a weaker answer: it reports what the ACCOUNT may do, not what THIS token may do.
+#
+# Refusal skips loudly, with a `::warning::` so the run carries the reason on its summary rather than in a log
+# nobody opens — the release stays green, and the fix is one setting on the PAT, not a revert. Anything else
+# (network, DNS, the repo gone) is not a permission answer and still fails.
+if ! probe="$(git -C "$work/repo" push --dry-run --quiet origin "HEAD:refs/heads/main" 2>&1)"; then
+  case "$probe" in
+    *"denied to"*|*"Permission to"*|*"Authentication failed"*|*"Invalid username or token"*|*"403"*|*"Repository not found"*)
+      echo "::warning title=gate-action not published::GATE_ACTION_TOKEN cannot write to ${ACTION_REPO}, so ${TAG} was not synced to the Marketplace action repo. Give the token Contents: read+write on that repo (or replace it) and re-run the action publish workflow against the tag."
+      echo "  skip     ${ACTION_REPO}@${TAG} (GATE_ACTION_TOKEN cannot write to ${ACTION_REPO})"
+      echo "$probe" | sed 's/^/           /'
+      exit 0
+      ;;
+    *)
+      echo "$probe" >&2
+      echo "${ACTION_REPO}: push probe failed for a reason that is not a permission refusal — treating it as fatal" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 # The version tag is immutable once out, like an npm version: workflows pin `@vX.Y.Z` and a tag that moves
 # under them is a supply-chain incident, not a fix. Only the floating major and the Release are completed on

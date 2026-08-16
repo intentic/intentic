@@ -20,9 +20,12 @@
 # contract it is held to live — and publish-action.sh pushes the snapshot, tags the version, moves the floating
 # major, and creates the Release the listing surfaces.
 #
-# Inert until GATE_ACTION_TOKEN exists (a fine-grained PAT, Contents: read+write on intentic/gate-action): the
-# script skips loudly without it rather than failing the release train over an optional artifact. The first
-# Marketplace listing is a one-time manual step in the UI; releases after that surface on it by themselves.
+# Inert until GATE_ACTION_TOKEN exists AND can write (a fine-grained PAT, Contents: read+write on
+# intentic/gate-action): the script probes the write before it pushes anything and skips loudly — a warning
+# annotation on this run — rather than failing the release train over an optional artifact. A token that only
+# reads is the same to it as no token: the action repo is public, so a useless credential clones just fine and
+# is refused at the first push, which is how v1.209.1 took this job red. The first Marketplace listing is a
+# one-time manual step in the UI; releases after that surface on it by themselves.
 name: action publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ action publish ▸ Run workflow, with
