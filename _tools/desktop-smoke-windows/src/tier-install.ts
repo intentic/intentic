@@ -262,6 +262,13 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             return setup !== undefined && setup === workspace;
         };
         if (!(await harness.untilTrue(15, `the setup screen covers the workspace — an overlay, not a second window`, overlaid))) {
+            /* The two rectangles FIRST, because they are the whole of what this assertion compared and a list
+             * of titles cannot say which way it went wrong. A missing one reads as a window that never came;
+             * two that differ by a frame's worth of pixels reads as an overlay sized against the wrong
+             * rectangle — the failure this assertion was written for, and the one the Linux tier prints
+             * geometry for. */
+            const { setup, workspace } = await rectangles();
+            harness.detail(`setup:     ${setup ?? `(no such window)`}\nworkspace: ${workspace ?? `(no such window)`}`);
             harness.detail(await describeWindows());
         }
 

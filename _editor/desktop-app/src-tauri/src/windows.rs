@@ -1,4 +1,6 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{
+    AppHandle, Manager, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
@@ -360,18 +362,55 @@ pub fn set_setup_frame(app: &AppHandle, overlay: bool) {
         if let Ok(position) = behind.outer_position() {
             let _ = window.set_position(position);
         }
-        /* The OUTER size, where `swap_in` takes the inner one — the difference is the whole reason this is not
-         * that function. Two windows wearing the same decorations cover each other when their inner sizes
-         * match; this one has just taken its decorations OFF, so its inner size IS its outer size, and asking
-         * for the workspace's inner size would leave the height of a title bar of it showing below. */
-        if let Ok(size) = behind.outer_size() {
-            let _ = window.set_size(size);
+        /* The workspace's OUTER rectangle is what has to be covered, where `swap_in` matches inner sizes — the
+         * difference is the whole reason this is not that function. Two windows wearing the same decorations
+         * cover each other when their inner sizes match; this one has just taken its decorations off, so
+         * asking for the workspace's inner size would leave the height of a title bar of it showing below.
+         *
+         * Asking for the outer size directly is not the answer either, because the size a window is asked for
+         * is its INNER one — see `inner_size_for_outer`, which takes this window's own remaining frame off. */
+        if let (Ok(target), Ok(outer), Ok(inner)) = (
+            behind.outer_size(),
+            window.outer_size(),
+            window.inner_size(),
+        ) {
+            let _ = window.set_size(inner_size_for_outer(target, outer, inner));
         }
     }
     // On top of the window it is about, the way a modal is — and only for as long as it is one.
     let _ = window.set_always_on_top(true);
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+/* THE SIZE TO ASK FOR, so that this window's OUTER rectangle comes out as `target`.
+ *
+ * `set_size` takes the INNER size — the client area — and whatever frame the window is wearing is added back
+ * outside it. On a window with no frame left those are the same number, which is why handing it the
+ * workspace's outer size read as correct and passed everywhere except the one place the two rectangles are
+ * actually measured against each other. A window is born with the undecorated SHADOW, and that shadow's
+ * resize band sits OUTSIDE the client area — 8px a side at 96 dpi, plus a pixel at the top on Windows 11, and
+ * more again at any display scale above 100%. So the overlay came up 16×9 larger than the window it was
+ * covering, which is the "an overlay, not a second window" assertion failing on a Windows runner while every
+ * Linux run of the same assertion passed.
+ *
+ * The frame is therefore MEASURED rather than assumed: whatever this window's own outer exceeds its own inner
+ * by is what comes off the target. Zero on a frameless window, which leaves the other platforms exactly where
+ * they were, and read after the decorations are already off, so it is the frame the overlay will actually wear.
+ */
+fn inner_size_for_outer(
+    target: PhysicalSize<u32>,
+    outer: PhysicalSize<u32>,
+    inner: PhysicalSize<u32>,
+) -> PhysicalSize<u32> {
+    PhysicalSize::new(
+        target
+            .width
+            .saturating_sub(outer.width.saturating_sub(inner.width)),
+        target
+            .height
+            .saturating_sub(outer.height.saturating_sub(inner.height)),
+    )
 }
 
 /// Bring the setup overlay up over the workspace. The parked request is already in state; this is the frame.
@@ -465,4 +504,40 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
                 park_setup(&handle, args);
             }
         });
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    /// What a window does with the size it is asked for: an INNER size, with the frame added back outside it.
+    fn outer_of(inner: PhysicalSize<u32>, frame: (u32, u32)) -> PhysicalSize<u32> {
+        PhysicalSize::new(inner.width + frame.0, inner.height + frame.1)
+    }
+
+    #[test]
+    fn the_overlay_ends_up_on_the_workspaces_rectangle() {
+        let workspace = PhysicalSize::new(1440u32, 900u32);
+        // No frame at all (GTK, and a Windows window with the shadow off) and the frame an undecorated
+        // Windows window with its shadow wears: 8px a side at 96 dpi plus the pixel Windows 11 keeps at the
+        // top, then the same again at 150%, where every one of those numbers is bigger.
+        for frame in [(0, 0), (16, 9), (24, 13)] {
+            let standing_at = PhysicalSize::new(1000u32, 700u32);
+            let asked = inner_size_for_outer(workspace, outer_of(standing_at, frame), standing_at);
+            assert_eq!(outer_of(asked, frame), workspace, "frame {frame:?}");
+        }
+    }
+
+    /// A frame wider than the rectangle it has to fit inside is not a size to ask for in u32 arithmetic — it
+    /// is a wrap to four billion pixels, and a window that never comes back. Nothing asks for one, and that
+    /// is exactly the kind of thing a desktop hands you when a monitor is unplugged mid-setup.
+    #[test]
+    fn a_target_smaller_than_the_frame_asks_for_nothing_rather_than_wrapping() {
+        let asked = inner_size_for_outer(
+            PhysicalSize::new(10, 4),
+            PhysicalSize::new(1016, 709),
+            PhysicalSize::new(1000, 700),
+        );
+        assert_eq!(asked, PhysicalSize::new(0, 0));
+    }
 }

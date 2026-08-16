@@ -79,7 +79,11 @@ the corner — and read as a second application that had opened itself on top of
 machine rather than something the window is holding up.
 
 Both smoke tiers assert the geometry rather than a window count, since "same rectangle" is the only part of
-this a test outside the process can see.
+this a test outside the process can see. *Same rectangle* is measured on the OUTER one, and the size a window
+is asked for is its INNER one — so the overlay takes off whatever frame it is still wearing before it asks
+(`inner_size_for_outer`). That is nothing on Linux and not nothing on Windows, where an undecorated window
+keeps the invisible resize band its shadow is drawn in: sized without allowing for it, the overlay came up 16
+by 9 pixels larger than the window it was covering, and the Windows tier is where that was caught.
 
 Three more consequences worth knowing:
 
