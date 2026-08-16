@@ -240,6 +240,61 @@ jobs:
       - shell: bash
         run: source _tools/scripts/packages.sh && node _tools/scripts/verify-publish-set.mjs "${PUB[@]}"
 
+  # THE ONE THING ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, and that
+  # replaying it produces schema.prisma. check-migrations.sh carries the full account; the short version is
+  # that a `challenge` column was added by editing a migration every deployed database had already applied,
+  # Prisma never re-ran it, and desktop sign-in returned an unhandled 500 in production for a week while every
+  # job in this file stayed green. It could not have been otherwise: every database CI builds is created FRESH
+  # from that same edited file, so the fresh ones were right, the deployed one was wrong, and each was
+  # perfectly consistent with itself. Only the history can say so, which is why this job reads the history.
+  #
+  # A JOB OF ITS OWN rather than a step in preflight, for the two things it needs and preflight does not:
+  # `fetch-depth: 0` (preflight checks out shallow — the immutability half is a diff against the merge base),
+  # and a postgres to replay into. Which is also why it is not in the verify matrix: the parity half needs an
+  # EMPTY, DISPOSABLE database, and every other database in this pipeline is somebody's fixture.
+  #
+  # `services:` rather than a docker-run against the mounted socket: a container this job started would sit on
+  # the default bridge, and this job's container sits on the network Actions made for it — the runner is the
+  # only thing here that can put a database and a job on the same network, and `services` is how it is asked.
+  migrations:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      # Reachable at `postgres:5432` — the service's name on the network Actions puts both containers on, so
+      # there is no port to publish and nothing on the host to collide with a developer's own compose stack.
+      # The SAME pin the platform's own compose file runs (_tools/selfhost/platform/docker-compose.yml): a
+      # migration replayed against a different major is a migration checked against a different database.
+      postgres:
+        image: postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MIGRATION_CHECK_DATABASE_URL: postgresql://app:app@postgres:5432/app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The immutability half diffs against the merge base, which on a pull request can sit arbitrarily far
+          # back — the same reason the `changes` job takes the full history, and just as incremental after the
+          # first run on a persistent workspace.
+          fetch-depth: 0
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - shell: bash
+        run: bash _tools/scripts/check-migrations.sh
+
   # The CI job image itself. Runs only when _tools/ci-base changes — every other pipeline skips it. It cannot
   # run inside ci-base (building that is the point), so it runs on the host runner directly.
   #
