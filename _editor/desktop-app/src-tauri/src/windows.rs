@@ -367,14 +367,17 @@ pub fn set_setup_frame(app: &AppHandle, overlay: bool) {
          * cover each other when their inner sizes match; this one has just taken its decorations off, so
          * asking for the workspace's inner size would leave the height of a title bar of it showing below.
          *
-         * Asking for the outer size directly is not the answer either, because the size a window is asked for
-         * is its INNER one — see `inner_size_for_outer`, which takes this window's own remaining frame off. */
+         * Asking for the outer size directly is not the answer either, on the one platform where taking the
+         * decorations off does not take the whole frame off — see `undecorated_frame`. */
         if let (Ok(target), Ok(outer), Ok(inner)) = (
             behind.outer_size(),
             window.outer_size(),
             window.inner_size(),
         ) {
-            let _ = window.set_size(inner_size_for_outer(target, outer, inner));
+            let _ = window.set_size(inner_size_for_outer(
+                target,
+                undecorated_frame(outer, inner),
+            ));
         }
     }
     // On top of the window it is about, the way a modal is — and only for as long as it is one.
@@ -383,33 +386,47 @@ pub fn set_setup_frame(app: &AppHandle, overlay: bool) {
     let _ = window.set_focus();
 }
 
-/* THE SIZE TO ASK FOR, so that this window's OUTER rectangle comes out as `target`.
+/* THE FRAME AN UNDECORATED WINDOW IS STILL WEARING — a number on exactly one of the two platforms this app
+ * ships to, and a number this window can only be ASKED for on that same one.
  *
- * `set_size` takes the INNER size — the client area — and whatever frame the window is wearing is added back
- * outside it. On a window with no frame left those are the same number, which is why handing it the
- * workspace's outer size read as correct and passed everywhere except the one place the two rectangles are
- * actually measured against each other. A window is born with the undecorated SHADOW, and that shadow's
- * resize band sits OUTSIDE the client area — 8px a side at 96 dpi, plus a pixel at the top on Windows 11, and
- * more again at any display scale above 100%. So the overlay came up 16×9 larger than the window it was
- * covering, which is the "an overlay, not a second window" assertion failing on a Windows runner while every
- * Linux run of the same assertion passed.
+ * WINDOWS. Taking the decorations off does not take the frame off. The window keeps the invisible resize band
+ * its shadow is drawn in — 8px a side at 96 dpi, a pixel more at the top on Windows 11, and more again at any
+ * display scale above 100% — and that band sits OUTSIDE the client area. The size a window is asked for is
+ * its INNER one, with whatever frame it wears added back outside it, so an overlay handed the workspace's
+ * outer rectangle comes up exactly one band too large: 16×9 pixels on the release runner, which is the
+ * "an overlay, not a second window" assertion failing there while every Linux run of it passed. The band is
+ * measured rather than assumed because it is a function of the display's scale, and it can be measured here
+ * because this platform answers both questions on the thread that has already taken the decorations off — so
+ * what comes back is the frame the overlay is about to WEAR.
  *
- * The frame is therefore MEASURED rather than assumed: whatever this window's own outer exceeds its own inner
- * by is what comes off the target. Zero on a frameless window, which leaves the other platforms exactly where
- * they were, and read after the decorations are already off, so it is the frame the overlay will actually wear.
+ * LINUX, NOTHING — and asking would be worse than not asking. An undecorated GTK window has no frame left to
+ * account for, so there is nothing to take off; and the two numbers it would answer with are read from a
+ * cache the window manager refreshes when the window is next configured, which the decorations coming off has
+ * not reached yet. On a cold overlay that cache has never been written at all. On the path where a setup
+ * arrives at a manager window it holds the title bar the window is about to LOSE, and taking that off would
+ * leave the overlay short by exactly a title bar — the same failure this whole function exists to prevent,
+ * one platform over.
  */
-fn inner_size_for_outer(
-    target: PhysicalSize<u32>,
-    outer: PhysicalSize<u32>,
-    inner: PhysicalSize<u32>,
-) -> PhysicalSize<u32> {
+fn undecorated_frame(outer: PhysicalSize<u32>, inner: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    if !cfg!(target_os = "windows") {
+        return PhysicalSize::new(0, 0);
+    }
     PhysicalSize::new(
-        target
-            .width
-            .saturating_sub(outer.width.saturating_sub(inner.width)),
-        target
-            .height
-            .saturating_sub(outer.height.saturating_sub(inner.height)),
+        outer.width.saturating_sub(inner.width),
+        outer.height.saturating_sub(inner.height),
+    )
+}
+
+/// THE SIZE TO ASK FOR, so that this window's OUTER rectangle comes out as `target`: the rectangle to cover,
+/// less the frame that will be added back outside whatever is asked for (`undecorated_frame`).
+///
+/// Saturating, because a frame wider than the rectangle it has to fit inside is not a size to ask for in u32
+/// arithmetic — it is a wrap to four billion pixels, and a window that never comes back. Nothing asks for one,
+/// and that is exactly the kind of thing a desktop hands you when a monitor is unplugged mid-setup.
+fn inner_size_for_outer(target: PhysicalSize<u32>, frame: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    PhysicalSize::new(
+        target.width.saturating_sub(frame.width),
+        target.height.saturating_sub(frame.height),
     )
 }
 
@@ -522,8 +539,7 @@ mod frame_tests {
         // Windows window with its shadow wears: 8px a side at 96 dpi plus the pixel Windows 11 keeps at the
         // top, then the same again at 150%, where every one of those numbers is bigger.
         for frame in [(0, 0), (16, 9), (24, 13)] {
-            let standing_at = PhysicalSize::new(1000u32, 700u32);
-            let asked = inner_size_for_outer(workspace, outer_of(standing_at, frame), standing_at);
+            let asked = inner_size_for_outer(workspace, PhysicalSize::new(frame.0, frame.1));
             assert_eq!(outer_of(asked, frame), workspace, "frame {frame:?}");
         }
     }
@@ -533,11 +549,21 @@ mod frame_tests {
     /// is exactly the kind of thing a desktop hands you when a monitor is unplugged mid-setup.
     #[test]
     fn a_target_smaller_than_the_frame_asks_for_nothing_rather_than_wrapping() {
-        let asked = inner_size_for_outer(
-            PhysicalSize::new(10, 4),
-            PhysicalSize::new(1016, 709),
-            PhysicalSize::new(1000, 700),
-        );
+        let asked = inner_size_for_outer(PhysicalSize::new(10, 4), PhysicalSize::new(16, 9));
         assert_eq!(asked, PhysicalSize::new(0, 0));
+    }
+
+    /// THE BAND IS WINDOWS' ALONE, and this is the assertion that says so on the runner that cannot see it.
+    /// The same two rectangles mean "a shadow's resize band, 16 by 9" there and "a cache still describing the
+    /// title bar this window is losing" on Linux, so only one of them is a frame to take off a target.
+    #[test]
+    fn only_windows_has_a_frame_left_to_take_off() {
+        let frame = undecorated_frame(PhysicalSize::new(1016, 709), PhysicalSize::new(1000, 700));
+        let expected = if cfg!(target_os = "windows") {
+            PhysicalSize::new(16, 9)
+        } else {
+            PhysicalSize::new(0, 0)
+        };
+        assert_eq!(frame, expected);
     }
 }

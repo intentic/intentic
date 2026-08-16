@@ -80,10 +80,13 @@ machine rather than something the window is holding up.
 
 Both smoke tiers assert the geometry rather than a window count, since "same rectangle" is the only part of
 this a test outside the process can see. *Same rectangle* is measured on the OUTER one, and the size a window
-is asked for is its INNER one — so the overlay takes off whatever frame it is still wearing before it asks
-(`inner_size_for_outer`). That is nothing on Linux and not nothing on Windows, where an undecorated window
-keeps the invisible resize band its shadow is drawn in: sized without allowing for it, the overlay came up 16
-by 9 pixels larger than the window it was covering, and the Windows tier is where that was caught.
+is asked for is its INNER one — so on Windows the overlay takes a frame off the target before it asks
+(`undecorated_frame`, `inner_size_for_outer`). Taking the decorations off there does not take the frame off:
+the window keeps the invisible resize band its shadow is drawn in, and sized without allowing for it the
+overlay came up 16 by 9 pixels larger than the window it was covering, which is where the Windows tier caught
+it. Nothing comes off anywhere else, and deliberately so — an undecorated GTK window has no frame left to
+account for, and the size it would report before the decorations land describes the title bar it is about to
+lose rather than the frame it will wear.
 
 Three more consequences worth knowing:
 
