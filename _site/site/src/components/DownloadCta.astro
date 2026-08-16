@@ -1,0 +1,69 @@
+---
+import { DESKTOP_DOWNLOADS_PAGE, DESKTOP_GENERIC_ICON, desktopPlatforms } from "../lib/desktop-downloads";
+
+/* THE THIRD DOOR: an installer, for the computer the visitor is reading this on.
+ *
+ * The other two buttons beside it go to the app and to the repository. This one is for the reader who wants
+ * the thing on their own machine, and it should not make them find out which build that is: the button names
+ * their platform and links straight at that installer.
+ *
+ * The platform is known only in the browser, so the button ships as the honest general case — "Download the
+ * app", pointing at the download page — and an inline script narrows it. Inline, and placed directly after
+ * the markup, so it runs before the hero paints: a bundled module would be deferred and the label would
+ * visibly change under the reader. Without JavaScript the general case is what stands, and it works.
+ *
+ * A Mac or a phone is left on the general case on purpose. There is no macOS build, and the download page
+ * says that in words next to the one-line install that does work — better than a button promising a file
+ * that does not exist. */
+
+interface Props {
+    /** Appended to the button's own classes, for spacing at the call site. */
+    class?: string;
+}
+
+const { class: className } = Astro.props;
+
+// Name and link only: the glyph in the table is the download page's, and shipping it in an attribute here
+// would put a Windows logo in the hero's HTML for nobody to draw.
+const targets = Object.fromEntries(
+    Object.entries(desktopPlatforms).map(([key, platform]) => [key, { name: platform.name, href: platform.href }]),
+);
+---
+
+<a
+    class:list={["btn", "btn-secondary", className]}
+    href={DESKTOP_DOWNLOADS_PAGE}
+    data-download-cta
+    data-platforms={JSON.stringify(targets)}
+>
+    {/* An arrow into a tray, on every platform. The button says which computer it means in words, and a
+        16px monochrome glyph is a poor place to say it again: the marks that fit at that size are a flag and
+        a bird, and one of the two platforms has no mark anybody recognises small. */}
+    <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current" aria-hidden="true">
+        <path d={DESKTOP_GENERIC_ICON}></path>
+    </svg>
+    <span data-download-label>Download the app</span>
+</a>
+
+{/* An IIFE with nothing at top level, so a second button on the same page costs a second harmless run
+    rather than a redeclaration that kills the script. */}
+<script is:inline>
+    (() => {
+        // userAgentData.platform where it exists ("Windows", "Linux", "macOS", "Android"), the user-agent
+        // string where it does not. Android and ChromeOS both say Linux and get neither build.
+        const hint = navigator.userAgentData?.platform || navigator.userAgent;
+        const key = /Win/i.test(hint)
+            ? "windows"
+            : /Linux|X11/i.test(hint) && !/Android|CrOS/i.test(hint)
+              ? "linux"
+              : null;
+        if (!key) return;
+
+        for (const cta of document.querySelectorAll("[data-download-cta]")) {
+            const platform = JSON.parse(cta.dataset.platforms || "{}")[key];
+            if (!platform) continue;
+            cta.href = platform.href;
+            cta.querySelector("[data-download-label]").textContent = `Download for ${platform.name}`;
+        }
+    })();
+</script>

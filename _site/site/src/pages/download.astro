@@ -4,6 +4,7 @@ import { APP_URL } from "@intentic-dev/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
+import { desktopPlatforms } from "../lib/desktop-downloads";
 
 /* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises.
  *
@@ -26,22 +27,21 @@ const title = "Download Intentic for Windows and Linux";
 const description =
     "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox, handles updates and opens your workspace.";
 
+/* Name, link and glyph come from the shared table, so this page and the hero's button can never drift into
+ * pointing at different files. The wording below is this page's own: here there is room to say what the file
+ * is and what running it costs. */
 const downloads = [
     {
-        platform: "Windows",
+        ...desktopPlatforms.windows,
         note: "Windows 10 and 11, 64-bit",
-        href: "/desktop/windows",
         label: "Download for Windows",
         sub: ".exe installer · installs for your user, no admin rights",
-        icon: "M0 3.449 9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801",
     },
     {
-        platform: "Linux",
+        ...desktopPlatforms.linux,
         note: "Any distribution, 64-bit",
-        href: "/desktop/linux",
         label: "Download AppImage",
         sub: "AppImage · chmod +x and run",
-        icon: "M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z",
     },
 ];
 
@@ -92,7 +92,7 @@ const does = [
                                 <svg viewBox="0 0 24 24" class="h-6 w-6 fill-current text-muted" aria-hidden="true">
                                     <path d={download.icon} />
                                 </svg>
-                                <span class="text-lg font-semibold text-content">{download.platform}</span>
+                                <span class="text-lg font-semibold text-content">{download.name}</span>
                             </span>
                             <span class="text-sm font-medium text-link group-hover:underline">{download.label}</span>
                             <span class="text-xs text-subtle">{download.sub}</span>

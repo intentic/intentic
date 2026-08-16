@@ -11,6 +11,7 @@ import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import CreatorLinks from "./CreatorLinks.astro";
 import DiscordIcon from "./DiscordIcon.astro";
+import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
 import ProductShotFigure from "./ProductShotFigure.astro";
@@ -99,9 +100,15 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                         {content.hero.subhead}
                     </p>
 
+                    {/* Three doors, one primary: the app, the repository, and an installer for the computer
+                        this is being read on. The download stays secondary because the invitation to begin is
+                        still the hosted one — it is the same product either way, and asking a stranger to run
+                        an installer first is a bigger ask than a sign-in. It wraps to its own line below the
+                        other two once the column narrows, which is where it belongs anyway. */}
                     <div class="mt-8 flex flex-wrap gap-3">
                         <a class="btn btn-primary" href={APP_URL}>Get started free</a>
                         <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the source</a>
+                        <DownloadCta />
                     </div>
 
                     <ul class="mt-8 flex flex-wrap gap-x-4 gap-y-2 text-xs text-subtle">
