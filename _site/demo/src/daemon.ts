@@ -513,21 +513,19 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
     /* THE CARDS THIS SANDBOX CAN SEND AS — the composer's persona picker, the personas page, and the chat
-     * rail's Personas column all read this one route. Two of them, because one card cannot show what a persona
-     * is FOR: the whole idea is that `reddit-shop` and `reddit-personal` are different someones, and that only
-     * reads with a second name beside the first. `connected` names the accounts actually signed in, so the
-     * support card arrives ready and the personal one arrives marked — which is the ordinary mixed state of a
-     * workspace and the one every surface has a branch for. */
+     * rail's Personas column all read this one route. Three people make the point without turning the column
+     * into a directory: customer care, growth, and operations, each with the accounts their job reaches. */
     [
         `GET`,
         `/personas`,
         () =>
             json({
                 personas: [
-                    { id: `shop-support`, label: `Shop Support`, capabilities: [`discord`, `gmail-support`] },
-                    { id: `maintainer`, label: `Maintainer`, capabilities: [`github`] },
+                    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`] },
+                    { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`] },
+                    { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
                 ],
-                connected: [`discord`, `github`],
+                connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`],
             }),
     ],
     /* Browsing a registry — what the Sandbox screen's Discover row renders. The real route clones a git repo

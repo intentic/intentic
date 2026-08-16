@@ -1,4 +1,5 @@
 import type { RestoredMessage } from "@intentic/sandbox-contract";
+import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
 
 /** The transcript route's body: `AgentTranscriptSchema` — the restored messages, plus the session they came from. */
@@ -145,6 +146,48 @@ const SOFT_DELETES: AgentTranscript = {
     ],
 };
 
-const TRANSCRIPTS: Record<string, AgentTranscript> = { [REVIEW_AGENT_ID]: SOFT_DELETES };
+/* A PERSONA CHAT, recorded for the pop-out's people-first view. The browser capture is intentionally one
+ * compact artifact with two frames: enough evidence to trust the autonomous work without turning the
+ * conversation into an operations dashboard. */
+const MAYA_SUPPORT: AgentTranscript = {
+    sessionId: `ses_01j9maya`,
+    messages: [
+        {
+            role: `user`,
+            text: `Morning, Maya. Clear the overnight support queue. Use your judgment on refunds under $150, and only bring me something that genuinely needs a decision.`,
+        },
+        {
+            role: `assistant`,
+            text: `On it. I found 18 new conversations: 14 routine, three that need a personal reply, and one renewal at risk. I’m handling the routine queue first, then I’ll check the renewal in its account context.`,
+        },
+        {
+            role: `assistant`,
+            text: `Seventeen are handled — 11 replies sent, four duplicates merged, and two refunds issued for **$68 total**.\n\nThe one judgment call is Northwind’s renewal. Their SSO rollout is blocked on SCIM mapping. I drafted a reply, but held it because it offers hands-on setup time.`,
+        },
+        {
+            role: `user`,
+            text: `Send it. Offer a 20-minute setup session tomorrow, book it yourself, and make sure we follow up after they try the fix.`,
+        },
+        {
+            role: `assistant`,
+            tools: [
+                {
+                    id: `tc_maya_support_sweep`,
+                    name: `Browser take screenshot`,
+                    category: `other`,
+                    status: `completed`,
+                    target: `Inbox cleared · follow-up booked`,
+                    content: [{ type: `image`, path: SUPPORT_SWEEP_PATH }],
+                },
+            ],
+            text: `Done. Jordan booked **10:30 tomorrow**. I attached their SSO logs to the account and scheduled a Friday check-in. The queue is clear; there’s nothing else you need to decide.`,
+        },
+    ],
+};
+
+const TRANSCRIPTS: Record<string, AgentTranscript> = {
+    [REVIEW_AGENT_ID]: SOFT_DELETES,
+    cnv_maya_support: MAYA_SUPPORT,
+};
 
 export const transcriptFor = (id: string): AgentTranscript => TRANSCRIPTS[id] ?? { messages: [] };

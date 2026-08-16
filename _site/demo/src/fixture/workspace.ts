@@ -16,6 +16,7 @@ import type {
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeGlobs } from "@intentic/sandbox-contract";
 import { acceptanceFiles } from "./acceptance";
+import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
 import { choreFiles } from "./chores";
 import { documentationFiles } from "./docs";
 import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
@@ -412,6 +413,7 @@ const RECORDED_AT = Date.now();
 
 const SOURCES: [string, string | number][] = [
     [`README.md`, README],
+    [SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT],
 
     // The storefront.
     [`web/src/pricing/PricingPage.tsx`, 3_184],
