@@ -137,9 +137,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         setup: "Paste the embed snippet into your site before </body>, on any page you listed as an allowed site.",
     },
     {
-        /* The seeded default (default-automations.ts) — every workspace already starts with it, so this entry
-         * exists for the owner who deleted it and wants it back: the shelf offers a template only while no
-         * automation of its id exists. One definition, there and here (the chore book owns it). */
+        /* Offered only as a template: no automation exists until the owner explicitly picks it from the shelf. */
         id: FIX_DEPS_AUTOMATION.id,
         title: FIX_DEPS_AUTOMATION.title,
         icon: "wrench",

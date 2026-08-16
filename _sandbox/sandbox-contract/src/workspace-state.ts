@@ -199,13 +199,6 @@ const STATE_FILES = [
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
-    {
-        path: ".intentic/automations.seeded.json",
-        invalidates: [],
-        why: "Which default automations this workspace has been offered (default-automations.ts); nothing renders it — it exists so deleting a seeded automation is final.",
-        portability: "carry",
-        versioned: true,
-    },
     /* The maintenance ledger and probe evidence, written by the daemon's chores-store and rendered by the
      * intentic.maintenance extension — the automations shape exactly: the path is the daemon's, the query keys
      * (`maintenance-report`, `maintenance-runs`) are the extension's own contributes.files. Point-in-time

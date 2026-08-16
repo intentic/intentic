@@ -60,10 +60,9 @@ disagreement waiting for whichever was edited second.
   where the events went, while its turn held the automation against the real mention queued behind it. Testing
   a listener means sending the bot a message, which exercises the entire path. The daemon refuses it too, so
   the row's missing button is a rule rather than a decoration.
-- The dependency fix chore ("Fix what a dependency change broke") arrives as a seeded but disabled row and is
-  offered again as a template only after the owner deletes it. The owner must enable it before it can react to
-  breakage; enabled fires also carry a 60-second hold. Approved drafts are published directly by the daemon at
-  their due time rather than through a seeded automation.
+- The dependency fix chore ("Fix what a dependency change broke") exists only as a template. No row is added
+  until the owner picks it; its fires then carry a 60-second hold. Approved drafts are published directly by
+  the daemon at their due time rather than through an automation.
 - A source outlives the pack that supplied it and a template does not, which reads like an inconsistency until
   you ask what each one is for. A source has to keep naming the trigger of an automation already standing on it,
   so a switched-off pack keeps its row and the picker simply declines to offer it. A template is something you

@@ -1,9 +1,6 @@
-/* THE FIX CHORE — one definition for the two surfaces that must agree on it.
+/* THE FIX CHORE — the template for opting into dependency-breakage repair.
  *
- * The daemon seeds this automation into a workspace (default-automations.ts in the sandbox package) and the
- * automations extension offers it as a recipe for anyone who deleted it and wants it back. Written once here
- * for the chore book's own reason: two copies of a prompt drift, and only one of them gets fixed when we
- * learn how to phrase it.
+ * The automations catalogue offers it as a recipe; nothing creates it until the owner picks that template.
  *
  * It wakes on `deps.broken` — the dependency verifier's edge event: a landed change drifted the installed
  * dependencies, the daemon reinstalled them, ran the tree's own checks, and they came back red. The payload
@@ -16,9 +13,9 @@
  * Attempt 1 is the breakage, attempt 2 is one landed fix that still failed; past that the loop stops and the
  * standing red is the owner's to read (the activity feed has been narrating every step).
  *
- * THE HOLD IS THE SECOND CHANCE. This automation is seeded disabled, so the owner must explicitly turn it on.
- * Once enabled, each fire is also held, visibly, for this many seconds on the Automations page before it starts,
- * cancellable the whole way, and it never starts while another agent is mid-turn. */
+ * THE HOLD IS THE SECOND CHANCE. After the owner creates the automation from its template, each fire is held,
+ * visibly, for this many seconds on the Automations page before it starts, cancellable the whole way, and it
+ * never starts while another agent is mid-turn. */
 export const FIX_DEPS_AUTOMATION = {
     id: "fix-dependency-breakage",
     title: "Fix what a dependency change broke",

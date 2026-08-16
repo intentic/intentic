@@ -268,7 +268,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     it(`tracks exactly the configuration slice`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `.intentic/automations.json`,
-            `.intentic/automations.seeded.json`,
             `.intentic/capability-dismissals.json`,
             `.intentic/environment.Dockerfile`,
             `.intentic/environment.custom.Dockerfile`,

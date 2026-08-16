@@ -13,11 +13,10 @@ import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { startWatchers } from "./agent/watchers.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
-import { seedDefaultAutomations } from "./automations/default-automations.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { emitWorkspaceEvent } from "./automations/workspace-events.js";
 import { sweepAgedState, sweepStateAtBoot } from "./workspace/state-janitor.js";
-import { statePath, stateRelPath } from "./workspace/state-paths.js";
+import { stateRelPath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
@@ -104,7 +103,6 @@ const BOOT_STEPS = [
     { key: "repoGitDirs", label: "Healing repository git dirs" },
     { key: "agentsRegistry", label: "Loading conversations" },
     { key: "skills", label: "Converging agent skills" },
-    { key: "seeds", label: "Offering the stock automations" },
     { key: "baseline", label: "Taking the workspace baseline" },
     { key: "staleSessions", label: "Sweeping stale sessions" },
     { key: "agentToken", label: "Writing the agent token" },
@@ -610,27 +608,6 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
     });
 
-    /* The stock automations a workspace starts with, offered exactly once — a deleted seed stays deleted. BEFORE
-     * THE BASELINE for the same reason the skills above are: both write CONFIG, and config is tracked by the root
-     * repo (workspace-state.ts `versioned`), so seeding after the baseline would greet the owner of a brand-new
-     * sandbox with pending changes they did not make. Well before the scheduler starts below, so its first tick
-     * already sees them.
-     *
-     * PERSONAS ARE NOT SEEDED, and used to be: three stock cards a fresh workspace arrived carrying. A workspace
-     * that needs no personas now has none, and the one card the product still names itself — the read-only front
-     * desk a public web chat answers through — is written when a Doorbell is saved rather than at boot
-     * (personas/front-desk.ts). */
-    await boot.step("seeds", async () => {
-        // ownsWorkspaceConfig beside role.roots: seeding writes automation config into the workspace — the
-        // daemon's to offer only where it owns the folder's config (and locally nothing would run them).
-        if (!role.roots || !traits.ownsWorkspaceConfig) {
-            return;
-        }
-        await seedDefaultAutomations(services.automations, statePath(services.workspace.root, ".intentic/automations.seeded.json")).catch(
-            (error: unknown) => services.logger.warn({ err: error }, "default automations: seed failed"),
-        );
-    });
-
     // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
     // files exist — so the Changes review starts with zero pending changes.
     await boot.step("baseline", async () => {
@@ -918,8 +895,7 @@ const main = async (): Promise<void> => {
     }
     shutdown.push(() => services.reaper.stop());
 
-    // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due. The stock automations
-    // it fires were seeded up in the `seeds` boot step, ahead of the baseline commit.
+    // Scheduled agent wake-ups: poll the automations manifest and fire whatever the owner configured there.
     const scheduler = createAutomationsScheduler(services, streamAgent);
     shutdown.push(() => scheduler.stop());
     if (role.container) {

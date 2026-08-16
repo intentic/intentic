@@ -38,10 +38,10 @@ export interface ProfileTraits {
      * recompose, preview-route minting. All act on container furniture that does not exist locally. */
     readonly containerCapabilities: boolean;
     /* Does the daemon own the workspace's agent-facing config, converging it at boot — the baked-tool skill
-     * files, the drafts skill, the seeded stock automations? In the container yes: the folder exists for the
-     * daemon and arrives empty. Locally no: the folder is the user's, and writing (or deleting) files in it
-     * that nobody asked for is the litter the local posture promises not to leave. Config a user changes
-     * through the daemon's own routes is still written — that write was asked for. */
+     * files and the drafts skill? In the container yes: the folder exists for the daemon and arrives empty.
+     * Locally no: the folder is the user's, and writing (or deleting) files in it that nobody asked for is the
+     * litter the local posture promises not to leave. Config a user changes through the daemon's own routes is
+     * still written — that write was asked for. */
     readonly ownsWorkspaceConfig: boolean;
     /* The workspace's resident automation: the automations scheduler, the drafts publisher, CI hooks and the
      * poller, maintenance probes. Off locally for now — the local surfaces (chat, agents, accounts) show

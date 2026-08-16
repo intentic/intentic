@@ -29,9 +29,9 @@ describe(`code chores come from the book`, () => {
     /* Two shelf entries stand apart from the measurement book, and neither is an oversight: they are REFLEXES,
      * not chores. Each fires on a workspace event, has no standing evidence to accumulate, and would be
      * meaningless as a row in a panel about what a codebase is owed. The split is the point — the book holds
-     * chores that have a measurement, this file holds triggers. The fix chore's definition still lives in the
-     * book's package (fix-deps.ts) because the daemon SEEDS it and two copies of a prompt drift; this only
-     * dresses it as a template for whoever deleted the seed. */
+     * chores that have a measurement, this file holds triggers. The fix chore's definition lives beside the
+     * book in fix-deps.ts so its template metadata and prompt stay one unit; this catalogue only dresses that
+     * definition for the shelf. */
     test(`the only hand-written chores are the reflexes, with no standing evidence`, () => {
         const handWritten = shelf.filter((template) => !scheduled.some((chore) => chore.id === template.id));
         expect(handWritten.map((template) => template.id)).toEqual([`fix-dependency-breakage`, `review-agent-work`]);
