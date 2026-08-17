@@ -127,15 +127,31 @@ export const noIsolation = (root: string, historyRoot: string = HISTORY_ROOT): T
     }),
 });
 
-// One fake for the provider-private turn seam. Plan-mode suites supply one event list per resumed turn; the
-// final list repeats if a flow asks again, which keeps rejection-loop fixtures focused on only the turns used.
-export const fakeCodexRunner = (...turns: readonly (readonly CodexEvent[])[]): { runner: CodexRunner; calls: CodexTurn[] } => {
+/* One fake for the provider-private turn seam. Plan-mode suites supply one event list per resumed turn; the
+ * final list repeats if a flow asks again, which keeps rejection-loop fixtures focused on only the turns used.
+ *
+ * `steered[n]` is what turn n's steering channel delivered — how a suite sees WHICH turn a mid-turn message
+ * reached, which for a plan turn is the whole question (one typed while the plan is being read belongs to the
+ * execution phase, not to the phase that has already closed). Drained in the background, as the real runner's
+ * pump does; the channel's messages land before the turn's first yielded event, so nothing races an assertion. */
+export const fakeCodexRunner = (...turns: readonly (readonly CodexEvent[])[]): { runner: CodexRunner; calls: CodexTurn[]; steered: string[][] } => {
     const calls: CodexTurn[] = [];
+    const steered: string[][] = [];
     const runner: CodexRunner = async function* (turn) {
         calls.push(turn);
+        const delivered: string[] = [];
+        steered.push(delivered);
+        const steering = turn.steering;
+        if (steering !== undefined) {
+            void (async () => {
+                for await (const text of steering) {
+                    delivered.push(text);
+                }
+            })();
+        }
         yield* turns[Math.min(calls.length - 1, turns.length - 1)] ?? [];
     };
-    return { runner, calls };
+    return { runner, calls, steered };
 };
 
 /* One agent card, mid-life: a branch of its own, a turn's worth of counters at zero, nothing landed yet. It is

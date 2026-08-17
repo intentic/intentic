@@ -2,6 +2,7 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
+import { SteeringQueue } from "../agent/agent-steering.js";
 import { fakeCodexRunner } from "../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
@@ -10,12 +11,13 @@ const createTestAgent = (runner: CodexRunner, codexHome = "/home") => createCode
 
 const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
 
-// Collect all events; `onPlan` (when given) schedules a decision for each plan frame AFTER the generator has
-// parked on the pending-plan bridge (the yield suspends before wait() registers, hence the macrotask).
+// Collect all events; `onPlan`/`onQuestion` (when given) schedule an answer for each card AFTER the generator has
+// parked on the pending-request bridge (the yield suspends before wait() registers, hence the macrotask).
 const collect = async (
     agent: ReturnType<typeof createCodexAgent>,
     turnRequest: Parameters<ReturnType<typeof createCodexAgent>>[0],
     onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
+    onQuestion?: (requestId: string) => { answers?: Record<string, string[]>; cancelled?: boolean },
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of agent(turnRequest)) {
@@ -23,6 +25,10 @@ const collect = async (
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
             setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+        }
+        if (event.kind === "question" && onQuestion !== undefined) {
+            const decision = onQuestion(event.requestId);
+            setTimeout(() => resolveRequest({ kind: "question", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -115,13 +121,15 @@ test("a subscription turn uses the translator bearer and the actor marker that u
             http_headers: { "x-openai-actor-authorization": "intentic" },
             supports_websockets: false,
         },
+        "tools.experimental_request_user_input": true,
     });
 });
 
 test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), { ...request, model: "gpt-5-codex" });
-    expect(calls[0]!.config).toBeUndefined();
+    // The question tool is the one key every turn carries; nothing here names a provider or a credential.
+    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input": true });
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
@@ -149,6 +157,7 @@ test("process-backed browser MCP servers ride Codex's per-thread config", async 
             env: { DISPLAY: ":99" },
             tool_timeout_sec: 120,
         },
+        "tools.experimental_request_user_input": true,
     });
 });
 
@@ -486,4 +495,155 @@ test("a streamed error survives the app-server process-exit throw", async () => 
         { kind: "error", message: "Your workspace is out of credits." },
         { kind: "done" },
     ]);
+});
+
+test("the thread's skills become the composer's command list", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "commands", skills: [{ name: "release", description: "Cut a release", path: "/work/.codex/skills/release" }] },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "commands", items: [{ name: "release", description: "Cut a release" }] },
+        { kind: "done" },
+    ]);
+});
+
+test("a Codex question becomes the same card the ask tool raises, and the picks travel back on the request", async () => {
+    const answered: Record<string, readonly string[]>[] = [];
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-q" },
+        {
+            type: "user_input.requested",
+            questions: [
+                {
+                    id: "q1",
+                    header: "Auth",
+                    question: "Which sign-in should the route accept?",
+                    options: [
+                        { label: "Google", description: "SSO through the connected account" },
+                        { label: "Email", description: "A code sent to the address" },
+                    ],
+                    secret: false,
+                },
+            ],
+            respond: (answers) => answered.push(answers),
+        },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Using Google." } },
+    ]);
+
+    const events = await collect(createTestAgent(runner), request, undefined, () => ({
+        answers: { "Which sign-in should the route accept?": ["Google"] },
+    }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-q" },
+        {
+            kind: "question",
+            requestId: expect.any(String) as string,
+            questions: [
+                {
+                    question: "Which sign-in should the route accept?",
+                    header: "Auth",
+                    // Codex publishes no multi-select flag, so every card it raises is single-pick.
+                    multiSelect: false,
+                    options: [
+                        { label: "Google", description: "SSO through the connected account" },
+                        { label: "Email", description: "A code sent to the address" },
+                    ],
+                },
+            ],
+        },
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: {
+                kind: "question",
+                requestId: expect.any(String) as string,
+                answers: { "Which sign-in should the route accept?": ["Google"] },
+            },
+        },
+        { kind: "delta", text: "Using Google." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+    expect(answered).toEqual([{ q1: ["Google"] }]);
+});
+
+test("a dismissed question tells Codex so rather than leaving it holding the request", async () => {
+    const answered: Record<string, readonly string[]>[] = [];
+    const { runner } = fakeCodexRunner([
+        {
+            type: "user_input.requested",
+            questions: [{ id: "q1", header: "Auth", question: "Which sign-in?", options: [], secret: false }],
+            respond: (answers) => answered.push(answers),
+        },
+    ]);
+
+    await collect(createTestAgent(runner), request, undefined, () => ({ cancelled: true }));
+
+    expect(answered).toEqual([{ q1: ["The user dismissed the questions without answering and stopped the turn."] }]);
+});
+
+test("an unattended turn is given no way to ask — a card nobody will answer is a deadlock", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), { ...request, unattended: true });
+    expect(calls[0]!.config).toBeUndefined();
+});
+
+test("a question for a secret is refused without a card, because a card's answers are recorded", async () => {
+    const answered: Record<string, readonly string[]>[] = [];
+    const { runner } = fakeCodexRunner([
+        {
+            type: "user_input.requested",
+            questions: [{ id: "key", header: "Key", question: "Paste the API key", options: [], secret: true }],
+            respond: (answers) => answered.push(answers),
+        },
+    ]);
+
+    const events = await collect(createTestAgent(runner), request);
+
+    expect(events.some((event) => event.kind === "question")).toBe(false);
+    expect(answered[0]?.["key"]?.[0]).toContain("does not collect secrets");
+});
+
+test("an anchored turn's app-server is born in the turn's mount namespace", async () => {
+    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1" };
+    const { runner, calls } = fakeCodexRunner([]);
+
+    await collect(createTestAgent(runner), {
+        ...request,
+        isolation: { plan, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } },
+    });
+
+    expect(calls[0]!.namespace).toEqual({ pid: 4321, cwd: WORKSPACE_ROOT });
+});
+
+test("an isolated turn the container could not anchor carries no namespace and runs cwd'd as before", async () => {
+    const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1" };
+    const { runner, calls } = fakeCodexRunner([]);
+
+    await collect(createTestAgent(runner), { ...request, cwd: plan.worktree, isolation: { plan } });
+
+    expect(calls[0]!.namespace).toBeUndefined();
+    expect(calls[0]!.options.workingDirectory).toBe(plan.worktree);
+});
+
+test("each turn gets a steering channel, and one typed while the plan is read reaches the execution phase", async () => {
+    const queue = new SteeringQueue();
+    const { runner, calls, steered } = fakeCodexRunner(
+        [
+            { type: "thread.started", thread_id: "thr-s" },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
+    );
+
+    await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const, steering: queue }, () => {
+        // Typed while the plan card is up: the planning phase's channel has already closed, so this message
+        // belongs to the phase that has not started yet.
+        queue.push("use fastify");
+        return { approve: true };
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(steered).toEqual([[], ["use fastify"]]);
 });

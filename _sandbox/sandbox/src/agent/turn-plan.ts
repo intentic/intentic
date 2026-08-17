@@ -480,7 +480,8 @@ const honoured = (
 // (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a bare dev run with no
 // translator. Its app-server accepts process-backed MCP servers in the per-thread config, so the browser servers
 // are built from the same persona-filtered manifest the Claude Code path reads. Daemon-side SDK servers and
-// plugins still belong to that richer harness and stay absent here.
+// plugins still belong to that richer harness and stay absent here. Mid-turn steering rides through like Pi's:
+// the queue is real (`turn/steer`), so the arm hands it over rather than dropping it.
 export const planCodexTurn = async (
     services: Services,
     input: AgentTurn,
@@ -520,7 +521,7 @@ export const planCodexTurn = async (
             context.base.permissionMode === "plan" ? undefined : input.conversationId,
         ),
     ]);
-    const withModel = { ...context.base, model };
+    const withModel = { ...context.base, model, ...(context.steering !== undefined ? { steering: context.steering } : {}) };
     // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer (the
     // adapter builds the provider block); the dev api-key path uses Codex's own OPENAI_API_KEY default. The
     // default CODEX_HOME (createCodexAgent) serves every turn — no per-turn home. Codex takes attachments

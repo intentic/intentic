@@ -447,14 +447,26 @@ test("fast speed is withheld from every runtime that isn't the Claude Code loop"
  * left that can keep it inside its own branch — see turn-preamble.ts on why it is second-best. */
 test("a cwd-isolated runtime is told where its worktree is; a namespaced one needs no telling", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
+    // OpenCode is its own loop with no spawn seam of ours, so it stays on the cwd side of the axis. Codex is on
+    // the namespace side with the Claude Code loop: its app-server is a child process nsenter can place.
+    const grokServices = servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+        }),
+    });
 
-    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), isolated);
-    const prompt = (codex as { request: AgentRequest }).request.prompt;
+    const grok = await planTurn(grokServices, turn({ agent: "grok" }), isolated);
+    const prompt = (grok as { request: AgentRequest }).request.prompt;
     expect(prompt).toContain("/history/worktrees/abc/work");
     expect(prompt).toContain("do the thing");
 
-    const claude = await planTurn(harnessServices(), turn(), isolated);
-    expect((claude as { request: AgentRequest }).request.prompt).not.toContain("Where this turn's files live");
+    for (const namespaced of [
+        await planTurn(harnessServices(), turn(), isolated),
+        await planTurn(codexServices(), turn({ agent: "codex" }), isolated),
+    ]) {
+        expect((namespaced as { request: AgentRequest }).request.prompt).not.toContain("Where this turn's files live");
+    }
 });
 
 test("a main-tree turn has no worktree to name, so it says nothing", async () => {

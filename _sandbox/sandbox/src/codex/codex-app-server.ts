@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
+import { nsenterArgv } from "../agents/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
 /* THE CODEX CLIENT SURFACE INTENTIC ACTUALLY NEEDS.
@@ -26,6 +27,15 @@ export interface CodexThreadOptions {
 
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
+// Where the app-server process is born: the pid holding the turn's mount namespace open, and the workspace root
+// as that namespace sees it. Present only on an isolated turn whose container could build one — everything the
+// app-server then forks (its shell, its browser servers) inherits the namespace, so /work IS the worktree for
+// all of it. Absent ⇒ spawned plainly here, cwd'd into whatever `options.workingDirectory` says.
+export interface CodexNamespace {
+    readonly pid: number;
+    readonly cwd: string;
+}
+
 export interface CodexTurn {
     readonly prompt: string;
     readonly images?: readonly string[];
@@ -34,6 +44,12 @@ export interface CodexTurn {
     readonly modelProvider?: string;
     readonly config?: Readonly<Record<string, JsonValue>>;
     readonly options: CodexThreadOptions;
+    /* Mid-turn steering: each message pulled from here is delivered to the RUNNING turn as `turn/steer`. A plain
+     * per-turn iterable rather than the daemon's shared queue — codex's plan emulation runs two app-servers with
+     * a person's approval in between, and the phase that has closed must not be holding the queue open (see
+     * codex-agent.ts, which owns the one consumer and hands each phase a channel of its own). */
+    readonly steering?: AsyncIterable<string>;
+    readonly namespace?: CodexNamespace;
     readonly signal: AbortSignal;
 }
 
@@ -88,10 +104,40 @@ interface CodexUsage {
     readonly reasoning_output_tokens: number;
 }
 
+// One skill the thread's cwd publishes (`skills/list`) — Codex's answer to a slash command. `path` travels
+// because invoking one takes both halves: app-server's skill input is keyed by name AND directory.
+export interface CodexSkill {
+    readonly name: string;
+    readonly description: string;
+    readonly path: string;
+}
+
+// One question from the experimental `item/tool/requestUserInput` server request. `options` is empty when Codex
+// asks something open-ended; `secret` marks an answer it wants withheld from the transcript.
+export interface CodexQuestion {
+    readonly id: string;
+    readonly header: string;
+    readonly question: string;
+    readonly options: readonly { readonly label: string; readonly description: string }[];
+    readonly secret: boolean;
+}
+
 export type CodexEvent =
     | { readonly type: "thread.started"; readonly thread_id: string }
     | { readonly type: "turn.started" }
     | { readonly type: "item.started" | "item.updated" | "item.completed"; readonly item: CodexItem }
+    | { readonly type: "commands"; readonly skills: readonly CodexSkill[] }
+    /* THE ONE SERVER-INITIATED REQUEST THIS CLIENT ANSWERS, handed over as an event so the answer travels the
+     * stream rather than a side channel: the consumer raises its card, waits for a person, and calls `respond`.
+     * The runner's loop is parked on that yield meanwhile, which is exactly right — app-server is blocked on the
+     * answer too, so nothing can arrive out of order while the card is open.
+     *
+     * `respond` takes one entry per question id; ids Codex did not ask about are ignored by it. */
+    | {
+          readonly type: "user_input.requested";
+          readonly questions: readonly CodexQuestion[];
+          readonly respond: (answers: Readonly<Record<string, readonly string[]>>) => void;
+      }
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
     | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
     | { readonly type: "error"; readonly message: string };
@@ -259,12 +305,26 @@ export interface AppServerNotification {
     readonly params: unknown;
 }
 
+/* WHAT ARRIVES FROM APP-SERVER, and why the two kinds share one queue: they are one ordered stream on the wire,
+ * and splitting them would let a question card render after the tool call that comes next.
+ *
+ * Only the requests this client actually answers reach here. Everything else is refused the instant it arrives
+ * (see HANDLED_REQUESTS) rather than queued for the loop: app-server can block on an answer BEFORE `turn/start`
+ * returns, and a refusal that waits for the loop to start would deadlock the turn against itself. */
+export type AppServerMessage =
+    | ({ readonly kind: "notification" } & AppServerNotification)
+    | ({ readonly kind: "request"; readonly respond: (result: JsonValue) => void } & AppServerNotification);
+
 export interface CodexAppServerConnection {
     readonly request: (method: string, params: unknown) => Promise<unknown>;
     readonly notify: (method: string, params: unknown) => void;
-    readonly notifications: AsyncIterable<AppServerNotification>;
+    readonly messages: AsyncIterable<AppServerMessage>;
     readonly close: () => void;
 }
+
+// The server-initiated requests Intentic answers. Approvals are deliberately absent: `approvalPolicy: "never"`
+// means Codex never asks, and the container is the isolation boundary either way.
+const HANDLED_REQUESTS = new Set(["item/tool/requestUserInput"]);
 
 export type CodexAppServerConnector = (turn: CodexTurn) => Promise<CodexAppServerConnection>;
 
@@ -336,15 +396,27 @@ const stdioConnector =
         if (binary === undefined) {
             throw new Error(CODEX_BINARY_MISSING);
         }
-        const child = spawnProcess(binary, ["app-server", "--stdio"], turn.env);
-        const notifications = new AsyncQueue<AppServerNotification>();
+        /* THE NAMESPACE IS ENTERED BY EXEC, not by supervision: nsenter execs app-server into the turn's anchor,
+         * so this stays a direct child — its pipes, its exit code and the kill on abort all reach the real
+         * process. Same seam and same reasoning as the Claude Code loop's spawn wrapper (agent.ts).
+         *
+         * The anchor's cwd wins over the turn's own working directory: it is the workspace root as the namespace
+         * sees it, which INSIDE is the conversation's worktree. A failure here fails the turn rather than falling
+         * back to the shared checkout — an agent quietly editing the main tree is what the namespace exists to
+         * prevent. */
+        const argv =
+            turn.namespace === undefined
+                ? { command: binary, args: ["app-server", "--stdio"] }
+                : nsenterArgv(turn.namespace.pid, turn.namespace.cwd, binary, ["app-server", "--stdio"]);
+        const child = spawnProcess(argv.command, argv.args, turn.env);
+        const messages = new AsyncQueue<AppServerMessage>();
         const pending = new Map<number, { readonly resolve: (value: unknown) => void; readonly reject: (error: unknown) => void }>();
         let requestId = 0;
         let closing = false;
         let stderr = "";
 
         const fail = (error: unknown): void => {
-            notifications.fail(error);
+            messages.fail(error);
             for (const waiter of pending.values()) {
                 waiter.reject(error);
             }
@@ -357,7 +429,7 @@ const stdioConnector =
         child.once("error", fail);
         child.once("exit", (code, signal) => {
             if (closing) {
-                notifications.end();
+                messages.end();
                 return;
             }
             const detail = stderr.trim();
@@ -379,7 +451,16 @@ const stdioConnector =
                     const id = message["id"];
                     const method = message["method"];
                     if (typeof id === "number" && typeof method === "string") {
-                        write({ id, error: { code: -32601, message: `Intentic does not handle app-server request ${method}` } });
+                        if (!HANDLED_REQUESTS.has(method)) {
+                            write({ id, error: { code: -32601, message: `Intentic does not handle app-server request ${method}` } });
+                            continue;
+                        }
+                        messages.push({
+                            kind: "request",
+                            method,
+                            params: message["params"],
+                            respond: (result) => write({ id, result }),
+                        });
                         continue;
                     }
                     if (typeof id === "number") {
@@ -397,7 +478,7 @@ const stdioConnector =
                         continue;
                     }
                     if (typeof method === "string") {
-                        notifications.push({ method, params: message["params"] });
+                        messages.push({ kind: "notification", method, params: message["params"] });
                     }
                 }
                 if (!closing) {
@@ -425,7 +506,7 @@ const stdioConnector =
                 });
             },
             notify: (method, params) => write({ method, params }),
-            notifications,
+            messages,
             close: () => {
                 closing = true;
                 turn.signal.removeEventListener("abort", abort);
@@ -460,18 +541,18 @@ const usageFrom = (value: unknown): CodexUsage => {
     };
 };
 
-const itemEvent = (method: "item/started" | "item/completed", value: unknown, turnId: string): CodexEvent | undefined => {
+const itemEvent = (method: "item/started" | "item/completed", value: unknown, turnIds: ReadonlySet<string>): CodexEvent | undefined => {
     const params = object(value, `${method} params`);
-    if (string(params, "turnId", `${method} params`) !== turnId) {
+    if (!turnIds.has(string(params, "turnId", `${method} params`))) {
         return undefined;
     }
     const item = normalizeItem(params["item"]);
     return item === undefined ? undefined : { type: method === "item/started" ? "item.started" : "item.completed", item };
 };
 
-const todoEvent = (value: unknown, turnId: string): CodexEvent | undefined => {
+const todoEvent = (value: unknown, turnId: string, turnIds: ReadonlySet<string>): CodexEvent | undefined => {
     const params = object(value, "turn/plan/updated params");
-    if (string(params, "turnId", "turn/plan/updated params") !== turnId) {
+    if (!turnIds.has(string(params, "turnId", "turn/plan/updated params"))) {
         return undefined;
     }
     const plan = params["plan"];
@@ -484,6 +565,107 @@ const todoEvent = (value: unknown, turnId: string): CodexEvent | undefined => {
     });
     return { type: "item.updated", item: { id: `plan-${turnId}`, type: "todo_list", items } };
 };
+
+/* THE SLASH COMMANDS CODEX ACTUALLY HAS: its skills, per working directory, as `skills/list` reports them.
+ *
+ * Disabled entries are dropped rather than shown greyed — the popover has no third state, and offering a name
+ * that refuses to load is worse than not offering it. Deduplicated by name because the answer is per-cwd and
+ * scoped (user, repo, system, admin), so one name can arrive several times; first wins, which is the same
+ * precedence app-server itself applies when the model asks for it by name.
+ *
+ * The one-line blurb wins over the body when there is one: `description` is the whole SKILL.md front matter,
+ * which is a paragraph written for a model, and the popover has a row. */
+const skillsFrom = (result: unknown): readonly CodexSkill[] => {
+    const data = object(result, "skills/list result")["data"];
+    if (!Array.isArray(data)) {
+        throw new Error("Codex app-server sent invalid skills/list result.data");
+    }
+    const found = new Map<string, CodexSkill>();
+    for (const [index, listed] of data.entries()) {
+        const entry = object(listed, `skills/list result.data[${index}]`);
+        const skills = entry["skills"];
+        if (!Array.isArray(skills)) {
+            throw new Error(`Codex app-server sent invalid skills/list result.data[${index}].skills`);
+        }
+        for (const [position, published] of skills.entries()) {
+            const what = `skills/list result.data[${index}].skills[${position}]`;
+            const skill = object(published, what);
+            if (skill["enabled"] !== true) {
+                continue;
+            }
+            const name = string(skill, "name", what);
+            if (found.has(name)) {
+                continue;
+            }
+            const short =
+                skill["interface"] === undefined || skill["interface"] === null
+                    ? undefined
+                    : optionalString(object(skill["interface"], `${what}.interface`), "shortDescription", `${what}.interface`);
+            found.set(name, {
+                name,
+                description: short ?? optionalString(skill, "shortDescription", what) ?? string(skill, "description", what),
+                path: string(skill, "path", what),
+            });
+        }
+    }
+    return [...found.values()];
+};
+
+/* A `/command` prompt, resolved against the skills this thread published. The structured skill input is what
+ * makes the popover real: app-server LOADS the skill, instead of the model reading a stray slash word and
+ * guessing. Whatever follows the name rides on as the text of the message.
+ *
+ * Undefined for prose that merely starts with a slash (a path, `/etc/hosts`, this product's own vocabulary) —
+ * unmatched text is sent verbatim, because Codex parses no slash commands of its own and so cannot swallow it.
+ * That is also what a plan turn gets: its prompt opens with the planning preamble, so the name is no longer
+ * leading and reaches the model as the words the user typed rather than as a loaded skill. */
+const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly skill: CodexSkill; readonly text: string } | undefined => {
+    const named = /^\/([^\s/]+)[ \t]*/.exec(prompt);
+    if (named === null) {
+        return undefined;
+    }
+    const skill = skills.find((candidate) => candidate.name === named[1]);
+    return skill === undefined ? undefined : { skill, text: prompt.slice(named[0].length) };
+};
+
+// The questions on one `item/tool/requestUserInput` request. Undefined when it belongs to another turn on this
+// thread — nothing in this run can answer that, and its caller says so on the wire instead of asking a person.
+const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly CodexQuestion[] | undefined => {
+    const params = object(raw, "item/tool/requestUserInput params");
+    if (!turnIds.has(string(params, "turnId", "item/tool/requestUserInput params"))) {
+        return undefined;
+    }
+    const questions = params["questions"];
+    if (!Array.isArray(questions)) {
+        throw new Error("Codex app-server sent invalid item/tool/requestUserInput params.questions");
+    }
+    return questions.map((asked, index) => {
+        const what = `item/tool/requestUserInput params.questions[${index}]`;
+        const question = object(asked, what);
+        const rawOptions = question["options"];
+        if (rawOptions !== undefined && rawOptions !== null && !Array.isArray(rawOptions)) {
+            throw new Error(`Codex app-server sent invalid ${what}.options`);
+        }
+        return {
+            id: string(question, "id", what),
+            header: string(question, "header", what),
+            question: string(question, "question", what),
+            options: (rawOptions ?? []).map((offered: unknown, position: number) => {
+                const option = object(offered, `${what}.options[${position}]`);
+                return {
+                    label: string(option, "label", `${what}.options[${position}]`),
+                    description: string(option, "description", `${what}.options[${position}]`),
+                };
+            }),
+            secret: question["isSecret"] === true,
+        };
+    });
+};
+
+// The turn a `turn/steer` landed on. Normally the turn that was already running — Codex interrupts the model
+// and resubmits with the steer folded in — but it answers with an id rather than nothing, so the id is read
+// rather than assumed: a steer that DID open a new turn would otherwise send every later frame to a dead id.
+const steeredTurnId = (value: unknown): string => string(object(value, "turn/steer result"), "turnId", "turn/steer result");
 
 export const createCodexAppServerRunner = (connect: CodexAppServerConnector = stdioConnector()): CodexRunner =>
     async function* runAppServerTurn(turn) {
@@ -511,11 +693,24 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 yield { type: "thread.started", thread_id: threadId };
             }
 
+            /* The thread's own slash commands, read before the turn starts because the prompt may name one.
+             * Best-effort: a workspace with no skills answers with an empty list, and a build that does not
+             * publish them at all must not cost the turn — an empty popover is the cost of a failure here. */
+            const skills = await connection
+                .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
+                .then(skillsFrom)
+                .catch(() => []);
+            if (skills.length > 0) {
+                yield { type: "commands", skills };
+            }
+
+            const command = skillInput(turn.prompt, skills);
             const input = [
-                { type: "text", text: turn.prompt, text_elements: [] },
+                ...(command === undefined ? [] : [{ type: "skill", name: command.skill.name, path: command.skill.path }]),
+                { type: "text", text: command?.text ?? turn.prompt, text_elements: [] },
                 ...(turn.images ?? []).map((path) => ({ type: "localImage", path })),
             ];
-            const turnId = turnIdFrom(
+            const startedTurnId = turnIdFrom(
                 await connection.request("turn/start", {
                     threadId,
                     input,
@@ -526,26 +721,77 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
                 }),
             );
+            /* WHICH TURN THIS RUN IS WATCHING. One id in the ordinary case; a steer answers with the id its
+             * message landed on, and both are kept because a superseded turn can still be completing while the
+             * one carrying the steer runs. The frames of every id in here belong to this run; only the LATEST
+             * one ends it, so a `turn/completed` for a turn a steer replaced cannot cut the stream short. */
+            const turnIds = new Set([startedTurnId]);
+            let turnId = startedTurnId;
+
+            /* MID-TURN STEERING. Best-effort by construction, the same posture as Pi's steer queue: the message
+             * is already in the user's transcript by the time it reaches here, and every way `turn/steer` can
+             * refuse is a race the user cannot see and cannot act on — the turn finished between the click and
+             * this call (`no_active_turn`), or a compaction owns the model for the moment (`non_steerable_*`).
+             * Failing the turn over one would replace a lost sentence with a lost turn. */
+            const steering = turn.steering;
+            if (steering !== undefined) {
+                void (async () => {
+                    for await (const text of steering) {
+                        const steered = await connection
+                            .request("turn/steer", {
+                                threadId,
+                                expectedTurnId: turnId,
+                                input: [{ type: "text", text, text_elements: [] }],
+                            })
+                            .then(steeredTurnId)
+                            .catch(() => undefined);
+                        if (steered !== undefined) {
+                            turnIds.add(steered);
+                            turnId = steered;
+                        }
+                    }
+                })();
+            }
 
             let usage: CodexUsage | undefined;
-            for await (const notification of connection.notifications) {
+            for await (const notification of connection.messages) {
+                if (notification.kind === "request") {
+                    // Only the question request reaches here (HANDLED_REQUESTS); everything else was refused on
+                    // arrival. A question for another turn is answered empty rather than shown to a person.
+                    const questions = questionsFrom(notification.params, turnIds);
+                    if (questions === undefined) {
+                        notification.respond({ answers: {} });
+                        continue;
+                    }
+                    yield {
+                        type: "user_input.requested",
+                        questions,
+                        respond: (answers) =>
+                            notification.respond({
+                                answers: Object.fromEntries(Object.entries(answers).map(([id, picks]) => [id, { answers: [...picks] }])),
+                            }),
+                    };
+                    continue;
+                }
                 if (notification.method === "turn/started") {
                     const params = object(notification.params, "turn/started params");
                     const startedTurn = object(params["turn"], "turn/started params.turn");
-                    if (string(startedTurn, "id", "turn/started params.turn") === turnId) {
+                    if (turnIds.has(string(startedTurn, "id", "turn/started params.turn"))) {
                         yield { type: "turn.started" };
                     }
                     continue;
                 }
                 if (notification.method === "item/started" || notification.method === "item/completed") {
-                    const event = itemEvent(notification.method, notification.params, turnId);
+                    const event = itemEvent(notification.method, notification.params, turnIds);
                     if (event !== undefined) {
                         yield event;
                     }
                     continue;
                 }
                 if (notification.method === "turn/plan/updated") {
-                    const event = todoEvent(notification.params, turnId);
+                    // Keyed by the turn this run STARTED, not the current one: a steer that opens a new turn must
+                    // keep updating the same checklist card rather than raising a second one beside it.
+                    const event = todoEvent(notification.params, startedTurnId, turnIds);
                     if (event !== undefined) {
                         yield event;
                     }
@@ -553,14 +799,14 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 }
                 if (notification.method === "thread/tokenUsage/updated") {
                     const params = object(notification.params, "thread/tokenUsage/updated params");
-                    if (string(params, "turnId", "thread/tokenUsage/updated params") === turnId) {
+                    if (turnIds.has(string(params, "turnId", "thread/tokenUsage/updated params"))) {
                         usage = usageFrom(params);
                     }
                     continue;
                 }
                 if (notification.method === "error") {
                     const params = object(notification.params, "error params");
-                    if (string(params, "turnId", "error params") === turnId) {
+                    if (turnIds.has(string(params, "turnId", "error params"))) {
                         yield { type: "error", message: string(object(params["error"], "error params.error"), "message", "error params.error") };
                     }
                     continue;

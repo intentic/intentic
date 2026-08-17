@@ -293,19 +293,26 @@ const CLAUDE_CODE: AgentCapabilities = {
     instructions: "replace",
 };
 
-// Codex app-server: item-level events plus process-backed MCP servers. Browser servers ride its per-thread
-// config, while daemon-side SDK servers, plugins, questions and server-initiated approvals remain unwired.
+/* Codex app-server: item-level events, process-backed MCP servers, and the four interactive seams its protocol
+ * actually publishes — `turn/steer` for mid-turn injection, the experimental `item/tool/requestUserInput` server
+ * request behind a question card, `skills/list` for the `/` popover (a picked command rides back as a structured
+ * skill input), and the same mount namespace the Claude Code loop gets, because app-server is a child process
+ * the adapter spawns and nsenter can put it in the turn's namespace like any other.
+ *
+ * Browser servers ride the per-thread config; daemon-side SDK servers, plugins and server-initiated APPROVALS
+ * stay unwired — the container is the isolation boundary, so approvals are declined by design rather than
+ * missing (codex-app-server.ts refuses every server request but the question one). */
 const CODEX: AgentCapabilities = {
     runtime: "codex",
-    steering: false,
+    steering: true,
     permissions: "plan",
-    questions: false,
+    questions: true,
     mcp: "browser",
     execution: ["shell"],
     effort: true,
     fastMode: false,
-    isolation: "cwd",
-    commands: false,
+    isolation: "namespace",
+    commands: true,
     terminals: false,
     recovery: false,
     /* Both halves, through the per-thread `config` block the adapter already sends: `model_instructions_file`

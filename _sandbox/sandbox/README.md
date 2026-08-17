@@ -267,6 +267,17 @@ Generated PNGs are copied out of Codex's provider state into `.intentic/artifact
 workspace-relative path enters the event stream and transcript. The `@openai/codex-sdk` dependency remains the
 exact CLI-version anchor and the locator for a vendored development fallback, not the native turn transport.
 
+That transport is bidirectional, which is what lifts the native Codex runtime off the foreign-loop floor. A
+mid-turn message from `/agent/steer` is delivered as `turn/steer` rather than forcing an abort-and-resend; the
+thread's skills are published as the composer's `/` commands and a picked one rides back as a structured skill
+input; and the experimental question request (`item/tool/requestUserInput`, which Codex only offers the model
+once the thread config asks for it) raises the same card the Claude Code loop's `ask` tool does. Approvals stay
+declined on purpose — the container is the isolation boundary — so app-server's other server-initiated requests
+are refused the moment they arrive, before anything can block a turn on an answer that is never coming. Isolation
+is the same mount namespace the Claude Code loop gets: app-server is a child process, so `nsenter` puts it (and
+everything it forks, its shell and its browser servers included) in the turn's anchor, where `/work` **is** the
+conversation's worktree instead of a path that still reaches the shared checkout.
+
 ## Conventions & gotchas
 
 - Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/auth/`,
