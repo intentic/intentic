@@ -306,7 +306,9 @@ export const createCliProxyClient = (params: {
     // CLIProxyAPI's xAI and Kimi logins are headless-friendly device flows exposed over the Management API. Each
     // returns a verification URL, optional user code and state, then polls to completion in the background.
     const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth });
+        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth }).catch((err: unknown) => {
+            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
+        });
         if (!response.ok) {
             throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login failed to start (${response.status})`);
         }
@@ -323,7 +325,9 @@ export const createCliProxyClient = (params: {
     // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
     // Google; the explicit redirect flow tells the card to ask for the landing URL.
     const connectGemini = async (): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth });
+        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth }).catch((err: unknown) => {
+            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
+        });
         if (!response.ok) {
             throw new Error(`Google sign-in failed to start (${response.status})`);
         }
@@ -342,6 +346,8 @@ export const createCliProxyClient = (params: {
             method: "POST",
             headers: { ...auth, "content-type": "application/json" },
             body: JSON.stringify({ provider: CLIPROXY_PROVIDER[input.provider], redirect_url: input.redirectUrl, state: input.state }),
+        }).catch((err: unknown) => {
+            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
         });
         if (!response.ok) {
             const reason = ((await response.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
@@ -565,9 +571,9 @@ export const createCliProxyClient = (params: {
         complete,
         disconnect,
         models: async (provider) => {
-            const response = await fetch(`${managementUrl}/model-definitions/${CLIPROXY_PROVIDER[provider]}`, { headers: auth });
-            if (!response.ok) {
-                throw new Error(`${provider} model catalog unavailable (${response.status})`);
+            const response = await fetchFn(`${managementUrl}/model-definitions/${CLIPROXY_PROVIDER[provider]}`, { headers: auth }).catch(() => undefined);
+            if (response === undefined || !response.ok) {
+                throw new Error(`${provider} model catalog unavailable (${response?.status ?? "unreachable"})`);
             }
             const body = (await response.json()) as {
                 models?: { id?: string; display_name?: string; description?: string; thinking?: { levels?: string[] } }[];

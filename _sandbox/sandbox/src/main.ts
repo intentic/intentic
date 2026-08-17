@@ -20,7 +20,7 @@ import { stateRelPath } from "./workspace/state-paths.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorHooks } from "./capabilities/cli/connector-hooks.js";
 import { linkSshHosts } from "./capabilities/ssh-hosts.js";
-import { startTranslator, translatorWanted } from "./agent/translator.js";
+import { startTranslator } from "./agent/translator.js";
 import { onPath } from "./platform/on-path.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
@@ -835,9 +835,8 @@ const main = async (): Promise<void> => {
      * and a core image doesn't carry it — TRANSLATOR_URL is runner-set either way, so the URL alone stopped
      * meaning "there is a translator here". Ungated, the spawn fails ENOENT and the restart ladder retries it
      * for the daemon's lifetime, filling the log with a failure that is really just an image without the pack.
-     * And gated on there being something to serve: the auth-dir/endpoint read (never the Management API, which
-     * is the very proxy this decides to start) keeps a sandbox nobody has connected anything to from running a
-     * proxy for nothing. A turn that later wants it says so itself, naming the rebuild. */
+     * Starts whenever the binary is present so the Management API is listening for connect handshakes (Google,
+     * Grok, Kimi) before an account has been stored. */
     void (async () => {
         if (config.translator.url === "" || !role.container) {
             return;
@@ -846,9 +845,7 @@ const main = async (): Promise<void> => {
             logger.info("translator: cli-proxy-api is not in this image — add it by rebuilding from the Environment card");
             return;
         }
-        if (await translatorWanted(services)) {
-            startTranslator(services);
-        }
+        startTranslator(services);
     })().catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
     if (role.container) {

@@ -1,6 +1,6 @@
 import { type AccountUsage, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createCliProxyClient, nextRestartDelay, renderConfig, RESTART_DELAY_BASE_MS, RESTART_DELAY_CAP_MS } from "./translator.js";
+import { createCliProxyClient, nextRestartDelay, renderConfig, RESTART_DELAY_BASE_MS, RESTART_DELAY_CAP_MS, TRANSLATOR_BINARY_MISSING } from "./translator.js";
 
 /* The shared account-usage store, in memory. Every client in this file gets one: `accounts` reads it on every
  * call now that a row's headroom travels with the row, so a test that skipped it would be exercising a client
@@ -75,6 +75,63 @@ test("starts Kimi Code's headless device login through CLIProxyAPI", async () =>
     });
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/kimi-auth-url", {
         headers: { authorization: "Bearer local" },
+    });
+});
+
+test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", async () => {
+    const fetchMock = vi.fn(async () =>
+        Response.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=123", state: "state-123", status: "ok" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        usageStore: memoryStore().store,
+    });
+
+    await expect(client.connect("gemini")).resolves.toEqual({
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=123",
+        code: "",
+        state: "state-123",
+        flow: "redirect",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/antigravity-auth-url", {
+        headers: { authorization: "Bearer local" },
+    });
+});
+
+test("throws TRANSLATOR_BINARY_MISSING when Google connect fails due to unreachable proxy", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        usageStore: memoryStore().store,
+    });
+
+    await expect(client.connect("gemini")).rejects.toThrow(TRANSLATOR_BINARY_MISSING);
+});
+
+test("completes Google's redirect login via oauth-callback", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ status: "ok" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        usageStore: memoryStore().store,
+    });
+
+    await expect(client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc&state=xyz", state: "xyz" })).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/oauth-callback", {
+        method: "POST",
+        headers: { authorization: "Bearer local", "content-type": "application/json" },
+        body: JSON.stringify({
+            provider: "antigravity",
+            redirect_url: "http://localhost:51121/oauth-callback?code=abc&state=xyz",
+            state: "xyz",
+        }),
     });
 });
 
