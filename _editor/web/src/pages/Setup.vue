@@ -300,9 +300,7 @@ const commandOffered = computed(() => addressed.value);
  *
  * The lane with no command, no code and no machine of the user's: the platform gives THIS sandbox a machine
  * it runs (sandbox.hostedProvision), and the ordinary announce watch below carries the rest — the page
- * redirects the moment the daemon reports in, exactly as it does for a pasted run. On a platform that hosts,
- * a fresh account's FIRST run takes this lane automatically (see onMounted): sign in, watch it come up, land
- * in the workspace — zero commands, zero choices, with the other rungs one click away.
+ * redirects the moment the daemon reports in, exactly as it does for a pasted run. With the other rungs one click away.
  *
  * A LANE MOVES A MACHINE, NOT THE SANDBOX. Every lane works on the row created on arrival, so choosing this
  * one attaches a machine and choosing another hands it back (sandbox.hostedRelease) — the name, the address
@@ -457,7 +455,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               {
                   value: `mine` as const,
                   icon: `desktop` as const,
-                  title: `A computer I have`,
+                  title: `A computer I own`,
                   meta: `Most power · no limits`,
                   note: `One pasted command`,
               },
@@ -1362,14 +1360,6 @@ const arrive = async (): Promise<void> => {
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         await autoCreate();
-        /* THE ONE-CLICK FIRST RUN: on a platform that hosts, the free machine is what a fresh sandbox is
-         * POINTED AT — the ladder opens on it and the card below is a button and a sentence — but nothing is
-         * created until that button is pressed. It used to provision here, on arrival, which meant a machine
-         * (and the hour meter that starts with it) existed for everybody who ever loaded this page, including
-         * the reader who came to paste a command on their own hardware. */
-        if (offer.enabled && offer.remaining > 0 && !desktop.value) {
-            machine.value = `hosted`;
-        }
         fallBackToAttach();
         return;
     }

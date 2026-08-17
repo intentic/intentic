@@ -264,22 +264,28 @@ it(`renames the sandbox it created, from the step itself`, async () => {
     expect(nameRow()).toContain(`shop`);
 });
 
-/* THE ZERO-CLICK FIRST RUN. On a platform that hosts, a fresh account's first sandbox is created AND started
- * without a single choice: the page creates the row the ordinary way, provisions a machine for it, and shows
- * the wait — no command, no copy button, nothing to paste. The classic tests above run with the offer
- * answering "disabled", which is every self-hosted platform and every platform from before the lane existed. */
-it(`points a fresh sandbox at the free machine, and starts nothing until the button is pressed`, async () => {
+/* ON A PLATFORM THAT HOSTS, A FRESH SANDBOX DEFAULTS TO THE READER'S OWN COMPUTER.
+ * The ladder offers the hosted machine beside it, and starting one is one click to that rung. */
+it(`defaults a fresh sandbox to the reader's own computer, with hosted available on the ladder`, async () => {
     // Not `…Once`: the offer is the account's remaining allowance, and the page asks again every time it
     // spends or hands back a machine. A platform that hosts goes on hosting between two reads of it.
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The row is created the ordinary way — the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
-    // …but the machine is NOT. Arriving on a page used to cost a machine (and start its hour meter) for
-    // everybody who loaded it, including the reader who came to paste a command on hardware of their own.
     expect(hostedProvision).not.toHaveBeenCalled();
     expect(el.textContent).not.toContain(`Starting the machine`);
-    // What the reader gets instead is the commitment, and the one fact that should inform it.
+    // Default rung is A computer I own, not We host it
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    const hostedRung = rungs.find((card) => card.textContent?.includes(`We host it`));
+    const mineRung = rungs.find((card) => card.textContent?.includes(`A computer I own`));
+    expect(mineRung?.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`false`);
+    expect(buttonLabelled(`Start my machine`)).toBeUndefined();
+
+    // Clicking We host it reveals the commitment and Start my machine
+    hostedRung!.click();
+    await nextTick();
     expect(buttonLabelled(`Start my machine`)).toBeDefined();
     expect(el.textContent).toContain(`don't back it up`);
 
@@ -299,6 +305,9 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    hostedRung!.click();
+    await nextTick();
     buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
     expect(create).toHaveBeenCalledWith(`workspace`);
@@ -372,8 +381,10 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
 it(`states the hour ceiling and what follows it on the hosted card, with the small print beside the button`, async () => {
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
-    const hosted = [...el.querySelectorAll(`[role="radio"]`)][0];
+    const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
     expect(hosted?.textContent).toContain(`40h a month, then membership`);
+    hosted!.click();
+    await nextTick();
     // The card stays three lines: what this machine's disk is, the reader reads where they commit to it.
     expect(hosted?.textContent).not.toContain(`back it up`);
     expect(el.textContent).toContain(`don't back it up`);
@@ -393,10 +404,13 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    hostedRung!.click();
+    await nextTick();
     buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
     const mine = (): HTMLButtonElement =>
-        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I have`)) as HTMLButtonElement;
+        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I own`)) as HTMLButtonElement;
     // The rungs are disabled while the machine is being made AND while the allowance that made it is re-read —
     // clicked before that settles, this does nothing, which is what the card is saying by being greyed out.
     await vi.waitFor(() => expect(mine().disabled).toBe(false));
@@ -422,7 +436,7 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
     const rung = (label: string): HTMLButtonElement =>
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
 
-    rung(`A computer I have`).click();
+    rung(`A computer I own`).click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     await vi.waitFor(() => expect(rung(`We host it`).disabled).toBe(false));
     expect(el.textContent).not.toContain(`Already using yours`);
