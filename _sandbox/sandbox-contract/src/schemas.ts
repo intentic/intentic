@@ -5995,7 +5995,7 @@ export const ImportReportSchema = z.object({
 });
 export type ImportReport = z.infer<typeof ImportReportSchema>;
 
-/* ---- migrations: importing a FOREIGN assistant's setup (Hermes; OpenClaw next) ----
+/* ---- migrations: importing a FOREIGN assistant's setup (Hermes, OpenClaw) ----
  *
  * A different crossing than a bundle restore, and deliberately a different surface: a bundle is our own format,
  * re-derived entry by entry against the state manifests, while a migration reads a directory some OTHER
@@ -6008,7 +6008,7 @@ export type ImportReport = z.infer<typeof ImportReportSchema>;
  * `plan` parses the uploaded archive into an itemized checklist and holds the upload in memory under a token;
  * `apply` names the ticked item ids and the token. The plan is RE-DERIVED from the held archive at apply — the
  * wire plan is a rendering for the owner, never the input the write trusts (restore.ts's rule, kept). */
-export const MigrationSourceSchema = z.enum(["hermes"]);
+export const MigrationSourceSchema = z.enum(["hermes", "openclaw"]);
 export type MigrationSource = z.infer<typeof MigrationSourceSchema>;
 
 // What an item becomes here, not what it was there — the apply loop dispatches on this, and the checklist

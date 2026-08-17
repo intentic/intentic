@@ -227,13 +227,14 @@ and the product's job is to make crossing it a guided ten-minutes, not to deny i
   subsystem. Every imported thing must be visible, editable and deletable in the native UI the day
   after import, indistinguishable from having been created here.
 
-## 10. What changed on the way (the Hermes slice, built)
+## 10. What changed on the way (both slices, built)
 
-The Hermes half is implemented: `MigrationPlanSchema`/`MigrationApplySchema`/`MigrationReportSchema` in the
-sandbox contract; `_sandbox/sandbox/src/migrations/` (`archive.ts` reader, `hermes.ts` adapter, `apply.ts`
-loop, `migrations.ts` composition); raw `POST /migrations/plan|apply` + `DELETE /migrations` beside the
-bundle routes; and `MigrationCard.vue` next to the bundle card. Four calls this doc made were corrected by
-the build:
+Both adapters are implemented: `MigrationPlanSchema`/`MigrationApplySchema`/`MigrationReportSchema` in the
+sandbox contract; `_sandbox/sandbox/src/migrations/` (`archive.ts` reader, `adapter-shared.ts` — the name
+shaping, secret/skill/cron/MCP planners both sources must not disagree on — `hermes.ts` and `openclaw.ts`
+adapters, `apply.ts` loop, `migrations.ts` dispatch); raw `POST /migrations/plan|apply` + `DELETE /migrations`
+beside the bundle routes; and `MigrationCard.vue` next to the bundle card — one upload button, the daemon
+recognizes which tool packed the archive. Calls this doc made that the build corrected:
 
 - **SOUL.md lands as fenced memory, not as `systemPrompt`.** §5 offered "custom system prompt or persona,
   owner picks" — but `systemPromptMode: custom` means *the entire prompt and nothing else*, which would trade
@@ -253,3 +254,15 @@ the build:
   its extension's contribution to resolve; on a fresh sandbox it may not be installed. The honest v1 is the
   reconnect instruction, with the bot token riding the secrets path so the reconnect is one paste — the
   §5 table's capability mapping stands as the target state.
+- **OpenClaw's JSON5 config is read by a deliberately partial reader** (`json5ish.ts`): comments, trailing
+  commas, bare keys and single quotes — the edits people actually make — but not the long tail (hex numbers,
+  line continuations). Past that the config is refused by name and the file items still import; a real JSON5
+  dependency is one small add away if a real archive ever defeats this.
+- **OpenClaw's daily memory diary splits in two.** The §5 rule "memory files → fenced merge" would put a
+  year of `memory/YYYY-MM-DD.md` into files every turn reads. The build keeps the curated stores plus the
+  newest two weeks in the fence and lands the whole diary under `imports/openclaw/memory/` for the agent to
+  search on demand.
+- **`schedule.kind: "every"` converts only where cron says it cleanly** (whole minutes/hours/a day); "every
+  90 minutes" is refused with the reason rather than approximated onto a rhythm the owner never chose.
+  One-time `at` jobs are refused too — by import day they are jobs in the past. HEARTBEAT.md becomes one
+  scheduled automation on the configured heartbeat interval, exactly as §5 planned.

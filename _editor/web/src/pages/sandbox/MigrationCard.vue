@@ -86,21 +86,32 @@ const cancel = (): Promise<void> =>
             :heading="2"
             icon="upload"
             title="Arrive from another assistant"
-            description="Bring a Hermes setup here: its personality and memory, skills, scheduled jobs and connections land as ordinary pieces of this sandbox — previewed as a checklist before anything is written."
+            description="Bring a Hermes or OpenClaw setup here: its personality and memory, skills, scheduled jobs and connections land as ordinary pieces of this sandbox — previewed as a checklist before anything is written."
         />
 
         <template v-if="isOwner">
-            <!-- Idle: the one gesture, and the exact command that produces its input. -->
-            <div v-if="plan === undefined" class="flex flex-wrap items-center gap-2">
-                <Button label="Upload a Hermes setup" size="small" :loading="planning" @click="chooseArchive?.click()">
-                    <template #icon><Icon name="upload" /></template>
-                </Button>
-                <input ref="chooseArchive" type="file" accept=".gz,.tgz,application/gzip" class="hidden" @change="uploadArchive" />
-                <code class="font-mono text-2xs text-subtle">tar czf hermes-setup.tar.gz -C ~ .hermes</code>
+            <!-- Idle: the one gesture, and the exact commands that produce its input. Which tool the archive
+                 came from is the daemon's to recognize — one button, not one per ecosystem. -->
+            <div v-if="plan === undefined" class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button label="Upload a packed setup" size="small" :loading="planning" @click="chooseArchive?.click()">
+                        <template #icon><Icon name="upload" /></template>
+                    </Button>
+                    <input ref="chooseArchive" type="file" accept=".gz,.tgz,application/gzip" class="hidden" @change="uploadArchive" />
+                </div>
+                <p class="text-2xs text-subtle">
+                    Pack it on the old machine with
+                    <code class="font-mono">tar czf setup.tar.gz -C ~ .hermes</code> or
+                    <code class="font-mono">tar czf setup.tar.gz -C ~ .openclaw</code>
+                </p>
             </div>
 
             <!-- The plan: every item a row with its tick. Nothing below this writes until Apply. -->
             <template v-else>
+                <div class="flex items-center gap-2">
+                    <StatusBadge variant="info" :label="plan.source === 'hermes' ? 'Hermes' : 'OpenClaw'" />
+                    <p class="text-2xs text-subtle">Recognized. Untick anything you don't want; nothing is written until you apply.</p>
+                </div>
                 <RowGroup>
                     <Row v-for="item in orderedItems" :key="item.id" as="label" density="compact" class="cursor-pointer">
                         <template #title

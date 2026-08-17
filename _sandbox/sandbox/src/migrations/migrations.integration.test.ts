@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
+import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
 /* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and
  * the apply loop, against deps that record every write. What the daemon composition adds on top (real stores,
@@ -141,6 +142,36 @@ test("withholding secrets skips secret items and lands capabilities keyless, say
     expect(recorded.capabilities[0]?.config).toEqual({ url: "https://mcp.linear.app/sse" });
     expect(report.needsAction.some((entry) => entry.subject === "Secrets withheld" && entry.detail.includes("OPENAI_API_KEY"))).toBe(true);
     expect(report.needsAction.some((entry) => entry.subject.includes("linear"))).toBe(true);
+});
+
+test("an openclaw home crosses the same pipeline: pairing state never held, the diary lands file by file", async () => {
+    const archive = await readForeignArchive(
+        packHome({
+            ".openclaw/openclaw.json": `{ agents: { defaults: { heartbeat: { every: "30m" } } } }`,
+            ".openclaw/credentials/whatsapp-ratchet.json": "{}",
+            ".openclaw/workspace/SOUL.md": "Dry wit.",
+            ".openclaw/workspace/HEARTBEAT.md": "Check the calendar.",
+            ".openclaw/workspace/memory/2026-08-01.md": "Day one.",
+            ".openclaw/workspace/memory/2026-08-02.md": "Day two.",
+        }),
+        10 * 1024 * 1024,
+    );
+    // The ratchet was skipped at the reader, before any adapter saw it — copying it would desync the source.
+    expect(archive.skipped.some((entry) => entry.includes("credentials"))).toBe(true);
+    const files = rebaseArchive(archive.files, "openclaw.json") ?? new Map();
+    expect(detectOpenclaw(files)).toBe(true);
+
+    const plan = planOpenclaw(files);
+    const recorded = recordingDeps();
+    const report = await applyMigration(recorded.deps, plan, {
+        items: ["memory:soul", "file:memory-diary", "automation:openclaw-heartbeat"],
+        includeSecrets: false,
+    });
+    expect(report.failed).toEqual([]);
+    expect(recorded.files.get("CLAUDE.md")).toContain("intentic:imported-openclaw:soul");
+    expect(recorded.files.get("imports/openclaw/memory/2026-08-01.md")).toBe("Day one.");
+    expect(recorded.files.get("imports/openclaw/memory/2026-08-02.md")).toBe("Day two.");
+    expect(recorded.automations[0]?.trigger).toEqual({ kind: "schedule", cron: "*/30 * * * *" });
 });
 
 test("one item failing is one failed row, not a dead migration", async () => {

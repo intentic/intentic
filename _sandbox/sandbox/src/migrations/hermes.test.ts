@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { detectHermes, planHermes, type PlannedItem } from "./hermes.js";
+import type { PlannedItem } from "./adapter-shared.js";
+import { detectHermes, planHermes } from "./hermes.js";
 
 /* The adapter over a lived-in fixture home: one of everything it maps, one of everything it must refuse, and
  * the judgment calls (localhost demotion, credential heuristic, baked-name renaming) asserted by name. */
@@ -149,7 +150,7 @@ test("the known-not-to-move list: enabled channels, the model to pick, fallback 
 
 test("loose root notes ride to imports/hermes/, and ids are deterministic across two derivations", () => {
     const first = planHermes(fixture());
-    expect(byId(first.planned, "file:NOTES.md")?.apply).toMatchObject({ target: "file", relPath: "imports/hermes/NOTES.md" });
+    expect(byId(first.planned, "file:NOTES.md")?.apply).toMatchObject({ target: "file", files: [{ relPath: "imports/hermes/NOTES.md" }] });
     const second = planHermes(fixture());
     expect(second.planned.map((entry) => entry.item.id)).toEqual(first.planned.map((entry) => entry.item.id));
 });

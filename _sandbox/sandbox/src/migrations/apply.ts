@@ -1,5 +1,5 @@
 import { type Automation, type Capability, type MigrationReport, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
-import type { PlannedItem, SourcePlan } from "./hermes.js";
+import type { PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
 
 /* THE APPLY LOOP — the ticked items of a re-derived plan, landed one by one through the same write paths the
@@ -96,7 +96,9 @@ export const applyMigration = async (
                 return;
             }
             case "file": {
-                await deps.writeWorkspaceFile(step.relPath, step.content.toString("utf8"));
+                for (const file of step.files) {
+                    await deps.writeWorkspaceFile(file.relPath, file.content.toString("utf8"));
+                }
                 return;
             }
         }

@@ -1,18 +1,24 @@
 import { parseEnv } from "node:util";
-import {
-    type Automation,
-    AutomationSchema,
-    type Capability,
-    CapabilitySchema,
-    type MigrationItem,
-    type MigrationPlan,
-    type SkillDraft,
-    SkillDraftSchema,
-} from "@intentic/sandbox-contract";
-import { Cron } from "croner";
+import { CapabilitySchema } from "@intentic/sandbox-contract";
 import { parse as parseYaml } from "yaml";
-import { isBakedSkill } from "../settings/skills.js";
-import { parseSkillFile } from "../settings/skill-file.js";
+import {
+    asArray,
+    asRecord,
+    asString,
+    automationPlanner,
+    clipped,
+    entryId,
+    type Files,
+    idPool,
+    localhost,
+    planMcpEntry,
+    planSkillFiles,
+    type PlannedItem,
+    PROVIDER_HINTS,
+    secretPlanner,
+    type SourcePlan,
+    text,
+} from "./adapter-shared.js";
 
 /* THE HERMES ADAPTER — `~/.hermes` read into a migration plan, pure over the archive's file map so the same
  * function answers the preview and the apply (the apply re-derives; the wire plan is a rendering, never the
@@ -34,76 +40,6 @@ import { parseSkillFile } from "../settings/skill-file.js";
  * provider with no base_url each become a `refused` line the owner reads, because a migration that dies on the
  * one odd corner of a lived-in home directory imports nothing at all. */
 
-// What one planned item DOES at apply — held beside the wire item, never serialized to the browser. Secret
-// values ride here (they are already in the held archive's memory); `secretFields` names the config keys to
-// strip when the owner withheld secrets, so a capability still lands, keyless, rather than not at all.
-export type ItemApply =
-    | { readonly target: "memory"; readonly fence: string; readonly body: string }
-    | { readonly target: "skill"; readonly skill: SkillDraft }
-    | { readonly target: "automation"; readonly automation: Automation }
-    | { readonly target: "capability"; readonly capability: Capability; readonly secretFields: readonly string[] }
-    | { readonly target: "secret"; readonly key: string; readonly value: string }
-    | { readonly target: "file"; readonly relPath: string; readonly content: Buffer };
-
-export interface PlannedItem {
-    readonly item: MigrationItem;
-    readonly apply: ItemApply;
-}
-
-export interface SourcePlan {
-    readonly planned: readonly PlannedItem[];
-    readonly refused: readonly string[];
-    readonly needsAction: MigrationPlan["needsAction"];
-}
-
-type Files = ReadonlyMap<string, Buffer>;
-
-const text = (files: Files, path: string): string | undefined => files.get(path)?.toString("utf8");
-
-// ---- tolerant readers over parsed YAML/JSON ----
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-    typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-const asString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value : undefined);
-const asArray = (value: unknown): readonly unknown[] | undefined => (Array.isArray(value) ? value : undefined);
-
-// ---- name shaping ----
-// A capability/automation id: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$, ≤60.
-const entryId = (raw: string): string => {
-    const cleaned = raw
-        .replaceAll(/[^a-zA-Z0-9_-]+/g, "-")
-        .replaceAll(/-{2,}/g, "-")
-        .replace(/^[_-]+/, "")
-        .replace(/[_-]+$/, "")
-        .slice(0, 60);
-    return cleaned === "" ? "imported" : cleaned;
-};
-// A skill name: ^[a-z0-9][a-z0-9-]*$.
-const skillName = (raw: string): string => {
-    const cleaned = raw
-        .toLowerCase()
-        .replaceAll(/[^a-z0-9-]+/g, "-")
-        .replaceAll(/-{2,}/g, "-")
-        .replace(/^-+/, "")
-        .replace(/-+$/, "")
-        .slice(0, 48);
-    return cleaned === "" || !/^[a-z0-9]/.test(cleaned) ? `imported-${cleaned}`.replace(/-+$/, "") : cleaned;
-};
-
-const localhost = (url: string): boolean => /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/]|$)/.test(url);
-
-// Whether an .env key reads as a credential rather than tuning — the default-tick heuristic, never a gate.
-// HERMES_*/TERMINAL_* are the tool's own knobs (timeouts, docker plumbing) whatever their suffix says.
-const credential = (key: string): boolean =>
-    /(_API_KEY|_TOKEN|_SECRET|_SID|_PASSWORD)$/.test(key) && !key.startsWith("HERMES_") && !key.startsWith("TERMINAL_");
-
-// Bootstrap files this size are a mistake at the source too (Hermes caps memory far lower) — truncating keeps
-// one runaway export from swamping the memory files every turn reads.
-const MEMORY_FILE_CHAR_LIMIT = 20000;
-const clipped = (body: string): string =>
-    body.length <= MEMORY_FILE_CHAR_LIMIT
-        ? body
-        : `${body.slice(0, MEMORY_FILE_CHAR_LIMIT)}\n\n*(truncated on import — the rest was ${body.length - MEMORY_FILE_CHAR_LIMIT} characters)*`;
-
 export const detectHermes = (files: Files): boolean =>
     files.has("config.yaml") &&
     (files.has("SOUL.md") ||
@@ -112,7 +48,6 @@ export const detectHermes = (files: Files): boolean =>
         files.has("memory/MEMORY.md") ||
         [...files.keys()].some((path) => path.startsWith("skills/")));
 
-// ---- the plan ----
 export const planHermes = (files: Files): SourcePlan => {
     const planned: PlannedItem[] = [];
     const refused: string[] = [];
@@ -157,13 +92,7 @@ export const planHermes = (files: Files): SourcePlan => {
     const agentsNotes = text(files, "AGENTS.md");
     if (agentsNotes !== undefined && agentsNotes.trim() !== "") {
         planned.push({
-            item: {
-                id: "memory:agents",
-                target: "memory",
-                label: "Operating notes — AGENTS.md",
-                recommended: true,
-                secrets: [],
-            },
+            item: { id: "memory:agents", target: "memory", label: "Operating notes — AGENTS.md", recommended: true, secrets: [] },
             apply: {
                 target: "memory",
                 fence: "intentic:imported-hermes:agents",
@@ -174,97 +103,30 @@ export const planHermes = (files: Files): SourcePlan => {
     const memoryFiles = [...files.keys()]
         .filter((path) => (path.startsWith("memories/") || path.startsWith("memory/")) && path.endsWith(".md"))
         .toSorted((left, right) => left.localeCompare(right));
-    if (memoryFiles.length > 0) {
-        const sections = memoryFiles
-            .map((path) => ({ path, body: (text(files, path) ?? "").trim() }))
-            .filter((section) => section.body !== "")
-            .map((section) => `### ${section.path}\n\n${clipped(section.body)}`);
-        if (sections.length > 0) {
-            planned.push({
-                item: {
-                    id: "memory:memories",
-                    target: "memory",
-                    label: `Long-term memory — ${sections.length} file${sections.length === 1 ? "" : "s"}`,
-                    recommended: true,
-                    secrets: [],
-                },
-                apply: {
-                    target: "memory",
-                    fence: "intentic:imported-hermes:memory",
-                    body: `## Imported memory (Hermes)\n\n${sections.join("\n\n")}`,
-                },
-            });
-        }
-    }
-
-    // -- skills: every SKILL.md under skills/, flattened (their own migrate flattens too) --
-    const takenSkillNames = new Set<string>();
-    for (const path of [...files.keys()].filter((candidate) => candidate.startsWith("skills/") && candidate.endsWith("/SKILL.md")).toSorted()) {
-        const dirName = path.split("/").at(-2) ?? "skill";
-        const parsed = parseSkillFile(text(files, path) ?? "");
-        if (parsed.body.trim() === "") {
-            refused.push(`${path} (empty skill)`);
-            continue;
-        }
-        let name = skillName(dirName);
-        if (isBakedSkill(name)) {
-            name = `${name}-imported`;
-        }
-        while (takenSkillNames.has(name)) {
-            name = `${name.slice(0, 45)}-2`;
-        }
-        takenSkillNames.add(name);
-        const siblings = [...files.keys()].filter((candidate) => candidate.startsWith(path.slice(0, -"SKILL.md".length)) && candidate !== path);
-        const skill = SkillDraftSchema.safeParse({
-            name,
-            description:
-                parsed.description?.trim() !== "" && parsed.description !== undefined ? parsed.description : `Imported from Hermes (${dirName}).`,
-            body: parsed.body,
-        });
-        if (!skill.success) {
-            refused.push(`${path} (does not fit a skill: ${skill.error.issues[0]?.message ?? "invalid"})`);
-            continue;
-        }
+    const sections = memoryFiles
+        .map((path) => ({ path, body: (text(files, path) ?? "").trim() }))
+        .filter((section) => section.body !== "")
+        .map((section) => `### ${section.path}\n\n${clipped(section.body)}`);
+    if (sections.length > 0) {
         planned.push({
             item: {
-                id: `skill:${name}`,
-                target: "skill",
-                label: `Skill — ${name}`,
-                ...(siblings.length > 0
-                    ? { detail: `Only the skill text moves; ${siblings.length} other file${siblings.length === 1 ? "" : "s"} in its folder did not.` }
-                    : {}),
+                id: "memory:memories",
+                target: "memory",
+                label: `Long-term memory — ${sections.length} file${sections.length === 1 ? "" : "s"}`,
                 recommended: true,
                 secrets: [],
             },
-            apply: { target: "skill", skill: skill.data },
+            apply: { target: "memory", fence: "intentic:imported-hermes:memory", body: `## Imported memory (Hermes)\n\n${sections.join("\n\n")}` },
         });
     }
 
+    // -- skills: every SKILL.md under skills/, flattened (their own migrate flattens too) --
+    planned.push(...planSkillFiles(files, "skills/", "Hermes", new Set(), refused));
+
     // -- secrets: .env keys, plus the plain api_key entries auth.json sometimes holds --
-    const plannedSecrets = new Set<string>();
-    const planSecret = (key: string, value: string, origin: string): void => {
-        if (plannedSecrets.has(key) || value === "") {
-            return;
-        }
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || key.length > 128) {
-            refused.push(`${origin}: ${key} (not an env-shaped name)`);
-            return;
-        }
-        plannedSecrets.add(key);
-        planned.push({
-            item: {
-                id: `secret:${key}`,
-                target: "secret",
-                label: `Secret — ${key}`,
-                ...(credential(key) ? {} : { detail: "Looks like tuning rather than a credential — take it only if something here will read it." }),
-                recommended: credential(key),
-                secrets: [key],
-            },
-            apply: { target: "secret", key, value },
-        });
-    };
+    const secrets = secretPlanner(planned, refused, ["HERMES_", "TERMINAL_"]);
     for (const [key, value] of Object.entries(env).toSorted(([left], [right]) => left.localeCompare(right))) {
-        planSecret(key, value, ".env");
+        secrets.plan(key, value, ".env");
     }
     const authRaw = text(files, "auth.json");
     if (authRaw !== undefined) {
@@ -280,7 +142,7 @@ export const planHermes = (files: Files): SourcePlan => {
             const record = asRecord(entry);
             const apiKey = asString(record?.["api_key"]);
             if (apiKey !== undefined) {
-                planSecret(`${provider.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, apiKey, "auth.json");
+                secrets.plan(`${provider.toUpperCase().replaceAll(/[^A-Z0-9]+/g, "_")}_API_KEY`, apiKey, "auth.json");
             }
             if (asString(record?.["access_token"]) !== undefined || asString(record?.["refresh_token"]) !== undefined) {
                 refused.push(`auth.json: ${provider} OAuth tokens (bound to that install — sign in fresh here)`);
@@ -289,49 +151,9 @@ export const planHermes = (files: Files): SourcePlan => {
     }
 
     // -- MCP servers: URL-served ones become mcp capabilities; command-run ones cannot cross --
-    const takenCapabilityIds = new Set<string>();
-    const capabilityId = (raw: string): string => {
-        let id = entryId(raw);
-        while (takenCapabilityIds.has(id)) {
-            id = `${id.slice(0, 57)}-2`;
-        }
-        takenCapabilityIds.add(id);
-        return id;
-    };
+    const capabilityId = idPool();
     for (const [name, entry] of Object.entries(asRecord(config["mcp_servers"]) ?? {}).toSorted(([left], [right]) => left.localeCompare(right))) {
-        const server = asRecord(entry);
-        // Hermes spells transport into the scheme (`sse+http://…`); the address underneath is the same server.
-        const url = asString(server?.["url"])?.replace(/^sse\+/, "");
-        if (url === undefined || !/^https?:\/\//.test(url)) {
-            if (asString(server?.["command"]) !== undefined) {
-                needsAction.push({
-                    subject: `MCP server "${name}"`,
-                    detail: "It ran as a local command on your old machine. Intentic reaches MCP servers over a URL — host it behind HTTP, or skip it.",
-                });
-            } else {
-                refused.push(`config.yaml: mcp_servers.${name} (no usable URL)`);
-            }
-            continue;
-        }
-        const bearer = asString(asRecord(server?.["headers"])?.["Authorization"])?.match(/^Bearer\s+(.+)$/)?.[1];
-        const id = capabilityId(name);
-        const capability = CapabilitySchema.safeParse({ id, kind: "mcp", config: { url, ...(bearer === undefined ? {} : { token: bearer }) } });
-        if (!capability.success) {
-            refused.push(`config.yaml: mcp_servers.${name} (${capability.error.issues[0]?.message ?? "invalid"})`);
-            continue;
-        }
-        const local = localhost(url);
-        planned.push({
-            item: {
-                id: `capability:mcp:${id}`,
-                target: "capability",
-                label: `MCP server — ${name}`,
-                detail: local ? `${url} — that address points at your old machine, not here.` : url,
-                recommended: !local,
-                secrets: bearer === undefined ? [] : [`${id}/token`],
-            },
-            apply: { target: "capability", capability: capability.data, secretFields: bearer === undefined ? [] : ["token"] },
-        });
+        planMcpEntry(name, asRecord(entry), `config.yaml: mcp_servers.${name}`, capabilityId, { planned, refused, needsAction });
     }
 
     // -- custom providers: anything with a base_url becomes a model endpoint capability --
@@ -344,7 +166,7 @@ export const planHermes = (files: Files): SourcePlan => {
         }
         const keyEnv = asString(provider?.["api_key_env"]);
         const apiKey = keyEnv === undefined ? undefined : env[keyEnv];
-        const id = capabilityId(name);
+        const id = capabilityId(entryId(name));
         const capability = CapabilitySchema.safeParse({
             id,
             kind: "endpoint",
@@ -373,53 +195,7 @@ export const planHermes = (files: Files): SourcePlan => {
     }
 
     // -- cron: the config.yaml section and the cron/ folder, whichever this install used --
-    const takenAutomationIds = new Set<string>();
-    const planCron = (rawName: string, entry: Record<string, unknown>, origin: string): void => {
-        const cron = asString(entry["schedule"]) ?? asString(entry["cron"]) ?? asString(entry["expression"]);
-        const prompt = asString(entry["prompt"]) ?? asString(entry["message"]) ?? asString(entry["task"]) ?? asString(entry["text"]);
-        if (cron === undefined || prompt === undefined) {
-            return;
-        }
-        // The job's OWN name wherever it declared one — a refusal that says "cron-2" makes the owner count
-        // list entries to learn which job it meant.
-        const name = asString(entry["name"]) ?? asString(entry["id"]) ?? rawName;
-        try {
-            new Cron(cron).nextRun();
-        } catch {
-            refused.push(`${origin}: "${name}" (cron expression "${cron}" is not readable)`);
-            return;
-        }
-        let id = entryId(`hermes-${name}`);
-        while (takenAutomationIds.has(id)) {
-            id = `${id.slice(0, 57)}-2`;
-        }
-        takenAutomationIds.add(id);
-        /* `requireApproval` on every imported job, deliberately: these prompts were written for a different
-         * agent on a different machine, and the first few fires should be read, not discovered. `enabled`
-         * follows the source — a job they had switched off stays off. */
-        const automation = AutomationSchema.safeParse({
-            id,
-            trigger: { kind: "schedule", cron },
-            prompt,
-            requireApproval: true,
-            enabled: entry["enabled"] !== false,
-        });
-        if (!automation.success) {
-            refused.push(`${origin}: "${name}" (${automation.error.issues[0]?.message ?? "invalid"})`);
-            return;
-        }
-        planned.push({
-            item: {
-                id: `automation:${id}`,
-                target: "automation",
-                label: `Automation — ${id} (${cron})`,
-                detail: "Fires are held for your approval until you relax that on its card.",
-                recommended: true,
-                secrets: [],
-            },
-            apply: { target: "automation", automation: automation.data },
-        });
-    };
+    const planCron = automationPlanner("hermes", planned, refused);
     const cronSection = asRecord(config["cron"]);
     if (cronSection !== undefined) {
         planCron("cron", cronSection, "config.yaml");
@@ -466,7 +242,7 @@ export const planHermes = (files: Files): SourcePlan => {
                 recommended: true,
                 secrets: [],
             },
-            apply: { target: "file", relPath: `imports/hermes/${path}`, content },
+            apply: { target: "file", files: [{ relPath: `imports/hermes/${path}`, content }] },
         });
     }
 
@@ -485,31 +261,21 @@ export const planHermes = (files: Files): SourcePlan => {
         needsAction.push({
             subject: `Reconnect ${name}`,
             detail: `You had ${name} wired into Hermes' gateway. Add the ${name} connector from the capabilities grid${
-                tokenKey !== undefined && plannedSecrets.has(tokenKey) ? ` — its token rides along as the ${tokenKey} secret when you tick it` : ""
+                tokenKey !== undefined && secrets.has(tokenKey) ? ` — its token rides along as the ${tokenKey} secret when you tick it` : ""
             }.`,
         });
     }
     const model = asRecord(config["model"]);
     if (model !== undefined) {
         const provider = asString(model["provider"]) ?? "";
-        const HINTS: Record<string, string> = {
-            anthropic: "connect a Claude account here",
-            openai: "connect an OpenAI account here",
-            google: "connect a Gemini account here",
-            gemini: "connect a Gemini account here",
-            xai: "connect a Grok account here",
-            grok: "connect a Grok account here",
-            moonshot: "connect a Kimi account here",
-            kimi: "connect a Kimi account here",
-        };
         needsAction.push({
             subject: "Pick your model provider",
-            detail: `Hermes ran on ${provider === "" ? "an unnamed provider" : provider}${asString(model["model"]) === undefined ? "" : ` (${asString(model["model"])})`} — ${
-                HINTS[provider.toLowerCase()] ?? "point a custom model endpoint at it, or pick a native provider"
-            }. Provider logins never travel in a migration.`,
+            detail: `Hermes ran on ${provider === "" ? "an unnamed provider" : provider}${
+                asString(model["model"]) === undefined ? "" : ` (${asString(model["model"])})`
+            } — ${PROVIDER_HINTS[provider.toLowerCase()] ?? "point a custom model endpoint at it, or pick a native provider"}. Provider logins never travel in a migration.`,
         });
     }
-    if (asArray(config["fallback_providers"]) !== undefined && (asArray(config["fallback_providers"]) ?? []).length > 0) {
+    if ((asArray(config["fallback_providers"]) ?? []).length > 0) {
         refused.push("config.yaml: fallback_providers (no equivalent here — the chat picker and automations pin models per use instead)");
     }
     refused.push("config.yaml (translated into the items above, not copied — it can hold inline tokens)");

@@ -36,6 +36,9 @@ const SKIPPED_SEGMENTS = new Set([
     "mcp-tokens",
     "plans",
     "hermes-agent",
+    // OpenClaw's channel state — WhatsApp ratchets and friends. Never held, not merely refused: state that
+    // DESYNCS when copied (their own migration guide's warning) has no business even sitting in memory here.
+    "credentials",
     "node_modules",
     ".git",
     "__pycache__",

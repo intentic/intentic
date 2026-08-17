@@ -12,9 +12,11 @@ import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
 import { reconcileSkills, writeOwnSkill } from "../settings/skills.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { type Files, type SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps, SecretsInactiveError } from "./apply.js";
-import { detectHermes, planHermes, type SourcePlan } from "./hermes.js";
+import { detectHermes, planHermes } from "./hermes.js";
+import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
 /* THE MIGRATION SURFACE'S COMPOSITION — the held upload, the plan/apply pair the routes call, and the six-
  * function deps object that is everything a migration may write through.
@@ -30,9 +32,25 @@ import { detectHermes, planHermes, type SourcePlan } from "./hermes.js";
 
 interface PendingMigration {
     readonly token: string;
-    readonly files: ReadonlyMap<string, Buffer>;
+    readonly source: MigrationPlan["source"];
+    readonly files: Files;
     readonly skipped: readonly string[];
 }
+
+/* The source registry: an anchor file that proves where the home directory starts, a detect that says "this is
+ * mine", and the pure planner. Order matters only in that the first recognizing adapter wins — the anchors are
+ * disjoint today, and a future archive that somehow carries both is answered by whichever is listed first. */
+const ADAPTERS = [
+    { source: "hermes", anchor: "config.yaml", detect: detectHermes, plan: planHermes },
+    { source: "openclaw", anchor: "openclaw.json", detect: detectOpenclaw, plan: planOpenclaw },
+] as const satisfies readonly {
+    source: MigrationPlan["source"];
+    anchor: string;
+    detect: (files: Files) => boolean;
+    plan: (files: Files) => SourcePlan;
+}[];
+
+export const PACK_HINTS = ["tar czf hermes-setup.tar.gz -C ~ .hermes", "tar czf openclaw-setup.tar.gz -C ~ .openclaw"] as const;
 
 export interface Migrations {
     readonly plan: (body: ReadableStream<Uint8Array>, limit: number) => Promise<MigrationPlan>;
@@ -93,8 +111,19 @@ const migrationDeps = (services: Services): MigrationDeps => {
     };
 };
 
-// The one adapter today. When OpenClaw's joins, this becomes the dispatch on what `detect` recognized.
-const planOf = (files: ReadonlyMap<string, Buffer>): SourcePlan => planHermes(files);
+// Which adapter answers for a map: rebase on each anchor in turn, first recognizing one wins.
+const recognize = (raw: Files): { source: MigrationPlan["source"]; files: Files; plan: (files: Files) => SourcePlan } | undefined => {
+    for (const adapter of ADAPTERS) {
+        const files = rebaseArchive(raw, adapter.anchor);
+        if (files !== undefined && adapter.detect(files)) {
+            return { source: adapter.source, files, plan: adapter.plan };
+        }
+    }
+    return undefined;
+};
+
+const planOf = (source: MigrationPlan["source"], files: Files): SourcePlan =>
+    (ADAPTERS.find((adapter) => adapter.source === source) ?? ADAPTERS[0]).plan(files);
 
 export const createMigrations = (services: Services): Migrations => {
     let pending: PendingMigration | undefined;
@@ -102,20 +131,20 @@ export const createMigrations = (services: Services): Migrations => {
     return {
         plan: async (body, limit) => {
             const archive = await readForeignArchive(body, limit);
-            const files = rebaseArchive(archive.files, "config.yaml");
-            if (files === undefined || !detectHermes(files)) {
+            const recognized = recognize(archive.files);
+            if (recognized === undefined) {
                 throw new MigrationFormatError(
-                    "this does not look like a Hermes home directory — pack it with `tar czf hermes-setup.tar.gz -C ~ .hermes` and upload that",
+                    `this does not look like a Hermes or OpenClaw home directory — pack one with \`${PACK_HINTS.join("` or `")}\` and upload that`,
                 );
             }
-            const source = planOf(files);
-            pending = { token: randomUUID(), files, skipped: archive.skipped };
+            const source = recognized.plan(recognized.files);
+            pending = { token: randomUUID(), source: recognized.source, files: recognized.files, skipped: archive.skipped };
             return {
-                source: "hermes",
+                source: recognized.source,
                 token: pending.token,
                 items: source.planned.map((planned) => planned.item),
                 refused: [...source.refused, ...skippedLines(archive.skipped)],
-                needsAction: source.needsAction,
+                needsAction: [...source.needsAction],
             };
         },
         apply: async (input) => {
@@ -123,7 +152,7 @@ export const createMigrations = (services: Services): Migrations => {
                 throw new MigrationFormatError("no held upload matches that plan — upload the archive again and re-review");
             }
             const held = pending;
-            const report = await applyMigration(migrationDeps(services), planOf(held.files), {
+            const report = await applyMigration(migrationDeps(services), planOf(held.source, held.files), {
                 items: input.items,
                 includeSecrets: input.includeSecrets,
             });
