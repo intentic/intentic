@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-//
 // THE TEST THAT WAS MISSING. Every other test in this package exercises pure functions, so the composables were
 // typechecked but never CALLED — and `useRuns` shipped a synchronous ReferenceError: its `refetchInterval` read a
 // `const` declared further down the same function, which vue-query resolves while it builds the observer, i.e.
@@ -10,7 +8,7 @@
 // require that nothing throws. That is the whole class of bug this file exists to catch.
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { describe, expect, it } from "vitest";
-import { createApp, defineComponent, h, ref } from "vue";
+import { createRenderer, defineComponent, h, ref } from "vue";
 import { bindHost } from "./host.js";
 import { useDocs } from "./useDocs.js";
 import { usePublish } from "./usePublish.js";
@@ -43,8 +41,32 @@ const stubHost = () =>
         theme: { mode: () => `light` as const, onDidChange: () => ({ dispose: () => {} }) },
     }) as unknown as Parameters<typeof bindHost>[0];
 
-// Mount a component whose setup runs `body`, and surface whatever it threw. createApp swallows setup errors into
-// its warn handler, so the throw is captured explicitly rather than relied upon to propagate.
+/* A renderer over nothing, in place of a DOM. What is under test is what SETUP does — the composables and the
+ * plugin backing them — and the host component's output is incidental to that, so it renders into stub nodes and
+ * this package needs no browser environment at all.
+ *
+ * That is not a saving of milliseconds. Vitest builds a file's environment INSIDE the fork's start budget, and
+ * that budget is 60s hardcoded in the pool, with no config to raise it; jsdom on a runner with every core busy
+ * has measured ~45s of it (the number is recorded in _editor/web/vitest.config.ts). This file and
+ * docPresence.test.ts were the only two here that asked for jsdom, and they are the only two that have ever
+ * failed to START a worker in CI — twice, while the six node suites beside them ran to completion. A budget
+ * nobody can raise is one to stop spending. */
+type StubNode = Record<string, unknown>;
+const stubRenderer = createRenderer<StubNode, StubNode>({
+    createElement: () => ({}),
+    createText: () => ({}),
+    createComment: () => ({}),
+    setText: () => {},
+    setElementText: () => {},
+    insert: () => {},
+    remove: () => {},
+    parentNode: () => null,
+    nextSibling: () => null,
+    patchProp: () => {},
+});
+
+// Mount a component whose setup runs `body`, and surface whatever it threw. Mounting swallows setup errors into
+// the app's warn handler, so the throw is captured explicitly rather than relied upon to propagate.
 const runInComponent = (body: () => void): unknown => {
     bindHost(stubHost());
     let thrown: unknown;
@@ -58,9 +80,9 @@ const runInComponent = (body: () => void): unknown => {
             return () => h(`div`);
         },
     });
-    const app = createApp(component);
+    const app = stubRenderer.createApp(component);
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
-    app.mount(document.createElement(`div`));
+    app.mount({});
     app.unmount();
     return thrown;
 };

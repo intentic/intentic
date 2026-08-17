@@ -1,6 +1,4 @@
 import { STATE_DIR } from "@intentic/sandbox-contract";
-// @vitest-environment jsdom
-//
 // WHAT THIS PROTECTS: the tree-icon poll must not ASK about a repo that documents nothing.
 //
 // It used to ask every repo for its index and its map on every tick — two reads per repo, forever, to learn what
