@@ -60,7 +60,23 @@ const {
 const emit = defineEmits<{ close: [] }>();
 
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
-const { order, groups, activeName, switchTab, joinTabs, unsplit, newTab, closeTab, splitTab, killTabs, restart } = tabs;
+const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, closeTab, splitTab, killTabs, restart } = tabs;
+
+/* WHAT THE PANEL SHOWS BEFORE IT KNOWS ANYTHING — the shapes of the strip this sandbox was left with.
+ *
+ * Opening the panel is instant and its terminals are one tunnel round trip away, so there is a moment with
+ * nothing to draw. It used to be drawn as "No terminals open." — an answer to a question still in flight, taken
+ * back the instant the list landed, and on a slow daemon it was the only thing a returning user saw. The
+ * remembered arrangement is the honest alternative: it says how many pills were here and how wide each was,
+ * which is exactly a skeleton's claim. Unlabelled and inert on purpose — WHICH terminals came back is the
+ * daemon's to say, and a placeholder that named one would be a promise this panel cannot keep.
+ *
+ * Capped, because the shapes are decoration: a sandbox left with twenty splits should not spend two rows of the
+ * strip on furniture. */
+const PLACEHOLDER_LIMIT = 6;
+const placeholders = computed(() =>
+    answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : [],
+);
 // Restart kills the active session and opens a fresh web-* shell in its slot — meaningless for a dev-server
 // tab, which gets refresh instead.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
@@ -816,6 +832,10 @@ const emptyHint = computed(() => {
         // between "be patient" and the spinner that used to sit there with nothing behind it.
         return `No terminal has appeared for it yet. It may still be starting, and this panel will show it the moment it does.`;
     }
+    if (answer.value === `refused`) {
+        // The one case where the panel knows it is not the sandbox that is empty, but the asking that failed.
+        return `This sandbox didn't answer when asked what it was running. Anything already going is still going — try again from the refresh button.`;
+    }
     return about.value === undefined
         ? `Open one to run something here.`
         : `Nothing in this sandbox runs under that name — it was started outside it, or it has already stopped.`;
@@ -1021,6 +1041,23 @@ const endResize = (event: PointerEvent): void => {
                         </div>
                     </template>
                 </div>
+                <!-- The strip this sandbox was left with, while its sessions are still on their way: one shape
+                     per remembered pill, as wide as that pill's splits made it. Inert and hidden from screen
+                     readers — it is a place being held, not a tab (see `placeholders`). -->
+                <div
+                    v-for="(group, gi) in placeholders"
+                    :key="`held-${gi}`"
+                    class="flex h-6 shrink-0 animate-pulse items-center rounded-md bg-overlay/50 opacity-40"
+                    :class="vertical ? 'w-full min-w-0' : ''"
+                    aria-hidden="true"
+                >
+                    <template v-for="(name, si) in group" :key="name">
+                        <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
+                        <div class="flex h-full items-center px-2" :class="vertical ? 'min-w-0 flex-1' : ''">
+                            <span class="h-2 w-8 rounded-full bg-line"></span>
+                        </div>
+                    </template>
+                </div>
                 <button
                     v-if="newTab !== undefined"
                     type="button"
@@ -1134,16 +1171,29 @@ const endResize = (event: PointerEvent): void => {
                      it is running, or the panel is back to offering a session name as the whole explanation. -->
                 <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
             </div>
+            <!-- THE UNKNOWN MOMENT, WEARING ITS OWN SHAPE. Between opening this sandbox's panel and its daemon
+                 saying what it runs there is nothing to show, and the state below — "No terminals open." — is an
+                 answer. Stating it here meant retracting it a beat later, and on a daemon still waking it was
+                 the only thing a returning user ever saw. -->
+            <div
+                v-else-if="order.length === 0 && answer === 'waiting'"
+                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
+            >
+                <Icon name="spinner" class="animate-spin text-lg text-subtle" />
+                <p class="text-sm text-muted">Looking for this sandbox's terminals…</p>
+            </div>
             <div
                 v-else-if="order.length === 0"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
-                <Icon name="desktop" class="text-2xl text-subtle" />
+                <Icon :name="answer === 'refused' ? 'exclamation-triangle' : 'desktop'" class="text-2xl text-subtle" />
                 <p v-if="about?.title" class="text-sm text-muted">{{ about.title }}</p>
                 <p v-else-if="about" class="text-sm text-muted">
                     <span class="font-mono text-content">{{ named }}</span> {{ awaiting === undefined ? `isn't running.` : `` }}
                 </p>
-                <p v-else class="text-sm text-muted">No terminals open.</p>
+                <!-- "Nothing runs here" and "this sandbox never told us" are different sentences, and only one
+                     of them is about the terminals. -->
+                <p v-else class="text-sm text-muted">{{ answer === "refused" ? `Couldn't reach this sandbox.` : `No terminals open.` }}</p>
                 <p class="max-w-md text-2xs text-subtle">{{ emptyHint }}</p>
                 <Button
                     v-if="newTab !== undefined"

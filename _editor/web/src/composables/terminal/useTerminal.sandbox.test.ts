@@ -12,7 +12,7 @@
 // The pane is mocked wholesale — every case here is about which names reach `order`/`groups` and which one is
 // mounted, none of which needs a real terminal.
 import { beforeEach, expect, test, vi } from "vitest";
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 
 const store = new Map<string, string>();
 vi.stubGlobal(`localStorage`, {
@@ -42,6 +42,7 @@ vi.mock("./terminalSession", () => ({
 
 const { createTerminalTabs, disposeAllSessions } = await import("./useTerminal");
 const { clearPendingTerminals } = await import("./terminalsQuery");
+const { persistScrollback } = await import("./terminalSession");
 
 type Listed = { name: string; kind: "shell"; running: boolean };
 const shell = (name: string): Listed => ({ name, kind: `shell`, running: true });
@@ -82,19 +83,24 @@ const panel = (initial: Listed[]) => {
     };
 };
 
-// Leaving one sandbox for another, as the app does it: every cached socket dies with the daemon it was opened
-// against, and the panel that was mounted goes with the layout state of the sandbox being left.
+// Leaving one sandbox for another, as the app does it: the active id moves first and the sockets of the sandbox
+// being LEFT are torn down after, which is why that sandbox has to be named rather than read (useTerminalPanel).
 const switchTo = (id: string): void => {
+    const left = activeSandboxId.value;
     activeSandboxId.value = id;
-    disposeAllSessions();
+    disposeAllSessions(left);
 };
 
 beforeEach(() => {
     for (const tabs of opened.splice(0)) {
         tabs.detach();
     }
+    // The session cache outlives any one instance — that is the whole point of it — so a case that never switched
+    // away leaves its shells in there for the next one to trip over.
+    disposeAllSessions(undefined);
     store.clear();
     clearPendingTerminals();
+    vi.mocked(persistScrollback).mockClear();
     activeSandboxId.value = `sbx-a`;
 });
 
@@ -218,6 +224,76 @@ test("each sandbox keeps its own strip", async () => {
     await other.attach();
 
     expect(other.tabs.groups.value).toEqual([[`web-9`]]);
+});
+
+/* THE UNKNOWN MOMENT HAS TO BE SAYABLE. An empty strip is three different facts — nothing runs here, we have not
+ * asked yet, and we asked and got nothing back — and the panel drew all three as "No terminals open.", an answer
+ * it then took back when the list landed. */
+test("an empty strip says whether this sandbox has actually answered", async () => {
+    const { tabs, attach } = panel([shell(`web-1`)]);
+    expect(tabs.answer.value).toBe(`waiting`);
+
+    await attach();
+    expect(tabs.answer.value).toBe(`arrived`);
+
+    // Arriving somewhere new is not an answer about the new place.
+    tabs.detach();
+    switchTo(`sbx-b`);
+    await nextTick();
+
+    expect(tabs.answer.value).toBe(`waiting`);
+});
+
+// …including when it never comes. A panel that goes on promising terminals it has stopped asking for is the
+// spinner that spins forever.
+test("a sandbox that never answers is reported as such, not as empty", async () => {
+    vi.useFakeTimers();
+    try {
+        const { tabs, attach, failNextLists } = panel([shell(`web-1`)]);
+        failNextLists(99);
+        await expect(attach()).rejects.toThrow();
+        expect(tabs.answer.value).toBe(`waiting`);
+
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(tabs.answer.value).toBe(`refused`);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// The shapes a panel holds a place with while it waits: the strip as it was left, splits included, and known
+// instantly because it comes out of storage rather than over the tunnel.
+test("the strip the sandbox was left with is offered as shapes, before any session is listed", async () => {
+    const first = panel([shell(`web-1`), shell(`web-2`), shell(`web-3`)]);
+    await first.attach();
+    first.tabs.joinTabs([`web-1`, `web-2`]);
+    first.tabs.detach();
+
+    switchTo(`sbx-b`);
+    switchTo(`sbx-a`);
+
+    const back = panel([shell(`web-1`), shell(`web-2`), shell(`web-3`)]);
+    // Nothing listed yet: no tabs, but two shapes — a wide one for the split pair, then a single.
+    expect(back.tabs.groups.value).toEqual([]);
+    expect(back.tabs.remembered.value).toEqual([[`web-1`, `web-2`], [`web-3`]]);
+
+    await back.attach();
+    expect(back.tabs.groups.value).toEqual([[`web-1`, `web-2`], [`web-3`]]);
+});
+
+// Leaving a sandbox is not the end of its terminals, so what each one had on screen is kept — filed under the
+// sandbox being LEFT, which is the only bucket it will ever be looked for in again.
+test("each terminal's scrollback is kept for the sandbox it belongs to", async () => {
+    const { attach } = panel([shell(`web-1`), shell(`web-2`)]);
+    await attach();
+
+    switchTo(`sbx-b`);
+
+    expect(vi.mocked(persistScrollback).mock.calls.map(([session, sandboxId]) => [session.name, sandboxId])).toEqual([
+        [`web-1`, `sbx-a`],
+        [`web-2`, `sbx-a`],
+    ]);
 });
 
 // A session that ENDS while the panel is open leaves the arrangement too, so it cannot come back as a pill on

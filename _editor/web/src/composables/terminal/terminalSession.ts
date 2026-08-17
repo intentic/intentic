@@ -238,17 +238,23 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
 
 // One session's scrollback-snapshot key. Keyed by sandbox so a snapshot never restores into a same-named
 // session on a different daemon.
-const scrollbackKey = (name: string): string => `terminal-scrollback-${useSandbox().activeSandboxId.value}-${name}`;
+const scrollbackKey = (name: string, sandboxId: string | undefined): string => `terminal-scrollback-${sandboxId}-${name}`;
 
-// Snapshot one session's scrollback into sessionStorage (page-reload survival; dies with the tab). Called from
-// the pagehide hook in useTerminal.ts; createTerminalSession restores and deletes the snapshot.
-export const persistScrollback = (s: TerminalSession): void => {
+/* Snapshot one session's scrollback into sessionStorage (survives a reload and a sandbox switch; dies with the
+ * tab). Called from the pagehide hook and from the sandbox switch, both in useTerminal.ts; createTerminalSession
+ * restores and deletes the snapshot.
+ *
+ * `sandboxId` is which sandbox the session BELONGS to, and it is a parameter because the switch cannot use the
+ * active one: by the time the sockets of the sandbox being left are torn down, the active id is already the
+ * sandbox being arrived at. Filed under the wrong daemon, a snapshot is never read again — the terminal came
+ * back from a switch with its history gone, showing only whatever tmux redrew. */
+export const persistScrollback = (s: TerminalSession, sandboxId: string | undefined = useSandbox().activeSandboxId.value): void => {
     const snapshot = s.serialize.serialize({ scrollback: SCROLLBACK_LINES });
     if (snapshot.length > SCROLLBACK_MAX_CHARS) {
         return;
     }
     try {
-        window.sessionStorage.setItem(scrollbackKey(s.name), snapshot);
+        window.sessionStorage.setItem(scrollbackKey(s.name, sandboxId), snapshot);
     } catch {
         // quota exceeded — losing the snapshot is fine
     }
@@ -568,11 +574,14 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         lastCopied = selection;
         copySelection(s);
     });
-    // Restore the pre-reload scrollback first (xterm buffers writes made before open()); tmux's attach redraw
-    // then paints the live screen below it.
-    const snapshot = window.sessionStorage.getItem(scrollbackKey(name));
+    // Restore the scrollback the last life of this session left — a reload's, or the one taken when the browser
+    // last left this sandbox — before anything else (xterm buffers writes made before open()); tmux's attach
+    // redraw then paints the live screen below it. Always the ACTIVE sandbox here: a session is only ever created
+    // against the daemon the browser is pointed at now.
+    const restoreKey = scrollbackKey(name, useSandbox().activeSandboxId.value);
+    const snapshot = window.sessionStorage.getItem(restoreKey);
     if (snapshot !== null) {
-        window.sessionStorage.removeItem(scrollbackKey(name));
+        window.sessionStorage.removeItem(restoreKey);
         term.write(snapshot);
     }
     // Connect immediately, even before the host is mounted: a hidden session keeps streaming. xterm buffers

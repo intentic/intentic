@@ -100,9 +100,11 @@ export const consumeSpawnRequest = (): boolean => {
     return pending;
 };
 
-// Cached sockets — and the claims on names not yet listed — die with the sandbox they were opened against.
-watch(useSandbox().activeSandboxId, () => {
-    disposeAllSessions();
+// Cached sockets — and the claims on names not yet listed — die with the sandbox they were opened against. That
+// sandbox is named on the way out, so the scrollback each session leaves behind is filed where it will be found
+// again: this watch runs after the active id has already changed.
+watch(useSandbox().activeSandboxId, (_id, previous) => {
+    disposeAllSessions(previous);
     clearPendingTerminals();
     requested.value = undefined;
     surfaced.value = undefined;

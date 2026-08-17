@@ -24,11 +24,14 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * keeps streaming into a strip that no longer shows it. A pending entry is this browser's claim on a name it
  * just created; it retires the moment the daemon lists it, or when the session ends. */
 
-const QUERY_KEY = TERMINALS.of();
+// Exported so the background loader can warm the very entry every surface here observes (prefetch/warmQuery
+// insists on that being one key and one fetcher, not two spellings of them).
+export const terminalsKey = TERMINALS.of();
 
 export type TerminalSession = z.infer<typeof TerminalSessionSchema>;
 
-const fetchTerminals = async (): Promise<TerminalSession[]> => TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions;
+export const fetchTerminals = async (): Promise<TerminalSession[]> =>
+    TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions;
 
 // A read at most this old counts as current. The panel relists in reaction to the shared entry's own poll, so
 // without a freshness window every arriving poll would echo one redundant request back at the daemon. Mutations
@@ -61,7 +64,7 @@ const withPending = (listed: TerminalSession[]): TerminalSession[] => {
 };
 
 export const useTerminalsQuery = (): { sessions: ComputedRef<TerminalSession[]>; refetch: () => Promise<unknown> } => {
-    const { query } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchTerminals });
+    const { query } = useSandboxQuery({ queryKey: terminalsKey, queryFn: fetchTerminals });
     return { sessions: computed(() => withPending(query.data.value ?? [])), refetch: () => query.refetch() };
 };
 
@@ -69,7 +72,7 @@ export const useTerminalsQuery = (): { sessions: ComputedRef<TerminalSession[]>;
 // restarts and surfaces). Cache-first within FRESH_MS, and the result lands in the SHARED entry — that write is
 // what keeps the rail's badge and the process rows in step with the strip.
 export const listTerminals = async (): Promise<TerminalSession[]> => {
-    const listed = await queryClient.fetchQuery({ queryKey: QUERY_KEY, queryFn: fetchTerminals, staleTime: FRESH_MS });
+    const listed = await queryClient.fetchQuery({ queryKey: terminalsKey, queryFn: fetchTerminals, staleTime: FRESH_MS });
     const known = new Set(listed.map((session) => session.name));
     pending.value = pending.value.filter((entry) => !known.has(entry.name));
     return withPending(listed);
@@ -81,11 +84,11 @@ export const listTerminals = async (): Promise<TerminalSession[]> => {
 // undone by the refetch that follows it.
 export const removeTerminal = (name: string): void => {
     dropPendingTerminal(name);
-    queryClient.setQueryData<TerminalSession[]>(QUERY_KEY, (listed) => listed?.filter((session) => session.name !== name));
+    queryClient.setQueryData<TerminalSession[]>(terminalsKey, (listed) => listed?.filter((session) => session.name !== name));
 };
 
 // Force the shared entry to catch up with a write the caller just made, so every observer sees the daemon's
 // own account of it rather than waiting out its next poll.
 export const refreshTerminals = async (): Promise<void> => {
-    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    await queryClient.invalidateQueries({ queryKey: terminalsKey });
 };

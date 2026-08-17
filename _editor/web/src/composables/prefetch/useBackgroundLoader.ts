@@ -8,6 +8,7 @@ import { agentsWarmSource } from "./sources/agentsWarm";
 import { changesWarmSource } from "./sources/changesWarm";
 import { extensionsWarmSource } from "./sources/extensionsWarm";
 import { railWarmSource } from "./sources/railWarm";
+import { terminalsWarmSource } from "./sources/terminalsWarm";
 import { registerWarmSource, warmPlan } from "./warmPlan";
 
 /* THE LOADER, PLUGGED INTO THE REAL APP — the one place that says what "paused", "busy" and "the plan" mean
@@ -27,8 +28,12 @@ const { conversations } = useChat();
  * product, and the two reads behind it are the ones the user waits on today. Then the review's diffs, then the
  * rail — the shell's own furniture before the extensions', because two of the shell's reads (the panels, the
  * capability manifest) are what the rail DETECTS its extension tiles from, so a tile whose data arrived before
- * the tile itself would have gained nothing by going first. */
-const SOURCES = [agentsWarmSource, changesWarmSource, railWarmSource, extensionsWarmSource];
+ * the tile itself would have gained nothing by going first.
+ *
+ * The terminals go FIRST of all, and only because of where their band comes from: theirs is the one wish that
+ * can be `now`, and it is `now` exactly when the panel is open — a surface already on screen with nothing in it
+ * until this list lands. Anything else at `now` is a place the user has gone, not one they are looking at. */
+const SOURCES = [terminalsWarmSource, agentsWarmSource, changesWarmSource, railWarmSource, extensionsWarmSource];
 
 const gates: LoaderGates = {
     /* NOBODY LOOKING, OR NOTHING TO LOOK AT. `onScreen` is asked of every window this tab renders into rather

@@ -70,10 +70,16 @@ export interface TerminalTabsSource {
 const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
     createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
 
-// Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a
-// mounted surface resets its tab state and relists against the new daemon.
-export const disposeAllSessions = (): void => {
+/* Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a mounted
+ * surface resets its tab state and relists against the new daemon.
+ *
+ * `left` is the sandbox being LEFT, which the caller has to tell us: the active id has already moved on by the
+ * time this runs. Each session's scrollback is snapshotted under it on the way out, exactly as a page reload
+ * does, because a switch is not the end of these terminals — they keep running, and coming back to one that
+ * showed a suite's output should not show an empty pane with a fresh prompt in it. */
+export const disposeAllSessions = (left: string | undefined): void => {
     for (const session of cache.values()) {
+        persistScrollback(session, left);
         disposeTerminalSession(session);
     }
     cache.clear();
@@ -114,6 +120,21 @@ export interface TerminalTabs {
     // The strip: ordered groups of session names; a group of one is a plain tab, more are split side by side.
     // Derived from `order`, so every name here is a session that exists (see `groups` below).
     readonly groups: ComputedRef<string[][]>;
+    /* WHETHER THIS SANDBOX HAS ANSWERED YET, and if it refused. An empty strip means three different things —
+     * "nothing runs here", "we haven't asked yet", and "we asked and got nothing back" — and a panel that states
+     * the first while it means the second has to take it back a beat later, which is worse than a spinner. The
+     * same distinction the chat draws for provider accounts (chat/providerAccounts.ts).
+     *
+     * `waiting` until a list lands, `arrived` once one has, `refused` when asking has run out of tries. A list
+     * that fails AFTER one arrived leaves this on `arrived`: the strip still shows the last thing this daemon
+     * actually said, and a dropped refresh is no reason to unsay it. */
+    readonly answer: Ref<"waiting" | "arrived" | "refused">;
+    /* The strip this sandbox was left with, as SHAPES rather than tabs — how many pills, and how wide each one
+     * is. What a panel draws placeholders from while `answer` is `waiting`: it is known instantly (it comes out
+     * of storage) whereas the sessions arrive over a tunnel, so it is the one thing available to say "your
+     * terminals are coming back" with. Never rendered as tabs — see `groups` for why a name in here is not yet
+     * a tab. */
+    readonly remembered: ComputedRef<string[][]>;
     // The managed background processes ("process" kind) from the last list — the processes popover's rows.
     readonly processes: Ref<TerminalTab[]>;
     // The FOCUSED session — keystrokes land here; its group is the mounted pane.
@@ -214,6 +235,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         const grouped = new Set(kept.flat());
         return [...kept, ...listed.filter((name) => !grouped.has(name)).map((name) => [name])];
     });
+
+    // The shapes a panel may promise while the sessions themselves are still on their way (see the interface).
+    const remembered = computed<string[][]>(() => arrangement.value.map((group) => [...group]));
+    const answer = ref<"waiting" | "arrived" | "refused">(`waiting`);
 
     const groupOf = (name: string): string[] => arrangement.value.find((group) => group.includes(name)) ?? [name];
 
@@ -342,6 +367,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         retireFinished(listed);
         const tabs = listed.filter((tab) => !hiddenFromStrip(tab));
         order.value = tabs;
+        // This daemon has now said what it is running, so an empty strip below means it, and the panel may stop
+        // holding a place for terminals that are on their way.
+        answer.value = `arrived`;
         reconcileGroups(tabs);
         for (const tab of tabs) {
             sessionOf(tab);
@@ -366,9 +394,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             // What the panel opens ONTO. A finished session is a dead pane whose whole content is an epitaph, so
             // it is the last thing worth restoring someone to — prefer the remembered tab only while it is still
             // alive, then the first live one, and settle for a corpse only when every tab is one.
-            const remembered = window.localStorage.getItem(activeKey()) ?? undefined;
+            const rememberedActive = window.localStorage.getItem(activeKey()) ?? undefined;
             const live = tabs.find((tab) => tab.running);
-            const restorable = tabs.find((tab) => tab.name === remembered && tab.running);
+            const restorable = tabs.find((tab) => tab.name === rememberedActive && tab.running);
             mount((restorable ?? live ?? tabs[0])?.name);
         } else if (mountedNames.some((name) => !tabbed.has(name))) {
             // The focused session survived but a groupmate vanished from the list (killed elsewhere) — remount
@@ -412,6 +440,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
     const retryLater = (): void => {
         const wait = RETRY_MS[retried];
+        if (wait === undefined && answer.value === `waiting`) {
+            // Nothing more is coming. Said out loud, because a panel that goes on promising terminals it has
+            // stopped asking for is the spinner that spins forever.
+            answer.value = `refused`;
+        }
         // Out of tries, torn down, or already waiting on one — a queue of retries would ask N times over.
         if (wait === undefined || container === undefined || retryTimer !== undefined) {
             return;
@@ -442,9 +475,13 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     watch(epoch, () => {
         order.value = [];
         processes.value = [];
-        // The new sandbox's own arrangement, so its splits come back as it left them. Nothing is drawn from it
-        // until that sandbox's list lands — `groups` is the intersection, and `order` is empty right now.
+        // The new sandbox's own arrangement, so its splits come back as it left them. No TAB is drawn from it
+        // until that sandbox's list lands — `groups` is the intersection, and `order` is empty right now — but
+        // the panel does draw its shapes, which is the whole of what `remembered` is for.
         arrangement.value = readGroups();
+        // Nothing has been asked of this daemon yet. Ahead of the relist below, so no frame can catch the strip
+        // claiming that THIS sandbox has no terminals on the strength of the last one's answer.
+        answer.value = `waiting`;
         viewedProcesses.clear();
         // The wait was for a session on the OLD daemon; nothing on this one is going to answer it.
         pending.value = undefined;
@@ -666,6 +703,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         return {
             order,
             groups,
+            answer,
+            remembered,
             processes,
             activeName,
             pending,
@@ -758,6 +797,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     return {
         order,
         groups,
+        answer,
+        remembered,
         processes,
         activeName,
         pending,
