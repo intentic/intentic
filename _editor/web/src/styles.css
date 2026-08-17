@@ -121,6 +121,52 @@
         color: hsl(var(--tile-hue) 70% 72%);
     }
 
+    /* THE ATTENTION MARK — "this one is waiting on you", down a card's left edge, in the same warning the
+     * lane's dot and the card's own reason chip are painted in. Worn by every card that can sit in the
+     * Attention lane: the board's AgentCard, its dashed WorkflowRunCard, and the rail's RailCard. It lives
+     * here for the reason .category-tile does — those are ONE card in three frames, and a mark whose colour
+     * and geometry are re-typed in each of them is a mark that drifts (it already had: two of the three drew
+     * a border, the third an inset shadow).
+     *
+     * A PILL INSET FROM THE CARD'S ENDS, not a stroke down its full height, because a lane stacks these six
+     * pixels apart and a full-height stroke failed twice over at that spacing:
+     *   · ITS ENDS WERE EATEN BY THE CORNER RADIUS. Anything drawn hard against the edge — a left border, an
+     *     inset shadow — is clipped to the card's rounded rectangle, so a 12px radius bent both ends of the
+     *     stroke inwards and tapered them to nothing. What should read as one clean mark ended in two thin
+     *     hooks, and a column of them read as a ragged, nearly-continuous stripe down the lane rather than as
+     *     one mark per card.
+     *   · IT WAS THE LOUDEST THING ON THE CARD. The lane header already says "attention", the meta line
+     *     already carries the reason in words, and the status glyph already carries it in colour; the edge
+     *     mark is the third telling of one fact, so it is the one that should whisper.
+     * Inset by the card's own radius plus a hair, the pill begins where the corner curve ends: parallel ends,
+     * full weight the whole way, and a visible gap between one card's mark and the next.
+     *
+     * A PSEUDO-ELEMENT rather than a thick left border, because a 3px border where the other three sides are
+     * 1px pushes the content of every attention card two pixels right of its neighbours' — a lane whose
+     * titles no longer share one left axis, which is exactly what the lane's slab exists to give them.
+     *
+     * MIXED INTO THE CARD'S FILL rather than painted at full strength. One formula covers both schemes: it
+     * settles the bright amber of the dark scheme and lifts the deep amber of the light one, each toward the
+     * surface the mark actually lies on. The chip keeps the undiluted colour, so the two are ordered — the
+     * one that says WHY is the brighter of them. */
+    .attention-mark {
+        position: relative;
+    }
+    .attention-mark::before {
+        content: "";
+        position: absolute;
+        /* Over the card's own 1px border, so the mark is flush with the card's edge — and, on a card that is
+           both selected and waiting, over that stretch of the selection ring. Attention outranks selection
+           here for the reason it is drawn on a channel of its own: opening the card that needs you must not
+           erase the cue that put it in the lane. */
+        left: -1px;
+        top: calc(var(--radius-lg) + 2px);
+        bottom: calc(var(--radius-lg) + 2px);
+        width: 3px;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--color-warning) 78%, var(--color-card));
+    }
+
     /* A LANE — the kanban column the fleet board is read as, and the same slab in the chat rail's one-card
      * width. It is a SURFACE the lane's cards lie on, not a heading over loose cards, and that is what the
      * rail was missing: with the cards drawn straight on canvas, a pinned header was a black rectangle with a
