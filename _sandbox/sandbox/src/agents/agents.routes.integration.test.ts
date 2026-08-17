@@ -537,9 +537,14 @@ const fakeGateway = async (answer: { status: number; body: string }): Promise<{ 
         let raw = "";
         req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
         req.on("end", () => {
-            deliveries.push({ path: req.url, body: JSON.parse(raw) });
-            res.writeHead(answer.status, { "content-type": "text/plain" });
-            res.end(answer.body);
+            if (req.method === "POST" && req.url === "/deliver") {
+                deliveries.push({ path: req.url, body: JSON.parse(raw || "{}") });
+                res.writeHead(answer.status, { "content-type": "text/plain" });
+                res.end(answer.body);
+                return;
+            }
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.end("ok");
         });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
