@@ -62,9 +62,9 @@ const props = defineProps<{
      * answering a question ("which is the real one?") that has no answer, and a second, muddier accent weight
      * was the whole cost of it. Every chat on screen is on screen. */
     selected?: boolean;
-    // This session needs the user — the shared mark down the left edge (.attention-mark in styles.css, worn
-    // by the board's cards too). A CHANNEL OF ITS OWN so it stacks with selection: drawing both as an outline
-    // meant opening the card that needed you erased the very cue that put it in the lane.
+    // This session needs the user — a bar down the left edge. A CHANNEL OF ITS OWN so it stacks with
+    // selection: drawing both as an outline meant opening the card that needed you erased the very cue that
+    // put it in the lane.
     attention?: boolean;
     // A container of other rows rather than one of them (a workflow run), dashed like its card on the board.
     dashed?: boolean;
@@ -82,7 +82,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
         type="button"
         class="rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-lg border p-2.5 text-left text-2xs"
         :class="[
-            { 'rail-card-on': selected, 'attention-mark': attention, 'border-dashed': dashed },
+            { 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed },
             $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
         ]"
     >
@@ -144,7 +144,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
  * Border WIDTH is the utility's (so `border-dashed` can restyle it); the colour is here, where the states
  * below can move it.
  *
- * EVERY STATE IS A VARIABLE, not a property — border colour, fill, and the two shadows. Written as plain
+ * EVERY STATE IS A VARIABLE, not a property — border colour, fill, and the three shadows. Written as plain
  * properties, `.rail-card:hover` (a class AND a pseudo-class) outranked `.rail-card-on` (one class), so
  * putting the pointer on the SELECTED card repainted its accent border grey: the list erased the mark for
  * the chat it was pointing at, for as long as the cursor rested there. Through variables the states can be
@@ -157,17 +157,16 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
     background: var(--rail-fill);
     --rail-border: var(--color-line);
     --rail-fill: var(--color-card);
-    /* Two independent marks on one box-shadow: the selection ring, and the halo that lifts a selected card off
-       its lane. Held as variables because a second box-shadow rule would REPLACE the first, which is what once
-       forced them into an either/or. The ATTENTION mark was a third slot here — an inset 3px stroke down the
-       left edge — until the card's 12px radius, which clips every inset shadow, bent both of its ends inwards
-       and tapered them to hooks. It is a pseudo-element now (.attention-mark), where no radius can reach it.
-       Each slot keeps its INSET-NESS across every state — `inset 0 0 #0000` rather than a bare `0 0 #0000` for
-       the inset one — because box-shadow only interpolates between lists that agree on it, and a transition
-       that cannot interpolate snaps. */
+    /* Three independent marks on one box-shadow: the attention bar (left edge), the selection ring, and the
+       halo that lifts a selected card off its lane. Held as variables because a second box-shadow rule would
+       REPLACE the first, which is what once forced the first two into an either/or.
+       All three keep their INSET-NESS across every state — `inset 0 0 #0000` rather than a bare `0 0 #0000`
+       for the two inset slots — because box-shadow only interpolates between lists that agree on it, and a
+       transition that cannot interpolate snaps. */
+    --rail-accent: inset 0 0 #0000;
     --rail-ring: inset 0 0 #0000;
     --rail-lift: 0 0 #0000;
-    box-shadow: var(--rail-ring), var(--rail-lift);
+    box-shadow: var(--rail-accent), var(--rail-ring), var(--rail-lift);
     /* The shadows transition WITH the colours. They used not to, so selecting a card faded its border over
        150ms while the ring snapped in on the first frame — one gesture arriving as two. The curve is the
        app's standard one (Tailwind's `transition-*` default), so a card animates like every other control. */
@@ -205,5 +204,14 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
    pointer with nothing at all. */
 .rail-card.rail-card-on:hover {
     --rail-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
+}
+/* An inset shadow rather than a wider left border: no layout shift, so a lane's cards keep their text on one
+   axis whether or not one of them needs the user. First in the list, so it paints OVER the selection ring —
+   a card that is both selected and waiting on you must not lose the reason it is in the lane.
+   A HAIRLINE-AND-A-HALF in a settled amber, not 3px of the full role colour: these cards stack six pixels
+   apart, and at that spacing the old bar read as one ragged stripe down the lane rather than as a mark on each
+   card. `--color-attention-edge` (styles.css) is the board's copy of the same bar, so the two cannot drift. */
+.rail-card-attention {
+    --rail-accent: inset 2px 0 0 0 var(--color-attention-edge);
 }
 </style>

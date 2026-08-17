@@ -331,12 +331,11 @@ const grab = (event: PointerEvent): void => {
                identical at a glance, and mutually exclusive, so selecting a card that needed the user ERASED
                the very cue that put it there. They are now told apart by WHERE they are drawn, which means they
                also stack: selection is a ring around the whole card plus a lifted surface (a property of the
-               user's focus, in the app's own primary), attention is a mark down the left edge (a property of
-               the agent, in warning — the same colour as its chip on the row above).
-               The mark is .attention-mark, shared with the rail's RailCard, and it replaced a `border-l-[3px]`
-               here: a left border three times the width of the card's other three sides pushed the content of
-               every attention card two pixels right of its neighbours', and the radius tapered both its ends. */
-            lane === 'attention' ? 'attention-mark' : '',
+               user's focus, in the app's own primary), attention is a solid bar down the left edge (a property
+               of the agent, in warning — the same colour as its chip on the row above, settled into the card
+               so a lane of them reads as one mark per card rather than as a stripe: --color-attention-edge in
+               styles.css, shared with the rail's copy of this bar). */
+            lane === 'attention' ? 'border-l-2 border-l-[var(--color-attention-edge)]' : '',
             selected ? 'border-primary-500 bg-overlay ring-2 ring-primary-500/50' : 'border-line bg-card hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             pending !== undefined ? 'pointer-events-none opacity-60' : '',

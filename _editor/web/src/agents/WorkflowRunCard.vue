@@ -50,11 +50,12 @@ const TONE: Record<WorkflowRun["state"], string> = {
         class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border border-dashed p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
-               rather than one of them. The attention mark is the agent card's, unchanged — and solid, which
-               it now is for free: as a pseudo-element (.attention-mark) rather than a left border it cannot
-               inherit this card's dashes, so the per-side `border-left-style` override that used to keep a
-               3px dashed edge from reading as a column of ticks beside the outline is gone with it. */
-            lane === 'attention' ? 'attention-mark' : '',
+               rather than one of them. The attention bar is the agent card's, unchanged in colour and
+               width — but SOLID, because a dashed left edge at twice the weight of the rest is not one bar, it
+               is a column of ticks beside a dashed outline, and the two dashed rhythms at different weights
+               read as a rendering fault. `border-style` is per-side in CSS; Tailwind has no per-side utility
+               for it. */
+            lane === 'attention' ? 'border-l-2 border-l-[var(--color-attention-edge)] [border-left-style:solid]' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
             // cannot point the chat at.
