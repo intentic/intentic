@@ -1,5 +1,7 @@
 import { ref } from "vue";
+import { activeSandboxId } from "./sandbox/activeSandbox";
 import { toAppPx } from "./uiScale";
+import { readWindowState, writeWindowState } from "./windowStore";
 
 export type ChatPosition = "left" | "right";
 // Which HOME the chat lives in: the side column beside every view, or behind a rail tile as the full-screen
@@ -83,7 +85,9 @@ const MAX_REVIEW_LIST_WIDTH = 800;
 
 // The global terminal — the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
 // terminal button + Ctrl+` toggle it); its height belongs to the shared TerminalPanel, persisted per surface.
-const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
+// Tied to the active sandbox, so opening or closing the terminal in one sandbox does not alter another sandbox's layout.
+const terminalOpenKey = (sandboxId: string | undefined): string => `intentic.terminalOpen.${sandboxId ?? `local`}`;
+const parseTerminalOpen = (raw: string): boolean | undefined => (raw === `1` ? true : raw === `0` ? false : undefined);
 
 // Which panel the workspace sidebar shows (files | changes | history). Persists like the terminal's open state.
 const SIDEBAR_PANEL_KEY = `ui-workspace-sidebar-panel`;
@@ -200,13 +204,26 @@ const write = (key: string, value: string): void => {
     }
 };
 
+let scopedSandboxId: string | undefined;
+
+const terminalOpen = ref<boolean>(false);
+
+const restoreTerminalOpen = (): void => {
+    scopedSandboxId = activeSandboxId.value;
+    terminalOpen.value = readWindowState(terminalOpenKey(scopedSandboxId), parseTerminalOpen) ?? false;
+};
+restoreTerminalOpen();
+
+export const resetTerminalOpen = (): void => {
+    restoreTerminalOpen();
+};
+
 const position = ref<ChatPosition>(readEnum(STORAGE_KEY, [`left`, `right`] as const, `left`));
 const chatHome = ref<ChatHome>(readEnum(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`));
 const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, DEFAULT_CHAT_WIDTH));
 const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH));
 const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, DEFAULT_REVIEW_LIST_WIDTH));
 const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
-const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
 const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
 const hideTests = ref<boolean>(readBool(HIDE_TESTS_KEY));
@@ -274,7 +291,7 @@ const toggleSidebar = (): void => {
 
 const setTerminalOpen = (open: boolean): void => {
     terminalOpen.value = open;
-    write(TERMINAL_OPEN_KEY, open ? `1` : `0`);
+    writeWindowState(terminalOpenKey(scopedSandboxId), open ? `1` : `0`);
 };
 
 // The toolbar button + Ctrl+` toggle the terminal panel. Sessions live in the shared cache (useTerminal), so

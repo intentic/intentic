@@ -1,4 +1,5 @@
 import { ref, type Ref, watch } from "vue";
+import { activeSandboxId } from "../sandbox/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
@@ -148,8 +149,8 @@ export interface TerminalTabs {
 // One surface's tab state. `storageKey` namespaces the remembered active tab + grouping; `onEmpty` fires when
 // the last tab ends (the panel closes itself).
 export const createTerminalTabs = (source: TerminalTabsSource, storageKey: string, onEmpty: () => void): TerminalTabs => {
-    const activeKey = `ui-${storageKey}-terminal-active`;
-    const groupsKey = `ui-${storageKey}-terminal-groups`;
+    const activeKey = (): string => `ui-${storageKey}-terminal-active.${activeSandboxId.value ?? `local`}`;
+    const groupsKey = (): string => `ui-${storageKey}-terminal-groups.${activeSandboxId.value ?? `local`}`;
     const order = ref<TerminalTab[]>([]);
     const processes = ref<TerminalTab[]>([]);
     // Process sessions the user opened a log view for — the only "process" sessions that appear in `order`.
@@ -173,7 +174,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     const readGroups = (): string[][] => {
         try {
-            const parsed: unknown = JSON.parse(window.localStorage.getItem(groupsKey) ?? `[]`);
+            const parsed: unknown = JSON.parse(window.localStorage.getItem(groupsKey()) ?? `[]`);
             if (Array.isArray(parsed)) {
                 return parsed.filter((group): group is string[] => Array.isArray(group) && group.every((name) => typeof name === `string`));
             }
@@ -185,7 +186,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const groups = ref<string[][]>(readGroups());
     const persistGroups = (): void => {
         try {
-            window.localStorage.setItem(groupsKey, JSON.stringify(groups.value));
+            window.localStorage.setItem(groupsKey(), JSON.stringify(groups.value));
         } catch {
             // Storage may be unavailable (private mode); the in-memory ref still holds.
         }
@@ -268,14 +269,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             cell.dataset[`session`] = member;
             cell.addEventListener(`focusin`, () => {
                 activeName.value = member;
-                window.localStorage.setItem(activeKey, member);
+                window.localStorage.setItem(activeKey(), member);
             });
             container.append(cell);
             mountTerminalSession(sessionOf(tab), cell, member === name);
         }
         mountedNames = group;
         activeName.value = name;
-        window.localStorage.setItem(activeKey, name);
+        window.localStorage.setItem(activeKey(), name);
     };
 
     // Reconcile the persisted grouping against the listed tabs: dead names drop out, empty groups collapse,
@@ -340,7 +341,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             // What the panel opens ONTO. A finished session is a dead pane whose whole content is an epitaph, so
             // it is the last thing worth restoring someone to — prefer the remembered tab only while it is still
             // alive, then the first live one, and settle for a corpse only when every tab is one.
-            const remembered = window.localStorage.getItem(activeKey) ?? undefined;
+            const remembered = window.localStorage.getItem(activeKey()) ?? undefined;
             const live = tabs.find((tab) => tab.running);
             const restorable = tabs.find((tab) => tab.name === remembered && tab.running);
             mount((restorable ?? live ?? tabs[0])?.name);
@@ -377,7 +378,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     watch(epoch, () => {
         order.value = [];
         processes.value = [];
-        groups.value = [];
+        groups.value = readGroups();
         viewedProcesses.clear();
         // The wait was for a session on the OLD daemon; nothing on this one is going to answer it.
         pending.value = undefined;

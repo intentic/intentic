@@ -4,6 +4,7 @@ import { loadAccountStatus, resetChat } from "../chat/useChat";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPresence } from "../usePresence";
 import { useSandbox } from "./useSandbox";
+import { resetTerminalOpen } from "../useLayout";
 import { resetWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
 
@@ -31,6 +32,7 @@ export const resetWorkspaceScopedState = (): void => {
     // The editor strip goes with the tree it browses: both are paths into ONE sandbox's /work, and each sandbox
     // has its own snapshot to come back to.
     resetWorkspaceTabs();
+    resetTerminalOpen();
 };
 
 watch(activeSandboxId, (id, previous) => {

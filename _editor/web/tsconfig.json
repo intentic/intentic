@@ -6,8 +6,16 @@
         // the live contract/UI code, so a change in _libs reflects here with no rebuild.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],
+            "@intentic/ui/brand-color": ["../../_editor/ui/src/lib/brandColor.ts"],
+            "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brandMark.ts"],
+            "@intentic/ui/dag": ["../../_editor/ui/src/components/dagLayout.ts"],
+            "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
+            "@intentic/ui/icons": ["../../_editor/ui/src/icons/iconSets.ts"],
+            "@intentic/ui/langs": ["../../_editor/ui/src/lib/shikiLangs.ts"],
             "@intentic/ui/markdown": ["../../_editor/ui/src/markdown/index.ts"],
+            "@intentic/ui/notice": ["../../_editor/ui/src/components/notice.ts"],
             "@intentic/ui/path": ["../../_editor/ui/src/lib/path.ts"],
             "@intentic/ui/series": ["../../_editor/ui/src/components/seriesAccent.ts"],
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
