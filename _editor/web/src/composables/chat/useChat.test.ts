@@ -1,4 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,7 +64,9 @@ const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?
 };
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
-const { draftConversation, hydrateOnce, loadAccountStatus, openAgentConversation, resetChat, reveal, useChat } = await import("./useChat");
+const { draftConversation, hydrateOnce, loadAccountStatus, openAgentConversation, refreshConnections, resetChat, reveal, useChat } = await import(
+    "./useChat"
+);
 // The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
 // suites open extra tabs with.
 const newChat = () => {
@@ -74,6 +77,7 @@ const newChat = () => {
 
 const { usageStatusByAccount } = await import("./usageStatus");
 const { Conversation } = await import("./conversation");
+const { endpointProviders, trialStatus } = await import("./providerCatalog");
 const { turnDefaults } = await import("./turnDefaults");
 
 beforeEach(() => {
@@ -84,8 +88,13 @@ beforeEach(() => {
     mockConnections();
 });
 
-afterEach(() => {
+afterEach(async () => {
     vi.clearAllMocks();
+    endpointProviders.value = [];
+    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
+    turnDefaults.provider.value = `claude`;
+    // Let the reconciliation and tab-snapshot watches settle before the next test clears their stores.
+    await nextTick();
     // An agent's transcript is cached across the app now, and this file reuses conversation ids between tests
     // with different daemon answers behind them — so the cache has to go with the mocks, or one test's reply is
     // handed to the next before its mock is ever asked.
@@ -192,6 +201,34 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.connected.value).toBe(true);
         expect(turnDefaults.provider.value).toBe(`claude`);
         expect(new Conversation().provider.value).toBe(`codex`);
+    });
+
+    /* The trial is a FALLBACK, not the provider somebody chose. A full-page OAuth return restores the open
+     * draft from its tab snapshot (still trial) and the user's Google pick from turnDefaults independently.
+     * Once the account read confirms Google, the untouched draft must converge on that pick; otherwise its
+     * first message consumes Intentic's metered trial despite the connection the user just completed. */
+    it(`returns an untouched trial fallback to Google once the connected account becomes available`, async () => {
+        storage.clear();
+        turnDefaults.provider.value = `gemini`;
+        resetChat();
+        const chat = useChat();
+
+        // The account read settles with nothing connected, then the platform's trial capability arrives.
+        mockConnections();
+        await refreshConnections(true);
+        endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial` }];
+        trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
+        await nextTick();
+        expect(chat.provider.value).toBe(TRIAL_PROVIDER);
+
+        // Google OAuth completes and the next connection read sees it. The open draft should leave the
+        // temporary trial just as a new conversation already would.
+        mockConnections({ subscriptions: { codex: [], grok: [], kimi: [], gemini: [{ name: `google.json`, label: `user@gmail.com` }] } });
+        await refreshConnections(true);
+        await nextTick();
+
+        expect(chat.provider.value).toBe(`gemini`);
+        expect(new Conversation().provider.value).toBe(`gemini`);
     });
 });
 

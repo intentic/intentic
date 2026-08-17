@@ -878,11 +878,22 @@ watch([providerAccounts, translatorAccounts, accountsLoaded, endpointProviders, 
         return;
     }
     for (const conversation of conversations.value) {
-        if (
-            conversation.session.value !== undefined ||
-            conversation.messages.value.length > 0 ||
-            providerReadyOn(conversation.provider.value, conversation.harness.value)
-        ) {
+        if (conversation.session.value !== undefined || conversation.messages.value.length > 0) {
+            continue;
+        }
+        /* RETURN FROM AN APP-CHOSEN FALLBACK once the user's remembered provider can run again. The current
+         * provider being ready is not enough to stop here: the free trial is ready by design, and an OAuth
+         * redirect restores an untouched tab on that trial separately from the Google pick in turnDefaults.
+         * Treating "trial can answer" as final silently spends the metered trial after Google connected.
+         *
+         * An explicit trial pick is left alone because selectProvider writes that pick to turnDefaults; only
+         * repointProvider (the fallback path below) creates the current != preferred shape handled here. */
+        const preferred = turnDefaults.provider.value;
+        if (preferred !== conversation.provider.value && providerReadyOn(preferred, conversation.harness.value)) {
+            conversation.repointProvider(preferred);
+            continue;
+        }
+        if (providerReadyOn(conversation.provider.value, conversation.harness.value)) {
             continue;
         }
         /* A connected account first, the free trial only when there is none — the trial is a metered courtesy
