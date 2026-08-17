@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
-import type { Config } from "../config.js";
+import { configSchema, type Config } from "../config.js";
 import { createTrialPool } from "./trial-pool.js";
 
 /* THE TRIAL IS THE ONE ROUTE FAMILY THAT SPENDS INTENTIC'S OWN MONEY, so the things worth pinning here are the
@@ -12,19 +12,19 @@ import { createTrialPool } from "./trial-pool.js";
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 
-const baseConfig = {
+const baseConfig = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
     betterAuth: { secret: `s` },
     secrets: { key: `` },
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
+    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
     zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     trial: { keys: `k1,k2`, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
-    log: { level: `silent`, pretty: false },
-} as Config;
+    log: { level: `silent`, pretty: `false` },
+});
 
 const configWith = (trial: Partial<Config["trial"]>): Config => ({ ...baseConfig, trial: { ...baseConfig.trial, ...trial } });
 
@@ -398,7 +398,7 @@ describe("the free-trial key pool", () => {
     });
 
     it("fails over on a rejected key and quarantines it for later calls", async () => {
-        const auths: string[] = [];
+        const auths: (string | undefined)[] = [];
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string>)[`authorization`];
             auths.push(auth);
@@ -417,7 +417,7 @@ describe("the free-trial key pool", () => {
 
     it("honours Retry-After when quarantining a rate-limited key", async () => {
         let at = Date.parse(`2026-08-16T00:00:00.000Z`);
-        const auths: string[] = [];
+        const auths: (string | undefined)[] = [];
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string>)[`authorization`];
             auths.push(auth);

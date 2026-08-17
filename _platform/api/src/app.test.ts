@@ -1,24 +1,24 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
-import type { Config } from "./config.js";
+import { configSchema, type Config } from "./config.js";
 import type { Logger } from "pino";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
 // Full config with the intentic-provided path enabled; secrets.key empty so encrypt/decrypt pass through as
 // plaintext (the stored payload is plain JSON, tokens are plain strings).
-const config = {
+const config = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
     betterAuth: { secret: `s` },
     secrets: { key: `` },
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true },
+    intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: `true` },
     zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
-    log: { level: `silent`, pretty: false },
-} as Config;
+    log: { level: `silent`, pretty: `false` },
+});
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 

@@ -14,7 +14,7 @@ const rootEnv = join(repoRoot(import.meta.url), ".env");
 // Strict, sandbox-centric model (CLAUDE.md): the platform holds no backend/infra secrets. The only credentials
 // here are for the central account (Google sign-in) and the platform's own session signing — everything else
 // (Claude/git tokens, SSH keys, Cloudflare) lives in the user's sandbox.
-const configSchema = z.object({
+export const configSchema = z.object({
     database: z.object({
         url: z.string().min(1).meta({ secret: true }),
         // Per-process pg pool cap (DATABASE_POOL_MAX). Size deliberately: replicas × poolMax must stay

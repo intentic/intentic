@@ -3,7 +3,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../app.js";
-import type { Config } from "../config.js";
+import { configSchema, type Config } from "../config.js";
 import { seedDemoService } from "./pool-demo.js";
 import type { StripeGateway } from "./pool-stripe.js";
 import { poolHttpRoutes } from "./pool.routes.js";
@@ -17,14 +17,14 @@ const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn
 
 const NOW = new Date(`2026-08-10T12:00:00Z`);
 
-const baseConfig = {
+const baseConfig = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
     betterAuth: { secret: `s` },
     secrets: { key: `` },
     webOrigin: `https://app.test`,
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
-    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
+    intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
     zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
     trial: { keys: ``, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     pool: {
@@ -37,11 +37,11 @@ const baseConfig = {
         dailyCredits: 100,
         serviceShare: 0.9,
         donationCredits: 50,
-        demoService: false,
+        demoService: `false`,
     },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
-    log: { level: `silent`, pretty: false },
-} as Config;
+    log: { level: `silent`, pretty: `false` },
+});
 
 const configWith = (pool: Partial<Config[`pool`]>): Config => ({ ...baseConfig, pool: { ...baseConfig.pool, ...pool } });
 
