@@ -5995,6 +5995,82 @@ export const ImportReportSchema = z.object({
 });
 export type ImportReport = z.infer<typeof ImportReportSchema>;
 
+/* ---- migrations: importing a FOREIGN assistant's setup (Hermes; OpenClaw next) ----
+ *
+ * A different crossing than a bundle restore, and deliberately a different surface: a bundle is our own format,
+ * re-derived entry by entry against the state manifests, while a migration reads a directory some OTHER
+ * program laid out (`~/.hermes`) and TRANSLATES it into native things — skills, automations, capabilities,
+ * merged memory. Nothing foreign is executed or copied verbatim into daemon state; every item lands through the
+ * same write paths the settings/skills/automations/capabilities surfaces use, which is what keeps an imported
+ * setup editable and deletable in the ordinary UI the day after (docs/assistant-import-design.md).
+ *
+ * The flow is PREVIEW-FIRST, mirroring what these tools' own `migrate` commands taught their users to expect:
+ * `plan` parses the uploaded archive into an itemized checklist and holds the upload in memory under a token;
+ * `apply` names the ticked item ids and the token. The plan is RE-DERIVED from the held archive at apply — the
+ * wire plan is a rendering for the owner, never the input the write trusts (restore.ts's rule, kept). */
+export const MigrationSourceSchema = z.enum(["hermes"]);
+export type MigrationSource = z.infer<typeof MigrationSourceSchema>;
+
+// What an item becomes here, not what it was there — the apply loop dispatches on this, and the checklist
+// groups by it so the owner reads "3 skills, 2 automations" rather than a foreign directory listing.
+export const MigrationTargetSchema = z.enum(["memory", "skill", "automation", "capability", "secret", "file"]);
+export type MigrationTarget = z.infer<typeof MigrationTargetSchema>;
+
+export const MigrationItemSchema = z.object({
+    // Deterministic (derived from the source artifact, e.g. `skill:weather`), so the ids the owner ticked name
+    // the same items when the plan is re-derived at apply.
+    id: z.string(),
+    target: MigrationTargetSchema,
+    // The checklist line, plain words: "Skill — weather", "Nightly digest (9:00 every day)".
+    label: z.string(),
+    detail: z.string().optional(),
+    /* The default tick. False marks the items the owner should read before taking — a server URL that points at
+     * localhost on the OLD machine, an .env key that looks like tuning rather than a credential. They still
+     * import fine when ticked; the flag is the adapter's judgment, not a gate. */
+    recommended: z.boolean(),
+    // Names of the secrets this item would store (never values — values stay in the held archive until apply,
+    // and only move when the apply says includeSecrets). Empty for items that carry none.
+    secrets: z.array(z.string()),
+});
+export type MigrationItem = z.infer<typeof MigrationItemSchema>;
+
+export const MigrationNeedsActionSchema = z.object({ subject: z.string(), detail: z.string() });
+
+export const MigrationPlanSchema = z.object({
+    source: MigrationSourceSchema,
+    // Names the held upload for the apply call. Minted per plan; a new upload replaces the held one.
+    token: z.string(),
+    items: z.array(MigrationItemSchema),
+    // What the adapter saw and will not move — sessions, logs, pairing state — listed rather than silent.
+    refused: z.array(z.string()),
+    // What is already known not to move mechanically (channels to reconnect, a model to pick) — the same
+    // honesty ImportReportSchema carries, surfaced at PREVIEW time so the owner ticks with open eyes.
+    needsAction: z.array(MigrationNeedsActionSchema),
+});
+export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
+
+export const MigrationApplySchema = z.object({
+    token: z.string(),
+    // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring — the
+    // archive is the truth, and a stale checklist must not block the items that still exist.
+    items: z.array(z.string()),
+    // The owner's explicit consent to move credential VALUES (mirrors the bundle export's `?secrets=`, and the
+    // `--include-secrets` these tools' own migrate commands require). Off: secret items are skipped and
+    // capability configs land without their keys.
+    includeSecrets: z.boolean(),
+});
+export type MigrationApply = z.infer<typeof MigrationApplySchema>;
+
+export const MigrationReportSchema = z.object({
+    applied: z.array(z.object({ id: z.string(), target: MigrationTargetSchema, label: z.string() })),
+    // Items that were ticked and did not land, each with the reason — a full disk, an env store that needs
+    // DevOps active. Distinct from `refused`, which is the class of things never attempted.
+    failed: z.array(z.object({ id: z.string(), label: z.string(), error: z.string() })),
+    refused: z.array(z.string()),
+    needsAction: z.array(MigrationNeedsActionSchema),
+});
+export type MigrationReport = z.infer<typeof MigrationReportSchema>;
+
 /* One export sitting in the daemon's export directory — the ARTIFACT a bundle is, rather than the request that
  * produced it. Packing takes minutes over a real workspace, so tying it to a response made it a property of one
  * browser tab: a refresh abandoned the work and left nothing to come back to. It is a file now, and every field

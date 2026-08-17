@@ -5,6 +5,7 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import BundleCard from "./BundleCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
+import MigrationCard from "./MigrationCard.vue";
 
 /* The Sandbox hub's "Environment" tab: the composed overlay Dockerfile (agent-proposed, owner-approved, applied
  * by a rebuild), and below it the bundle card that moves the whole environment to another sandbox. The two
@@ -44,5 +45,9 @@ const outline = useSandboxOutline(reading);
         </div>
 
         <BundleCard />
+
+        <!-- Beside the bundle card because they are the two crossings: a bundle moves an INTENTIC environment,
+             this one translates a foreign assistant's home directory into native pieces. -->
+        <MigrationCard />
     </div>
 </template>

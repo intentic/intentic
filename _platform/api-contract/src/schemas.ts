@@ -23,6 +23,9 @@ import {
     BundleExportSchema,
     GrantedRoleSchema,
     ImportReportSchema,
+    MigrationItemSchema,
+    MigrationPlanSchema,
+    MigrationReportSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
     LogFileEntrySchema,
@@ -124,6 +127,9 @@ export {
     BundleExportSchema,
     BundleExportsSchema,
     ImportReportSchema,
+    MigrationItemSchema,
+    MigrationPlanSchema,
+    MigrationReportSchema,
     InventoryEntrySchema,
     InventoryProviderSchema,
     InventoryValuesSchema,
@@ -171,6 +177,9 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 export type EnvironmentItem = EnvironmentContents["items"][number];
 export type ImportReport = z.infer<typeof ImportReportSchema>;
+export type MigrationItem = z.infer<typeof MigrationItemSchema>;
+export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
+export type MigrationReport = z.infer<typeof MigrationReportSchema>;
 export type BundleExport = z.infer<typeof BundleExportSchema>;
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
 export type Automation = z.infer<typeof AutomationSchema>;

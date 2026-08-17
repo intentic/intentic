@@ -5,6 +5,7 @@ import {
     type GrantedRole,
     GrantedRoleSchema,
     MachineReportSchema,
+    MigrationApplySchema,
     roleAtLeast,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -54,6 +55,8 @@ import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironm
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
+import { MigrationFormatError } from "./migrations/archive.js";
+import { createMigrations } from "./migrations/migrations.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
@@ -1040,6 +1043,57 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }
             throw error;
         }
+    });
+
+    /* MIGRATIONS: importing a FOREIGN assistant's setup (a packed `~/.hermes`), preview-first. Raw Hono beside
+     * the bundle routes for the same reason they are — the plan's input is an upload stream — and owner-only
+     * throughout: the archive is somebody's credential store and the apply writes settings, skills, automations
+     * and capabilities. Two calls: `plan` parses the upload into a checklist and holds it in memory under a
+     * token; `apply` names the ticked ids. See migrations/migrations.ts for why nothing is held on disk. */
+    const migrations = createMigrations(services);
+    app.post("/migrations/plan", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = c.req.raw.body;
+        if (body === null) {
+            return c.json({ error: "empty body" }, 400);
+        }
+        try {
+            return c.json(await migrations.plan(body, MAX_UPLOAD_BYTES));
+        } catch (error) {
+            if (error instanceof MigrationFormatError) {
+                return c.json({ error: error.message }, 400);
+            }
+            throw error;
+        }
+    });
+    app.post("/migrations/apply", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = MigrationApplySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ error: "expected { token, items, includeSecrets }" }, 400);
+        }
+        try {
+            return c.json(await migrations.apply(parsed.data));
+        } catch (error) {
+            // A stale/consumed token is the caller's staleness, not breakage — 409 so the UI re-uploads.
+            if (error instanceof MigrationFormatError) {
+                return c.json({ error: error.message }, 409);
+            }
+            throw error;
+        }
+    });
+    app.delete("/migrations", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ ok: migrations.abandon() });
     });
 
     // An extension's prebuilt ESM bundle — raw JS bytes, so a plain Hono route like /environment (oRPC is for
