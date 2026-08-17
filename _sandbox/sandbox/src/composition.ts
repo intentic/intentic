@@ -44,7 +44,7 @@ import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { createProviderCatalogs, type ProviderCatalog } from "./agent/provider-catalogs.js";
-import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
+import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { fileLoopDesignsStore, fileLoopsStore, type LoopDesignsStore, type LoopsStore } from "./loops/loops-store.js";
@@ -671,6 +671,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         managementUrl: cliProxyManagementUrl(config),
         token: config.translator.token,
         configPath: cliProxyConfigPath(config),
+        // The credential store the proxy reads, so the connection list survives a proxy that isn't answering —
+        // its 15s boot warm-up and every rung of its restart ladder (see listFiles).
+        authDir: cliProxyAuthDir(authRoot),
         usageStore: accountUsage,
     });
     // Hoisted above the OpenCode service (it is also a row in the provider table below): Gemini's NATIVE runtime

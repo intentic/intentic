@@ -64,6 +64,7 @@ test("starts Kimi Code's headless device login through CLIProxyAPI", async () =>
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
     });
 
@@ -87,6 +88,7 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
     });
 
@@ -101,17 +103,36 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
     });
 });
 
-test("throws TRANSLATOR_BINARY_MISSING when Google connect fails due to unreachable proxy", async () => {
+/* A PROXY THAT DIDN'T ANSWER IS TWO DIFFERENT SITUATIONS, and the user's next move differs in each — so the
+ * pair is pinned together. This used to be one test asserting the rebuild sentence for BOTH, which is how a
+ * sandbox whose translator was merely mid-boot told its owner to go and rebuild the image: slow, and it changes
+ * nothing, because the binary was there all along. Only the absence of the binary earns that instruction. */
+const unreachableClient = (binaryPresent: boolean) => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
-    const client = createCliProxyClient({
+    return createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
+        binaryPresent: async () => binaryPresent,
     });
+};
 
-    await expect(client.connect("gemini")).rejects.toThrow(TRANSLATOR_BINARY_MISSING);
+test("asks for a rebuild when Google connect finds no translator binary in this image", async () => {
+    await expect(unreachableClient(false).connect("gemini")).rejects.toThrow(TRANSLATOR_BINARY_MISSING);
 });
+
+test("asks the user to wait when the translator is present but not answering yet", async () => {
+    const failure = unreachableClient(true).connect("gemini");
+
+    await expect(failure).rejects.toThrow(/starting up/);
+    await expect(failure).rejects.not.toThrow(TRANSLATOR_BINARY_MISSING);
+});
+
+// The other half of "unreachable is not empty" — that a proxy which cannot be asked still yields the accounts on
+// disk — needs a real auth-dir, so it lives in translator.integration.test.ts under the budget for suites that
+// touch the machine.
 
 test("completes Google's redirect login via oauth-callback", async () => {
     const fetchMock = vi.fn(async () => Response.json({ status: "ok" }));
@@ -120,6 +141,7 @@ test("completes Google's redirect login via oauth-callback", async () => {
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
     });
 
@@ -157,6 +179,7 @@ test("reads Kimi's provider-scoped model definitions without owned_by inference"
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
     });
 
@@ -174,6 +197,7 @@ test("projects CLIProxyAPI's Kimi auth files as connected subscription accounts"
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
         configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
         usageStore: memoryStore().store,
     });
 
@@ -238,6 +262,7 @@ describe("translator subscription usage", () => {
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
             configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
             usageStore: store,
             fetchFn: cliProxyFetch(calls),
         });
@@ -285,6 +310,7 @@ describe("translator subscription usage", () => {
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
             configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
             usageStore: store,
             fetchFn: cliProxyFetch(calls),
         });
@@ -315,6 +341,7 @@ describe("translator subscription usage", () => {
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
             configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
             usageStore: store,
             fetchFn: filesNamed(provider, names),
         });
@@ -430,6 +457,7 @@ describe("translator subscription usage", () => {
             managementUrl: "http://cliproxy.test",
             token: "management-secret",
             configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
             usageStore: store,
             fetchFn: cliProxyFetch(calls),
         });

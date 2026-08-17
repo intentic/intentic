@@ -13,6 +13,7 @@ import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../endpoints/endpoint-translator.js";
 import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
+import { onPath } from "../platform/on-path.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
 import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
@@ -34,7 +35,7 @@ import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnL
 const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai", kimi: "kimi", gemini: "antigravity" };
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
-const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
+export const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
 
 // CLIProxyAPI's own provider id, back to ours — the inverse of CLIPROXY_PROVIDER, which is what an auth file on
 // disk stamps itself with.
@@ -45,35 +46,59 @@ const KEYED_PROVIDER: Record<string, KeyedProvider> = Object.fromEntries(
 /* THE CONNECTION VIEW THAT DOES NOT NEED THE PROXY — every subscription CLIProxyAPI holds, read from its
  * auth-dir on disk.
  *
- * `accounts` below answers the same question through the Management API, which IS the running proxy. That is
- * right for a routed turn (the proxy has to be up for the turn to run at all) and useless for the two callers
- * here, because both run BEFORE one exists: whether to spawn the proxy, and whether the translator pack belongs
- * in the environment overlay. Asking the proxy either question is circular — and on a core image, where the
- * binary is absent entirely, it can only ever answer "nothing connected", which would keep the pack out of the
- * very rebuild that would install it.
+ * The Management API answers the same question from the RUNNING proxy, and that is the better answer whenever
+ * there is one: only the proxy knows each account's `auth_index`, which is what a quota read is addressed by. So
+ * `listFiles` prefers it and falls back here — and every caller of this function is somewhere the proxy cannot
+ * be asked at all:
+ *
+ *   · whether to spawn the proxy, and whether the translator pack belongs in the environment overlay — both run
+ *     BEFORE one exists, so asking it is circular. On a core image, where the binary is absent entirely, it could
+ *     only ever answer "nothing connected", which would keep the pack out of the very rebuild that installs it.
+ *   · the connection list and the routed turn's credential gate, while the proxy is down — its 15s boot warm-up,
+ *     or any rung of the restart ladder. An empty answer there is a lie that hides connected accounts.
  *
  * Each auth file is one account, named `<type>-<account>.json`; the `type` INSIDE it is read rather than the
  * filename parsed, since the name is CLIProxyAPI's to change. Nothing is filtered on the files' `disabled` or
  * `expired` flags: those describe an account's health, `accounts` does not filter on them either, and a stale
- * credential is still a connected subscription — the answer here has to match the list the user is looking at. */
-export const connectedTranslatorProviders = async (authRoot: string): Promise<Set<KeyedProvider>> => {
-    const dir = cliProxyAuthDir(authRoot);
-    const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".json"));
-    const types = await Promise.all(
-        names.map(async (name) => {
-            const raw = await readFile(join(dir, name), "utf8").catch(() => undefined);
+ * credential is still a connected subscription — the answer here has to match the list the user is looking at.
+ * That last rule is the whole reason this file is read at all: a lapsed Google token is a connected account with
+ * a problem, never an absent one, and it must not vanish from the card that exists to let the user renew it. */
+export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFile[]> => {
+    const names = (await readdir(authDir).catch(() => [])).filter((name) => name.endsWith(".json"));
+    const files = await Promise.all(
+        names.map(async (name): Promise<TranslatorAuthFile[]> => {
+            const raw = await readFile(join(authDir, name), "utf8").catch(() => undefined);
             if (raw === undefined) {
-                return undefined;
+                return [];
             }
+            let parsed: { type?: unknown; email?: unknown };
             try {
-                return (JSON.parse(raw) as { type?: unknown }).type;
+                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown };
             } catch {
                 // A file half-written by a login that is still polling — it counts on the next read.
-                return undefined;
+                return [];
             }
+            if (typeof parsed.type !== "string" || KEYED_PROVIDER[parsed.type] === undefined) {
+                return [];
+            }
+            /* Shaped as the Management API's own row so both sources are one type to every caller. `auth_index`
+             * is deliberately absent: it is the proxy's in-memory handle for a quota read, so an account read
+             * off disk renders as the connected account it is with a dot instead of a ring — which is the
+             * correct answer while the thing that measures rings isn't running. */
+            return [{ name, provider: parsed.type, ...(typeof parsed.email === "string" ? { email: parsed.email } : {}) }];
         }),
     );
-    return new Set(types.flatMap((type) => (typeof type === "string" && KEYED_PROVIDER[type] !== undefined ? [KEYED_PROVIDER[type]] : [])));
+    return files.flat();
+};
+
+export const connectedTranslatorProviders = async (authRoot: string): Promise<Set<KeyedProvider>> => {
+    const files = await authFilesOnDisk(cliProxyAuthDir(authRoot));
+    return new Set(
+        files.flatMap((file) => {
+            const keyed = file.provider === undefined ? undefined : KEYED_PROVIDER[file.provider];
+            return keyed === undefined ? [] : [keyed];
+        }),
+    );
 };
 
 // Would a translator have anything to serve? Its two workloads are the routed SUBSCRIPTIONS above and the
@@ -284,21 +309,48 @@ export const createCliProxyClient = (params: {
     managementUrl: string;
     token: string;
     configPath: string;
+    authDir: string;
     usageStore: AccountUsageStore;
     fetchFn?: typeof fetch;
+    binaryPresent?: () => Promise<boolean>;
 }): CliProxyClient => {
-    const { managementUrl, token, configPath, usageStore } = params;
+    const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
+    const binaryPresent = params.binaryPresent ?? (() => onPath("cli-proxy-api"));
     const auth = { authorization: `Bearer ${token}` };
 
+    /* WHY THE PROXY DIDN'T ANSWER, which is two entirely different situations with two different things for the
+     * user to do — and they used to share one sentence.
+     *
+     * No binary in this image is a core image missing the translator pack, fixed by a rebuild. A binary that IS
+     * here and still isn't answering is a proxy mid-boot (its Management API listens a beat after the spawn) or
+     * mid-restart on its backoff ladder, fixed by waiting a moment. Telling the second group to rebuild their
+     * image sends them off to do something slow that changes nothing, and it is what every new user saw in the
+     * seconds between their sandbox starting and the proxy binding its port. */
+    const unreachable = async (cause?: unknown): Promise<Error> =>
+        (await binaryPresent())
+            ? new Error("The model translator isn't answering yet — it may still be starting up. Try again in a moment.", { cause })
+            : new Error(TRANSLATOR_BINARY_MISSING, { cause });
+
+    /* EVERY SUBSCRIPTION THIS SANDBOX HOLDS — from the running proxy when it is up, and from its credential
+     * store on disk when it is not.
+     *
+     * The disk fallback is the difference between "we couldn't ask" and "there is nothing there", and getting
+     * those two confused is what made a shelf of connected Google accounts disappear from the Agent tab and come
+     * back as a Connect button. The proxy is down for real windows — 15s of boot warm-up, and up to 5 minutes on
+     * the restart ladder's ceiling — and this read is BOTH the settings list and the routed turn's credential
+     * gate, so an empty answer in that window told the user they had never signed in and told their turn there
+     * was nothing to run on. The tokens were on disk the whole time, which is where connectedTranslatorProviders
+     * has always read them from for exactly this reason.
+     *
+     * Both shapes of unreachable fall through here: a non-ok answer (proxy still booting / not baked) and the
+     * fetch itself throwing — a dead port, or no translator configured at all (an empty TRANSLATOR_URL makes
+     * this a relative URL, which fetch rejects before it ever dials). The local dev profile lives in that last
+     * shape permanently and reads its accounts off disk from now on. */
     const listFiles = async (): Promise<TranslatorAuthFile[]> => {
-        // Management not reachable ⇒ treat as nothing connected rather than throw. Both shapes of unreachable:
-        // a non-ok answer (proxy still booting / not baked), and the fetch itself throwing — a dead port, or
-        // no translator configured at all (empty TRANSLATOR_URL makes this a relative URL, which fetch rejects
-        // before it ever dials). The local profile lives in that last shape permanently.
         const response = await fetchFn(`${managementUrl}/auth-files`, { headers: auth }).catch(() => undefined);
         if (response === undefined || !response.ok) {
-            return [];
+            return authFilesOnDisk(authDir);
         }
         return ((await response.json()) as { files?: TranslatorAuthFile[] }).files ?? [];
     };
@@ -306,9 +358,11 @@ export const createCliProxyClient = (params: {
     // CLIProxyAPI's xAI and Kimi logins are headless-friendly device flows exposed over the Management API. Each
     // returns a verification URL, optional user code and state, then polls to completion in the background.
     const connectDevice = async (provider: "grok" | "kimi"): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth }).catch((err: unknown) => {
-            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
-        });
+        const response = await fetchFn(`${managementUrl}/${provider === "grok" ? "xai" : "kimi"}-auth-url`, { headers: auth }).catch(
+            async (err: unknown) => {
+                throw await unreachable(err);
+            },
+        );
         if (!response.ok) {
             throw new Error(`${provider === "grok" ? "xAI" : "Kimi Code"} subscription login failed to start (${response.status})`);
         }
@@ -325,8 +379,8 @@ export const createCliProxyClient = (params: {
     // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
     // Google; the explicit redirect flow tells the card to ask for the landing URL.
     const connectGemini = async (): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth }).catch((err: unknown) => {
-            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
+        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth }).catch(async (err: unknown) => {
+            throw await unreachable(err);
         });
         if (!response.ok) {
             throw new Error(`Google sign-in failed to start (${response.status})`);
@@ -346,8 +400,8 @@ export const createCliProxyClient = (params: {
             method: "POST",
             headers: { ...auth, "content-type": "application/json" },
             body: JSON.stringify({ provider: CLIPROXY_PROVIDER[input.provider], redirect_url: input.redirectUrl, state: input.state }),
-        }).catch((err: unknown) => {
-            throw new Error(TRANSLATOR_BINARY_MISSING, { cause: err });
+        }).catch(async (err: unknown) => {
+            throw await unreachable(err);
         });
         if (!response.ok) {
             const reason = ((await response.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
@@ -418,7 +472,21 @@ export const createCliProxyClient = (params: {
         const cliproxyProvider = CLIPROXY_PROVIDER[provider];
         for (const file of await listFiles()) {
             if (file.provider === cliproxyProvider && file.name === name) {
-                await fetchFn(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, { method: "DELETE", headers: auth });
+                /* The proxy OWNS the delete — it holds the credential in memory as well as on disk, so removing
+                 * the file behind its back would leave a live account serving turns off a token the user believes
+                 * they revoked. So a proxy that isn't answering means the disconnect did not happen, and saying so
+                 * is the only honest answer: the row this list now draws from disk is reachable while the proxy is
+                 * down, which is exactly when a silently-swallowed DELETE would report success and change nothing.
+                 */
+                const response = await fetchFn(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, {
+                    method: "DELETE",
+                    headers: auth,
+                }).catch(async (err: unknown) => {
+                    throw await unreachable(err);
+                });
+                if (!response.ok) {
+                    throw new Error(`The translator refused to drop that account (${response.status}).`);
+                }
                 attemptedAt.delete(usageKey(provider, name));
                 await usageStore.clear(usageKey(provider, name));
             }
@@ -439,13 +507,19 @@ export const createCliProxyClient = (params: {
     const REFRESH_AFTER_MS = 5 * 60_000;
     const attemptedAt = new Map<string, number>();
 
-    // Every auth file whose quota this client can actually read, paired with the provider it belongs to.
+    /* Every auth file whose quota this client can actually read, paired with the provider it belongs to.
+     *
+     * `auth_index` is the proxy's own handle for the account, and a quota read is addressed by it — so a row that
+     * has none is not readable, whatever else is true of it. That is every row `listFiles` recovers from disk
+     * while the proxy is down (authFilesOnDisk), and without this filter each one would look permanently overdue:
+     * a sweep would fire on every `accounts` call — once per routed turn, and every three seconds through a
+     * connect flow — to ask an upstream it has no address for and record nothing. */
     const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
         KeyedProviderSchema.options
             .filter(reportsPlanLimits)
             .flatMap((provider) =>
                 files.flatMap((file) =>
-                    file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
+                    file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined && file.auth_index !== undefined
                         ? [{ provider, file, key: usageKey(provider, file.name) }]
                         : [],
                 ),

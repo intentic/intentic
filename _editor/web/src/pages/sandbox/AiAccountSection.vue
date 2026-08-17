@@ -67,7 +67,13 @@ const {
     cancelTranslatorConnect,
     disconnectTranslator,
 } = useChat();
-// The chat store reports a bare message; this section knows the user is here to connect an account.
+/* The chat store reports a bare message; this section knows the user is here to connect an account.
+ *
+ * The store's message lands in `detail` on the noticeFrom convention — the app's sentence leads, the caught one
+ * is evidence — and that is the slot the DAEMON's sentence arrives in for a failed sign-in. Which is why this
+ * card was useless for so long: oRPC replaced every message the translator routes threw with "Internal server
+ * error" (fixed at the source in translator.routes.ts), so the evidence line named no cause and the headline
+ * was all the reader got. The pairing is right; the wire was dropping half of it. */
 const chatNotice = computed<NoticeModel | undefined>(() =>
     chatError.value === null ? undefined : { tone: `danger`, title: `Couldn't reach your AI accounts.`, detail: chatError.value },
 );
