@@ -32,28 +32,46 @@ export interface PlanInput {
     readonly dockerReady: boolean;
     /** This setup also enrols desktop sync (the setup link carried a folder). */
     readonly syncing: boolean;
+    /** `windows` swaps the first two steps and renames them — see below. */
+    readonly os: string;
 }
 
-/* The steps that always happen, in the order the flow takes them: connect.sh checks Docker and fetches the
- * CLI, then ic preflights, redeems the code, pulls, starts, waits, verifies and connects the machine. */
-export const setupPlan = (input: PlanInput): readonly PlanStep[] => [
-    { phase: `checking-docker`, label: `Check Docker`, weight: 5 },
-    // The only step that can dominate the whole install — a ~1.5 GB download, an installer, a first-run
-    // dialog and on Windows possibly a WSL2 setup. Its weight is the reason the bar crawls honestly on a
-    // machine that needs it instead of sitting at 90% for ten minutes.
-    ...(input.dockerReady ? [] : [{ phase: `installing-docker`, label: `Install Docker`, weight: 420 }]),
-    { phase: `fetching-ic`, label: `Fetch the installer`, weight: 15 },
-    { phase: `preflight`, label: `Check this computer`, weight: 10 },
-    { phase: `claiming-code`, label: `Redeem your setup code`, weight: 5 },
-    // The second long one, and the one people meet on every first install. It reports real progress (docker
-    // names each layer as it lands), so this weight only has to be right about its share of the whole.
-    { phase: `pulling-image`, label: `Download the sandbox image`, weight: 240 },
-    { phase: `starting-sandbox`, label: `Start your sandbox`, weight: 25 },
-    { phase: `waiting-health`, label: `Wait for it to come up`, weight: 40 },
-    { phase: `verifying`, label: `Check it answers`, weight: 20 },
-    ...(input.syncing ? [{ phase: `desktop-sync`, label: `Set up folder sync`, weight: 45 }] : []),
-    { phase: `connecting-machine`, label: `Connect this computer`, weight: 20 },
-];
+/* The steps that always happen, in the order the flow takes them: the shim checks Docker and fetches the
+ * installer, then it preflights, redeems the code, pulls, starts, waits, verifies and connects the machine.
+ *
+ * WINDOWS TAKES THE FIRST TWO IN THE OTHER ORDER, and that is a real difference rather than a cosmetic one.
+ * "Does this machine have Docker" is one question on Linux and a dozen on Windows — virtualization,
+ * WSL2, the two Windows features behind it, a pending restart, the package manager this PC may not have —
+ * and that examination lives in the installer binary, so the binary has to be here before it can happen.
+ * Drawing the steps in the order they will actually run is the entire contract of this screen. */
+export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
+    const windows = input.os === `windows`;
+    const fetch: PlanStep = { phase: `fetching-ic`, label: `Fetch the installer`, weight: 15 };
+    const check: PlanStep = {
+        phase: `checking-docker`,
+        label: windows ? `Check what Docker needs` : `Check Docker`,
+        weight: windows ? 12 : 5,
+    };
+    // The only step that can dominate the whole install — a ~600 MB download, an installer, a first-run
+    // dialog, and on Windows possibly turning on WSL2 as well. Its weight is the reason the bar crawls
+    // honestly on a machine that needs it instead of sitting at 90% for ten minutes.
+    const install: PlanStep[] = input.dockerReady
+        ? []
+        : [{ phase: `installing-docker`, label: windows ? `Set up Docker` : `Install Docker`, weight: windows ? 600 : 420 }];
+    return [
+        ...(windows ? [fetch, check, ...install] : [check, ...install, fetch]),
+        { phase: `preflight`, label: `Check this computer`, weight: 10 },
+        { phase: `claiming-code`, label: `Redeem your setup code`, weight: 5 },
+        // The second long one, and the one people meet on every first install. It reports real progress (docker
+        // names each layer as it lands), so this weight only has to be right about its share of the whole.
+        { phase: `pulling-image`, label: `Download the sandbox image`, weight: 240 },
+        { phase: `starting-sandbox`, label: `Start your sandbox`, weight: 25 },
+        { phase: `waiting-health`, label: `Wait for it to come up`, weight: 40 },
+        { phase: `verifying`, label: `Check it answers`, weight: 20 },
+        ...(input.syncing ? [{ phase: `desktop-sync`, label: `Set up folder sync`, weight: 45 }] : []),
+        { phase: `connecting-machine`, label: `Connect this computer`, weight: 20 },
+    ];
+};
 
 /* --- docker's own account of the pull ---
  *

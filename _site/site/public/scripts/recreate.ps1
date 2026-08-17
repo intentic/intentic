@@ -24,7 +24,8 @@ param(
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
-# ---- fetch the ic CLI (keep in lockstep with connect.ps1 - standalone irm|iex files) ----
+# ---- fetch the ic CLI (the same block connect.ps1 and connect-host.ps1 carry, apart from its one narration
+#      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
 # Downloaded on EVERY run, so re-running a card's command upgrades an existing install; only a failed
 # download falls back to what's installed. IC_BIN overrides for local dev.
 $Ic = $env:IC_BIN

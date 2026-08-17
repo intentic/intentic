@@ -566,6 +566,63 @@ mod tests {
         }
     }
 
+    /* THREE COPIES OF ONE DOWNLOAD, HELD TO EACH OTHER.
+     *
+     * `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone
+     * string: there is no import, no dot-sourcing and no shared file, so the block that fetches the `ic`
+     * binary genuinely has to exist three times. Each copy carries the fallback ladder (a failed download
+     * uses the installed binary, then one on PATH, then gives up), the download-then-rename that keeps a
+     * half-written executable from ever running, and the TLS 1.2 line that Windows PowerShell 5.1 needs
+     * before it will talk to GitHub at all.
+     *
+     * Those are the parts that go quietly wrong in a copy. Their comments have said "keep in lockstep" since
+     * the second copy appeared, which is a hope; this is the check. Only the narration line differs by design
+     * — one of them names a progress phase the desktop app watches for — so that line is dropped before the
+     * comparison rather than being an excuse not to make it. */
+    #[test]
+    fn every_copy_of_the_ic_download_is_the_same_download() {
+        let scripts = powershell_scripts();
+        let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
+        for (path, text) in &scripts {
+            if let Some(block) = ic_fetch_block(text) {
+                blocks.push((path.clone(), block));
+            }
+        }
+        assert!(
+            blocks.len() >= 3,
+            "expected connect/connect-host/recreate to carry this block, found {}",
+            blocks.len()
+        );
+        let (first_path, first) = &blocks[0];
+        for (path, block) in &blocks[1..] {
+            assert_eq!(
+                block,
+                first,
+                "{} and {} fetch the ic binary differently. These files cannot share code, so the copies \
+                 have to be identical apart from their narration line — fix the one that drifted rather \
+                 than relaxing this test.",
+                path.display(),
+                first_path.display(),
+            );
+        }
+    }
+
+    /// The `$Ic = $env:IC_BIN` block, up to the brace that closes it, minus the one line that is allowed to
+    /// differ. None for a script that has no such block (cleanup, sync, computer).
+    fn ic_fetch_block(text: &str) -> Option<String> {
+        let start = text.find("$Ic = $env:IC_BIN")?;
+        let rest = &text[start..];
+        // The block is one `if (-not $Ic) { … }`, and its closing brace is the first one in column 0.
+        let end = rest.find("\n}\n").map(|at| at + 3).unwrap_or(rest.len());
+        Some(
+            rest[..end]
+                .lines()
+                .filter(|line| !line.contains("fetching the ic CLI"))
+                .collect::<Vec<&str>>()
+                .join("\n"),
+        )
+    }
+
     /// Every shipped `.ps1`, as (path, contents). The checks above are properties of the FILE that no Linux
     /// runner can reach any other way — the Windows installer is cross-built here and these scripts first
     /// execute on a user's machine.

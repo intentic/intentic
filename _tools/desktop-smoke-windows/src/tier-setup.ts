@@ -92,6 +92,31 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     }
     harness.pass(`the daemon runs linux containers`);
 
+    /* ── the prerequisite examination, on a machine that has nothing wrong with it ──────────────────────
+     *
+     * `ic docker prepare` reads a dozen facts off this PC — WMI classes, service names, registry values,
+     * `wsl --status` — and decides from them whether a sandbox can run here. Every one of those is a name that
+     * only exists on Windows, and the binary is cross-built on Linux, so nothing before this line has ever
+     * executed a single one of them.
+     *
+     * `--dry-run` on a machine this tier has just confirmed is healthy therefore asserts the strongest thing
+     * available cheaply: the probe runs, its output parses, and the classifier finds NOTHING. A renamed field
+     * or a probe that silently returns nothing would fail here as a fistful of imaginary problems — which is
+     * exactly how it would reach a user, except that they would meet it on a machine that really was fine. */
+    if (options.icBin !== undefined) {
+        harness.section(`ic docker prepare (read-only)`);
+        const prepared = await run(options.icBin, [`docker`, `prepare`, `--dry-run`], { timeoutMs: 120_000 });
+        if (prepared.code === 0) {
+            harness.pass(`it finds this PC ready`);
+        } else {
+            harness.fail(
+                `ic docker prepare --dry-run exited ${prepared.code} on a PC whose Docker this tier just verified`,
+                `Either the machine really is missing something, or the Windows probe is misreading it — the checklist below says which.\n${prepared.stdout}\n${prepared.stderr}`,
+            );
+            return undefined;
+        }
+    }
+
     // ── run the setup the app would run ─────────────────────────────────────────────────────────────────
     harness.section(`the shipped connect.ps1 (image: ${options.sandboxImage})`);
     const env: Record<string, string> = {

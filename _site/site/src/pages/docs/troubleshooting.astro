@@ -65,6 +65,40 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         install Docker yourself and re-run it without. Everything after that step is a docker or curl call your own user can make.
     </p>
 
+    <h3 id="windows-docker">On Windows, the install stopped over Docker</h3>
+    <p>
+        Docker on Windows runs Linux containers inside <strong>WSL2</strong>, which in turn needs hardware virtualization and two Windows
+        features. The setup checks all of it before it starts and tells you, in one list, exactly what is missing — so the answer is whatever
+        that list says rather than a guess. Most of it it does for you, once, after asking:
+    </p>
+    <ul>
+        <li>
+            <strong>WSL2 or its Windows features are off</strong> — turned on for you (Windows asks for permission), then your PC restarts. The
+            desktop app saves the setup and picks it up again after the restart; from a terminal, run the same command once you are back.
+        </li>
+        <li>
+            <strong>Docker Desktop isn't installed</strong> — installed for you. If this PC has no Windows package manager, the installer is
+            downloaded straight from docker.com instead, which is the same thing by a different route.
+        </li>
+        <li>
+            <strong>Docker is installed but the engine isn't up</strong> — started and waited for. If Docker Desktop is showing you its
+            first-run screens, finish those and run the setup again.
+        </li>
+        <li>
+            <strong>Docker is in Windows-container mode</strong> — switched back to Linux containers, which is what a sandbox is.
+        </li>
+    </ul>
+    <p>
+        Two of them are not ours to fix, and the setup says so plainly rather than retrying. <strong>Virtualization switched off in your
+        PC's firmware</strong> is a BIOS/UEFI setting — no software can change it from inside Windows — so the setup prints the steps,
+        including the key to press for your make of PC. And if this Windows is itself a <strong>virtual machine</strong>, nested
+        virtualization has to be enabled on the machine hosting it, with the VM shut down.
+    </p>
+    <p>
+        You can ask for the diagnosis on its own at any time, without changing anything:{" "}
+        <code>ic docker prepare --dry-run</code>.
+    </p>
+
     <h3>The setup code no longer works</h3>
     <p>
         Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the setup screen and a fresh code is minted into a fresh command; nothing else is lost, and it is still the same sandbox. Re-running a command whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.

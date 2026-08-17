@@ -78,7 +78,11 @@ export type RunEvent =
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
 export const pendingSetup = (): Promise<SetupArgs | null> => invoke(`pending_setup`);
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
-export const setupRun = (args: SetupArgs): Promise<void> => invoke(`setup_run`, { args });
+/* `install` is the user's answer to the requirements list, and it is what makes the flow's one question one
+ * question. A setup's FIRST attempt always passes false: `ic docker prepare` then examines the machine,
+ * reports what would have to change and stops without changing it. The window draws that as a list with a
+ * button, and the click comes back here as true. On a machine that needs nothing the two are the same run. */
+export const setupRun = (args: SetupArgs, install = false): Promise<void> => invoke(`setup_run`, { args, install });
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
 export const sandboxPower = (slug: string, action: PowerAction): Promise<void> => invoke(`sandbox_power`, { slug, action });
 // One command for all three recreate modes, exactly as the script takes them: no hash updates to the fresh
@@ -131,3 +135,83 @@ export const parseStep = (line: string): Step | undefined => {
     const found = STEP.exec(line);
     return found === null ? undefined : { phase: found[1] ?? ``, message: (found[2] ?? ``).trim() };
 };
+
+/* SOMETHING THIS COMPUTER NEEDS BEFORE A SANDBOX CAN RUN — the other thing the installer prints, and the
+ * only one this window turns into a control rather than a line of text.
+ *
+ * Windows is the reason this exists. On Linux and macOS "you need Docker" is one sentence with one fix; on
+ * Windows it is a tree — virtualization switched off in firmware, WSL2 absent, a restart Windows is already
+ * waiting for, a package manager this PC does not have, an engine in the wrong container mode — and the
+ * difference between them is the difference between a button that fixes it, a button that restarts, and a
+ * page of instructions for something no software can do from inside Windows.
+ *
+ * So `ic docker prepare` prints one of these per unmet requirement, and `action` is what this window
+ * switches on. It is a SEPARATE marker from the phase lines above, deliberately: a requirement is not a step,
+ * and a parser that took it for one would slide the progress bar to a phase that does not exist.
+ *
+ * Emitted only when the installer's output is a pipe — which is exactly this window, and never a terminal,
+ * where the same information is already prose. */
+const REQUIREMENT = /^intentic-requirement: (\{.*\})$/;
+
+/** How an unmet requirement gets met. Mirrors ic's `prepare::plan::Action` — same strings, same meanings. */
+export type RequirementAction =
+    | `fix` // we can do it, right now
+    | `fixElevated` // we can do it, once Windows has asked for administrator
+    | `restart` // Windows has to restart first
+    | `firmware` // a BIOS/UEFI setting; no software can change it
+    | `hostVm` // this Windows is a guest and its host has to change
+    | `user` // a person has to do something we cannot
+    | `signOut` // done, but only the next sign-in picks it up
+    | `unsupported`; // not something this build runs on
+
+export interface Requirement {
+    /** Stable id (`virtualization`, `wsl-features`, `docker-desktop`, …) — never reworded. */
+    readonly id: string;
+    /** The heading, in the reader's terms. */
+    readonly title: string;
+    readonly problem: string;
+    readonly remedy: string;
+    readonly action: RequirementAction;
+    /** The long form, where there is one — the firmware walkthrough, mostly. Pre-formatted; show verbatim. */
+    readonly detail?: string;
+}
+
+export const parseRequirement = (line: string): Requirement | undefined => {
+    const found = REQUIREMENT.exec(line);
+    if (found === null) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(found[1] ?? ``) as Partial<Requirement>;
+        // A requirement with no id is one this window cannot key, de-duplicate or act on, which makes it a
+        // line of text — and there is already a log for those.
+        return typeof parsed.id === `string` && parsed.id !== ``
+            ? {
+                  id: parsed.id,
+                  title: parsed.title ?? parsed.id,
+                  problem: parsed.problem ?? ``,
+                  remedy: parsed.remedy ?? ``,
+                  action: parsed.action ?? `user`,
+                  ...(parsed.detail ? { detail: parsed.detail } : {}),
+              }
+            : undefined;
+    } catch {
+        // A truncated line (the pipe closed mid-write) is not worth a broken screen.
+        return undefined;
+    }
+};
+
+/* --- the native side of a Windows restart, and of coming back from one --- */
+
+/** Save this setup so the app can pick it up after Windows restarts, then restart Windows. */
+export const restartForSetup = (args: SetupArgs): Promise<void> => invoke(`restart_for_setup`, { args });
+/** The setup that was interrupted by a restart, if there is one and it is still worth resuming. */
+export const resumableSetup = (): Promise<ResumableSetup | null> => invoke(`resumable_setup`);
+/** Forget it — taken when the user backs out, or when its code has expired. */
+export const forgetResumableSetup = (): Promise<void> => invoke(`forget_resumable_setup`);
+
+export interface ResumableSetup {
+    readonly args: SetupArgs;
+    /** Seconds since it was saved. Setup codes last 30 minutes, and a restart can eat most of that. */
+    readonly agedSeconds: number;
+}

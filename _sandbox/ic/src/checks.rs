@@ -278,10 +278,62 @@ pub fn check_disk() -> Outcome {
     disk_outcome(output.as_deref().and_then(parse_df_avail), &root)
 }
 
+/// Windows measures its own free space inside [`check_windows`], which probes the machine once for a dozen
+/// facts at a time — asking a second time here would be a second `powershell.exe` launch for a number we
+/// already have.
 #[cfg(not(unix))]
 pub fn check_disk() -> Outcome {
     Outcome::Skip {
-        why: "no portable free-space probe on Windows — watch the pull for disk errors".to_string(),
+        why: "measured with the rest of this PC's prerequisites".to_string(),
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Windows — the prerequisites Docker itself has, which on no other platform are a tree.
+// ───────────────────────────────────────────────────────────────────────────
+
+/* THE SAME DIAGNOSIS THE INSTALLER MADE, ARRIVING WHERE THE USER ACTUALLY IS.
+ *
+ * `ic docker prepare` runs before this and fixes what it can, so on the ordinary path this check passes and
+ * costs a second. It exists for the two paths where it does not:
+ *
+ *   • somebody running `ic sandbox connect` directly, who never went through the shim at all;
+ *   • a machine that changed between the two — Docker Desktop stopped, a WSL update pending.
+ *
+ * And it exists because of WHERE a preflight failure goes. `findings_failed` posts these to the platform,
+ * which the setup page renders while the user waits — so "virtualization is switched off in this PC's
+ * firmware", with the walkthrough, reaches the browser tab of somebody who closed the terminal ten minutes
+ * ago. That is the one surface the old shim's stderr could never reach.
+ *
+ * Every unmet requirement is folded into ONE finding rather than one each: the preflight's rows name AREAS of
+ * a machine ("Docker", "Disk space"), and a Windows PC with four things wrong should not push the other
+ * checks off the screen. The composed problem still names all four. */
+#[cfg(windows)]
+pub fn check_windows() -> Outcome {
+    let facts = match crate::prepare::facts::probe() {
+        Ok(facts) => facts,
+        // A machine that would not describe itself has not failed anything: docker_outcome above still has to
+        // pass on its own, and refusing here would turn a WMI fault into "your PC is broken".
+        Err(why) => return Outcome::Skip { why },
+    };
+    let unmet = crate::prepare::plan::requirements(&facts);
+    if unmet.is_empty() {
+        return Outcome::Pass;
+    }
+    Outcome::Fail {
+        problem: unmet
+            .iter()
+            .map(|requirement| requirement.problem.clone())
+            .collect::<Vec<String>>()
+            .join(" "),
+        remedy: format!(
+            "{} Run `ic docker prepare` (or the setup one-liner) and it will do what it can.",
+            unmet
+                .iter()
+                .map(|requirement| requirement.remedy.clone())
+                .collect::<Vec<String>>()
+                .join(" ")
+        ),
     }
 }
 

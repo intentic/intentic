@@ -1,8 +1,13 @@
 <#
 .SYNOPSIS
-  intentic connect (Windows) - bootstrap shim: get Docker Desktop onto this PC, fetch the `ic` CLI, and hand
+  intentic connect (Windows) - bootstrap shim, and now genuinely only that: fetch the `ic` CLI, let it get
+  this PC ready for Docker (`ic docker prepare` - virtualization, WSL2, Docker Desktop, its engine), then hand
   the flow over to `ic sandbox connect`, which does everything else - the setup-code claim, tunnels, the
-  launch, the Docker-in-Docker deploy target (SELF_HOST), desktop sync. The flow lives in _sandbox/ic.
+  launch, the Docker-in-Docker deploy target (SELF_HOST), desktop sync. Both flows live in _sandbox/ic.
+
+  The CLI is fetched BEFORE Docker is looked at, which is the one ordering worth knowing about here: the
+  Windows prerequisite tree is far too large to live in a shell script, and putting it in ic is what lets the
+  terminal, the desktop app and the browser setup page all report the same diagnosis.
 
   The setup code carries the sandbox's reachability grant on intentic's own tunnel hub; the sandbox enables
   with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS PC's SSH for the deploy engine.
@@ -23,8 +28,8 @@ param(
     # Start without prompting even if other sandboxes are already running (the old always-proceed behavior).
     [switch]$Yes
 )
-# NOT 'Stop': this shim probes with docker and branches on $LASTEXITCODE itself - a probe exiting non-zero is
-# the ANSWER, not a failure. Windows PowerShell 5.1 (what `powershell.exe` still is, and what the desktop app
+# NOT 'Stop': this shim branches on $LASTEXITCODE itself - a child exiting non-zero is an ANSWER to act on,
+# not a failure to abort into. Windows PowerShell 5.1 (what `powershell.exe` still is, and what the desktop app
 # spawns) additionally turns a redirected native stderr into a terminating error under 'Stop'.
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -45,53 +50,8 @@ if ($PlatformUrl) { $env:PLATFORM_URL = $PlatformUrl }
 if ($ConnectToken) { $env:CONNECT_TOKEN = $ConnectToken }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
 
-Write-Step 'checking-docker' 'checking Docker...'
-$DockerInstalled = $false
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    # Best-effort guided install: winget can install Docker Desktop, but a first WSL2 setup may require a
-    # reboot - the daemon wait below names that remedy. Never silent: consent (naming Docker's terms) first.
-    if ($env:INSTALL_DOCKER -ne '1') {
-        $answer = Read-Host 'intentic: Docker Desktop is not installed. Install it now via winget? Continuing accepts Docker''s terms (https://www.docker.com/legal/docker-subscription-service-agreement) [Y/n]'
-        if ($answer -match '^[nN]') {
-            Write-Error 'docker is required - install Docker Desktop (https://docs.docker.com/get-docker/) and re-run.'
-            exit 1
-        }
-    }
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Error 'docker is not installed and winget is unavailable - install Docker Desktop (https://docs.docker.com/get-docker/), then re-run.'
-        exit 1
-    }
-    Write-Step 'installing-docker' 'installing Docker Desktop (winget, ~500 MB)...'
-    winget install --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'Docker Desktop install failed - install it manually (https://docs.docker.com/get-docker/), then re-run.'
-        exit 1
-    }
-    # A fresh install isn't on this session's PATH yet; point at the standard install location and launch it.
-    $env:Path += ";$env:ProgramFiles\Docker\Docker\resources\bin"
-    $dockerDesktop = "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
-    if (Test-Path $dockerDesktop) { Start-Process $dockerDesktop }
-    $DockerInstalled = $true
-}
-docker info *> $null
-if ($LASTEXITCODE -ne 0) {
-    if (-not $DockerInstalled) {
-        Write-Error 'the docker daemon is not running. Start Docker Desktop, then re-run.'
-        exit 1
-    }
-    Write-Step 'installing-docker' 'waiting for Docker Desktop (accept the first-run dialog if shown)...'
-    for ($i = 0; $i -lt 60; $i++) {
-        Start-Sleep -Seconds 5
-        docker info *> $null
-        if ($LASTEXITCODE -eq 0) { break }
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'the Docker daemon did not come up - if Windows asked to reboot (WSL2 setup), reboot and re-run this command.'
-        exit 1
-    }
-}
-
-# ---- fetch the ic CLI (keep in lockstep with recreate.ps1 - standalone irm|iex files) ----
+# ---- fetch the ic CLI (the same block recreate.ps1 and connect-host.ps1 carry, apart from its one narration
+#      line - these are standalone irm|iex files and cannot share code, so a test holds them to it instead) ----
 # Downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed download
 # falls back to what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
 # executable fails, and a half-downloaded binary must never be what runs.
@@ -124,6 +84,24 @@ if (-not $Ic) {
         }
     }
 }
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+#
+# This used to be forty lines of this script: is `docker` on PATH, does `docker info` answer, and if not,
+# winget. It saw two of the dozen states a Windows PC can be in, and every other one arrived as the same
+# sentence - most often "docker is not installed and winget is unavailable", which is a dead end on a machine
+# where the only thing missing was a different download.
+#
+# It is now `ic docker prepare`: one read-only examination of this PC (Windows version, virtualization,
+# WSL2, the features behind it, a pending restart, Docker itself, its group, its engine, its container mode,
+# free space), one question covering everything that has to change, and then the changes. It is in ic rather
+# than here because the SAME reading feeds the desktop app's install screen and the platform's setup page -
+# and because a decision written in Rust is one the Linux runner that cross-builds this can actually test.
+#
+# Consent still comes from the same place it always did: INSTALL_DOCKER=1 pre-approves (the desktop app sets
+# it), and otherwise ic asks on the terminal. Nothing below this line is reached until Docker answers.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Everything else - claim, tunnels, launch, the dind deploy target, sync - is ic's. The env this shell
 # carries (CF_TOKEN, SANDBOX_IMAGE, SELF_HOST, ...) rides along.

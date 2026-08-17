@@ -55,9 +55,27 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     <h2>Installing Docker</h2>
     <p>
         The desktop app and the setup command both install Docker for you if it's missing, and both ask first: it's a root-level change
-        beyond the sandbox itself, so it is never silent. On Linux that's <code>get.docker.com</code>; on Windows it's Docker Desktop via{" "}
-        <code>winget</code>, and a first WSL2 setup may want a reboot. In an unattended run set <code>INSTALL_DOCKER=1</code> to pre-consent,
-        or <a href="https://docs.docker.com/get-docker/">install Docker yourself</a> beforehand and every path will use it.
+        beyond the sandbox itself, so it is never silent. On Linux that's <code>get.docker.com</code>. In an unattended run set{" "}
+        <code>INSTALL_DOCKER=1</code> to pre-consent, or <a href="https://docs.docker.com/get-docker/">install Docker yourself</a> beforehand
+        and every path will use it.
+    </p>
+
+    <h3>Windows needs more than Docker</h3>
+    <p>
+        Docker's Linux engine on Windows runs inside <strong>WSL2</strong>, so a Windows PC has a short chain of requirements rather than one:
+        hardware virtualization enabled in firmware, the <em>Virtual Machine Platform</em> and <em>Windows Subsystem for Linux</em> features
+        turned on, a current WSL2 kernel, and then Docker Desktop itself. Windows 10 version 21H2 or newer, 64-bit Intel or AMD.
+    </p>
+    <p>
+        Every install path checks that chain in one go before touching anything, shows you the whole list, and asks once. It then turns on
+        what it can (the features, then a restart), installs Docker Desktop — through the Windows package manager where there is one, and
+        straight from docker.com where there isn't — starts its engine and makes sure it is in Linux-container mode. What it cannot do it
+        says so about: a firmware virtualization switch is changed in BIOS/UEFI before Windows boots, and a Windows running inside a virtual
+        machine needs nested virtualization enabled on its host.
+    </p>
+    <p>
+        The same examination is available on its own, read-only: <code>ic docker prepare --dry-run</code>. See{" "}
+        <a href="/docs/troubleshooting/#windows-docker">Troubleshooting</a> for what each outcome means.
     </p>
 
     <h2>What gets created</h2>

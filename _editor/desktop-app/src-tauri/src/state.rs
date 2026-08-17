@@ -41,6 +41,16 @@ pub struct Settings {
     pub platform_url: Option<String>,
 }
 
+/// A setup parked across a Windows restart. See [`AppState::park_setup`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParkedSetup {
+    pub args: SetupArgs,
+    /// Unix seconds. The point of writing it down: after a restart there is nothing else left that knows how
+    /// long ago this was, and the setup code inside expires.
+    pub saved_at: u64,
+}
+
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
@@ -110,6 +120,42 @@ impl AppState {
 
     fn close_action_path(&self) -> PathBuf {
         self.config_dir.join("close-action.json")
+    }
+
+    /* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process
+     * by design rather than by accident.
+     *
+     * Turning WSL2 on is the ordinary first step of a Windows install and it does nothing until the machine
+     * reboots. Everything else this app parks lives in `pending`, in memory, which is exactly right for a
+     * handover from a browser tab and exactly wrong here: the reboot is the point.
+     *
+     * On disk, with the time it was written, because the setup code inside it expires thirty minutes after
+     * the platform minted it and a Windows feature install plus a restart can spend most of that. The age is
+     * what lets the window say "your code expired while your PC restarted" instead of failing at the claim
+     * with something that reads like a bad code. */
+    pub fn park_setup(&self, args: &SetupArgs) {
+        let parked = ParkedSetup {
+            args: args.clone(),
+            saved_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_secs())
+                .unwrap_or(0),
+        };
+        write_json(&self.parked_setup_path(), &parked);
+    }
+
+    pub fn parked_setup(&self) -> Option<ParkedSetup> {
+        read_json(&self.parked_setup_path())
+    }
+
+    /// Taken rather than left: a resume that has been offered has been offered, and a file that survives it
+    /// would re-open the same card on every launch from here on.
+    pub fn clear_parked_setup(&self) {
+        let _ = std::fs::remove_file(self.parked_setup_path());
+    }
+
+    fn parked_setup_path(&self) -> PathBuf {
+        self.config_dir.join("resume-setup.json")
     }
 
     /* THE ONE THING THAT TIES THIS APP'S TWO FACES TOGETHER IN ANALYTICS.

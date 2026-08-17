@@ -7,6 +7,7 @@ mod logfile;
 #[cfg(unix)]
 mod machine;
 mod platform;
+mod prepare;
 mod record;
 mod sandbox;
 #[cfg(unix)]
@@ -44,6 +45,22 @@ enum Command {
     /// This machine as a deploy target for a sandbox
     #[command(subcommand)]
     Machine(MachineCommand),
+    /// Docker on this machine — what it needs, and getting it there
+    #[command(subcommand)]
+    Docker(DockerCommand),
+}
+
+#[derive(Subcommand)]
+enum DockerCommand {
+    /// Check every prerequisite for running a sandbox here and, with consent, put them right
+    Prepare {
+        /// Go ahead without asking (the shims and the desktop app pass this; INSTALL_DOCKER=1 also works)
+        #[arg(short = 'y', long = "yes", alias = "force")]
+        yes: bool,
+        /// Report what is wrong and change nothing
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -155,6 +172,12 @@ fn main() {
             }),
         },
         Command::Machine(command) => run_machine(command),
+        Command::Docker(DockerCommand::Prepare { yes, dry_run }) => prepare::run(prepare::Args {
+            // The desktop app has no terminal to answer a question on, so its consent arrives as the same
+            // environment variable connect.sh has always used for a headless install.
+            yes: yes || std::env::var("INSTALL_DOCKER").as_deref() == Ok("1"),
+            dry_run,
+        }),
     };
     if let Err(util::Fail(message)) = result {
         eprintln!("error: {message}");
@@ -328,6 +351,30 @@ mod tests {
         );
         assert!(!keep_user);
         assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
+    }
+
+    /* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it
+     * will not parse — and it is the one command here whose flags decide whether a machine gets CHANGED. */
+    #[test]
+    fn docker_prepare_defaults_to_asking_and_to_acting() {
+        let Ok(Cli {
+            command: Command::Docker(DockerCommand::Prepare { yes, dry_run }),
+        }) = parse(&["docker", "prepare"])
+        else {
+            panic!("the shims' own invocation did not parse")
+        };
+        assert!(!yes, "consent is never a default: this installs software");
+        assert!(!dry_run, "a bare prepare is the one that fixes things");
+
+        let Ok(Cli {
+            command: Command::Docker(DockerCommand::Prepare { yes, dry_run }),
+        }) = parse(&["docker", "prepare", "-y", "--dry-run"])
+        else {
+            panic!("flags did not parse")
+        };
+        assert!(yes && dry_run);
+        // No positionals: a stray argument must be refused rather than silently ignored.
+        assert!(parse(&["docker", "prepare", "extra"]).is_err());
     }
 
     #[test]

@@ -93,6 +93,11 @@ fn connect(
         checks::Check::new("Docker", checks::check_docker),
         checks::Check::new("Disk space", checks::check_disk),
     ];
+    // Windows only, and FIRST among the machine checks in the report: when a PC cannot virtualize, "docker is
+    // not installed" is a true sentence about a consequence, and the reader needs the cause. checks::check_windows
+    // explains why this is worth a second even on the path where the shim already fixed everything.
+    #[cfg(windows)]
+    list.insert(0, checks::Check::new("This PC", checks::check_windows));
     // Only when this run actually speaks to the platform — the code's claim, and the wizard's reports that
     // ride the same code. A codeless run carries its tokens in the env and never calls the origin, so
     // probing it would fail a setup on an address nothing was going to use. Same shape as the Cloudflare

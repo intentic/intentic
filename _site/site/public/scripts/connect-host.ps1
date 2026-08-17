@@ -114,49 +114,49 @@ function Invoke-ImagePull([string]$Image) {
     }
 }
 
-# ---- Docker Desktop (lifted from connect.ps1) ----
-Write-Host 'intentic: checking Docker...'
-$DockerInstalled = $false
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    if ($env:INSTALL_DOCKER -ne '1') {
-        $answer = Read-Host 'intentic: Docker Desktop is not installed. Install it now via winget? Continuing accepts Docker''s terms (https://www.docker.com/legal/docker-subscription-service-agreement) [Y/n]'
-        if ($answer -match '^[nN]') {
-            Write-Error 'docker is required - install Docker Desktop (https://docs.docker.com/get-docker/) and re-run.'
-            exit 1
+# ---- fetch the ic CLI (the same block connect.ps1 and recreate.ps1 carry, apart from its one narration
+#      line - a test in desktop-app/src-tauri/src/scripts.rs holds the three to that, because three
+#      hand-kept copies of a download are three chances to drift) ----
+# Downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed download
+# falls back to what's installed. IC_BIN overrides for local dev. Download-then-rename: overwriting a running
+# executable fails, and a half-downloaded binary must never be what runs.
+$Ic = $env:IC_BIN
+if (-not $Ic) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $IcDir = "$env:USERPROFILE\.intentic\ic\bin"
+    New-Item -ItemType Directory -Force -Path $IcDir | Out-Null
+    $IcDest = "$IcDir\ic.exe"
+    $IcBase = if ($env:IC_URL) { $env:IC_URL } else { 'https://github.com/intentic/intentic/releases/latest/download' }
+    Write-Host 'intentic: [fetching-ic] fetching the ic CLI...'
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile "$IcDest.tmp"
+        Move-Item -Force "$IcDest.tmp" $IcDest
+        $Ic = $IcDest
+    } catch {
+        Remove-Item -Force "$IcDest.tmp" -ErrorAction SilentlyContinue
+        if (Test-Path $IcDest) {
+            Write-Host "note: could not download the latest ic CLI - continuing with the installed $IcDest."
+            $Ic = $IcDest
+        } else {
+            $installed = Get-Command ic -ErrorAction SilentlyContinue
+            if ($installed) {
+                Write-Host "note: could not download the latest ic CLI - continuing with the installed $($installed.Source)."
+                $Ic = $installed.Source
+            } else {
+                Write-Error 'could not download the ic CLI and none is installed - check your network and re-run.'
+                exit 1
+            }
         }
     }
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Error 'docker is not installed and winget is unavailable - install Docker Desktop (https://docs.docker.com/get-docker/), then re-run.'
-        exit 1
-    }
-    Write-Host 'intentic: installing Docker Desktop (winget, ~500 MB)...'
-    winget install --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'Docker Desktop install failed - install it manually (https://docs.docker.com/get-docker/), then re-run.'
-        exit 1
-    }
-    $env:Path += ";$env:ProgramFiles\Docker\Docker\resources\bin"
-    $dockerDesktop = "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
-    if (Test-Path $dockerDesktop) { Start-Process $dockerDesktop }
-    $DockerInstalled = $true
 }
-docker info *> $null
-if ($LASTEXITCODE -ne 0) {
-    if (-not $DockerInstalled) {
-        Write-Error 'the docker daemon is not running. Start Docker Desktop, then re-run.'
-        exit 1
-    }
-    Write-Host 'intentic: waiting for Docker Desktop (accept the first-run dialog if shown)...'
-    for ($i = 0; $i -lt 60; $i++) {
-        Start-Sleep -Seconds 5
-        docker info *> $null
-        if ($LASTEXITCODE -eq 0) { break }
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error 'the Docker daemon did not come up - if Windows asked to reboot (WSL2 setup), reboot and re-run this command.'
-        exit 1
-    }
-}
+
+# ---- Docker, and everything Windows needs before Docker can exist ----
+# This was a copy of connect.ps1's Docker block, kept in step by hand and marked "lifted from connect.ps1".
+# Both are now one call into ic, which examines this PC properly (virtualization, WSL2, the features behind
+# it, a pending restart, Docker, its group, its engine, its container mode, free space), asks once, and fixes
+# what it can. See connect.ps1 for why that reading lives there rather than in a shell script.
+& $Ic docker prepare
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # ---- validate the Cloudflare token (own-Cloudflare path only; lifted from connect.ps1) ----
 if (-not $ProvidedTunnel) {

@@ -65,10 +65,21 @@ pub struct SetupContext {
     pub docker_ready: bool,
     pub sandbox_image: Option<String>,
     pub host: Host,
+    /* THE USER HAS SEEN THE LIST AND SAID YES.
+     *
+     * The install flow asks its one question exactly once, and on this path there is no terminal to ask it
+     * on — so the run happens TWICE. The first pass changes nothing: `ic docker prepare` examines the machine,
+     * prints one `intentic-requirement:` line per thing that has to change, and stops. The window draws those
+     * as a list with one button. The second pass carries this flag, which becomes INSTALL_DOCKER=1, which is
+     * the same pre-consent the terminal path has always accepted for a headless install.
+     *
+     * A machine that needs nothing never sees the first pass end early — it has no requirements to report —
+     * so the two-pass shape costs nothing on the common path. */
+    pub consented: bool,
 }
 
 impl SetupContext {
-    fn of(app: &AppHandle) -> SetupContext {
+    fn of(app: &AppHandle, consented: bool) -> SetupContext {
         let state = app.state::<AppState>();
         SetupContext {
             platform_url: state.platform_url(),
@@ -78,6 +89,7 @@ impl SetupContext {
                 .ok()
                 .filter(|image| !image.is_empty()),
             host: Host::current(),
+            consented,
         }
     }
 }
@@ -115,12 +127,17 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
 
-    // Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I
-    // already have Docker" checkbox makes. Windows never elevates here: connect.ps1 installs Docker Desktop
-    // through winget, which asks for itself. INSTALL_DOCKER=1 goes with the elevation because the script's
-    // consent prompt has no terminal to be answered in: the launcher asked before we got here.
+    /* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I
+     * already have Docker" checkbox makes. Windows never elevates the SCRIPT: `ic docker prepare` raises the
+     * individual steps that need administrator (turning on WSL2, running Docker's installer) through Windows'
+     * own prompt, which is both narrower and the thing users expect to see.
+     *
+     * INSTALL_DOCKER=1 is the pre-consent both hosts read, and it is set from different places for the same
+     * reason. On Unix it rides with the elevation: pkexec has already asked the user for a password, which is
+     * the consent. On Windows it waits for `consented` — the click on the requirements list, which is the
+     * only place the user has been shown what will change. */
     let elevate = ctx.host == Host::Unix && !ctx.docker_ready;
-    if elevate {
+    if elevate || (ctx.host == Host::Windows && ctx.consented) {
         env.push(("INSTALL_DOCKER".into(), "1".into()));
     }
 
@@ -136,11 +153,16 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     }
 }
 
+/// `install` is the user's answer to the requirements list — see [`SetupContext::consented`]. False on the
+/// first attempt of any setup, which is why a machine that needs changes reports them instead of making them.
 #[tauri::command]
-pub async fn setup_run(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
+pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> CommandResult<()> {
     *app.state::<AppState>().pending.lock().unwrap() = None;
+    // A run that starts is a run that is no longer parked: whatever the restart was for has been picked up,
+    // and leaving the file would re-offer this same setup on the next launch.
+    app.state::<AppState>().clear_parked_setup();
 
-    let run = setup_script(&args, &SetupContext::of(&app));
+    let run = setup_script(&args, &SetupContext::of(&app, install));
     let name = args.name.clone();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, "setup", run))
@@ -156,6 +178,101 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
         }
     }
     Ok(())
+}
+
+/* --- THE RESTART, AND COMING BACK FROM IT ---
+ *
+ * Turning WSL2 on is the ordinary first step of a Windows install, and it does nothing at all until the
+ * machine reboots. Every version of this flow that merely SAID so lost people there: they are several minutes
+ * in, have answered an administrator prompt, and are now being asked to restart and then find their way back
+ * to a setup code they no longer have on screen.
+ *
+ * So the app takes the whole thing on: the setup is written to disk, Windows is told to run this app once at
+ * the next sign-in, and the machine restarts. The app comes back up, finds the parked setup, and carries on.
+ * RunOnce is the right key for it — Windows deletes the entry as it runs it, so a setup that is picked up is
+ * picked up exactly once and nothing is left behind on the machine afterwards. */
+
+/// Park this setup, ask Windows to start this app after the next sign-in, and restart.
+#[tauri::command]
+pub fn restart_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
+    app.state::<AppState>().park_setup(&args);
+    restart_now()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumableSetup {
+    pub args: SetupArgs,
+    /// How long ago it was parked. The window decides what to do with that — a setup code lives 30 minutes,
+    /// and this is the only thing on either side of a restart that knows how much of that is left.
+    pub aged_seconds: u64,
+}
+
+#[tauri::command]
+pub fn resumable_setup(state: State<'_, AppState>) -> Option<ResumableSetup> {
+    let parked = state.parked_setup()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0);
+    Some(ResumableSetup {
+        args: parked.args,
+        // Saturating, because a clock that moved backwards over the restart (they do) must read as "just
+        // now" rather than as an age of eighteen quintillion seconds.
+        aged_seconds: now.saturating_sub(parked.saved_at),
+    })
+}
+
+#[tauri::command]
+pub fn forget_resumable_setup(state: State<'_, AppState>) {
+    state.clear_parked_setup();
+}
+
+#[cfg(windows)]
+fn restart_now() -> CommandResult<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let exe = std::env::current_exe()
+        .map_err(|error| format!("could not work out where this app lives: {error}"))?;
+    // Quoted inside the value: the path contains spaces on every ordinary install, and RunOnce hands its
+    // value to the shell as a command line.
+    let command = format!("\"{}\"", exe.display());
+    let registered = std::process::Command::new("reg.exe")
+        .args([
+            "add",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+            "/v",
+            "IntenticResumeSetup",
+            "/t",
+            "REG_SZ",
+            "/d",
+            &command,
+            "/f",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+    // A failed registration is NOT a reason to refuse the restart: the setup is already on disk, and the user
+    // opening the app themselves afterwards finds it there. Losing the automatic half is much better than
+    // leaving somebody on a screen whose only button did nothing.
+    if !registered.map(|status| status.success()).unwrap_or(false) {
+        eprintln!("intentic: could not register the after-restart resume; the setup is saved and will resume when this app is next opened.");
+    }
+    let restarted = std::process::Command::new("shutdown.exe")
+        .args(["/r", "/t", "10", "/c", "intentic: finishing Docker setup"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .map_err(|error| format!("could not restart this PC: {error}"))?;
+    if restarted.success() {
+        return Ok(());
+    }
+    Err("Windows refused the restart. Restart this PC yourself and open Intentic again — your setup is saved.".to_string())
+}
+
+/// Only Windows ever asks for this: no step of the Unix install needs a reboot to take effect.
+#[cfg(not(windows))]
+fn restart_now() -> CommandResult<()> {
+    Err("nothing on this system needs a restart to finish installing.".to_string())
 }
 
 #[derive(Serialize)]
@@ -445,6 +562,9 @@ mod tests {
             docker_ready,
             sandbox_image: None,
             host,
+            // The default is the FIRST attempt of any setup — nothing agreed to yet. Every test that cares
+            // about the second one says so.
+            consented: false,
         }
     }
 
@@ -552,10 +672,51 @@ mod tests {
         assert!(!unneeded.elevate);
         assert_eq!(env_of(&unneeded, "INSTALL_DOCKER"), None);
 
-        // Windows never elevates here — connect.ps1 installs Docker Desktop via winget, which asks for itself.
+        // Windows never elevates the SCRIPT — `ic docker prepare` raises the individual steps that need
+        // administrator through Windows' own prompt.
         let windows = setup_script(&setup_args("c"), &context(Host::Windows, false));
         assert!(!windows.elevate);
-        assert_eq!(env_of(&windows, "INSTALL_DOCKER"), None);
+    }
+
+    /* THE TWO PASSES OF A WINDOWS SETUP, which is the whole shape of "ask once" on a screen with no terminal.
+     *
+     * First attempt: nothing agreed to, so no pre-consent rides along and `ic docker prepare` reports what it
+     * would change rather than changing it. The window turns that into a list and a button. Second attempt
+     * carries the answer. Getting this backwards would mean a window that silently installs Docker Desktop and
+     * turns on Windows features on the strength of a click that never mentioned either. */
+    #[test]
+    fn windows_only_pre_consents_after_the_user_has_seen_the_list() {
+        let first = setup_script(&setup_args("c"), &context(Host::Windows, false));
+        assert_eq!(
+            env_of(&first, "INSTALL_DOCKER"),
+            None,
+            "the first pass must ask, not act"
+        );
+
+        let mut agreed = context(Host::Windows, false);
+        agreed.consented = true;
+        let second = setup_script(&setup_args("c"), &agreed);
+        assert_eq!(env_of(&second, "INSTALL_DOCKER"), Some("1"));
+        assert!(
+            !second.elevate,
+            "the pre-consent is not an elevation - Windows asks for that itself, per step"
+        );
+    }
+
+    /// The consent rides on what the USER answered, not on what this app's own Docker probe happened to see a
+    /// moment earlier. Those two can disagree — a Docker Desktop that stopped between the probe and the run —
+    /// and the second pass must not turn into a run that stops to ask a question nobody can answer.
+    #[test]
+    fn the_windows_pre_consent_follows_the_answer_rather_than_the_probe() {
+        for docker_ready in [true, false] {
+            let mut agreed = context(Host::Windows, docker_ready);
+            agreed.consented = true;
+            assert_eq!(
+                env_of(&setup_script(&setup_args("c"), &agreed), "INSTALL_DOCKER"),
+                Some("1"),
+                "docker_ready={docker_ready}"
+            );
+        }
     }
 
     #[test]

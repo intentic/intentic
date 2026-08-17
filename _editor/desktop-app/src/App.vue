@@ -16,17 +16,22 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track } from "./analytics";
+import Requirements from "./components/Requirements.vue";
 import SetupProgress from "./components/SetupProgress.vue";
 import { advance, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
     desktopInfo,
+    forgetResumableSetup,
     machineReport,
     onPendingRecreate,
     onPendingSetup,
     onRun,
     onUpdateAvailable,
+    parseRequirement,
     parseStep,
     pendingSetup,
+    restartForSetup,
+    resumableSetup,
     sandboxList,
     sandboxLogs,
     sandboxPower,
@@ -38,6 +43,7 @@ import {
     workspaceOpen,
     type DesktopInfo,
     type MachineReport,
+    type Requirement,
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
@@ -101,6 +107,25 @@ const pending = ref<SetupArgs | undefined>(undefined);
 const setupError = ref<string | undefined>(undefined);
 const runs = ref<Record<string, RunEvent[]>>({});
 const activeRun = ref<string | undefined>(undefined);
+
+/* WHAT THIS COMPUTER STILL NEEDS — the Windows half of a failed setup, and the reason one exists at all.
+ *
+ * On Linux and macOS a setup that stops has usually hit something unforeseeable, and four lines of stderr is
+ * the right thing to show. On Windows the common stops are none of them accidental: WSL2 is not turned on,
+ * this PC has no package manager, virtualization is switched off in firmware. The installer knows all of
+ * that specifically, and says so in `intentic-requirement:` lines (desktop.ts) — so those get a list with a
+ * button rather than a red box with a paragraph.
+ *
+ * Cleared at the START of every attempt, not at the end: a re-run that fixed two of three problems has to
+ * draw the one that is left, and a list that only ever grows would keep showing the two that are gone. */
+const requirements = ref<Requirement[]>([]);
+/* Whether the user has answered the list. It is the second pass of a setup — the first deliberately changes
+ * nothing — and it lives here rather than in the args because it is about this WINDOW's conversation, not
+ * about the link the SPA handed over. */
+const consented = ref(false);
+// A setup this app is finishing after restarting Windows for it, and how stale its code is.
+const resuming = ref(false);
+const expired = ref(false);
 
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
@@ -241,27 +266,99 @@ const runSetup = async (): Promise<void> => {
         return;
     }
     const startedAt = Date.now();
+    // The list belongs to the attempt that produced it — see `requirements` above.
+    requirements.value = [];
+    expired.value = false;
     /* The plan, before the first line of output — that is the point of it. A machine with Docker already up
      * is not shown the step that installs it, and a setup that carries no folder is not shown the one that
      * pairs one: the list on screen is what WILL run here, so nothing on it is ever skipped in front of the
      * reader. Rebuilt per run, so "Try again" starts a clean bar rather than resuming a dead one's. */
-    progress.value = startProgress(setupPlan({ dockerReady: info.value?.dockerReady ?? true, syncing: (args.syncDir ?? ``) !== `` }), startedAt);
+    progress.value = startProgress(
+        setupPlan({
+            dockerReady: info.value?.dockerReady ?? true,
+            syncing: (args.syncDir ?? ``) !== ``,
+            os: info.value?.os ?? ``,
+        }),
+        startedAt,
+    );
     now.value = startedAt;
-    track(`desktop_install_started`, { dockerReady: info.value?.dockerReady ?? null, sync: (args.syncDir ?? ``) !== `` });
-    setupError.value = await start(`setup`, () => setupRun(args));
+    track(`desktop_install_started`, {
+        dockerReady: info.value?.dockerReady ?? null,
+        sync: (args.syncDir ?? ``) !== ``,
+        consented: consented.value,
+        resumed: resuming.value,
+    });
+    setupError.value = await start(`setup`, () => setupRun(args, consented.value));
     const ok = setupError.value === undefined;
     /* THE DESKTOP FUNNEL'S LAST STEP, REPORTED FROM WHERE IT ACTUALLY HAPPENS. The SPA has its own
      * `sandbox_connected`, but on this path it is fired by a page that has been behind this window for the
      * whole install — late at best, and never at all when the handover came from a browser tab the user then
      * closed. Exit zero here means the daemon booted and announced itself, which is the same fact that page
      * was waiting to observe. */
-    track(`desktop_install_finished`, runOutcome(`setup`, ok, startedAt));
+    track(`desktop_install_finished`, {
+        ...runOutcome(`setup`, ok, startedAt),
+        // Which prerequisite stopped it, by id — the ids never change wording, so two releases' funnels can
+        // be compared. Nothing else about the machine leaves here.
+        ...(requirements.value.length === 0 ? {} : { requirements: requirements.value.map((requirement) => requirement.id) }),
+    });
     if (ok) {
         pending.value = undefined;
         // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
         // has been polling for — so handing the window back is one poll away from showing the workspace.
         await workspaceOpen();
     }
+};
+
+/* THE ONE QUESTION THIS FLOW ASKS, ANSWERED. The first attempt reported what it would change and changed
+ * nothing; this is the user saying go ahead, and it is the same pre-consent the terminal path takes as a
+ * typed "y". It stays set for the rest of this window's conversation — a re-check after fixing something by
+ * hand should not put the question back. */
+const installRequirements = async (): Promise<void> => {
+    consented.value = true;
+    await runSetup();
+};
+
+/* Restart Windows and pick this setup up afterwards. The args go to disk before anything else happens, so a
+ * machine that goes down between here and the reboot still comes back to a setup it can finish. */
+const restartNow = async (): Promise<void> => {
+    const args = pending.value;
+    if (args === undefined || running.value) {
+        return;
+    }
+    track(`desktop_install_restart`, { requirements: requirements.value.map((requirement) => requirement.id) });
+    try {
+        await restartForSetup(args);
+    } catch (error) {
+        // The restart is the one action here with no second chance to explain itself, so a refusal says so
+        // in the card rather than leaving a button that quietly did nothing.
+        setupError.value = String(error);
+    }
+};
+
+/* SETUP CODES OUTLIVE NEITHER A LONG RESTART NOR A SLOW ONE. They are good for thirty minutes from the moment
+ * the platform minted one, and turning on WSL2, restarting, and letting Windows finish its own updates can
+ * spend most of that. Resuming into a claim that fails with "invalid or expired" would read as a broken
+ * install; this reads as what it is. Twenty-five minutes leaves the setup itself room to finish. */
+const RESUME_WINDOW_SECONDS = 25 * 60;
+
+const loadResumable = async (): Promise<void> => {
+    const parked = await resumableSetup();
+    if (parked === null) {
+        return;
+    }
+    pending.value = parked.args;
+    if (parked.agedSeconds > RESUME_WINDOW_SECONDS) {
+        await forgetResumableSetup();
+        expired.value = true;
+        track(`desktop_install_resume_expired`, { agedSeconds: parked.agedSeconds });
+        return;
+    }
+    resuming.value = true;
+    // Already agreed to, before the restart this app performed on the strength of that answer. Asking the
+    // same question again on the other side of it would be the flow forgetting its own conversation.
+    consented.value = true;
+    track(`desktop_install_resumed`, { agedSeconds: parked.agedSeconds });
+    await runSetup();
 };
 
 /* A parked setup RUNS on arrival rather than waiting to be asked. The SPA's "Set up on this computer" button
@@ -400,6 +497,14 @@ onMounted(async () => {
                 now.value = Date.now();
                 progress.value = advance(progress.value, event, now.value);
             }
+            // What this computer still needs, collected as the installer names it. Keyed by id so a run that
+            // reports the same requirement twice — the fixer re-examines between passes — draws one row.
+            if (event.run === `setup` && event.kind === `line`) {
+                const requirement = parseRequirement(event.text);
+                if (requirement !== undefined) {
+                    requirements.value = [...requirements.value.filter((seen) => seen.id !== requirement.id), requirement];
+                }
+            }
         }),
         onPendingSetup(() => void loadPending()),
         onPendingRecreate(() => void drainRecreate()),
@@ -408,6 +513,11 @@ onMounted(async () => {
     // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
     // exactly once — by the event above or by these, whichever finds the request still there.
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
+    // Only when nothing was handed over: a fresh link is about a setup the user is starting right now, and it
+    // outranks one this app restarted the machine for at some point in the past.
+    if (pending.value === undefined) {
+        await loadResumable();
+    }
 });
 onUnmounted(() => {
     clearInterval(ticker);
@@ -443,17 +553,42 @@ onUnmounted(() => {
                     <Icon name="times" />
                 </button>
             </div>
-            <p v-if="info && !info.dockerReady" class="flex items-start gap-2 text-2xs text-warning">
+            <!-- The code this window came back to is older than the platform will accept. Said plainly, with
+                 the one thing that fixes it, instead of letting the run fail at the claim with something that
+                 reads like a bad code. -->
+            <Notice v-if="expired" tone="warning" class="text-2xs">
+                Your setup code ran out while this computer restarted. Open the setup page again for a fresh one — everything the restart was for is
+                already done.
+            </Notice>
+            <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
+                <Icon name="refresh" class="mt-0.5 shrink-0" />
+                <span>Picking up where the restart left off.</span>
+            </p>
+            <p v-if="info && !info.dockerReady && !expired" class="flex items-start gap-2 text-2xs text-warning">
                 <Icon name="box" class="mt-0.5 shrink-0" />
-                <span v-if="info.os === `windows`">Docker isn't running yet — setup installs Docker Desktop first, which is a large download.</span>
+                <span v-if="info.os === `windows`">Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span>
                 <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
             </p>
-            <SetupProgress v-if="progressShown" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
-            <Notice v-if="setupError" tone="danger" class="text-2xs">{{ setupError }}</Notice>
+            <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
+
+            <!-- WHAT STOPPED IT, WHEN THE INSTALLER KNOWS SPECIFICALLY. This replaces the red box rather than
+                 sitting beside it: "3 things are in the way, here is the button" and a paragraph of the same
+                 text in stderr underneath is one message written twice, and the second copy is the one that
+                 reads like a crash. The log behind "Show detail" still carries every word. -->
+            <Requirements
+                v-if="requirements.length > 0 && !running && !expired"
+                :requirements="requirements"
+                :busy="running"
+                @install="installRequirements"
+                @restart="restartNow"
+                @recheck="runSetup"
+            />
+
+            <Notice v-else-if="setupError && !expired" tone="danger" class="text-2xs">{{ setupError }}</Notice>
             <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this app can
                  strand someone, and "try again" as the only control is a dead end wearing a button. -->
-            <div v-if="setupError" class="flex flex-wrap items-center gap-2">
-                <Button label="Try again" :disabled="running" @click="runSetup">
+            <div v-if="(setupError || expired) && requirements.length === 0" class="flex flex-wrap items-center gap-2">
+                <Button v-if="!expired" label="Try again" :disabled="running" @click="runSetup">
                     <template #icon><Icon name="bolt" /></template>
                 </Button>
                 <Button severity="secondary" :text="true" label="Back to your workspace" @click="workspaceOpen">
