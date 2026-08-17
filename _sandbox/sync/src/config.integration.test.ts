@@ -59,6 +59,14 @@ describe("upsertPairing", () => {
         expect((await readState()).pairings).toEqual([local]);
     });
 
+    it("treats a state file with missing or non-array pairings as empty", async () => {
+        await writeFile(agentHome("sync").configPath, JSON.stringify({}), "utf8");
+        expect((await readState()).pairings).toEqual([]);
+
+        await upsertPairing(local);
+        expect((await readState()).pairings).toEqual([local]);
+    });
+
     // A file that EXISTS and is malformed is a real fault, not an empty machine — silently starting from scratch
     // there would overwrite whatever the user still had paired.
     it("propagates a state file that won't parse instead of treating it as empty", async () => {

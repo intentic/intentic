@@ -98,7 +98,11 @@ export const readState = async (): Promise<SyncState> => {
         }
         throw error;
     });
-    return raw === undefined ? { pairings: [] } : (JSON.parse(raw) as SyncState);
+    if (raw === undefined) {
+        return { pairings: [] };
+    }
+    const parsed = JSON.parse(raw) as Partial<SyncState> | undefined;
+    return { pairings: Array.isArray(parsed?.pairings) ? parsed.pairings : [] };
 };
 
 /* Read-modify-write the pairing list. Every mutation goes through here and re-reads immediately beforehand, so a
