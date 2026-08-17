@@ -60,11 +60,23 @@ export interface WorkspaceStateFile extends StateFile {
      * the same reason. An ignore-pattern list would invert it: a credential store added next month would be
      * committed on its first write, and nothing would have had to change for that to happen.
      *
-     * Only CONFIGURATION belongs here — the small, slow-moving files that decide how this sandbox behaves. Two
-     * kinds of entry are excluded on purpose even though they are `carry` and hold no secret:
-     *   - LEDGERS (workflow runs, loop iterations, thread bookkeeping, permission-usage batches), which are
-     *     rewritten on a timer or several times per step. Tracking them buries the owner's code review under
-     *     machine noise — one of them is written every few seconds while a browser has the app open.
+     * WHAT EARNS IT is one question, asked of the entry rather than of its shape: does a change here change what
+     * this sandbox DOES? Two families answer yes.
+     *   - CONFIGURATION — the small, slow-moving files that decide how the sandbox behaves: settings, personas,
+     *     skills, automations, workflow designs, the environment overlay, which extensions are on.
+     *   - AUTHORED CONTENT WHOSE CONSEQUENCES LEAVE THE SANDBOX — a workspace extension is code that runs in the
+     *     app with a declared permission surface and a backend of its own; a post draft is words that go out
+     *     under the owner's name. Neither is configuration, and reading `versioned` as config-only is what kept
+     *     both of them out: an agent could write, and then run, a whole extension with a diff nowhere, and
+     *     propose a public post that left no trace once declined. The rule was never "is this a setting", it was
+     *     "can this be read, reverted and attributed" — and for the two things the AGENT authors on its own,
+     *     that matters more than it does for a file a person edited on purpose.
+     *
+     * Two kinds of entry stay out on purpose even though they are `carry` and hold no secret:
+     *   - LEDGERS (workflow runs, loop iterations, thread bookkeeping, permission-usage batches, held-wake
+     *     queues), which are rewritten on a timer or several times per step. Tracking them buries the owner's
+     *     code review under machine noise — one of them is written every few seconds while a browser has the app
+     *     open. A queue is a ledger too: it records that something was ASKED, and is emptied when it is answered.
      *   - BULK (session transcripts, artifacts), which are hundreds of megabytes of constantly-rewritten
      *     content. They travel in a bundle; they do not belong in a diff.
      * `versioned` is therefore NARROWER than `carry`, and the two answer different questions: carry is "does it
@@ -74,7 +86,10 @@ export interface WorkspaceStateFile extends StateFile {
      * human- or agent-written TEXT that a workspace search should surface? Every `versioned` entry already is
      * (a setting, a persona, a skill — things the agent is asked to find and edit), so this flag exists only
      * for the entries that are authored content without being config: a draft awaiting approval, a staged
-     * README, an extension the agent wrote in place. Everything else under `.intentic` is machine state, and
+     * README, an extension the agent wrote in place. Two of those three are now `versioned` as well, which makes
+     * the flag redundant to `SEARCHABLE_STATE_PATHS` on them and is why it stays anyway: searchability is a
+     * property of the content, and hanging it on `versioned` would mean a future decision to stop TRACKING a
+     * draft silently also stopped anyone FINDING one. Everything else under `.intentic` is machine state, and
      * `SEARCHABLE_STATE_PATHS` below is what lets the search engine deny the rest BY DEFAULT instead of
      * hand-keeping a deny list that goes stale the day a store is added (which is how a 98 kB loop ledger and
      * whole third-party extension checkouts ended up ranking in code search). */
@@ -159,10 +174,22 @@ const STATE_FILES = [
         portability: "derived",
         note: "Stamps of when each rule last did something; the new sandbox starts its own record.",
     },
-    // Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox — the one entry
-    // here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
-    // a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.
-    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry", authored: true },
+    /* Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox — the one entry
+     * here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
+     * a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.
+     *
+     * `versioned` because a draft is the furthest-reaching thing the agent writes: these words go out under the
+     * owner's name, to an audience, and cannot be recalled. The approval inbox already gates that — but a gate is
+     * not a record. Declining one used to erase it, so the question "what has this agent tried to post" had no
+     * answer at all, and an approved post's own history (what was proposed, what the owner changed, when it
+     * actually went) lived only in a file nobody could diff.
+     *
+     * It costs almost nothing to track, which is why the ledger objection does not reach it: a draft is one small
+     * file per post, it is written a handful of times across its whole life (proposed → approved → posted, with
+     * `postedAt`/`postedUrl` stamped at the end), and it is KEPT afterwards rather than consumed — so tracking
+     * yields a durable record instead of the add/delete churn a queue would produce. Nothing in a draft is a
+     * credential: it is a platform, a target URL and the body itself, all of it bound for publication anyway. */
+    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry", versioned: true, authored: true },
     // ---- declared by the extension that renders them (contributes.files), not here ----
     // The path is the DAEMON's (automations-store writes both), the query keys are the intentic.automations
     // extension's. It declares them in its own manifest and the browser unions the two lists, so uninstalling
@@ -289,8 +316,21 @@ const STATE_FILES = [
      * an extension and it is live for the daemon and every session at once, since .intentic is shared), so this
      * push is what makes one appearing or changing show up on the Extensions tab while the owner watches.
      * `authored` for the same reason as drafts: this is source the agent wrote and will be asked to find —
-     * unlike `.intentic/extensions/` below, which is CLONES of source that lives elsewhere. */
-    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry", authored: true },
+     * unlike `.intentic/extensions/` below, which is CLONES of source that lives elsewhere.
+     *
+     * `versioned` FOR THAT SAME REASON, which is the whole argument. Every other load path an extension can take
+     * is already reviewable by construction: a git-installed one is a sha in `capabilities.json` that an owner
+     * approved, a baked one shipped in the image. This one is neither — it is code that appears because an agent
+     * wrote a file, runs in the app on the owner's session, may register a rail tile, and may serve HTTP from a
+     * node process with the workspace under `node:fs` and whatever `permissions.daemon` names. Untracked, the
+     * switch that turns it on was in `git log` (extension-enablement.json, below) while the thing being switched
+     * on was not: a commit could record enabling something nobody else could read. It is also the one extension
+     * kind with no install moment to review at, so the diff is the only review there is.
+     *
+     * Not a ledger and not bulk: a handful of small authored files per extension, written when someone edits them.
+     * The daemon restarts the backend host on a change here, so an edit is already a consequential event — this
+     * makes it a legible one. */
+    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry", versioned: true, authored: true },
     /* What the registry comparison found per installed extension (update available / advisory / post-update
      * health), written by the periodic check and by the update/revert transactions — pushed to the tab because
      * an advisory that auto-disabled something must not wait for a reload to be seen. */

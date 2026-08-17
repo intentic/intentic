@@ -65,19 +65,34 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
  * itself, so the assertion is on git's own answer.
  *
  * The directory carve-out (environment.d/) is here for the same reason: re-including a DIRECTORY is what lets
- * git walk into it, and it is the one negation whose trailing slash has to survive the mapping in history.ts. */
+ * git walk into it, and it is the negation whose trailing slash has to survive the mapping in history.ts —
+ * checked here on the NESTED case too (an extension is a directory inside a carved-out directory), because that
+ * is the shape a `*` glob written one level too shallow would silently drop. */
 test("the baseline commits the config slice and still refuses every credential and ledger beside it", async () => {
     const { work, historyRoot } = await tempBase();
     await mkdir(join(work, `${STATE_DIR}`, "browser", "reddit-work"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "auth", "claude"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "environment.d"), { recursive: true });
     await mkdir(join(work, `${STATE_DIR}`, "sessions", "claude"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "drafts"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "approvals"), { recursive: true });
     // Configuration — every one of these decides how the sandbox behaves, and each is `versioned` in the contract.
     await writeFile(join(work, `${STATE_DIR}`, "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
     await writeFile(join(work, `${STATE_DIR}`, "settings.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "automations.json"), "[]\n");
     await writeFile(join(work, `${STATE_DIR}`, "environment.custom.Dockerfile"), "RUN echo hi\n");
     await writeFile(join(work, `${STATE_DIR}`, "environment.d", "rust.Dockerfile"), "RUN rustup\n");
+    /* What the AGENT authored on its own initiative — tracked for a different reason than the config above it:
+     * not "the owner decided this" but "the sandbox did this outward, and it must be readable, revertible and
+     * attributable". The extension is the nested-directory case, and its manifest is what decides how far its
+     * code may reach, so the two files together are the whole review. */
+    await writeFile(join(work, `${STATE_DIR}`, "drafts", "reddit-launch.json"), `{"platform":"reddit","status":"proposed"}\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
+    await writeFile(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
+    // A CONSUMED QUEUE beside them, and the counterexample that keeps the line honest: a held wake is removed the
+    // moment it is answered, so tracking it would commit an add and a delete about a decision recorded elsewhere.
+    await writeFile(join(work, `${STATE_DIR}`, "approvals", "wake-1.json"), "{}\n");
     // Credentials and identity — never tracked, whatever else changes.
     await writeFile(join(work, `${STATE_DIR}`, "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
     await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
@@ -91,13 +106,16 @@ test("the baseline commits the config slice and still refuses every credential a
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // Exactly the config slice out of that directory — the directory carve-out included, nothing else.
+    // Exactly the tracked slice out of that directory — both directory carve-outs included, nothing else.
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
         ".intentic/automations.json",
+        ".intentic/drafts/reddit-launch.json",
         ".intentic/environment.custom.Dockerfile",
         ".intentic/environment.d/rust.Dockerfile",
         ".intentic/personas.json",
         ".intentic/settings.json",
+        ".intentic/workspace-extensions/rail-demo/extension.js",
+        ".intentic/workspace-extensions/rail-demo/intentic-extension.json",
     ]);
     // Nothing left over: the credentials and ledgers are IGNORED, not merely uncommitted-and-pending.
     expect(await bothSides(work)).toEqual([]);

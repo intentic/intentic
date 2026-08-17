@@ -265,10 +265,16 @@ describe(`VERSIONED_STATE_PATHS`, () => {
 
     /* Spelled out rather than derived, so ADDING a tracked entry is a visible edit to this list and not a silent
      * consequence of editing the table above — the review the flag itself exists to force. */
-    it(`tracks exactly the configuration slice`, () => {
+    it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `.intentic/automations.json`,
             `.intentic/capability-dismissals.json`,
+            /* The two entries the AGENT authors on its own initiative, and the reason `versioned` is not read as
+             * config-only. Both are the sandbox acting outward — a draft publishes words under the owner's name,
+             * a workspace extension is code that runs in the app and can serve HTTP with the workspace under
+             * node:fs — and both used to reach that far with no diff anywhere. Kept rather than consumed, one
+             * small file at a time, so tracking them yields a record instead of churn. */
+            `.intentic/drafts/`,
             `.intentic/environment.Dockerfile`,
             `.intentic/environment.custom.Dockerfile`,
             `.intentic/environment.d/`,
@@ -287,7 +293,32 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/skills/`,
             `.intentic/templates.json`,
             `.intentic/workflows.json`,
+            `.intentic/workspace-extensions/`,
         ]);
+    });
+
+    /* THE ASYMMETRY THIS CLOSED, kept as its own assertion because it is the failure rather than a detail of it:
+     * the switch was tracked and the thing it switched was not, so a commit could record turning on an extension
+     * whose code nobody else could read — and a workspace extension has no install moment to review at instead. */
+    it(`tracks a workspace extension's code, not just the switch that enables it`, () => {
+        expect(VERSIONED_STATE_PATHS).toContain(`.intentic/extension-enablement.json`);
+        expect(VERSIONED_STATE_PATHS).toContain(`.intentic/workspace-extensions/`);
+    });
+
+    /* A QUEUE IS A LEDGER, which is the distinction the two entries above turn on. A draft is kept after it
+     * settles (`posted`, with postedAt/postedUrl stamped on it), so tracking it leaves a durable record of what
+     * went out; a held wake is REMOVED once answered, so tracking it would leave an add and a delete describing
+     * a decision whose outcome lives elsewhere. Same for the staged docs: publishing copies them into the repo,
+     * where they are tracked as ordinary content, so tracking the staging tree too would double every page. */
+    it(`leaves the consumed queues and the staging trees out even though they are authored`, () => {
+        for (const path of [`.intentic/approvals/`, `.intentic/docs/`]) {
+            expect([path, VERSIONED_STATE_PATHS.includes(path)]).toEqual([path, false]);
+        }
+        // Both still reach workspace search — searchability is a property of the content, not of tracking.
+        for (const path of [`.intentic/approvals/`, `.intentic/docs/`]) {
+            const entry = WORKSPACE_STATE_FILES.find((file) => file.path === path);
+            expect([path, entry?.versioned === true || entry?.authored === true]).toEqual([path, path === `.intentic/docs/`]);
+        }
     });
 
     /* The composed overlay is `derived` — recomposed on every boot from the custom file that IS tracked, against
