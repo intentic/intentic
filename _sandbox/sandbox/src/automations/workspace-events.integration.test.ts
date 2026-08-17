@@ -9,7 +9,15 @@ import { unstubbed } from "@intentic/testing";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import type { WakeFn } from "./scheduler.js";
-import { dispatchWorkspaceEvent } from "./workspace-events.js";
+
+// The per-chore queues, the scheduler's overlap guard and the workspace-wide turn chain are all process-wide
+// because there is one daemon. Each case takes a fresh module so one test's unfinished pump cannot leak into
+// another — a queue still draining under a shared chore id would otherwise swallow the next test's event and
+// fire it with the previous test's wake.
+const freshDispatch = async (): Promise<typeof import("./workspace-events.js")> => {
+    vi.resetModules();
+    return import("./workspace-events.js");
+};
 
 // Same shape as scheduler.test's fake — the dispatcher reaches only automations/approvals/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
@@ -64,6 +72,7 @@ const event = (agentId: string, extra: Partial<WorkspaceEvent> = {}): WorkspaceE
 });
 
 test("a matching enabled chore wakes with the event as its payload", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
     const prompts: string[] = [];
@@ -76,6 +85,7 @@ test("a matching enabled chore wakes with the event as its payload", async () =>
 });
 
 test("disabled chores, other events and other repos never fire", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("off", { enabled: false }));
     await services.automations.upsert(chore("landed-only", { trigger: { kind: "workspace", event: "agent.landed" } }));
@@ -92,6 +102,7 @@ test("disabled chores, other events and other repos never fire", async () => {
 });
 
 test("a burst QUEUES instead of dropping — every distinct agent gets reviewed, one turn at a time", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
     const prompts: string[] = [];
@@ -111,6 +122,7 @@ test("a burst QUEUES instead of dropping — every distinct agent gets reviewed,
 });
 
 test("a second event for a waiting agent REPLACES it rather than queueing a duplicate review", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
     const prompts: string[] = [];
@@ -128,6 +140,7 @@ test("a second event for a waiting agent REPLACES it rather than queueing a dupl
 });
 
 test("two different chores on one event do not run their turns at the same time", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
     await services.automations.upsert(chore("docs"));
@@ -143,6 +156,7 @@ test("two different chores on one event do not run their turns at the same time"
 });
 
 test("a chore disabled while its backlog waits does not run", async () => {
+    const { dispatchWorkspaceEvent } = await freshDispatch();
     const services = fakeServices(mkdtempSync(join(tmpdir(), "chore-")));
     await services.automations.upsert(chore("review"));
     const prompts: string[] = [];
