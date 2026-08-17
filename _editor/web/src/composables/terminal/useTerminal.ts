@@ -1,4 +1,4 @@
-import { ref, type Ref, watch } from "vue";
+import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { activeSandboxId } from "../sandbox/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
@@ -27,8 +27,9 @@ import { useTextSize } from "@intentic/ui/text-size";
  *
  * Tabs arrange into GROUPS (VSCode's split terminals): `groups` is the strip order, each entry an ordered
  * list of session names rendered side by side in one pane when active. Grouping is pure client view state
- * (tmux sees flat sessions), persisted per storageKey; the daemon's list stays the truth for which sessions
- * exist — reconcile drops dead names and appends newcomers as their own single-tab groups. */
+ * (tmux sees flat sessions), remembered per storageKey AND per sandbox; the daemon's list stays the truth for
+ * which sessions exist, so `groups` is DERIVED — the remembered arrangement intersected with what is listed,
+ * newcomers tabbing at the end. A pill therefore always has a session behind it. */
 
 export interface TerminalTab {
     readonly name: string;
@@ -111,7 +112,8 @@ watch(useTextSize().scale, () => {
 export interface TerminalTabs {
     readonly order: Ref<TerminalTab[]>;
     // The strip: ordered groups of session names; a group of one is a plain tab, more are split side by side.
-    readonly groups: Ref<string[][]>;
+    // Derived from `order`, so every name here is a session that exists (see `groups` below).
+    readonly groups: ComputedRef<string[][]>;
     // The managed background processes ("process" kind) from the last list — the processes popover's rows.
     readonly processes: Ref<TerminalTab[]>;
     // The FOCUSED session — keystrokes land here; its group is the mounted pane.
@@ -183,16 +185,37 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         return [];
     };
-    const groups = ref<string[][]>(readGroups());
+    /* HOW THE USER ARRANGED THE STRIP — which sessions sit side by side, and in what order — remembered per
+     * sandbox. It is what somebody SET UP, not what exists: a name stays in it while its session is merely
+     * absent, which is what carries a split arrangement across a sandbox switch and a reload. */
+    const arrangement = ref<string[][]>(readGroups());
     const persistGroups = (): void => {
         try {
-            window.localStorage.setItem(groupsKey(), JSON.stringify(groups.value));
+            window.localStorage.setItem(groupsKey(), JSON.stringify(arrangement.value));
         } catch {
             // Storage may be unavailable (private mode); the in-memory ref still holds.
         }
     };
 
-    const groupOf = (name: string): string[] => groups.value.find((group) => group.includes(name)) ?? [name];
+    /* WHAT THE STRIP MAY DRAW: the arrangement, intersected with the sessions the daemon actually lists.
+     *
+     * Derived rather than assigned, because the arrangement and the list are true at different MOMENTS. A
+     * sandbox switch restores the arrangement out of storage instantly, while the session list arrives over the
+     * tunnel — and until it does (or when it never does, because the list failed) a pill straight from storage
+     * is a tab nothing can open: `mount` refuses a name that isn't listed, so the pill sits there unresponsive
+     * over a panel saying no terminals are open. Deriving makes that state unrepresentable.
+     *
+     * A listed session the arrangement has never seen tabs at the end, on its own — the same rule reconcile
+     * writes into the arrangement once a list has landed. */
+    const groups = computed<string[][]>(() => {
+        const listed = order.value.map((tab) => tab.name);
+        const known = new Set(listed);
+        const kept = arrangement.value.map((group) => group.filter((name) => known.has(name))).filter((group) => group.length > 0);
+        const grouped = new Set(kept.flat());
+        return [...kept, ...listed.filter((name) => !grouped.has(name)).map((name) => [name])];
+    });
+
+    const groupOf = (name: string): string[] => arrangement.value.find((group) => group.includes(name)) ?? [name];
 
     // The kinds that are listed by the daemon but do not tab on their own: a background process (its lifecycle
     // belongs to the processes popover) and — unless the user asked for them — the terminals WORK runs in, the
@@ -279,18 +302,20 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         window.localStorage.setItem(activeKey(), name);
     };
 
-    // Reconcile the persisted grouping against the listed tabs: dead names drop out, empty groups collapse,
-    // and every newly-listed session gets its own single-tab group at the end of the strip.
+    // Fold a landed list INTO the remembered arrangement: dead names drop out, empty groups collapse, and every
+    // newly-listed session gets its own single-tab group at the end of the strip. Only ever called with the
+    // daemon's own answer in hand, which is what makes the pruning safe — a list that failed leaves the
+    // arrangement alone, so a momentary outage can't flatten somebody's splits.
     const reconcileGroups = (tabs: TerminalTab[]): void => {
         const tabbed = new Set(tabs.map((tab) => tab.name));
-        const kept = groups.value.map((group) => group.filter((name) => tabbed.has(name))).filter((group) => group.length > 0);
+        const kept = arrangement.value.map((group) => group.filter((name) => tabbed.has(name))).filter((group) => group.length > 0);
         const grouped = new Set(kept.flat());
         for (const tab of tabs) {
             if (!grouped.has(tab.name)) {
                 kept.push([tab.name]);
             }
         }
-        groups.value = kept;
+        arrangement.value = kept;
         persistGroups();
     };
 
@@ -378,7 +403,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     watch(epoch, () => {
         order.value = [];
         processes.value = [];
-        groups.value = readGroups();
+        // The new sandbox's own arrangement, so its splits come back as it left them. Nothing is drawn from it
+        // until that sandbox's list lands — `groups` is the intersection, and `order` is empty right now.
+        arrangement.value = readGroups();
         viewedProcesses.clear();
         // The wait was for a session on the OLD daemon; nothing on this one is going to answer it.
         pending.value = undefined;
@@ -453,8 +480,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             disposeTerminalSession(session);
             cache.delete(name);
         }
-        const group = groups.value.find((members) => members.includes(name));
-        groups.value = groups.value.map((members) => members.filter((member) => member !== name)).filter((members) => members.length > 0);
+        const group = arrangement.value.find((members) => members.includes(name));
+        arrangement.value = arrangement.value.map((members) => members.filter((member) => member !== name)).filter((members) => members.length > 0);
         persistGroups();
         const remaining = order.value.filter((tab) => tab.name !== name);
         order.value = remaining;
@@ -561,7 +588,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         const joining = new Set(names);
         const next: string[][] = [];
         let placed = false;
-        for (const group of groups.value) {
+        for (const group of arrangement.value) {
             const kept = group.filter((member) => !joining.has(member));
             if (kept.length < group.length && !placed) {
                 next.push([...names]);
@@ -574,20 +601,20 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (!placed) {
             return;
         }
-        groups.value = next;
+        arrangement.value = next;
         persistGroups();
         mount(activeName.value !== undefined && joining.has(activeName.value) ? activeName.value : names[0]);
     };
 
     // Move one session out of its split group into its own tab, placed right after the group it left.
     const unsplit = (name: string): void => {
-        const index = groups.value.findIndex((group) => group.includes(name) && group.length > 1);
+        const index = arrangement.value.findIndex((group) => group.includes(name) && group.length > 1);
         if (index === -1) {
             return;
         }
-        const next = groups.value.map((group, at) => (at === index ? group.filter((member) => member !== name) : group));
+        const next = arrangement.value.map((group, at) => (at === index ? group.filter((member) => member !== name) : group));
         next.splice(index + 1, 0, [name]);
-        groups.value = next;
+        arrangement.value = next;
         persistGroups();
         mount(name);
     };
@@ -631,7 +658,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const newTab = (): void => {
         const tab = claim(create());
         order.value = [...order.value, tab];
-        groups.value = [...groups.value, [tab.name]];
+        arrangement.value = [...arrangement.value, [tab.name]];
         persistGroups();
         mount(tab.name);
     };
@@ -639,13 +666,13 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const splitTab = (name: string): void => {
         const tab = claim(create());
         order.value = [...order.value, tab];
-        const grouped = groups.value.some((group) => group.includes(name));
-        groups.value = grouped
-            ? groups.value.map((group) => {
+        const grouped = arrangement.value.some((group) => group.includes(name));
+        arrangement.value = grouped
+            ? arrangement.value.map((group) => {
                   const at = group.indexOf(name);
                   return at === -1 ? group : group.toSpliced(at + 1, 0, tab.name);
               })
-            : [...groups.value, [name, tab.name]];
+            : [...arrangement.value, [name, tab.name]];
         persistGroups();
         mount(tab.name);
     };
@@ -680,7 +707,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         const tab = claim(create());
         order.value = [...order.value.filter((entry) => entry.name !== name), tab];
-        groups.value = groups.value.map((group) => group.map((member) => (member === name ? tab.name : member)));
+        arrangement.value = arrangement.value.map((group) => group.map((member) => (member === name ? tab.name : member)));
         persistGroups();
         activeName.value = undefined;
         mount(tab.name);

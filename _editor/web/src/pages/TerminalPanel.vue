@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vu
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import WorkTerminals from "../components/WorkTerminals.vue";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../composables/commands/useCommands";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
@@ -90,6 +91,20 @@ watch(
     () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
     () => void tabs.refresh(),
 );
+
+/* AND THE DAEMON COMING BACK IS ITSELF A RELIST — the other edge, and the one a sandbox switch lands on.
+ *
+ * The panel opens with a list, and that list can simply FAIL: switching sandboxes points the browser at a
+ * daemon that may still be waking, and the first request goes out before it answers. Nothing above would ask
+ * again — the watch reacts to the session set CHANGING, and a list that never arrived changed nothing — so the
+ * strip kept whatever it had opened with, for as long as that panel lived, over a sandbox whose terminals were
+ * running the whole time. Reachability is exactly the missing signal: it is false while the request would fail
+ * and true once it will succeed. */
+watch(useSandbox().reachable, (isReachable) => {
+    if (isReachable) {
+        void tabs.refresh();
+    }
+});
 
 /* THE AGENT IS WAITING FOR YOU AT THIS TERMINAL — the answering end of the terminal handover
  * (sandbox terminal/terminal-help.ts), and the exact counterpart of the banner over the Browsers stage.

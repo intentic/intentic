@@ -69,6 +69,18 @@ describe(`sandbox-scoped terminal open state`, () => {
         expect(layout.terminalOpen.value).toBe(true);
     });
 
+    it(`writes a toggle to the sandbox on screen, not to the one the app started on`, async () => {
+        const layout = useLayout();
+
+        // The switch has landed, and something toggles the terminal before the reset watch has run.
+        activeSandboxId.value = `sb2`;
+        await nextTick();
+        layout.setTerminalOpen(true);
+
+        expect(session.get(`intentic.terminalOpen.sb2`)).toBe(`1`);
+        expect(session.get(`intentic.terminalOpen.sb1`)).toBeUndefined();
+    });
+
     it(`restores terminal open state when seeded in localStorage`, () => {
         local.set(`intentic.terminalOpen.sb1`, `1`);
         resetTerminalOpen();

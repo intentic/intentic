@@ -204,16 +204,17 @@ const write = (key: string, value: string): void => {
     }
 };
 
-let scopedSandboxId: string | undefined;
-
 const terminalOpen = ref<boolean>(false);
 
+// Read (and written) against whichever sandbox is active AT THAT MOMENT, never a captured one: a toggle always
+// belongs to the sandbox on screen, so there is no window in which a switch that has landed can have the
+// previous sandbox's layout written over it.
 const restoreTerminalOpen = (): void => {
-    scopedSandboxId = activeSandboxId.value;
-    terminalOpen.value = readWindowState(terminalOpenKey(scopedSandboxId), parseTerminalOpen) ?? false;
+    terminalOpen.value = readWindowState(terminalOpenKey(activeSandboxId.value), parseTerminalOpen) ?? false;
 };
 restoreTerminalOpen();
 
+// A switch arrived (composables/sandbox/sandboxScope) — show the terminal exactly as this sandbox was left.
 export const resetTerminalOpen = (): void => {
     restoreTerminalOpen();
 };
@@ -291,7 +292,7 @@ const toggleSidebar = (): void => {
 
 const setTerminalOpen = (open: boolean): void => {
     terminalOpen.value = open;
-    writeWindowState(terminalOpenKey(scopedSandboxId), open ? `1` : `0`);
+    writeWindowState(terminalOpenKey(activeSandboxId.value), open ? `1` : `0`);
 };
 
 // The toolbar button + Ctrl+` toggle the terminal panel. Sessions live in the shared cache (useTerminal), so

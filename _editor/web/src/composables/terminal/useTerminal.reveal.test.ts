@@ -16,8 +16,14 @@ vi.stubGlobal(`localStorage`, {
     removeItem: (key: string) => store.delete(key),
 });
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../sandbox/useSandbox", () => ({
+// Everything the strip remembers is filed under the sandbox it belongs to, so the ids in the keys below are
+// this test's sandbox rather than decoration.
+vi.mock("../sandbox/activeSandbox", () => ({
+    ACTIVE_KEY: `intentic.activeSandboxId`,
+    activeSandboxId: ref(`sbx-1`),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
+}));
+vi.mock("../sandbox/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId: ref(`sbx-1`) }),
 }));
 vi.mock("./terminalSession", () => ({
@@ -140,7 +146,7 @@ test("opening an ALREADY-finished terminal from the chat's Bash card still tabs 
 });
 
 test("the panel opens onto a live tab, never onto the dead pane it was last left on", async () => {
-    store.set(`ui-test-terminal-active`, `panel-app`);
+    store.set(`ui-test-terminal-active.sbx-1`, `panel-app`);
     const { attach, tabs } = panel([{ name: `panel-app`, label: `app`, kind: `panel`, running: false }, shell(`web-1`)]);
     await attach();
 
