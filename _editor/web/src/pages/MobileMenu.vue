@@ -13,6 +13,7 @@ import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { identityHue } from "../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { connectedSandboxes, unfinishedSandboxes } from "../composables/sandbox/roster";
 import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
 import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
@@ -97,8 +98,18 @@ const sandboxRows = computed<readonly AreaRow[]>(() => [
     { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
+// Two lists, for the desktop switcher's reasons (roster.ts): a sandbox that has never checked in cannot be
+// switched to, so it is not offered beside the ones that can — tapping it here used to strand the reader on a
+// connecting gate with no way back but the menu they had just left.
+const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
+const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
+
 const addSandbox = (): void => {
     void router.push(`/setup`);
+};
+
+const resumeSetup = (id: string): void => {
+    void router.push({ path: `/setup`, query: { sandbox: id } });
 };
 
 const logout = async (): Promise<void> => {
@@ -152,7 +163,7 @@ const logout = async (): Promise<void> => {
         <section class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</h2>
             <button
-                v-for="option in sandbox.sandboxes.value"
+                v-for="option in switchable"
                 :key="option.id"
                 type="button"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
@@ -184,6 +195,24 @@ const logout = async (): Promise<void> => {
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
                 Add sandbox
             </button>
+
+            <!-- Setups that were never finished, under the two things the reader came here for. Same partition
+                 and same wording as the desktop switcher: the row offers the one move left in it rather than
+                 naming a machine that does not exist yet. -->
+            <template v-if="unfinished.length > 0">
+                <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</h2>
+                <button
+                    v-for="option in unfinished"
+                    :key="option.id"
+                    type="button"
+                    class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
+                    @click="resumeSetup(option.id)"
+                >
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle"><Icon name="wrench" /></span>
+                    <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+                </button>
+            </template>
         </section>
 
         <!-- The other members connected right now — same roster the desktop rail stacks. -->

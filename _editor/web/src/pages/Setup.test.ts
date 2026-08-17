@@ -47,6 +47,8 @@ const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSu
 // The 3s poll's read. Named (rather than inline) because the wait card is driven entirely by what it returns:
 // what the sandbox has said about its own boot, and whether we have been refusing its check-ins.
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
+// The discard rule's one observable act: leaving without committing deletes the draft this page minted.
+const remove = vi.fn<(id: string) => Promise<void>>();
 vi.mock(`../composables/sandbox/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
@@ -56,9 +58,9 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
         hostedRelease,
         update,
         refresh,
+        remove,
         select: vi.fn(),
         attach: vi.fn(),
-        remove: vi.fn().mockResolvedValue(undefined),
     }),
 }));
 
@@ -186,8 +188,16 @@ beforeEach(() => {
         return row;
     });
     update.mockReset().mockImplementation(async (id: string, input: { name?: string }) => sandboxRow({ id, name: input.name ?? `` }));
+    remove.mockReset().mockResolvedValue(undefined);
     push.mockReset();
 });
+
+// Leaving the page, the way every exit does it — the discard rule hangs off the unmount, so the tests below
+// have to actually take the page down rather than assert on a flag.
+const leave = (): void => {
+    app?.unmount();
+    app = undefined;
+};
 
 afterEach(() => {
     app?.unmount();
@@ -201,6 +211,63 @@ it(`creates the sandbox on arrival, with no name asked for`, async () => {
     expect(create).toHaveBeenCalledWith(`workspace`);
     expect(nameRow()).toContain(`workspace`);
     expect(buttonLabelled(`Create`)).toBeUndefined();
+});
+
+/* THE DRAFT RULE — the price of creating on arrival, paid back.
+ *
+ * Creating the row before anything is asked for is what makes the first frame useful (the address mint needs a
+ * row to hang off), and it used to be charged to the reader's switcher: opening this screen and going straight
+ * back left a sandbox in their list, wearing a "Setup" chip, that they never asked to make. Looking at a thing
+ * must not create it. So the row is a draft until an ACT says otherwise, and leaving without one deletes it —
+ * the platform row and the tunnel the mint bought with it. */
+it(`discards the sandbox it made when the reader leaves without committing`, async () => {
+    await mount();
+    expect(create).toHaveBeenCalledWith(`workspace`);
+    leave();
+    expect(remove).toHaveBeenCalledWith(`new`);
+});
+
+// …and the acts that keep it are acts, never guesses. Typing a name over the one we picked is the cheapest of
+// them and the easiest to get wrong: nobody renames a machine they are about to walk away from.
+it(`keeps the sandbox once its name has been typed`, async () => {
+    const el = await mount();
+    renamePencil().click();
+    await nextTick();
+    const field = el.querySelector<HTMLInputElement>(`input`)!;
+    field.value = `shop`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    saveName().click();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
+    leave();
+    expect(remove).not.toHaveBeenCalled();
+});
+
+// A machine exists now — there is hardware behind this row, and deleting it on the way past would be throwing
+// away the thing the reader just started.
+it(`keeps the sandbox once a machine has been started for it`, async () => {
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    hostedRung!.click();
+    await nextTick();
+    buttonLabelled(`Start my machine`)!.click();
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    leave();
+    expect(remove).not.toHaveBeenCalled();
+});
+
+/* AND A RESUMED SANDBOX IS NEVER A DRAFT. It predates the visit — somebody made it on purpose and came back to
+ * it — so leaving is setting it aside, not abandoning something that was created behind their back. Getting
+ * this wrong would delete the very row the page was opened to finish. */
+it(`never discards a sandbox it merely resumed`, async () => {
+    const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
+    sandboxes.value = [unfinished];
+    list.mockResolvedValue([unfinished]);
+    await mount();
+    expect(create).not.toHaveBeenCalled();
+    leave();
+    expect(remove).not.toHaveBeenCalled();
 });
 
 /* THE FIRST FRAME, WHICH USED TO BE AN ERROR SCREEN. "No row, and not creating one" is the shape of a create

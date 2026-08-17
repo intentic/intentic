@@ -161,12 +161,20 @@ const select = (id: string): void => {
     persistActive(id);
 };
 
-// Mint a new sandbox and make it active — the entry point of the "add sandbox" flow.
+/* Mint a new sandbox — the entry point of the "add sandbox" flow.
+ *
+ * IT DOES NOT MAKE THE NEW ROW ACTIVE, and that omission is the point. /setup creates its row on arrival, before
+ * the reader has agreed to anything (see Setup.vue's autoCreate), so pointing the workspace at it meant merely
+ * OPENING the setup screen re-aimed the shell at a machine that does not exist: "Back to workspace" then landed
+ * on a connecting gate for a daemon nobody had ever started, and the only way out was the switcher. The
+ * selection now moves exactly where it always meant to — on the announce (check()) and on a successful attach
+ * (connectDomain), both of which select the row themselves once it is a workspace.
+ *
+ * The caller holds the returned row, so nothing downstream needs the selection to find it. */
 const create = async (name: string): Promise<SandboxSummary> => {
     const sandbox = await apiClient.sandbox.create({ name });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
     queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => [...live, sandbox]);
-    persistActive(sandbox.id);
     return sandbox;
 };
 

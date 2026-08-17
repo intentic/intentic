@@ -108,6 +108,16 @@ const { getIdToken, warmIdToken } = useGoogleIdentity();
 const created = ref<SandboxSummary | null>(null);
 // True when we arrived via ?sandbox=<id> and resumed an existing sandbox (vs. created one here now).
 const resuming = ref(false);
+/* THE ROW ON SCREEN WAS MINTED BY THIS VISIT — the half of the discard rule that says what may be thrown away.
+ * A resumed sandbox predates the visit and is somebody's unfinished errand; only a row this page created out of
+ * nothing is a draft nobody has agreed to yet. */
+const createdHere = ref(false);
+// The reader typed a name over the one we picked. The cheapest possible signal of intent, and enough on its own
+// to keep the draft: nobody renames a machine they are about to walk away from.
+const renamed = ref(false);
+// Setup ran to the end — the daemon reported in, or an attach bound one. Set on the way out, because both exits
+// navigate and the row's own `lastSeenAt` in `created` can still be the pre-announce copy at that moment.
+const finished = ref(false);
 // The name on screen: the created row's, until the user edits it in the rename box (or the attach lane's field).
 const name = ref(``);
 const creating = ref(false);
@@ -892,6 +902,7 @@ const check = async (): Promise<void> => {
         if (seen !== null && seen !== baseline.value && !holding) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
             track(`sandbox_connected`, { resuming: resuming.value });
+            finished.value = true;
             // Point the workspace at the sandbox this page just set up. The same `reconcileActive` fallback that
             // used to trigger this redirect can also have moved the selection away while we were waiting, and
             // opening someone's older sandbox at the end of setting up a new one is the same wrong answer
@@ -931,6 +942,8 @@ const autoCreate = async (): Promise<void> => {
         const row = await sandbox.create(typed === `` ? autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)) : typed);
         created.value = row;
         name.value = row.name;
+        // Minted here, agreed to by nobody — from this instant it is a draft the discard rule below owns.
+        createdHere.value = true;
     } catch (err) {
         error.value = noticeFrom(err, `Could not create your sandbox.`);
     } finally {
@@ -1092,6 +1105,7 @@ const saveName = async (): Promise<void> => {
     error.value = null;
     try {
         created.value = await sandbox.update(row.id, { name: trimmed });
+        renamed.value = true;
         renaming.value = false;
     } catch (err) {
         error.value = noticeFrom(err, `Could not rename your sandbox.`);
@@ -1151,6 +1165,7 @@ const connectDomain = async (): Promise<void> => {
         // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace, and
         // the workspace has to open on THAT one (see check()).
         track(`sandbox_connected`, { resuming: resuming.value, attached: true });
+        finished.value = true;
         sandbox.select(row.id);
         await router.push(`/`);
     } catch (err) {
@@ -1390,12 +1405,69 @@ onMounted(async () => {
     }
 });
 
+/* --- THE DRAFT RULE ---
+ *
+ * This page creates its sandbox ON ARRIVAL, before the reader has agreed to anything, because the address mint
+ * behind it takes seconds this flow cannot afford to spend after the first click (autoCreate says why). The
+ * price of that was paid in the switcher: opening the screen and going straight back left a sandbox in the
+ * user's list, wearing a "Setup" chip, that they never asked for and could not tell apart from one they meant to
+ * make. Looking at a thing must not create it.
+ *
+ * So the row is a DRAFT until something happens that only somebody who means it would do — and leaving without
+ * one of those discards it. Every clause below is an act, not a guess from elapsed time:
+ *   • the command is on a clipboard, in an inbox, or handed to the app — it may already be running somewhere
+ *   • a machine exists (ours or the reader's cloud account) — there is hardware behind this row now
+ *   • a machine redeemed the code, or reported on its run — the sandbox is being built as we speak
+ *   • the daemon checked in, or an attach bound one — it is a workspace, not a draft
+ *   • the name was typed over the one we picked — nobody renames a machine they are about to abandon
+ *
+ * Deliberately NOT in the list: which lane or rung is selected, an expanded disclosure, a pasted Cloudflare
+ * token, a typed domain that was never verified. Those are all still looking. */
+const committed = computed(
+    () =>
+        finished.value ||
+        copied.value ||
+        launched.value ||
+        emailed.value ||
+        renamed.value ||
+        claimedAt.value !== null ||
+        report.value !== null ||
+        announced.value ||
+        cloudMachine.value !== null ||
+        hostedRow.value !== null,
+);
+
+/* Throw the draft away. Owner-delete drops the platform row AND the intentic-provided tunnel the mint bought,
+ * so a peek leaves nothing behind on either side — which is the whole point of doing this rather than just
+ * hiding the row.
+ *
+ * Fire-and-forget by design: every caller is on its way somewhere (an unmount, a lane's replacement create), and
+ * `remove` drops the row from the shared cache synchronously before its first await — so the switcher is already
+ * clean on the frame the reader lands back in the workspace. A failure is swallowed for the same reason it is
+ * not retried: nobody is waiting on it, and a sandbox that outlives this is exactly what the switcher's
+ * unfinished section is there to catch. */
+const discardDraft = (): void => {
+    const row = created.value;
+    if (row === null || !createdHere.value || committed.value) {
+        return;
+    }
+    createdHere.value = false;
+    created.value = null;
+    void sandbox.remove(row.id).catch(() => undefined);
+};
+
 // Escape hatch from a resumed setup: forget the resumed sandbox and start a new one in its place. Everything
 // derived from the resumed sandbox resets too — its minted code, hostname, and token-derived subdomain must
 // not leak into the sandbox created next.
 const startFresh = (): void => {
+    // Walking away from a row THIS visit minted is the same abandonment as leaving the page — the replacement is
+    // created two lines down, and two drafts for one reader is the mess this rule exists to prevent. A resumed
+    // sandbox is untouched (it fails `createdHere`): it is the user's, from before, and they are only setting it
+    // aside.
+    discardDraft();
     resuming.value = false;
     created.value = null;
+    renamed.value = false;
     name.value = ``;
     error.value = null;
     setup.value = null;
@@ -1453,6 +1525,10 @@ onUnmounted(() => {
     clearTimeout(mintTimer);
     document.removeEventListener(`visibilitychange`, recheck);
     window.removeEventListener(`focus`, recheck);
+    /* LEAVING WITHOUT COMMITTING THROWS THE DRAFT AWAY — "Back to workspace", the browser's back button, a deep
+     * link, any of them. This is the only exit hook there is: `beforeunload` cannot hold a page open for a
+     * round-trip, so a closed tab keeps its draft and the switcher's unfinished section is what picks it up. */
+    discardDraft();
 });
 
 // Mint the setup code whenever the chosen target is complete, debounced so subdomain/folder keystrokes don't
@@ -1719,7 +1795,11 @@ watch(commandReady, (ready) => {
                         </template>
                         <Notice
                             v-else-if="attachOutcome?.kind === `denied`"
-                            :of="{ tone: `danger`, title: attachOutcome.message, detail: `Ask its owner to invite ${user?.email ?? `you`}, then connect it again.` }"
+                            :of="{
+                                tone: `danger`,
+                                title: attachOutcome.message,
+                                detail: `Ask its owner to invite ${user?.email ?? `you`}, then connect it again.`,
+                            }"
                         />
                         <Notice
                             v-else-if="attachOutcome?.kind === `rejected`"

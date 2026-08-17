@@ -12,6 +12,7 @@ import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
+import { connectedSandboxes, unfinishedSandboxes } from "../composables/sandbox/roster";
 import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
@@ -64,18 +65,28 @@ const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
 const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 
-/* Switching to a sandbox that has never reported in is not switching to anything: it has no daemon, so the
- * shell can only paint a connecting gate that cannot resolve. What that row actually is, is an unfinished
- * setup — so picking it goes back there and resumes it, which is also the only place it can become a
- * workspace. (The router's requireSetup keeps the same row out of the shell on a cold load; this is the same
- * rule from inside, for an account that has one working sandbox and one it never started.) */
+/* THE LIST IS TWO LISTS (roster.ts). Switching to a sandbox that has never reported in is not switching to
+ * anything — it has no daemon, so the shell can only paint a connecting gate that cannot resolve — so those
+ * rows are not offered as places to go. They are unfinished errands, and they get their own section below,
+ * under a heading that says what they are and a row that says what clicking does.
+ *
+ * It used to be one list with a "Setup" chip on those rows, and the chip could not carry the difference: a
+ * sandbox you own that is merely offline looked the same as one that has never existed anywhere, and picking
+ * the second threw you out of the workspace you were standing in. */
+const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
+const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
+
 const pick = (option: SandboxSummary): void => {
     open.value = false;
-    if (option.lastSeenAt === null) {
-        void router.push({ path: `/setup`, query: { sandbox: option.id } });
-        return;
-    }
     sandbox.select(option.id);
+};
+
+// Back to the one screen where an unfinished sandbox can become a workspace, resuming THIS row rather than
+// offering a blank create form. (The router's requireSetup does the same thing on a cold load with nothing else
+// to open; this is the same rule from inside, for an account that also has one that works.)
+const resumeSetup = (option: SandboxSummary): void => {
+    open.value = false;
+    void router.push({ path: `/setup`, query: { sandbox: option.id } });
 };
 
 /* ALT+1…9 — the Nth sandbox in this popover's own order, without opening it.
@@ -110,7 +121,10 @@ onMounted(() => {
             icon: `server`,
             keybinding: `Alt+${at + 1}`,
             handler: (): void => {
-                const option = sandbox.sandboxes.value[at];
+                // The Nth SWITCHABLE sandbox — the same order the popover draws, which is the only order the
+                // digit can be learned from. Unfinished setups are not in it: they are not places to switch to,
+                // and a chord that bounced you onto /setup would be the worst possible use of one keystroke.
+                const option = switchable.value[at];
                 if (option !== undefined) {
                     pick(option);
                 }
@@ -282,7 +296,7 @@ const confirmRemove = async (): Promise<void> => {
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Sandboxes</div>
 
             <button
-                v-for="(option, at) in sandbox.sandboxes.value"
+                v-for="(option, at) in switchable"
                 :key="option.id"
                 type="button"
                 class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors"
@@ -302,13 +316,7 @@ const confirmRemove = async (): Promise<void> => {
                     :class="connectionDotClass"
                     v-tooltip.top="connectionLabel"
                 ></span>
-                <!-- Says what it is before it is clicked, so the jump back to setup reads as the answer to the
-                     row rather than as the switcher losing its place. Same chrome as "Shared" — both are facts
-                     about the row, not states of the connection (that is the dot above). -->
-                <span v-if="option.lastSeenAt === null" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
-                    >Setup</span
-                >
-                <span v-else-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <span v-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <!-- WHICH DIGIT THIS ROW IS. A positional shortcut nobody can see the positions of is not a
@@ -338,6 +346,40 @@ const confirmRemove = async (): Promise<void> => {
                 </span>
                 Add sandbox
             </button>
+
+            <!-- SETUPS THAT WERE NEVER FINISHED — a section, not rows in the list above, because they are not
+                 places to go. Each one is an errand with one move left in it, so the row says the move ("Finish
+                 setting up") rather than naming a machine that does not exist yet, and it sits BELOW "Add
+                 sandbox": the reader came here to switch or to add, and neither of those may be read past to
+                 reach an aside.
+                 A draft normally never survives to be listed here — leaving setup without committing throws it
+                 away (Setup.vue's discardDraft). This catches the ones no exit hook can: a closed tab, a crash,
+                 a machine that was genuinely started and then never came up. -->
+            <template v-if="unfinished.length > 0">
+                <div class="my-1 border-t border-line"></div>
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</div>
+                <button
+                    v-for="option in unfinished"
+                    :key="option.id"
+                    type="button"
+                    class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="resumeSetup(option)"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
+                        <Icon name="wrench" class="text-xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
+                    <!-- In flow, not overlaid — same trick as the rows above: both icons always hold their slot
+                         and only their opacity changes, so hovering a row never shifts the text beside it. -->
+                    <Icon
+                        name="trash"
+                        @click.stop="askRemove(option)"
+                        v-tooltip.top="option.role === 'owner' ? 'Remove from account' : 'Leave'"
+                        class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
+                    />
+                </button>
+            </template>
 
             <div class="my-1 border-t border-line"></div>
 
