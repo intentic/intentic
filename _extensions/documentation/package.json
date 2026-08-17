@@ -25,8 +25,8 @@
         "@tanstack/vue-query": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
-        "jsdom": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",
         "vue": "catalog:",
