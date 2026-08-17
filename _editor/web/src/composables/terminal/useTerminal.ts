@@ -389,12 +389,51 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
      * Chaining the whole read-and-apply — not just the apply — means every list is FETCHED after the previous one
      * has been applied, so no answer can be older than the state it is written over. */
     let listing: Promise<void> = Promise.resolve();
+
+    /* A LIST THAT WAS REFUSED HAS TO BE ASKED AGAIN, and this is the only place that can.
+     *
+     * Every other thing that relists reacts to a list that ARRIVED — the daemon's `terminals` frame, the shared
+     * entry's content changing, a kill or a spawn. A request that FAILED produces none of those, so the strip
+     * simply kept whatever it opened with: on a sandbox switch, that is nothing at all. The panel sat empty over
+     * a sandbox whose shells were running the whole time, and the only way back was to make it list by accident:
+     * clicking `+`, whose new tab nudges the shared list, at which point every pre-existing terminal appeared.
+     *
+     * Note what this is NOT: the retry the standing wait replaced (see `focus`) was a race against a session
+     * that did not exist YET, and losing it hid the session for good. This asks again because the daemon never
+     * answered — a refused request, the first one after a switch, at the moment a resumed daemon is least ready.
+     * So the tries are few and spaced, they stop the moment one succeeds, and they never outlive the panel. */
+    const RETRY_MS = [500, 1_500, 4_000] as const;
+    let retried = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const stopRetrying = (): void => {
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+        retried = 0;
+    };
+    const retryLater = (): void => {
+        const wait = RETRY_MS[retried];
+        // Out of tries, torn down, or already waiting on one — a queue of retries would ask N times over.
+        if (wait === undefined || container === undefined || retryTimer !== undefined) {
+            return;
+        }
+        retried += 1;
+        retryTimer = setTimeout(() => {
+            retryTimer = undefined;
+            if (container !== undefined) {
+                void refresh().catch(() => undefined);
+            }
+        }, wait);
+    };
+
     const refresh = (): Promise<void> => {
         // Both arms run the relist: a rejected predecessor (a dropped tunnel request) is that caller's failure to
         // report, never a reason to stop the next caller from asking.
         const next = listing.then(relist, relist);
         // The queue itself must stay resolvable, or one failed list would reject every relist after it forever.
         listing = next.catch(() => undefined);
+        // Watched rather than awaited: the caller keeps the promise (and the failure to report), while the retry
+        // above is this instance's own business.
+        next.then(stopRetrying, retryLater);
         return next;
     };
 
@@ -411,6 +450,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         pending.value = undefined;
         activeName.value = undefined;
         mountedNames = [];
+        // A fresh daemon gets fresh tries — whatever the one we just left refused us is spent.
+        stopRetrying();
         void refresh();
     });
 
@@ -461,6 +502,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         mountedNames = [];
         container = undefined;
+        // Nobody is left to show the answer to.
+        stopRetrying();
     };
 
     // A session ended (tab ×, or the daemon's exit frame): dispose its client state, drop the tab, focus a

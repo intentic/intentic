@@ -54,10 +54,12 @@ const opened: { detach: () => void }[] = [];
 // One panel instance over a mutable session list, standing in for the daemon this sandbox happens to be.
 const panel = (initial: Listed[]) => {
     let listed = initial;
-    let failOnce = false;
+    let failures = 0;
+    let asked = 0;
     const list = (): Promise<Listed[]> => {
-        if (failOnce) {
-            failOnce = false;
+        asked += 1;
+        if (failures > 0) {
+            failures -= 1;
             return Promise.reject(new Error(`Your sandbox isn't reachable yet`));
         }
         return Promise.resolve(listed);
@@ -69,11 +71,12 @@ const panel = (initial: Listed[]) => {
         daemonLists: (next: Listed[]) => {
             listed = next;
         },
-        // The next list comes back as a rejection — a daemon that hasn't answered yet, which is what a switch
+        // The next N lists come back as rejections — a daemon that hasn't answered yet, which is what a switch
         // lands on.
-        failNextList: () => {
-            failOnce = true;
+        failNextLists: (count = 1) => {
+            failures = count;
         },
+        asked: () => asked,
         attach: () => tabs.attach(document.createElement(`div`)),
         names: () => tabs.order.value.map((tab) => tab.name),
     };
@@ -108,7 +111,7 @@ test("coming back to a sandbox whose list has not landed yet shows no tabs at al
 
     // The panel reopens (its open state is remembered per sandbox) and asks a daemon that is still waking.
     const back = panel([shell(`web-1`)]);
-    back.failNextList();
+    back.failNextLists();
     await expect(back.attach()).rejects.toThrow();
 
     expect(back.names()).toEqual([]);
@@ -129,15 +132,76 @@ test("the split arrangement survives a switch, and a list that failed on the way
     switchTo(`sbx-a`);
 
     const back = panel([shell(`web-1`), shell(`web-2`), shell(`web-3`)]);
-    back.failNextList();
+    back.failNextLists();
     await expect(back.attach()).rejects.toThrow();
     expect(back.tabs.groups.value).toEqual([]);
 
-    // The daemon answers — the panel relists when it becomes reachable (see TerminalPanel).
+    // The daemon answers the next time it is asked.
     await back.tabs.refresh();
 
     expect(back.tabs.groups.value).toEqual([[`web-1`, `web-2`], [`web-3`]]);
     expect(back.tabs.activeName.value).toBe(`web-1`);
+});
+
+/* AND IT ASKS AGAIN, BY ITSELF. The bug's second act, reported once the dead pill was gone: coming back to a
+ * sandbox left the pane empty over shells that were running the whole time, and the only way to see them was to
+ * click + — whose new tab nudges the shared list, at which point every pre-existing terminal appeared at once.
+ * A refused list is the one failure nothing else recovers from, because everything else reacts to a list that
+ * arrived. */
+test("a list refused on the way in is asked again, and the terminals arrive on their own", async () => {
+    vi.useFakeTimers();
+    try {
+        const back = panel([shell(`web-1`), shell(`web-2`)]);
+        back.failNextLists();
+        await expect(back.attach()).rejects.toThrow();
+        expect(back.names()).toEqual([]);
+
+        // Nobody touches anything.
+        await vi.advanceTimersByTimeAsync(600);
+
+        expect(back.names()).toEqual([`web-1`, `web-2`]);
+        expect(back.tabs.groups.value).toEqual([[`web-1`], [`web-2`]]);
+        expect(back.tabs.activeName.value).toBe(`web-1`);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// A daemon that is genuinely gone is not worth hammering: the tries are few and spaced, and then it is the
+// strip's own refresh (or the daemon's next frame) that gets another go.
+test("the re-asking is bounded", async () => {
+    vi.useFakeTimers();
+    try {
+        const back = panel([shell(`web-1`)]);
+        back.failNextLists(99);
+        await expect(back.attach()).rejects.toThrow();
+
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        // The attach's own list, and a handful of retries — not a list every few seconds forever.
+        expect(back.asked()).toBe(4);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// …and it stops dead when the panel closes: a retry landing on a torn-down surface would show its answer to
+// nobody, and could steal a session's host from the panel that replaced it.
+test("the re-asking stops when the panel closes", async () => {
+    vi.useFakeTimers();
+    try {
+        const back = panel([shell(`web-1`)]);
+        back.failNextLists(99);
+        await expect(back.attach()).rejects.toThrow();
+        const asked = back.asked();
+
+        back.tabs.detach();
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(back.asked()).toBe(asked);
+    } finally {
+        vi.useRealTimers();
+    }
 });
 
 // One sandbox's strip is not the other's — the arrangement is remembered per sandbox, so the shells of the one

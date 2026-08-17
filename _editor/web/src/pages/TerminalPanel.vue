@@ -92,14 +92,13 @@ watch(
     () => void tabs.refresh(),
 );
 
-/* AND THE DAEMON COMING BACK IS ITSELF A RELIST — the other edge, and the one a sandbox switch lands on.
+/* AND THE DAEMON COMING BACK IS ITSELF A RELIST — for an outage that outlasts asking again.
  *
- * The panel opens with a list, and that list can simply FAIL: switching sandboxes points the browser at a
- * daemon that may still be waking, and the first request goes out before it answers. Nothing above would ask
- * again — the watch reacts to the session set CHANGING, and a list that never arrived changed nothing — so the
- * strip kept whatever it had opened with, for as long as that panel lived, over a sandbox whose terminals were
- * running the whole time. Reachability is exactly the missing signal: it is false while the request would fail
- * and true once it will succeed. */
+ * A list refused on the way in re-asks a few times on its own (useTerminal's refresh), which covers the seconds
+ * a resumed daemon takes to answer. An outage measured in minutes outlives that, and the watch above cannot end
+ * it either: it reacts to the session set CHANGING, and a daemon nobody can reach reports no changes. So the
+ * moment this one is reachable again, the strip asks once more — the cheapest possible answer to "was anything
+ * running while we were cut off". */
 watch(useSandbox().reachable, (isReachable) => {
     if (isReachable) {
         void tabs.refresh();
