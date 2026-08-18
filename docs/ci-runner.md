@@ -354,6 +354,18 @@ Concurrent access itself is fine: the pnpm store is built for many projects shar
 are content-addressed files written via atomic rename, and cargo's registry is designed for many builds
 sharing one `CARGO_HOME`.
 
+**Cargo TARGET directories are the exception, and the hazard is not the lock.** Cargo decides freshness by
+mtime — "is any source newer than the last build of this unit" — while a container job's checkout is always
+`/__w/intentic/intentic` whichever runner process it belongs to. One cached unit therefore stands for six
+different copies of the repository, and a checkout that PREDATES another process's build of that same path is
+judged up to date: cargo prints `Finished` without `Compiling`, replays the other checkout's warnings, and
+leaves the other checkout's binary uplifted for whatever stages it. Nightly run 32096156841 shipped an `ic`
+built before `ic docker prepare` existed, and the Windows setup tier failed on `unrecognized subcommand
+'docker'` against a source tree that had the command in it. Registry and store sharing are untouched by this —
+it is a property of build OUTPUTS keyed by path. `build-ic.sh` drops its own crate (`cargo clean -p ic`)
+before every build for that reason; anything else that stages a binary out of a shared target directory needs
+the same, or its own directory.
+
 ---
 
 ## Why a bind mount and not a managed cache

@@ -71,12 +71,33 @@ for target in "$@"; do
   esac
   rustup target add "$triple" >/dev/null
   echo "==> ic for $target ($triple)"
+  # THIS CRATE IS DROPPED FROM THE CACHE BEFORE EVERY BUILD, and that is not belt-and-braces.
+  #
+  # Cargo decides freshness by MTIME — "is any source newer than the last build of this unit" — never by
+  # hashing what the source says. CI points CARGO_TARGET_DIR at /ci-cache, which every runner process on the
+  # machine shares, and a container job's checkout is ALWAYS /__w/intentic/intentic whichever process it
+  # belongs to. So one cached unit stands for several different checkouts, and a workspace whose checkout
+  # PREDATES another workspace's build of that same path is judged up to date: cargo prints "Finished" without
+  # "Compiling", replays the other checkout's warnings, and leaves ITS binary uplifted for the copy below.
+  #
+  # That is what nightly run 32096156841 shipped — an ic built before `ic docker prepare` existed, from a tree
+  # that has had it since cabdb6f1 — and the Windows setup tier failed on `unrecognized subcommand 'docker'`
+  # against a source file anyone could read the command in. A binary the shims download on every run is the
+  # worst possible place for "the cache decided this was the same code".
+  #
+  # Only this crate's own units go: dependencies are immutable for a given version, so they stay cached and
+  # this costs the seconds it takes to compile one small crate.
+  cargo clean --manifest-path "$MANIFEST" --release --target "$triple" -p ic
   case "$runner" in
     zigbuild) cargo zigbuild --manifest-path "$MANIFEST" --release --target "$triple" ;;
     xwin) cargo xwin build --manifest-path "$MANIFEST" --release --target "$triple" ;;
   esac
   src="$TARGET_DIR/${triple}/release/ic"
   [ -f "$src" ] || src="${src}.exe"
+  # The clean above removed the uplifted binary as well, so whatever is here now is what this build wrote —
+  # which is the property the copy needs and never had. Said out loud rather than left to `cp` to discover,
+  # because the failure it replaces was silent: a leftover binary copies just as happily as a fresh one.
+  [ -f "$src" ] || { echo "error: no ic binary at $src after building $target" >&2; exit 1; }
   cp "$src" "$OUT/$name"
 done
 
