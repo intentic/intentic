@@ -45,7 +45,7 @@
     "plugins": {
         "updater": {
             "endpoints": ["https://github.com/intentic/intentic/releases/latest/download/latest.json"],
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGRjUyN0VFM0JERDFFMjQKUldRa0h0MDc3aWYxUHdFNWRXNjU5cnhNZzZ6ZjZqc0U1QW96SlArbmVKMkNsVkdCK1dBQjJKb0cK"
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzODRDRTZGODg4RkY5NkEKUldScStZK0liODZFODh5UWRTdmhLaCsyK09PS3dlV25XUUdQa0hiY1lUR2NGSGI3Smxaby9zRzYK"
         },
         "deep-link": {
             "desktop": {

@@ -54,8 +54,14 @@ export const initAnalytics = (info: DesktopInfo): void => {
  * rejected promise here must not surface as an unhandled one. `keepalive` so an event sent as the window is
  * handed back to the workspace still leaves. */
 export const track = (event: string, properties?: Record<string, unknown>): void => {
+    void send(event, properties);
+};
+
+/* The POST itself, kept apart from `track` for the one caller below that has to hold on to it. Undefined when
+ * analytics is off, so that caller can tell "nothing was sent" from "sent, still in flight". */
+const send = (event: string, properties?: Record<string, unknown>): Promise<void> | undefined => {
     if (context === undefined) {
-        return;
+        return undefined;
     }
     const body = JSON.stringify({
         api_key: __POSTHOG_KEY__,
@@ -64,5 +70,27 @@ export const track = (event: string, properties?: Record<string, unknown>): void
         properties: { ...context.shared, ...properties },
         timestamp: new Date().toISOString(),
     });
-    void fetch(CAPTURE_URL, { method: `POST`, headers: { "content-type": `application/json` }, body, keepalive: true }).catch(() => undefined);
+    return fetch(CAPTURE_URL, { method: `POST`, headers: { "content-type": `application/json` }, body, keepalive: true }).then(
+        () => undefined,
+        () => undefined,
+    );
+};
+
+/* How long an event that precedes a shutdown is allowed to hold it up. */
+const EXIT_FLUSH_MS = 1500;
+
+/* THE ONE EVENT THAT CANNOT FIRE AND FORGET. The Windows leg of a setup ends by restarting the machine, and
+ * `restart_for_setup` parks the work and reboots in the same breath — so the request above was still on the
+ * wire when the machine went down, and the step that costs a setup the most people was the one step that
+ * reported nothing. `keepalive` covers a webview being torn down; it does not cover an operating system
+ * switching off underneath it.
+ *
+ * Awaited, and CAPPED: a machine on a bad network — which, mid-Docker-install, is a real state — delays the
+ * restart by a second and a half rather than parking the user on a promise that may never settle. */
+export const trackBeforeExit = async (event: string, properties?: Record<string, unknown>): Promise<void> => {
+    const sent = send(event, properties);
+    if (sent === undefined) {
+        return;
+    }
+    await Promise.race([sent, new Promise<void>((resolve) => setTimeout(resolve, EXIT_FLUSH_MS))]);
 };

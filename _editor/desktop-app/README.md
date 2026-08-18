@@ -278,14 +278,24 @@ too.
 
 The workspace face is the hosted SPA and carries that app's instrumentation. This face is the half that touches
 the machine, and it used to report nothing — so every desktop funnel ended at *"clicked the button"* and the
-install's outcome was invisible. It now sends five named events of its own
+install's outcome was invisible. It now sends named events of its own
 ([`src/analytics.ts`](src/analytics.ts)):
 
 | Event | When | Carries |
 | --- | --- | --- |
 | `desktop_app_opened` | the launcher mounts | whether Docker already answers |
 | `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
+| `desktop_install_dismissed` | the setup card is closed | whether the run was still going, and how far it had got |
+| `desktop_install_restart` | Windows is restarted mid-setup | which prerequisites asked for it |
+| `desktop_install_resumed` / `_resume_expired` | the app comes back after that restart | how long the parked setup sat there |
 | `desktop_recreate_started` / `_finished` | an update or an environment rebuild | the same, plus which of the two, and whether it came from this screen or from the SPA's card |
+
+Two of these exist because the funnel lies without them. **Dismissal**: the × stops nothing — the script is a
+process on this machine — so a run somebody walked out on still reports its own `_finished`, and without this
+event a setup watched to the end and one abandoned ninety seconds into a four-minute pull are the same shape.
+**Restart**: it is the step that costs a Windows setup the most people, and it is the one event that cannot
+fire and forget, because the line after it takes the machine down. `trackBeforeExit` holds the reboot for up
+to a second and a half rather than letting the request die on the wire.
 
 `desktop_install_finished` is **the desktop funnel's last step**. The SPA has its own `sandbox_connected`, but
 on this path it is fired by a page that spent the whole install parked behind this window — late where a hidden
@@ -336,7 +346,18 @@ Release**, exactly like `intentic-sync` and `intentic-host`.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
-`tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json`.
+`tauri.conf.json`). Without it the build still produces plain installers and skips `latest.json` — which is
+what every release up to and including v1.213.0 did, so `latest.json` 404s and no copy in the wild has ever
+been offered an update.
+
+The key that pairs with the committed pubkey was **rotated** when that was fixed, the original having been
+lost. An app verifies the manifest against the pubkey it was COMPILED with, so copies installed from
+v1.213.0 or earlier will reject every manifest this key signs and stay where they are: they need one manual
+reinstall, and everything from the first signed release forward updates itself.
+
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is exported (empty) by `build-desktop.sh` because the signer prints
+`Signing without password.` and then BLOCKS on a prompt when the variable is absent — a release that hangs
+rather than one that fails.
 
 `POSTHOG_KEY` is the release workflow's other secret, and it is set on the desktop jobs only — a compiled app
 has no entrypoint to substitute one at start the way the web image does, so it is baked into the launcher UI

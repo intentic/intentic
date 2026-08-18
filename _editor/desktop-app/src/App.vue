@@ -15,7 +15,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
-import { initAnalytics, track } from "./analytics";
+import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
 import SetupProgress from "./components/SetupProgress.vue";
 import { advance, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
@@ -309,6 +309,28 @@ const runSetup = async (): Promise<void> => {
     }
 };
 
+/* WALKING AWAY FROM AN INSTALL, REPORTED AS ITS OWN THING.
+ *
+ * The × hands the window back to the workspace and stops NOTHING — the script is a process on this machine
+ * (see the button itself) — so a run dismissed here still reports its own `desktop_install_finished` when it
+ * ends. What this says is that nobody was watching any more, and that was invisible: a setup somebody left
+ * ninety seconds into a four-minute pull and one they sat through to the end read identically.
+ *
+ * WHERE it was left is the whole value, so it carries the phase id the finish event reports against and the
+ * bar's own position. Nothing about the machine leaves here, exactly as everywhere else on this screen. */
+const dismissSetup = async (): Promise<void> => {
+    const state = progress.value;
+    const step = state?.plan[state.index]?.phase;
+    track(`desktop_install_dismissed`, {
+        // A dismissal after the run ended is somebody closing a finished — or failed — card, which is the
+        // ordinary way out of this screen and not the same event at all.
+        running: running.value,
+        ...(state === undefined ? {} : { percent: Math.round(state.percent), elapsedMs: Date.now() - state.startedAt }),
+        ...(step === undefined ? {} : { step }),
+    });
+    await workspaceOpen();
+};
+
 /* THE ONE QUESTION THIS FLOW ASKS, ANSWERED. The first attempt reported what it would change and changed
  * nothing; this is the user saying go ahead, and it is the same pre-consent the terminal path takes as a
  * typed "y". It stays set for the rest of this window's conversation — a re-check after fixing something by
@@ -325,7 +347,9 @@ const restartNow = async (): Promise<void> => {
     if (args === undefined || running.value) {
         return;
     }
-    track(`desktop_install_restart`, { requirements: requirements.value.map((requirement) => requirement.id) });
+    // Awaited, unlike every other event here: the line below takes the machine down, and an event still in
+    // flight when that happens is an event nobody ever sees (analytics.ts).
+    await trackBeforeExit(`desktop_install_restart`, { requirements: requirements.value.map((requirement) => requirement.id) });
     try {
         await restartForSetup(args);
     } catch (error) {
@@ -548,7 +572,7 @@ onUnmounted(() => {
                     type="button"
                     aria-label="Close"
                     class="-m-1 shrink-0 rounded-md p-1 text-subtle hover:bg-canvas hover:text-content"
-                    @click="workspaceOpen"
+                    @click="dismissSetup"
                 >
                     <Icon name="times" />
                 </button>
@@ -591,7 +615,7 @@ onUnmounted(() => {
                 <Button v-if="!expired" label="Try again" :disabled="running" @click="runSetup">
                     <template #icon><Icon name="bolt" /></template>
                 </Button>
-                <Button severity="secondary" :text="true" label="Back to your workspace" @click="workspaceOpen">
+                <Button severity="secondary" :text="true" label="Back to your workspace" @click="dismissSetup">
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
             </div>

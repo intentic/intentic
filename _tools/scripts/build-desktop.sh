@@ -198,6 +198,12 @@ fi
 export APPIMAGE_EXTRACT_AND_RUN=1
 export NO_STRIP=true
 
+# The signing key carries no password, and the signer WAITS FOR ONE unless it is told that in the environment:
+# with the variable unset it prints "Signing without password." and then blocks on a prompt no CI job can
+# answer, which is a release that hangs rather than one that fails. Defaulted rather than assigned, so a key
+# that does have a password still signs with it.
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+
 # Stale bundles from a previous (cached) build would make the glob-copies below ambiguous.
 # Both CI jobs that run this set CARGO_TARGET_DIR to the shared /ci-cache store, and cargo puts the bundles
 # under THAT — so the src-tauri/target spelling cleaned nothing and the copies below looked for artifacts in a
