@@ -584,3 +584,80 @@ describe(`symlink rows`, () => {
         expect(chevronOf(`away`)).toBe(false);
     });
 });
+
+/* WHERE A DROP LANDS. Aiming at a FILE used to be the one gesture in the explorer that ignored what was under
+ * the pointer: the row declined the drop, it bubbled to the explorer background, and whatever was dragged
+ * landed at the workspace root — nowhere near the folder being pointed into, and, for an upload of a folder,
+ * a mess to undo. A file stands in for the folder holding it everywhere else here (New File, paste, the
+ * keyboard axis), and now it does for a drop too: onto something means beside it. */
+describe(`where a drop on a row lands`, () => {
+    const DROP_TREE: WorkspaceTreeEntry[] = [
+        dir(`src`, [dir(`src/api`, [file(`src/api/routes.ts`)]), file(`src/main.ts`), file(`src/util.ts`)]),
+        file(`README.md`),
+    ];
+    const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
+        [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
+    // jsdom implements neither DragEvent nor DataTransfer, so the drag store is the two things the handler
+    // reads: what the drag is offering, and what it holds. An internal row move is the payload under test
+    // because it lands as a daemon call this can read.
+    const dropOn = async (row: HTMLElement, dragged: string, types: string[] = [`application/x-intentic-path`]): Promise<void> => {
+        const event = new Event(`drop`, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, `dataTransfer`, {
+            value: { types, getData: (type: string): string => (type === `application/x-intentic-path` ? dragged : ``) },
+        });
+        row.dispatchEvent(event);
+        // The handler's work is a promise chain with no timer in it, so draining the queue twice settles both
+        // the move and the "nothing to move" case — which has to be readable as SILENCE, not as a slow call.
+        for (let tick = 0; tick < 2; tick += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            await nextTick();
+        }
+    };
+    const moves = (): unknown[] => daemon.calls.filter((call) => call.path === `/workspace/move`).map((call) => JSON.parse(String(call.init?.body)));
+
+    beforeEach(() => {
+        daemon.calls.length = 0;
+    });
+
+    it(`puts what was dropped on a file into the folder that holds that file`, async () => {
+        restoreFrom([`src`, `src/api`]);
+        const el = await mount({ tree: DROP_TREE });
+
+        await dropOn(rowNamed(el, `routes.ts`), `README.md`);
+
+        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
+    });
+
+    it(`still puts what was dropped on a folder inside that folder`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: DROP_TREE });
+
+        await dropOn(rowNamed(el, `api`), `README.md`);
+
+        expect(moves()).toEqual([{ from: `README.md`, to: `src/api/README.md` }]);
+    });
+
+    // Dropping a row onto its own neighbour asks for the folder it is already in: nothing to do, and nothing
+    // asked of the daemon — least of all a move to the root, which is where it used to end up.
+    it(`asks the daemon for nothing when the file aimed at is already a neighbour`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: DROP_TREE });
+
+        await dropOn(rowNamed(el, `util.ts`), `src/main.ts`);
+
+        expect(moves()).toEqual([]);
+    });
+
+    /* Now that every row takes drops, every row also has to REFUSE the drags that aren't ours. A browser makes
+     * each image and link a drag source, so dragging the previewed image across the explorer used to sail over
+     * folder rows harmlessly and would now sail over file rows too — landing a copy of the file being looked at
+     * back in the workspace if a row accepted it. */
+    it(`refuses a drag carrying neither files nor rows`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: DROP_TREE });
+
+        await dropOn(rowNamed(el, `util.ts`), ``, [`text/uri-list`]);
+
+        expect(daemon.calls).toEqual([]);
+    });
+});

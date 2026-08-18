@@ -18,6 +18,7 @@ import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { useReceipts } from "../../composables/receipts";
 import { explorerTreatment, iconForEntry } from "@intentic/ui";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { dragOffer } from "./dragSource";
 import { filesToEntries } from "./dropEntries";
 import { explorerShows } from "./explorerFilter";
 import { movableInto, pastePairs } from "./explorerPaste";
@@ -930,7 +931,13 @@ const onKeydown = (event: KeyboardEvent): void => {
 };
 
 // ---- drag: reorder within the tree (internal move, possibly of a multi-selection) OR upload OS files onto a
-// folder row (file rows / empty space bubble to the explorer root). A drop into a folder's own subtree no-ops. ----
+// row (empty space bubbles to the explorer root). A drop into a folder's own subtree no-ops. ----
+/* WHERE A DROP ON THIS ROW LANDS. A folder takes the drop itself; a FILE stands in for the folder holding it,
+ * exactly as it does for New File, paste and every other op here (targetDir above). Aiming at a file used to be
+ * the one gesture that ignored what was under the pointer: the row declined the drop, it bubbled to the
+ * explorer background, and the files landed at the workspace root — nowhere near the folder the user was
+ * pointing into. Dropping ONTO something now always means "beside it". */
+const dropDirOf = (row: Row): string => (row.entry.type === `dir` ? row.entry.path : parentDir(row.entry.path));
 const isInvalidMoveTarget = (dir: string): boolean => dragPaths.value.length > 0 && dragPaths.value.every((source) => !canMoveInto(source, dir));
 const onRowDragStart = (event: DragEvent, row: Row): void => {
     if (event.dataTransfer === null) {
@@ -958,40 +965,51 @@ const onRowDragEnd = (): void => {
     dragOverPath.value = undefined;
 };
 const onRowDragOver = (event: DragEvent, row: Row): void => {
-    if (row.entry.type !== `dir`) {
+    const offer = dragOffer(event);
+    // Nothing this row can take (an image or a link dragged around inside the app): left alone, so the browser
+    // declines it — the same answer the explorer background gives, which a row must not quietly overrule.
+    if (!offer.files && !offer.rows) {
         return;
     }
     // preventDefault even on an invalid target so the drop lands here (a no-op) instead of bubbling to the root.
     event.preventDefault();
-    const invalid = locked(row.entry.path) || isInvalidMoveTarget(row.entry.path);
+    const dir = dropDirOf(row);
+    const invalid = locked(dir) || isInvalidMoveTarget(dir);
     if (event.dataTransfer !== null) {
         event.dataTransfer.dropEffect = invalid ? `none` : dragPaths.value.length > 0 ? `move` : `copy`;
     }
-    dragOverPath.value = invalid ? undefined : row.entry.path;
+    // The highlight names the DESTINATION, so hovering a file lights up the folder row holding it — the answer
+    // to "where will this land?" is the row it will land in, not the one under the pointer. A file at the root
+    // has no such row: the explorer background's own "drop to add" hint is already up and says it.
+    dragOverPath.value = invalid || dir === `` ? undefined : dir;
 };
 const onRowDragLeave = (row: Row): void => {
-    if (dragOverPath.value === row.entry.path) {
+    if (dragOverPath.value === dropDirOf(row)) {
         dragOverPath.value = undefined;
     }
 };
 const onRowDrop = (event: DragEvent, row: Row): void => {
-    if (row.entry.type !== `dir` || event.dataTransfer === null) {
+    const offer = dragOffer(event);
+    if (event.dataTransfer === null || (!offer.files && !offer.rows)) {
         return;
     }
     event.preventDefault();
     event.stopPropagation();
+    const dir = dropDirOf(row);
     // Swallowed here rather than left to bubble: a drop the sandbox would refuse must not fall through to the
     // explorer root and land the files somewhere the user never aimed at.
-    if (locked(row.entry.path)) {
+    if (locked(dir)) {
         dragOverPath.value = undefined;
         return;
     }
-    const dir = row.entry.path;
     dragOverPath.value = undefined;
     const dataTransfer = event.dataTransfer;
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
         void run(() => moveIntoMany(internal.split(`\n`), dir), `Couldn't move those items.`);
+        return;
+    }
+    if (!offer.files) {
         return;
     }
     // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the items are alive)
