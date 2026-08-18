@@ -59,7 +59,8 @@ interface Stored {
         upstreamUrl: string;
         secret: string;
         creditsPerRun: number;
-        active: boolean;
+        sampleRequest: string;
+        status: string;
     }[];
     creditSpends: Map<string, number>;
     serviceRuns: { userId: string; serviceId: string; credits: number; status: string; createdAt: Date }[];
@@ -146,8 +147,16 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             ),
             findMany: vi.fn(async () =>
                 stored.services
-                    .filter((service) => service.active)
-                    .map(({ slug, publisher, name, description, creditsPerRun }) => ({ slug, publisher, name, description, creditsPerRun })),
+                    .filter((service) => service.status === `probation` || service.status === `listed`)
+                    .map(({ slug, publisher, name, description, creditsPerRun, status, sampleRequest }) => ({
+                        slug,
+                        publisher,
+                        name,
+                        description,
+                        creditsPerRun,
+                        status,
+                        sampleRequest,
+                    })),
             ),
         },
         creditSpend: {
@@ -387,7 +396,8 @@ const RESEARCH = {
     upstreamUrl: `https://svc.acme.test/run`,
     secret: `svc-secret`,
     creditsPerRun: 40,
-    active: true,
+    sampleRequest: `{"query":"a worked example"}`,
+    status: `listed`,
 };
 
 const MEMBER = { userId: `user-1`, stripeCustomerId: `cus_1`, stripeSubscriptionId: `sub_1`, status: `active`, currentPeriodEnd: NOW };
@@ -410,8 +420,18 @@ describe(`metered service runs`, () => {
             credits?: { remaining: number };
         };
         expect(body.member).toBe(true);
+        // `status` is flattened to `probation` on the way out — the catalog's readers need "is this new",
+        // never the lifecycle vocabulary — and the provider's worked example rides along for the agent.
         expect(body.services).toEqual([
-            { slug: `acme-research`, publisher: `acme`, name: `Acme Research`, description: `Deep research runs.`, creditsPerRun: 40 },
+            {
+                slug: `acme-research`,
+                publisher: `acme`,
+                name: `Acme Research`,
+                description: `Deep research runs.`,
+                creditsPerRun: 40,
+                sampleRequest: `{"query":"a worked example"}`,
+                probation: false,
+            },
         ]);
         expect(body.credits?.remaining).toBe(75);
     });
@@ -564,7 +584,7 @@ describe(`metered service runs`, () => {
             return row;
         };
         await seedDemoService(prisma, demoConfig);
-        expect(stored.services).toMatchObject([{ slug: `demo-research`, publisher: `intentic`, creditsPerRun: 5, active: true }]);
+        expect(stored.services).toMatchObject([{ slug: `demo-research`, publisher: `intentic`, creditsPerRun: 5, status: `listed` }]);
 
         // The forward's fetch dispatched back into the same app — the demo upstream verifies the signature
         // exactly as an external provider would, so this drives the WHOLE path: spend → sign → verify →

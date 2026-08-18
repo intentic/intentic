@@ -947,3 +947,92 @@ export const ClaimChallengeSchema = z.object({
     claimedByOther: z.boolean(),
 });
 export type ClaimChallenge = z.infer<typeof ClaimChallengeSchema>;
+
+/* ── OPEN ADMISSION: a provider's own listings ─────────────────────────────────────────────────────────── */
+
+/* THE PUBLISHED RULES, read from the platform rather than written on a screen. Every number here is a
+ * threshold the admission algorithm actually applies (api config.ts pool.*), and the whole promise of
+ * rules-based admission is that a provider can look them up before they build anything. A screen that
+ * hardcoded them would be a second copy free to drift from the one that decides. */
+export const AdmissionRulesSchema = z.object({
+    // Whether self-serve listing is on at all. Off means the platform kept the hand-written flow.
+    openAdmission: z.boolean(),
+    minCredits: z.number(),
+    maxCredits: z.number(),
+    // The tighter ceiling a listing is held under until it graduates.
+    probationMaxCredits: z.number(),
+    // How long a passing conformance probe stays good enough to publish on.
+    probeFreshMinutes: z.number(),
+    // Served runs needed to graduate, and the refund rate that both blocks graduation and trips the watch.
+    graduationRuns: z.number(),
+    maxRefundRate: z.number(),
+    watchWindowRuns: z.number(),
+    canaryFailures: z.number(),
+    priceChangeHours: z.number(),
+    maxServicesPerOwner: z.number(),
+});
+export type AdmissionRules = z.infer<typeof AdmissionRulesSchema>;
+
+export const ServiceStatusSchema = z.enum([`draft`, `probation`, `listed`, `suspended`]);
+export type ServiceStatus = z.infer<typeof ServiceStatusSchema>;
+
+/* ONE OF THE CALLER'S OWN LISTINGS. The signing secret is deliberately absent: it is shown once when it is
+ * minted and once when it is rotated, and never read back, so a compromised session cannot harvest it.
+ *
+ * The two counters are here because graduation is a counter and a provider staring at "probation" with no
+ * numbers has no idea whether it is two runs away or two hundred. */
+export const ProviderServiceSchema = z.object({
+    slug: z.string(),
+    publisher: z.string(),
+    name: z.string(),
+    description: z.string(),
+    upstreamUrl: z.string(),
+    creditsPerRun: z.number(),
+    sampleRequest: z.string(),
+    status: ServiceStatusSchema,
+    // When the last conformance probe passed — absent until one has.
+    probedAt: z.iso.datetime().optional(),
+    // Why the watch suspended it, in a sentence written for the provider reading it.
+    suspendedFor: z.string().optional(),
+    servedRuns: z.number(),
+    refundedRuns: z.number(),
+    createdAt: z.iso.datetime(),
+});
+export type ProviderService = z.infer<typeof ProviderServiceSchema>;
+
+export const ProviderServicesStateSchema = z.object({
+    enabled: z.boolean(),
+    rules: AdmissionRulesSchema,
+    services: z.array(ProviderServiceSchema),
+    // Whether this account could publish at all today — the two identity gates, answered before a provider
+    // spends an afternoon building against a door that is shut.
+    holdsAnyPublisher: z.boolean(),
+    payoutsEnabled: z.boolean(),
+});
+export type ProviderServicesState = z.infer<typeof ProviderServicesStateSchema>;
+
+/* WHAT A CONFORMANCE PROBE FOUND. Every check is reported, passed or not — a provider fixing their endpoint
+ * wants the whole picture, and "one of three failed" without saying which is a support ticket waiting to
+ * happen. `message` is the first failure as a sentence, which is what a screen puts in front of them. */
+export const ServiceProbeResultSchema = z.object({
+    passed: z.boolean(),
+    checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string() })),
+    message: z.string(),
+});
+export type ServiceProbeResult = z.infer<typeof ServiceProbeResultSchema>;
+
+// A listing as its provider writes it. The same fields the rules are checked against, which is why there is
+// no separate "draft" shape — an edit and a creation are the same validation.
+export const ServiceListingInputSchema = z.object({
+    slug: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .max(64),
+    publisher: PublisherSlugSchema,
+    name: z.string().min(1).max(60),
+    description: z.string().min(1).max(400),
+    upstreamUrl: z.url(),
+    creditsPerRun: z.number().int().positive(),
+    sampleRequest: z.string().max(4000),
+});
+export type ServiceListingInput = z.infer<typeof ServiceListingInputSchema>;

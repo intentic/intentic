@@ -22,8 +22,10 @@ export const seedDemoService = async (prisma: PrismaClient, config: Config): Pro
     }
     const existing = await prisma.service.findUnique({ where: { slug: DEMO_SLUG } });
     if (!config.pool.demoService) {
-        if (existing !== null && existing.active) {
-            await prisma.service.update({ where: { slug: DEMO_SLUG }, data: { active: false } });
+        // Back to `draft` rather than `suspended`: the flag being off is an operator's choice, and the
+        // suspended state is the watch's word for a provider that failed. The row and its runs stay either way.
+        if (existing !== null && existing.status !== `draft`) {
+            await prisma.service.update({ where: { slug: DEMO_SLUG }, data: { status: `draft` } });
         }
         return;
     }
@@ -33,7 +35,10 @@ export const seedDemoService = async (prisma: PrismaClient, config: Config): Pro
         description: `A demonstration research run — answers a canned summary for any query, so you can watch the metered flow end to end.`,
         upstreamUrl: new URL(`/pool/demo/upstream`, config.api.url).toString(),
         creditsPerRun: 5,
-        active: true,
+        sampleRequest: JSON.stringify({ query: `which subreddits fit a self-hosted agent workspace?` }),
+        // An operator row, owned by nobody: exempt from the admission gates it never passed and from the
+        // watch that governs the providers who did.
+        status: `listed`,
     };
     if (existing === null) {
         await prisma.service.create({ data: { slug: DEMO_SLUG, secret: encryptSecret(config, randomBytes(24).toString(`hex`)), ...state } });

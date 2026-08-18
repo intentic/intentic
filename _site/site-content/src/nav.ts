@@ -124,8 +124,8 @@ export const navEntries: NavEntry[] = [
      * stop a menu listing twenty pages, not to hide one of two artifacts (see apiServicesDestination).
      *
      * It is a menu row rather than a top-level label on purpose. In the bar it would read as a peer
-     * destination, announcing a curated, hand-onboarded catalog to every visitor who has no endpoint to sell,
-     * and the bar is already six labels, two marks and a button wide. Inside the menu it costs nobody
+     * destination, announcing a paid-service catalog to every visitor who has no endpoint to sell, and the
+     * bar is already six labels, two marks and a button wide. Inside the menu it costs nobody
      * anything: whoever opened "Developers" is already the audience it is written for.
      *
      * The gallery is the ACTION here, the way the changelog is under Docs. It is the answer to the question an

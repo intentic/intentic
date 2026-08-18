@@ -33,6 +33,12 @@ interface CatalogAnswer {
         readonly name: string;
         readonly description: string;
         readonly creditsPerRun: number;
+        // Set on a listing the platform admitted automatically and has not yet graduated (open admission's
+        // probation). Optional like every other field here: a platform that stops sending it is a card that
+        // says less, not a throw.
+        readonly probation?: boolean;
+        // A request body the provider published as a worked example of their service's shape.
+        readonly sampleRequest?: string;
     }[];
 }
 
@@ -112,6 +118,7 @@ export const gatedServiceRun = async (deps: OfferDeps, offered: OfferedRun): Pro
         publisher: service.publisher,
         description: service.description,
         creditsPerRun: service.creditsPerRun,
+        ...(service.probation === true ? { probation: true } : {}),
         ...(parsed.credits !== undefined ? { credits: parsed.credits } : {}),
         request: offered.body,
         ...(offered.why !== undefined && offered.why !== "" ? { why: offered.why.slice(0, WHY_MAX) } : {}),

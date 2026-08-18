@@ -6,6 +6,17 @@ import { poolEnabled } from "../pool/pool-membership.js";
 import { type StripeGateway, stripeGateway } from "../pool/pool-stripe.js";
 import { CLAIM_PATH, checkClaim, claimToken, type RegistryReader, registryReader } from "./creator-claim.js";
 import { payoutState, startPayoutSetup } from "./creator-payouts.js";
+import {
+    admissionRules,
+    draftService,
+    listServices,
+    probeOwnService,
+    publishService,
+    rotateServiceSecret,
+    type ServiceDeps,
+    updateService,
+    withdrawService,
+} from "./creator-services.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -43,6 +54,15 @@ export interface CreatorDeps {
 export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps = {}) => {
     const stripeOf = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.pool.stripeSecretKey);
     const readerOf = (context: OrpcContext): RegistryReader => reader ?? registryReader(context.config, fetchFn);
+    // The service operations take the same two injectables the rest of this surface does, plus the fetch the
+    // conformance probe reaches the provider's endpoint with — so a test drives a whole admission without a
+    // network, a Stripe account, or a provider.
+    const serviceDeps = (context: OrpcContext): ServiceDeps => ({
+        prisma: context.prisma,
+        config: context.config,
+        gateway: stripeOf(context),
+        fetchFn,
+    });
     return {
         /* What this account holds today. Signed in but holding nothing is the ordinary first visit, and it
          * answers with empty claims and an unconnected payout state rather than an error — the screen needs
@@ -172,5 +192,53 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
                 throw error;
             }
         }),
+
+        /* OPEN ADMISSION — the provider's six operations, each a thin call into creator-services.ts. The
+         * handlers are this shallow on purpose: every rule, refusal sentence and transition lives in one
+         * module that the tests drive directly, so what the contract exposes cannot quietly grow logic of
+         * its own.
+         *
+         * `list` is the only one that answers on a platform with self-serve turned off — the screen has to be
+         * able to say so, and a read that threw would leave it with nothing to explain. */
+        services: {
+            list: os.creator.services.list.handler(async ({ context }) => {
+                if (!poolEnabled(context.config) || !context.config.pool.openAdmission) {
+                    return {
+                        enabled: false,
+                        rules: admissionRules(context.config),
+                        services: [],
+                        holdsAnyPublisher: false,
+                        payoutsEnabled: false,
+                    };
+                }
+                const user = requireUser(context);
+                return listServices(serviceDeps(context), user.id);
+            }),
+            draft: os.creator.services.draft.handler(async ({ context, input }) => {
+                requirePool(context);
+                return draftService(serviceDeps(context), requireUser(context).id, input);
+            }),
+            update: os.creator.services.update.handler(async ({ context, input }) => {
+                requirePool(context);
+                const { slug, ...patch } = input;
+                return updateService(serviceDeps(context), requireUser(context).id, slug, patch);
+            }),
+            probe: os.creator.services.probe.handler(async ({ context, input }) => {
+                requirePool(context);
+                return probeOwnService(serviceDeps(context), requireUser(context).id, input.slug);
+            }),
+            publish: os.creator.services.publish.handler(async ({ context, input }) => {
+                requirePool(context);
+                return publishService(serviceDeps(context), requireUser(context).id, input.slug);
+            }),
+            withdraw: os.creator.services.withdraw.handler(async ({ context, input }) => {
+                requirePool(context);
+                return withdrawService(serviceDeps(context), requireUser(context).id, input.slug);
+            }),
+            rotateSecret: os.creator.services.rotateSecret.handler(async ({ context, input }) => {
+                requirePool(context);
+                return rotateServiceSecret(serviceDeps(context), requireUser(context).id, input.slug);
+            }),
+        },
     };
 };

@@ -269,6 +269,38 @@ export const configSchema = z.object({
             minPayoutCents: z.coerce.number().int().nonnegative().default(2500),
             // The currency transfers are made in — the platform's own Stripe currency. POOL_PAYOUT_CURRENCY.
             payoutCurrency: z.string().default(`usd`),
+
+            /* OPEN ADMISSION (pool/pool-admission.ts) — the published thresholds a provider is measured
+             * against. Every one of them is here rather than in the code because the whole promise of
+             * rules-based admission is that the rules are readable in advance: a number a provider cannot
+             * look up is a human review wearing a constant's clothes. */
+            // Whether a provider may list a service without an operator. Off restores the hand-written flow;
+            // operator rows keep working either way, because no gate applies to a row with no owner.
+            // POOL_OPEN_ADMISSION.
+            openAdmission: z.stringbool().default(true),
+            // The price band a listing may publish inside, and the tighter ceiling probation holds it under.
+            // A new listing that could name any price would make the probation badge the only thing standing
+            // between a member and a 1000-credit surprise. POOL_SERVICE_MIN_CREDITS / _MAX / _PROBATION_MAX.
+            serviceMinCredits: z.coerce.number().int().positive().default(1),
+            serviceMaxCredits: z.coerce.number().int().positive().default(200),
+            probationMaxCredits: z.coerce.number().int().positive().default(25),
+            // How long a passed conformance probe stays good enough to publish on. Short on purpose: the
+            // probe's whole claim is "this endpoint works right now". POOL_PROBE_FRESH_MINUTES.
+            probeFreshMinutes: z.coerce.number().int().positive().default(60),
+            // Served runs a probation listing needs before it graduates, and the refund rate that both blocks
+            // graduation and trips the watch. POOL_GRADUATION_RUNS / POOL_MAX_REFUND_RATE.
+            graduationRuns: z.coerce.number().int().positive().default(50),
+            maxRefundRate: z.coerce.number().min(0).max(1).default(0.2),
+            // How many recent runs the tripwire judges on — small enough to react, large enough that three
+            // unlucky timeouts don't delist a working service. POOL_WATCH_WINDOW_RUNS.
+            watchWindowRuns: z.coerce.number().int().positive().default(20),
+            // Consecutive failed canary probes before a live listing is suspended. POOL_CANARY_FAILURES.
+            canaryFailures: z.coerce.number().int().positive().default(3),
+            // How often a provider may move a listing's price. POOL_PRICE_CHANGE_HOURS.
+            priceChangeHours: z.coerce.number().int().nonnegative().default(24),
+            // The most listings one account may hold live at once — the crude Sybil bound the design doc
+            // names, priced against nothing yet because no abuse has been observed. POOL_MAX_SERVICES.
+            maxServicesPerOwner: z.coerce.number().int().positive().default(5),
         })
         .prefault({}),
     // Where the connect bootstrap scripts are served from — the cloud lane bakes `${scriptOrigin}/connect`

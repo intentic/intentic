@@ -34,6 +34,7 @@ model User {
     donations        Donation[]
     creditSpends     CreditSpend[]
     serviceRuns      ServiceRun[]
+    services         Service[]
     publisherClaims  PublisherClaim[]
     payoutAccount    PayoutAccount?
     payouts          CreatorPayout[]
@@ -376,26 +377,76 @@ model Donation {
     @@map("donation")
 }
 
-// A priced upstream the platform will meter and forward to — one row per premium service, created by the
-// PLATFORM OPERATOR (no self-serve onboarding in v1; the docs say so). `slug` is the public id extensions
-// call it by; `secret` is the provider's signing key (encrypted at rest, api crypto.ts — the one secret in
-// the pool's tables), spent on the HMAC that lets the provider verify a forwarded call came from intentic.
-// `creditsPerRun` is the visible price; `active: false` delists without deleting the run history.
+/* A priced upstream the platform will meter and forward to — one row per premium service. `slug` is the
+ * public id extensions call it by; `secret` is the provider's signing key (encrypted at rest, api crypto.ts —
+ * the one secret in the pool's tables), spent on the HMAC that lets the provider verify a forwarded call came
+ * from intentic. `creditsPerRun` is the visible price.
+ *
+ * TWO KINDS OF ROW LIVE HERE, told apart by `userId`. An OPERATOR row (null owner — the demo service, and any
+ * listing written by hand) answers to nobody and is exempt from every admission gate. An OWNED row arrived
+ * through open admission (pool-admission.ts): its owner claimed the publisher name, connected payouts, and
+ * passed a live conformance probe, and it is subject to the watch forever after.
+ *
+ * `status` replaced the old `active` boolean because "live" stopped being one bit: `draft` is editable and
+ * invisible, `probation` is live under a price ceiling and badged as new, `listed` is graduated, `suspended`
+ * is delisted with its reason recorded. Run history survives every transition — a suspended service's
+ * earnings are somebody's money, and its public numbers are the evidence for why it was suspended. */
 model Service {
-    id            String       @id @default(cuid())
-    slug          String       @unique
+    id            String        @id @default(cuid())
+    slug          String        @unique
     publisher     String
     name          String
     description   String
     upstreamUrl   String
     secret        String
     creditsPerRun Int
-    active        Boolean      @default(true)
-    createdAt     DateTime     @default(now())
-    updatedAt     DateTime     @updatedAt
+    /* A request body this service actually answers, as JSON. Two jobs, which is why it is required of an
+     * owned listing: it is the body the conformance probe sends (so the probe tests a call the provider
+     * knows works, rather than a canonical one they never anticipated), and the catalog hands it to the
+     * agent as the worked example of this service's request shape. */
+    sampleRequest String        @default("{}")
+    // "draft" | "probation" | "listed" | "suspended" — see pool-admission.ts ServiceStatus.
+    status        String        @default("listed")
+    // Null for operator-created rows; set to the provider who published it through open admission.
+    userId        String?
+    user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // When the last conformance probe passed. Publishing requires one inside the freshness window; the
+    // canary refreshes it for a listed service that is still answering.
+    probedAt      DateTime?
+    // How many consecutive canary probes have failed — the counter the watch suspends on.
+    canaryFails   Int           @default(0)
+    // Why a suspended row is suspended, in a sentence written for the provider reading it.
+    suspendedFor  String?
+    // When the price last moved — the rate limit's whole state.
+    pricedAt      DateTime?
+    createdAt     DateTime      @default(now())
+    updatedAt     DateTime      @updatedAt
     runs          ServiceRun[]
+    probes        ServiceProbe[]
 
+    // The catalog reads live rows; the watch scans by owner.
+    @@index([status])
+    @@index([userId])
     @@map("service")
+}
+
+// One conformance probe attempt — kept rather than overwritten so a provider debugging a rejection can read
+// what actually happened, and so a suspension has the failing runs behind it on record. Swept by retention.
+model ServiceProbe {
+    id        String   @id @default(cuid())
+    serviceId String
+    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+    // Whether all three checks passed.
+    passed    Boolean
+    // "publish" (the gate) or "canary" (the watch) — the two callers, told apart in the provider's log.
+    kind      String
+    // Per-check outcome as JSON, and the first failing check's sentence. Read by humans, never by logic.
+    detail    String
+    createdAt DateTime @default(now())
+
+    @@index([serviceId, createdAt])
+    @@index([createdAt])
+    @@map("service_probe")
 }
 
 // The credit meter: what a member has spent today, the trial_usage shape verbatim — atomic upsert on

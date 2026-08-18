@@ -62,3 +62,30 @@ export const runsPerDay = (creditsPerRun: number): number => Math.floor(pool.dai
  * without a backend read, and the honest example: a real provider sets its own, and every surface shows it
  * before the run. Named for what it is so no page can pass it off as a catalog-wide rate. */
 export const demoServiceCredits = 5;
+
+/* THE ADMISSION THRESHOLDS a service listing is measured against, mirrored from the same `pool` block
+ * (_platform/api/src/config.ts) for the same reason the figures above are: a provider reading the rules
+ * before they build must be reading the numbers the algorithm actually applies. The platform answers its own
+ * live values to a signed-in provider on the Offer a service screen; this is what a static page can state.
+ *
+ * They are here rather than typed into the page because the whole claim of rules-based admission is that the
+ * rules are knowable in advance — a threshold quietly out of date on a public page is worse than no page. */
+export const admission = {
+    // The price band a listing may publish inside, and the tighter ceiling probation holds it under.
+    minCredits: 1,
+    maxCredits: 200,
+    probationMaxCredits: 25,
+    // Served runs a listing needs before probation lifts.
+    graduationRuns: 50,
+    // The refund rate that both blocks graduation and, over the recent window, suspends a listing outright.
+    maxRefundRate: 0.2,
+    watchWindowRuns: 20,
+    // Consecutive failed health checks before a live listing is suspended.
+    canaryFailures: 3,
+    // How often a listing's price may move, and how many live listings one account may hold.
+    priceChangeHours: 24,
+    maxServicesPerOwner: 5,
+} as const;
+
+// The refund tripwire as whole percent, for copy that says "20%".
+export const maxRefundPct = Math.round(admission.maxRefundRate * 100);

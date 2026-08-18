@@ -107,9 +107,17 @@ const list = async () => {
         return;
     }
     for (const service of services) {
+        // `new` is the probation badge — a listing the platform admitted on its mechanical gates that has not
+        // served enough runs to graduate. Said here as well as on the approval card, because the agent choosing
+        // between two services should be able to weigh it before it asks.
+        const badge = service.probation === true ? ", new" : "";
         process.stdout.write(
-            `${service.slug} — ${service.name}: ${service.description} (${service.creditsPerRun} credits/run, by ${service.publisher})\n`,
+            `${service.slug} — ${service.name}: ${service.description} (${service.creditsPerRun} credits/run, by ${service.publisher}${badge})\n`,
         );
+        // The provider's own worked example of the request shape. Worth more than any prose about it.
+        if (typeof service.sampleRequest === "string" && service.sampleRequest !== "" && service.sampleRequest !== "{}") {
+            process.stdout.write(`    example request: ${service.sampleRequest}\n`);
+        }
     }
     if (credits !== undefined) {
         process.stdout.write(`\nCredits: ${credits.remaining} of ${credits.allowance} left today (resets ${credits.resetsAt}).\n`);

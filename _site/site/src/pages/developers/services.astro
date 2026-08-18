@@ -1,6 +1,6 @@
 ---
 import { apiBook } from "@intentic-dev/site-content/api";
-import { creatorSharePct } from "@intentic-dev/site-content/pool";
+import { admission, creatorSharePct, maxRefundPct } from "@intentic-dev/site-content/pool";
 import { discordUrl } from "@intentic-dev/site-content/site";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
@@ -77,7 +77,7 @@ const runSteps = [
     book={apiBook}
     pageId="services"
     heading="Offer a paid service"
-    lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. The technical bar is verifying a webhook; the catalog itself is curated."
+    lead="A service is not an extension: no manifest, bundle or repo pointer. It is one HTTPS endpoint that receives metered, signed calls from the platform. The technical bar is verifying a webhook, and admission is mechanical: pass the checks and you are listed, with nobody in the loop."
 >
     <h2>What a service is for</h2>
     <p>
@@ -270,53 +270,83 @@ const runSteps = [
 
     <h2>Admission &amp; the watch</h2>
     <p>
-        A service has no code to audit — none of yours ships to anyone — so the gate is human, not a pipeline. <strong>Admission is
-        curated</strong>: every listing is created by the platform after a review of who you are, what it claims, and whether the price
-        fits. No form puts an endpoint in front of members' agents unreviewed.
+        A service has no code to audit — none of yours ships to anyone — so admission asks the only three questions that can be answered
+        mechanically, and answers them without a person. <strong>There is no review queue and no waiting list.</strong> Pass all three and
+        your listing is live immediately.
     </p>
-    <p>After that, the watch is behavioral — with a service, behavior is the artifact:</p>
+    <table>
+        <thead>
+            <tr><th>Gate</th><th>What it checks</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Identity</strong></td><td>You hold a proved <a href="/developers/publish/">publisher name</a> and payouts are connected. A listing has to be payable before it can be offered.</td></tr>
+            <tr><td><strong>Conformance</strong></td><td>A live probe of your endpoint: one correctly signed call that must serve, plus a forged signature and an expired timestamp that must both be <em>refused</em>.</td></tr>
+            <tr><td><strong>Listing rules</strong></td><td>A public https endpoint, a price inside {admission.minCredits}–{admission.maxCredits} credits, and bounded name and description carrying no reserved words.</td></tr>
+        </tbody>
+    </table>
+    <p>
+        The two refusal checks matter as much as the serving one, and they are there for <em>your</em> sake: an endpoint that answers a
+        forged call is one anyone on the internet can bill against your own upstream costs. We will not list it.
+    </p>
+    <p>
+        A new listing goes live <strong>on probation</strong> — capped at {admission.probationMaxCredits} credits per run and badged as new
+        on every card a member sees, which is the honest form of "admitted by machine, not vouched for". It graduates
+        after {admission.graduationRuns} served runs. After that the watch is behavioral, because with a service behavior is the artifact:
+    </p>
     <table>
         <thead>
             <tr><th>What's watched</th><th>How it works</th></tr>
         </thead>
         <tbody>
             <tr><td><strong>Every run</strong></td><td>Public on the ledger, month by month — a track record neither of us can dress up.</td></tr>
+            <tr><td><strong>Failure rate</strong></td><td>Above {maxRefundPct}% of your last {admission.watchWindowRuns} runs failing to answer, the listing is suspended automatically. Those runs were all refunded, so it cost members nothing.</td></tr>
+            <tr><td><strong>Liveness</strong></td><td>Quiet listings are re-probed; {admission.canaryFailures} failed checks in a row suspends one, so a service that died stops being offered before a member finds out by clicking.</td></tr>
             <tr><td><strong>Disputes</strong></td><td>Almost none to have: "no answer, no charge" is the platform's code, not a support queue.</td></tr>
-            <tr><td><strong>Quality</strong></td><td>A service that keeps disappointing is delisted, its run history kept — the way a bad extension listing is blocked.</td></tr>
         </tbody>
     </table>
+    <p>
+        A suspension is never a deletion: the row, its runs and its earnings stay, the reason is stated, and a fixed endpoint can publish
+        again — back through probation, because a new endpoint is a new thing to trust. Prices move once
+        every {admission.priceChangeHours} hours, and one account may hold {admission.maxServicesPerOwner} live listings.
+    </p>
     <p>
         Throughout, the member keeps their guard: the agent only <em>discovers</em> and offers, and nothing is spent until the owner clicks
         approve on the run's card — a gate the member's own sandbox enforces, not an etiquette the model is trusted with. Discovery is the
         agent's job, admission is the platform's, spending stays the member's.
     </p>
 
-    <h2>Getting onboarded, honestly</h2>
+    <h2>Listing one, start to finish</h2>
     <p>
-        There's no self-serve signup yet: the first services are onboarded by hand, which buys each one a real conversation about price
-        and shape.
+        All of it happens on <strong>Settings → Offer a service</strong> in your own workspace. The screen states the live thresholds the
+        platform is applying, so the numbers you plan against are the numbers that decide.
     </p>
     <ol class="mt-5 flex list-none flex-col gap-2.5 pl-0">
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">1</span>
-            <div class="text-base leading-relaxed">Bring an endpoint that answers the exchange above.</div>
+            <div class="text-base leading-relaxed">Prove a publisher name and connect payouts, on <strong>Settings → Getting paid</strong>.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">2</span>
-            <div class="text-base leading-relaxed"><a href={discordUrl}>Say hello on Discord</a> — that's where onboarding starts.</div>
+            <div class="text-base leading-relaxed">Create a draft listing. You get your signing secret once, at that moment — we keep only an encrypted copy and can never read it back to you.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">3</span>
-            <div class="text-base leading-relaxed">We review it together: who you are, what the listing claims, and whether the price fits.</div>
+            <div class="text-base leading-relaxed">Deploy your endpoint and run the health check. It reports all three probes, passed or not, so a rejection tells you exactly what to fix.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">4</span>
-            <div class="text-base leading-relaxed">You leave with a secret and a listing.</div>
+            <div class="text-base leading-relaxed">Publish. You are live on probation the same second — no queue, no approval, nobody emailed.</div>
         </li>
     </ol>
     <p class="mt-5">
         The catalog's own <code>demo-research</code> service is the living reference: its upstream is run by the platform and verifies
         exactly the signature on this page, so what this page documents is what the forward actually sends.
+    </p>
+    <p>
+        A listing publishes a <strong>sample request</strong> — a body your service really answers. It does double duty: it is what the
+        health check sends, so the probe tests a call you know works rather than one we invented, and members' agents read it as the worked
+        example of your request shape. Stuck on any of it, or think a rule is wrong? <a href={discordUrl}>Discord</a> is where that
+        conversation happens — it is just no longer the thing standing between you and a listing.
     </p>
 
     <DocsRelated

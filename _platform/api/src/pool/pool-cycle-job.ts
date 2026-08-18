@@ -6,6 +6,7 @@ import { closeDueMonths } from "./pool-close.js";
 import { poolEnabled } from "./pool-membership.js";
 import { runPayoutsLogged } from "./pool-payout.js";
 import { stripeGateway } from "./pool-stripe.js";
+import { runWatch } from "./pool-watch.js";
 
 /* THE MONEY CYCLE, ON A SCHEDULE: close every finished month, then pay everything that has come due.
  *
@@ -43,6 +44,15 @@ export const startPoolCycle = (prisma: PrismaClient, config: Config, logger: Log
             // Individual payment failures are handled inside the run — they stay pending and retry under their
             // own key. This catches only a failure of the run itself.
             logger.error({ err: error }, `pool: payout run failed`);
+        }
+        try {
+            /* Gate 4 of open admission (pool-watch.ts): graduate, trip, canary. Guarded separately and run
+             * last because it is the only half that reaches OUT — a provider's endpoint hanging must not be
+             * able to stop a month closing or a creator being paid. It shares the cycle's lock because two
+             * replicas probing the same listings would double every provider's canary bill. */
+            await runWatch({ prisma, config }, logger);
+        } catch (error) {
+            logger.error({ err: error }, `pool: service watch failed`);
         }
     };
     const tick = (): void => {

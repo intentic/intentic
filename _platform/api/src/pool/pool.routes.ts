@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
+import { LIVE_STATUSES, type ServiceStatus } from "./pool-admission.js";
 import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
 import { DEMO_SLUG, demoStream } from "./pool-demo.js";
 import { buildLedger } from "./pool-ledger.js";
@@ -137,14 +138,19 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        const [services, member] = await Promise.all([
+        const [rows, member] = await Promise.all([
             prisma.service.findMany({
-                where: { active: true },
-                select: { slug: true, publisher: true, name: true, description: true, creditsPerRun: true },
+                where: { status: { in: [...LIVE_STATUSES] } },
+                select: { slug: true, publisher: true, name: true, description: true, creditsPerRun: true, status: true, sampleRequest: true },
                 orderBy: { slug: `asc` },
             }),
             premiumOf(prisma, ownerId),
         ]);
+        /* `probation` is flattened to one boolean here rather than leaking the status vocabulary to every
+         * reader: what a member's card needs to say is "this listing is new", and what an agent needs to know
+         * is nothing at all. `sampleRequest` rides along because an agent composing a request body with a
+         * worked example in front of it writes a better one — it is the listing's own documentation. */
+        const services = rows.map(({ status, ...service }) => ({ ...service, probation: status === `probation` }));
         const credits = member ? await creditStatus(prisma, config, ownerId, now()) : undefined;
         return c.json({ member, services, ...(credits !== undefined ? { credits } : {}) });
     });
@@ -167,7 +173,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             return c.json({ error: `unknown sandbox` }, 404);
         }
         const service = await prisma.service.findUnique({ where: { slug: c.req.param(`slug`) } });
-        if (service === null || !service.active) {
+        if (service === null || !LIVE_STATUSES.includes(service.status as ServiceStatus)) {
             return c.json({ error: `no such service` }, 404);
         }
         if (!(await premiumOf(prisma, ownerId))) {

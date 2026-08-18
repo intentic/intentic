@@ -16,9 +16,13 @@ import {
     InviteListSchema,
     InvitePreviewSchema,
     MembershipStateSchema,
+    ProviderServiceSchema,
+    ProviderServicesStateSchema,
     PublisherClaimSchema,
     PublisherSlugSchema,
     SandboxSummarySchema,
+    ServiceListingInputSchema,
+    ServiceProbeResultSchema,
     SetupCodeSchema,
     UserSchema,
 } from "./schemas.js";
@@ -204,6 +208,44 @@ export const poolContract = {
  * registry lists under that name. `connectPayouts` answers a Stripe-hosted URL like checkout and portal do,
  * for the same reason: the platform hosts no payment UI and collects no bank or tax detail of its own.
  * All four refuse (NOT_FOUND) on a platform whose pool is off. */
+/* OPEN ADMISSION, the provider's side: how a third-party business lists a metered service without an
+ * operator. The gates it is judged by are published as data on `list` rather than described in prose, so a
+ * provider reads the same numbers the algorithm applies (docs/services-admission-design.md).
+ *
+ * `probe` is its own call rather than a step inside `publish` because it reaches out and hits the provider's
+ * endpoint three times: whose endpoint gets called and when is theirs to choose. `publish` only checks that a
+ * passing probe is recent, which is what makes the gate honest — a probe's whole claim is about right now.
+ *
+ * `draft` and `rotateSecret` are the only two places a signing secret is ever readable, and each answers it
+ * exactly once; nothing reads one back, so a stolen session cannot harvest what it did not watch being made. */
+export const serviceContract = {
+    list: oc.route({ method: "GET", path: "/creator/services" }).output(ProviderServicesStateSchema),
+    draft: oc
+        .route({ method: "POST", path: "/creator/services" })
+        .input(ServiceListingInputSchema)
+        .output(z.object({ service: ProviderServiceSchema, secret: z.string() })),
+    update: oc
+        .route({ method: "POST", path: "/creator/services/{slug}" })
+        .input(ServiceListingInputSchema.omit({ slug: true, publisher: true }).partial().extend({ slug: z.string() }))
+        .output(ProviderServiceSchema),
+    probe: oc
+        .route({ method: "POST", path: "/creator/services/{slug}/probe" })
+        .input(z.object({ slug: z.string() }))
+        .output(ServiceProbeResultSchema),
+    publish: oc
+        .route({ method: "POST", path: "/creator/services/{slug}/publish" })
+        .input(z.object({ slug: z.string() }))
+        .output(ProviderServiceSchema),
+    withdraw: oc
+        .route({ method: "POST", path: "/creator/services/{slug}/withdraw" })
+        .input(z.object({ slug: z.string() }))
+        .output(ProviderServiceSchema),
+    rotateSecret: oc
+        .route({ method: "POST", path: "/creator/services/{slug}/secret" })
+        .input(z.object({ slug: z.string() }))
+        .output(z.object({ secret: z.string() })),
+};
+
 export const creatorContract = {
     status: oc.route({ method: "GET", path: "/creator/status" }).output(CreatorStateSchema),
     challenge: oc
@@ -215,6 +257,7 @@ export const creatorContract = {
         .input(z.object({ publisher: PublisherSlugSchema }))
         .output(PublisherClaimSchema),
     connectPayouts: oc.route({ method: "POST", path: "/creator/payouts/connect" }).output(z.object({ url: z.url() })),
+    services: serviceContract,
 };
 
 // Aggregated contract router — consumed by the oRPC client (ContractRouterClient<typeof apiContract>)

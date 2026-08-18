@@ -11,6 +11,7 @@ import SettingsMembership from "./settings/SettingsMembership.vue";
 import SettingsNotifications from "./settings/SettingsNotifications.vue";
 import SettingsPayouts from "./settings/SettingsPayouts.vue";
 import SettingsProfile from "./settings/SettingsProfile.vue";
+import SettingsServices from "./settings/SettingsServices.vue";
 
 /* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Built on the
  * same <HubLayout> as the sandbox hub — the symmetry was the point when both were tab strips, and it is more of
@@ -45,6 +46,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
                 ? ([
                       { slug: `membership`, label: `Membership`, icon: `star` },
                       { slug: `payouts`, label: `Getting paid`, icon: `credit-card` },
+                      { slug: `services`, label: `Offer a service`, icon: `bolt` },
                   ] as const)
                 : []),
             { slug: `appearance`, label: `Appearance`, icon: `palette` },
@@ -69,6 +71,7 @@ const DEFAULT = `profile`;
             <SettingsProfile v-if="slug === `profile`" />
             <SettingsMembership v-else-if="slug === `membership`" />
             <SettingsPayouts v-else-if="slug === `payouts`" />
+            <SettingsServices v-else-if="slug === `services`" />
             <SettingsAppearance v-else-if="slug === `appearance`" />
             <SettingsNotifications v-else-if="slug === `notifications`" />
             <SettingsKeybindings v-else-if="slug === `keybindings`" />

@@ -66,6 +66,11 @@ export const ServiceOfferSchema = z.object({
     publisher: z.string(),
     description: z.string(),
     creditsPerRun: z.number(),
+    /* Whether the platform still has this listing on probation — a new provider that passed admission's
+     * mechanical gates but has not yet served enough runs cleanly to graduate. It rides the card because
+     * probation is the honest form of "listed automatically, not vouched for": the member approving the
+     * spend is the person who should know that, and the platform is the only party that can say it. */
+    probation: z.boolean().optional(),
     // The owner's meter as the platform stated it with the catalog — what "N left today" renders from. Absent
     // when the platform sent none (it answers a meter only to a member, and membership was already checked
     // before this card went up, so in practice it is present; the field stays honest about the wire).

@@ -18,6 +18,11 @@ services run <slug> '{"query":"…"}' \
     --why "one line on why this helps"       # ask for one metered run — request JSON inline or on stdin
 ```
 
+`list` prints a worked **example request** under any service that published one — the provider's own body,
+which is the best thing to shape yours after. It also marks a listing **`new`**: that one passed the
+platform's mechanical admission checks but has not yet served enough runs to graduate, so prefer an
+established service when both would answer, and say which you picked when it matters.
+
 A run streams: the provider's progress shows live on the card in the owner's chat while you wait, and when
 it finishes `run` prints the provider's result JSON on stdout (composable) and the remaining credits on
 stderr. A run can take up to five minutes — hold the command open rather than timing it out.
