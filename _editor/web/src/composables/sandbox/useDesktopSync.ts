@@ -1,4 +1,4 @@
-import { syncFolder } from "@intentic/sandbox-contract";
+import { type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
@@ -42,6 +42,13 @@ export function useDesktopSync() {
     // When that machine last used its enrollment; undefined for one that never has. The agent's ports poll is the
     // heartbeat behind it (the daemon stamps it on verify).
     const syncSeenAt = ref<number | undefined>(undefined);
+    /* WHICH FOLDER ON THAT MACHINE IS THIS SANDBOX'S /work — the one thing "Syncing from radarsu-rog" never said,
+     * and the first thing anyone asks of it. The daemon cannot derive it: SYNC_DIR is the agent's own local state,
+     * so it arrives only inside the machine's report, and only on a "sync" pairing (a mirror enrollment carries no
+     * folder at all — see scopedReport's disclosure rule). At most one machine holds sync, so the first reported
+     * localDir IS the holder's folder. Undefined while an enrolled machine has yet to post a report, which the
+     * card says out loud rather than filling in with the default path it would have guessed. */
+    const syncingPath = ref<string | undefined>(undefined);
     // Machines with a mirror-only enrollment (collaborators forwarding ports to their own localhost) — shown so
     // an active localhost mirror is never invisible in the card.
     const mirroredBy = ref<readonly string[]>([]);
@@ -145,18 +152,15 @@ export function useDesktopSync() {
             if (!response.ok) {
                 return;
             }
-            const body = (await response.json()) as {
-                enrolled?: boolean;
-                available?: boolean;
-                syncingFrom?: string;
-                syncSeenAt?: number;
-                mirroredBy?: string[];
-            };
+            const body = (await response.json()) as Partial<SyncStatus>;
             enrolled.value = body.enrolled === true;
             available.value = body.available === true;
             syncingFrom.value = body.syncingFrom;
             syncSeenAt.value = body.syncSeenAt;
             mirroredBy.value = body.mirroredBy ?? [];
+            syncingPath.value = (body.machines ?? [])
+                .flatMap((machine) => machine.pairings)
+                .find((pairing) => pairing.localDir !== undefined)?.localDir;
         } catch {
             // Sandbox not reachable yet — leave the last known state.
         }
@@ -192,6 +196,7 @@ export function useDesktopSync() {
         isOwner,
         enrolled,
         syncingFrom,
+        syncingPath,
         syncStopped,
         syncLastSeen,
         mirroredBy,

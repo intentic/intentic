@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, ui, Code, Row } from "@intentic/ui";
+import { Card, ConfirmDialog, CopyButton, ui, Code, Row } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
@@ -21,6 +21,7 @@ const {
     isOwner,
     enrolled,
     syncingFrom,
+    syncingPath,
     syncStopped,
     syncLastSeen,
     revokedFrom,
@@ -70,11 +71,17 @@ watch(
     { immediate: true },
 );
 
+/* DISABLE ASKS FIRST. It is a one-click kill switch for every paired computer — file sync stops, mirrored ports
+ * fall off localhost — sitting in the corner of a card people open to READ their sync state, with nothing between
+ * the pointer and the revoke. Re-enabling is not a click either: it means pasting a fresh one-liner on the
+ * machine. So it takes the app's own confirm, which names what goes and what survives. */
+const confirmingDisable = ref(false);
 const disabling = ref(false);
 const runDisable = async (): Promise<void> => {
     disabling.value = true;
     try {
         await disable();
+        confirmingDisable.value = false;
     } finally {
         disabling.value = false;
     }
@@ -118,6 +125,23 @@ onUnmounted(stop);
                             <span v-if="syncLastSeen !== undefined" :class="syncStopped ? 'text-warning' : 'text-subtle'">{{ syncLastSeen }}</span>
                         </dd>
                     </div>
+                    <!-- WHERE ON THAT COMPUTER. Naming the machine and stopping there is what this card did, and
+                         it is half an answer: the reader's next move is almost always to OPEN the folder, and the
+                         one place the path could be read was the machine's own terminal. Copyable for the same
+                         reason it is here at all.
+                         Wraps rather than truncates — the tail of a path is the part that identifies it, and every
+                         sandbox on one machine shares the head. -->
+                    <div v-if="syncingFrom !== undefined" class="flex items-start justify-between gap-3">
+                        <dt class="shrink-0 text-subtle">Folder on that computer</dt>
+                        <dd v-if="syncingPath !== undefined" class="flex min-w-0 items-center gap-1.5">
+                            <span class="break-all text-right font-mono text-content">{{ syncingPath }}</span>
+                            <CopyButton :text="syncingPath" v-tooltip.top="`Copy path`" />
+                        </dd>
+                        <!-- The agent is the only thing that knows SYNC_DIR, so a machine that hasn't reported
+                             leaves this genuinely unknown. Saying so beats printing the folder we'd have suggested
+                             at setup, which the user was free to change. -->
+                        <dd v-else class="min-w-0 text-right text-subtle">not reported yet</dd>
+                    </div>
                 </dl>
                 <!-- The "Ports: on localhost at <machine>" and "Manage: intentic-sync status" rows that used to
                      sit here are gone. Both were this card admitting it could not answer: the first named a
@@ -157,7 +181,7 @@ onUnmounted(stop);
                             Mirror ports on another computer
                         </button>
                     </div>
-                    <Button label="Disable sync" size="small" severity="danger" :text="true" :loading="disabling" @click="runDisable">
+                    <Button label="Disable sync" size="small" severity="danger" :text="true" @click="confirmingDisable = true">
                         <template #icon><Icon name="times" /></template>
                     </Button>
                 </div>
@@ -264,5 +288,28 @@ onUnmounted(stop);
         <div v-else :class="ui.emptyState()">
             Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet — one behind your own domain does.
         </div>
+
+        <ConfirmDialog
+            :open="confirmingDisable"
+            header="Disable desktop sync?"
+            confirm-label="Disable sync"
+            confirm-icon="times"
+            :loading="disabling"
+            @cancel="confirmingDisable = false"
+            @confirm="runDisable"
+        >
+            <p>
+                Every paired computer loses access at once: file sync stops<template v-if="syncingFrom !== undefined">
+                    on <span class="font-mono text-content">{{ syncingFrom }}</span></template
+                >, and mirrored ports drop off localhost within a minute.
+            </p>
+            <!-- The folder is named because it is the thing the reader is actually about to stop, and because it
+                 is the one fact that makes "which sandbox is this?" answerable without leaving the dialog. -->
+            <p v-if="syncingPath !== undefined" class="mt-2 break-all font-mono text-xs text-content">{{ syncingPath }}</p>
+            <p class="mt-2">
+                Nothing on that computer is deleted and its sync agent stays installed — but turning this back on means running a fresh pairing
+                command there.
+            </p>
+        </ConfirmDialog>
     </Card>
 </template>
