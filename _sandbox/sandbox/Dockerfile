@@ -46,8 +46,18 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # agent reaching for ordinary Python tooling (Pillow to inspect a screenshot, a one-off script's dependency)
 # hit `pip: command not found` and improvised. Debian marks the system interpreter externally-managed, so
 # `pip install` outside a venv refuses by design — venv is what makes pip usable rather than merely present.
+# python3-yaml + python3-pil are baked from Debian rather than left to pip BECAUSE of that refusal: an import
+# an agent reaches for mid-task cannot afford a venv detour first. Measured over 1146 session transcripts,
+# a missing import is the ONLY common Python failure here — 60 sessions, ~1 in 8 of those that run python3,
+# and it is PyYAML (36 sessions) and Pillow (24) almost exclusively; every other module is a one-off. The
+# failure is not a retry, it is a silent detour: 6 times in 10 the agent abandons Python and redoes the work
+# in Node. yq (below) was baked for the YAML case and did not move the number — agents keep importing yaml,
+# so the fix has to BE the import, not an alternative to it. Debian's packages sidestep PEP 668 entirely.
+# python-is-python3 for the rarer sibling: `python` unqualified is only 2 sessions in 1146, but both came
+# from runners that are not this image's usual agent (a delegated CLI, a loop attempt) writing `python -m`
+# out of habit, and Debian ships no such name. One package ends a whole class of no-such-command.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv make g++ ripgrep \
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
 # Docker Engine, Chromium, provider CLIs et al. are NOT here — each is a feature pack (packs/<name>.Dockerfile)
 # spliced at the markers below for the profiles that bake it, or riding the environment overlay on demand.
@@ -223,11 +233,13 @@ RUN apt-get update \
     && ln -s /usr/bin/vim.tiny /usr/local/bin/vim \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
-# yq on PATH — jq's counterpart for YAML, and until now there was NO way to read a YAML file programmatically
-# here: python3 is baked for node-gyp, but Debian's interpreter ships no PyYAML, so an agent editing a compose
-# file, a CI pipeline or a k8s manifest had to hand-patch it with sed. Debian's own `yq` package is a
-# DIFFERENT program (a Python wrapper around jq) whose write syntax is not the one every model has learned, so
-# this is upstream's Go binary — pinned and version-checked like cloudflared, same rationale.
+# yq on PATH — jq's counterpart for YAML, for editing a compose file, a CI pipeline or a k8s manifest from a
+# shell pipeline instead of hand-patching it with sed. It was baked to cover the missing-PyYAML case too, and
+# the transcripts say it did not: yq usage held at 0.6% of sessions across the bake while agents went on
+# importing yaml. Hence PyYAML above — these two now serve different callers (shell vs Python), not one need
+# with a preferred answer. Debian's own `yq` package is a DIFFERENT program (a Python wrapper around jq) whose
+# write syntax is not the one every model has learned, so this is upstream's Go binary — pinned and
+# version-checked like cloudflared, same rationale.
 ARG YQ_VERSION=4.53.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \

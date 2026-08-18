@@ -15,10 +15,13 @@ propose custom Dockerfile steps — the owner reviews and approves them, then a 
 The image is not bare, and reaching for an install before looking wastes a lot of a turn. Baked in every
 profile:
 
-- **Toolchain** — git (+ git-lfs), tmux, zsh, make/g++, python3 with **pip and venv**, node 24 (which runs
-  `.ts` files directly — `tsx` is a shim over it), pnpm/npm.
+- **Toolchain** — git (+ git-lfs), tmux, zsh, make/g++, python3 with **pip and venv** (`python` works too),
+  node 24 (which runs `.ts` files directly — `tsx` is a shim over it), pnpm/npm.
+- **Python libraries** — **PyYAML** and **Pillow** are baked, so `import yaml` and `from PIL import Image`
+  work with no venv. They are the only two; anything else still needs pip inside a venv.
 - **First-party CLIs** — `intentic`, `iq`, `lsp`.
-- **Search & data** — ripgrep, `jq`, `yq` (YAML; note python3 has no PyYAML), sqlite3, xmllint, file, tree.
+- **Search & data** — ripgrep, `jq`, `yq` (YAML, for shell pipelines — in Python just `import yaml`),
+  sqlite3, xmllint, file, tree.
 - **Network** — curl, wget, rsync, openssh, ss/ip, netstat/ifconfig, lsof, fuser, ping, traceroute, dig/host,
   nc, socat.
 - **Process & files** — ps/top, killall/pstree, strace, patch, less, nano/vi, diff, hexdump/xxd/column,
