@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { type CliLauncher, isProcessAlive, livePid, type Log, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
@@ -7,6 +7,7 @@ import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { MIRROR_AUTOSTART } from "./autostart.js";
 import {
     baseDir,
+    mirrorHeartbeatPath,
     type MirroredPort,
     mirrorLogPath,
     mirrorPidPath,
@@ -24,10 +25,10 @@ import {
     mutagenForwardArgs,
     ourForwardSessions,
     retireOrphanSessions,
-    runMutagen,
+    runMutagenAsync,
 } from "./mutagen.js";
 import { machineReport, scopedReport } from "./report.js";
-import { sshAlias } from "./ssh.js";
+import { pairingSshConfig, pruneKnownHosts, sshAlias, writeManagedSshConfig } from "./ssh.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
 // Port mirroring: every WORKSPACE port listening in a paired sandbox is bound to the SAME port on this machine's
@@ -122,17 +123,21 @@ const localPortFree = (port: number): Promise<boolean> =>
 // The side-effecting operations reconcile drives, injectable so the reconcile logic unit-tests without Mutagen.
 export interface ForwardExecutor {
     readonly terminate: (port: number) => void;
-    readonly create: (summary: PortSummary) => void;
+    // Async, and it must stay that way here: creating a forward dials the sandbox over the transport THIS process
+    // serves, so a blocking create waits on an event loop it is itself holding (exec.ts). Every mirrored port on
+    // every machine was failing this way.
+    readonly create: (summary: PortSummary) => Promise<void>;
     readonly isLocalPortFree: (port: number) => Promise<boolean>;
 }
 
 // The real executor: Mutagen forward sessions named per sandbox+port (so reconcile targets them without listing,
-// and one pairing's teardown can never reach another's).
-const mutagenExecutor = (mutagen: string, pairing: Pairing): ForwardExecutor => ({
+// and one pairing's teardown can never reach another's). `terminate` stays blocking: it is a local call to the
+// daemon that dials nothing.
+const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardExecutor => ({
     terminate: (port) =>
         void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], { stdio: "ignore", windowsHide: true }),
-    create: (summary) =>
-        runMutagen(
+    create: async (summary) =>
+        await runMutagenAsync(
             mutagen,
             mutagenForwardArgs({
                 name: forwardSessionName(pairing.sandboxId, summary.port),
@@ -140,6 +145,7 @@ const mutagenExecutor = (mutagen: string, pairing: Pairing): ForwardExecutor => 
                 alias: sshAlias(pairing.sandboxId),
                 host: summary.host,
             }),
+            log,
         ),
     isLocalPortFree: localPortFree,
 });
@@ -192,7 +198,9 @@ export const reconcileForwards = async (
             log(`  localhost:${summary.port} is busy on this machine — skipped (${summary.command ?? "unknown process"})`);
             continue;
         }
-        executor.create(summary);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports, and each create dials the
+        // sandbox over this process's own transport; sequencing keeps the log readable
+        await executor.create(summary);
         next.push({ port: summary.port, host: summary.host, command: summary.command });
         log(`  localhost:${summary.port} ← ${summary.command ?? "unknown process"}`);
     }
@@ -240,9 +248,16 @@ export const skippedPortsOf = (
 // The pidfile is how `mirror`/`--stop`/`uninstall`/`setup` find the resident watcher across processes.
 export const readLiveWatcherPid = async (): Promise<number | undefined> => await livePid(mirrorPidPath);
 
+/* The end of a whole pass, stamped where every reader can see it (config.ts explains why the pid alone is not
+ * this fact). Best-effort by construction: a watcher that cannot write its own stamp must keep mirroring — the
+ * cost of a failed write is a status line that under-claims, which is the safe direction for a liveness signal. */
+const beat = async (): Promise<void> => await writeFile(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
+
 // On SIGTERM/SIGINT the watcher drops its pidfile and exits, leaving the forwards up (Mutagen's daemon holds
-// them) so a restart never breaks live connections.
-const watcherShutdown = (): void => void rm(mirrorPidPath, { force: true }).finally(() => process.exit(0));
+// them) so a restart never breaks live connections. The heartbeat goes with the pidfile: a stopped watcher must
+// not leave behind a stamp that reads as a pass finishing moments ago.
+const watcherShutdown = (): void =>
+    void Promise.all([rm(mirrorPidPath, { force: true }), rm(mirrorHeartbeatPath, { force: true })]).finally(() => process.exit(0));
 
 // Persist one pairing's port picture, leaving every other pairing's alone. Targeted because the watcher and a
 // concurrent `setup` write this file for different reasons — a whole-state write from the tick's stale read is
@@ -263,7 +278,7 @@ const servePairing = async (
 ): Promise<readonly MirroredPort[]> => {
     const baseline = pairing.mirroredPorts ?? [];
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(pairing.sandboxUrl, pairing.syncToken);
-    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing), baseline, ports, claimedBy, log);
+    const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, log);
     const skipped = skippedPortsOf(ports, next, claimedBy);
     // Either half changing is a write: a port that flipped from mirrored to contended leaves the mirror set the
     // same size and is exactly the transition the report exists to explain.
@@ -388,6 +403,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     if (initial.pairings.length === 0) {
         await unregisterAutostart(MIRROR_AUTOSTART, log);
         await rm(mirrorPidPath, { force: true });
+        await rm(mirrorHeartbeatPath, { force: true });
         log("no sandboxes are paired — nothing to mirror. Enable it from a sandbox's Desktop sync card.");
         return;
     }
@@ -395,6 +411,22 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
      * so Mutagen has nothing to connect to until these listeners are bound. Reconciled again on every tick
      * below, for the same reason the pairing list is re-read: a sandbox paired or dropped while this is running
      * must gain or lose its transport without a restart. */
+    /* THE SSH FRAGMENT, REGENERATED HERE — because until now only `setup` and `uninstall` ever wrote it, and
+     * that made it the one piece of this agent's state an upgrade could not reach. A machine paired months ago
+     * kept dialling on whatever rules were current the day it was paired, no matter how many times the binary was
+     * replaced, and the only cure was to go back to the browser for a fresh pairing token.
+     *
+     * It is not hypothetical: the `HostKeyAlias %h` bug (ssh.ts) was fixed in the agent and stayed live on every
+     * already-paired machine, refusing every sandbox but the first. Same argument as ensureSyncSession — the
+     * watcher runs at every login, so it is where an inherited configuration is brought onto this build's rules.
+     * The write is idempotent and derived from the pairing list, so a machine that is already correct pays one
+     * file comparison. The poisoned known_hosts entry goes with it, since nothing else can ever remove it. */
+    await guard(log, "refreshing the ssh configuration", async () => {
+        await writeManagedSshConfig(pairingSshConfig(initial.pairings));
+        if (await pruneKnownHosts()) {
+            log("  removed a stale `%h` host-key entry left by an older agent — it was refusing every sandbox but the first.");
+        }
+    });
     const tunnels = createTunnelPool(log);
     await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(initial.pairings)));
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
@@ -409,7 +441,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     const sessionsPending = new Set<string>();
     for (const pairing of initial.pairings) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as below; the guard is what makes the order safe
-        const ready = await guard(log, `${pairing.sandboxId}: preparing its file sync`, () => ensureSyncSession(mutagen, pairing, log));
+        const ready = await guard(log, `${pairing.sandboxId}: preparing its file sync`, async () => await ensureSyncSession(mutagen, pairing, log));
         if (!ready) {
             sessionsPending.add(pairing.sandboxId);
         }
@@ -439,6 +471,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 await tunnels.stopAll();
                 await unregisterAutostart(MIRROR_AUTOSTART, log);
                 await rm(mirrorPidPath, { force: true });
+                await rm(mirrorHeartbeatPath, { force: true });
                 log("no sandboxes are paired any more — watcher exiting. Re-enable from a sandbox's Desktop sync card.");
                 return;
             }
@@ -452,7 +485,11 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             if (sessionsPending.size > 0 && tick % SESSION_RETRY_EVERY_TICKS === 0) {
                 for (const pairing of state.pairings.filter((held) => sessionsPending.has(held.sandboxId))) {
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as at startup
-                    const ready = await guard(log, `${pairing.sandboxId}: preparing its file sync`, () => ensureSyncSession(mutagen, pairing, log));
+                    const ready = await guard(
+                        log,
+                        `${pairing.sandboxId}: preparing its file sync`,
+                        async () => await ensureSyncSession(mutagen, pairing, log),
+                    );
                     if (ready) {
                         sessionsPending.delete(pairing.sandboxId);
                         log(`  ${pairing.sandboxId}: file sync is running again`);
@@ -498,7 +535,8 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 // later, not a tick later, which is what turned a sub-minute lag into the occasional two-minute one.
                 try {
                     const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : repos.get(pairing.sandboxId);
-                    const listed = runGitBridge(realBridgeExec, pairing, log, known);
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's bridge at a time, as above
+                    const listed = await runGitBridge(realBridgeExec, pairing, log, known);
                     if (listed === undefined) {
                         repos.delete(pairing.sandboxId);
                     } else {
@@ -514,6 +552,11 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             if (tick % REPORT_EVERY_TICKS === 0) {
                 await guard(log, "posting this machine's reports", async () => await postReports(state.pairings, mutagen, reportUnsupported, log));
             }
+            /* HERE, at the bottom of the pass, and INSIDE the branch that did the work: the stamp's whole meaning
+             * is that everything above it ran. A tick skipped because the state would not parse leaves the stamp
+             * where it was — a watcher that cannot read its own pairings is not serving them, and going quiet
+             * until it can is exactly what a reader should see. */
+            await beat();
         }
         await sleep(POLL_MS);
     }
@@ -573,7 +616,10 @@ export const stopWatcher = async (): Promise<number | undefined> => {
             await sleep(WATCHER_EXIT_POLL_MS);
         }
     }
+    // The heartbeat goes with the pidfile, always: a watcher that has been stopped must not leave a stamp behind
+    // for the next reader to age — the next watcher writes its own on its first completed pass.
     await rm(mirrorPidPath, { force: true });
+    await rm(mirrorHeartbeatPath, { force: true });
     return pid;
 };
 

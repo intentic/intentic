@@ -44,7 +44,7 @@ const fakeExecutor = (free: (port: number) => boolean = () => true): { executor:
         terminated,
         executor: {
             terminate: (port) => void terminated.push(port),
-            create: (summary) => void created.push(summary.port),
+            create: async (summary) => await Promise.resolve(void created.push(summary.port)),
             isLocalPortFree: (port) => Promise.resolve(free(port)),
         },
     };

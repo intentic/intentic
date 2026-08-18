@@ -14,7 +14,10 @@ export const MIRROR_AUTOSTART: AutostartSpec = {
     windowsRunValue: "IntenticSyncMirror",
     desktopName: "Intentic Sync Mirror",
     desktopComment: "Mirror the intentic sandbox's workspace ports onto localhost",
-    launchAgent: { label: "dev.intentic.sync-mirror", logPath: mirrorLogPath },
+    // One log for this watcher however it was started — by hand, by launchd, or by the systemd user unit. The
+    // file `status` and every note in this agent name is the file each of those mechanisms writes to.
+    logPath: mirrorLogPath,
+    launchAgent: { label: "dev.intentic.sync-mirror" },
     detachedArgs: ["mirror"],
     foregroundArgs: ["mirror", "--watch"],
     failureNote: (reason) =>

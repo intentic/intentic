@@ -46,6 +46,21 @@ const BUFFER_HIGH = 1_048_576;
 const BUFFER_LOW = 262_144;
 const DRAIN_POLL_MS = 50;
 
+/* HOW LONG A CONNECTION MAY SIT IN THE HANDSHAKE before this end gives up on it.
+ *
+ * The listener accepts TCP instantly — it is a local socket — so from ssh's point of view the connection always
+ * SUCCEEDS, and everything that can actually fail (the sandbox being asleep, its tunnel 502-ing, its zone
+ * retired) fails silently afterwards, inside a WebSocket that may never resolve either way. ssh then waits in
+ * banner exchange, and every caller waits on ssh: Mutagen's create, and the git bridge, whose own cap is 120
+ * SECONDS. One unreachable sandbox therefore added two minutes to every watcher pass — serially, ahead of every
+ * healthy pairing's ports and commits — for as long as it stayed unreachable. Measured on this exact bug.
+ *
+ * So the timeout lives HERE, at the one place that knows the stream never opened, and it is short: a WebSocket to
+ * a healthy sandbox settles in well under a second, and anything slower is going to be retried anyway — Mutagen
+ * redials a dropped transport every 15s and the watcher's next pass is seconds away. Failing fast is what keeps a
+ * dead pairing costing one line in the log instead of every other pairing's freshness. */
+const OPEN_TIMEOUT_MS = 10_000;
+
 /* One TCP read, as a frame the socket can own. A Buffer is a slice of a shared pool and `send` is asynchronous,
  * so handing over the pool's memory lets the next read overwrite bytes that have not gone out yet — on an SSH
  * stream that is not a glitch, it is a corrupted transport with no error to point at. */
@@ -92,11 +107,20 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
     const close = (): void => {
         clearInterval(drain);
         drain = undefined;
+        clearTimeout(handshake);
         socket.destroy();
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
             ws.close();
         }
     };
+
+    // A handshake that never resolves is the failure mode ssh cannot see (see OPEN_TIMEOUT_MS). Ending the TCP
+    // connection is the only answer that reaches it: the caller then fails in seconds with a real error, instead
+    // of holding the watcher's pass open for as long as its own timeout allows.
+    const handshake = setTimeout(() => {
+        onError(`the sync transport to ${target.sandboxId} did not open within ${OPEN_TIMEOUT_MS / 1000}s — the sandbox is not answering`);
+        close();
+    }, OPEN_TIMEOUT_MS);
 
     socket.on("data", (chunk: Buffer) => {
         if (!open) {
@@ -120,6 +144,7 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
 
     ws.addEventListener("open", () => {
         open = true;
+        clearTimeout(handshake); // the stream is up; from here a long-lived connection is the point, not a symptom
         for (const chunk of queued) {
             ws.send(frameOf(chunk));
         }
@@ -142,6 +167,14 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
     });
     ws.addEventListener("close", close);
 };
+
+/* NO SEPARATE "DIAGNOSIS" REQUEST LIVES HERE, and the attempt is worth recording. A WebSocket error event carries
+ * no status by specification, so the obvious idea is to ask the same URL over plain HTTP and report what comes
+ * back. It does not work: this route exists only as an upgrade, so a plain GET answers 404 on a perfectly healthy
+ * sandbox — and the "diagnosis" then states, in a confident sentence, that the user's sandbox is too old, when
+ * the real cause is on this side. A wrong explanation is worse than the plain fact that the stream did not open;
+ * it sends the reader to the wrong machine. If this is ever worth explaining, it has to be explained by something
+ * that performs the real upgrade. */
 
 /* Start listening for this pairing. Resolves once the port is bound — a caller that goes on to hand the port to
  * ssh must not race the bind — and answers a stop function that closes the listener and every live stream.

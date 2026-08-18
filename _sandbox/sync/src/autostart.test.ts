@@ -22,6 +22,11 @@ describe("MIRROR_AUTOSTART", () => {
 
     it("declares a macOS LaunchAgent, which is the only autostart macOS reads", () => {
         expect(MIRROR_AUTOSTART.launchAgent?.label).toBe("dev.intentic.sync-mirror");
-        expect(MIRROR_AUTOSTART.launchAgent?.logPath).toMatch(/mirror\.log$/);
+    });
+
+    // Whichever mechanism supervises the loop, its output has to land in the one file this agent tells people to
+    // read — a watcher whose log lives somewhere the product never names is a watcher nobody can debug.
+    it("names the watcher's own log as the sink every mechanism writes to", () => {
+        expect(MIRROR_AUTOSTART.logPath).toMatch(/mirror\.log$/);
     });
 });

@@ -360,7 +360,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             panelToken: services.panelToken,
             agentToken: services.agentToken,
             controlTokens: services.controlTokens,
-            verifySync: (presented) => verifySyncToken(services.config.historyRoot, presented),
+            verifySync: (presented, checkedIn) => verifySyncToken(services.config.historyRoot, presented, checkedIn),
             verifyExtension: (presented) => services.extensionBackend.verifyExtensionToken(presented),
         });
         app.use("*", async (c, next) => {

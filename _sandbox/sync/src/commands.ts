@@ -4,13 +4,13 @@ import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { cliLauncher, type Log, registerAutostart, unregisterAutostart } from "@intentic/local-agent";
-import { type MachinePort, type MachineReport, sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { type MachinePort, type MachineReport, sandboxIdFromUrl, watcherStalled } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { MIRROR_AUTOSTART } from "./autostart.js";
-import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
+import { mirrorLogPath, type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
-import { ensureMutagen, ensureSyncSession, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
+import { ensureMutagen, ensureSyncSession, existingSyncSessions, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
 import { machineReport } from "./report.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
@@ -229,7 +229,7 @@ const setup = buildCommand<SetupFlags>({
         // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
         const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
         assertSshConfigVisible(ssh, alias, port);
-        probeSshTransport(ssh, alias, out);
+        await probeSshTransport(ssh, alias, out);
 
         // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
         // this version's rules, leave it exactly as it is rather than paying a full rescan for nothing. Every
@@ -265,7 +265,6 @@ const setup = buildCommand<SetupFlags>({
                 out(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
             }
         }
-
     },
 });
 
@@ -337,29 +336,68 @@ const portLine = (port: MachinePort): string => {
     return `  localhost:${port.port} — NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
 };
 
+/* ONE PAIRING'S LINE. Pure, and exported, because every word of it has been wrong at least once and the only way
+ * that stops is a test that reads the sentence.
+ *
+ * The two rules it exists to keep:
+ *
+ *   A count is printed only when it IS a count. `conflicts` is absent whenever Mutagen has none to report —
+ *   protobuf JSON omits an empty list — so a healthy session used to render "[watching, undefined conflict(s)]",
+ *   on the one line a user reads to find out whether anything is wrong. Absent means "none reported", never a
+ *   number to interpolate.
+ *
+ *   A missing session is SHOUTED, not blanked. A sync pairing whose session was never created (or was terminated
+ *   and could not be recreated) has no status to print, and printing nothing put "this folder is not syncing at
+ *   all" and "this folder is fine" one space apart. */
+export const pairingLine = (pairing: MachineReport["pairings"][number]): string => {
+    const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
+    const state =
+        pairing.mode !== "sync"
+            ? []
+            : [
+                  // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts
+                  // rather than clobbering, and nothing else in the product has ever said one was waiting.
+                  pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION — this folder is not syncing"),
+                  pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
+              ].filter((part) => part !== undefined);
+    return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
+};
+
+/* THE WATCHER LINE — running, stopped, or the third state that had no words: a live process whose loop is gone.
+ *
+ * That third one is the failure this whole file keeps meeting from a different angle. The watcher holds its
+ * tunnel listeners on the event loop, so anything that escapes the loop leaves a process that is alive, a pidfile
+ * that is claimed and a systemd unit that is "active", with mirroring and the git bridge stopped underneath. It
+ * has now happened twice, and both times every surface said "running". A pid is not a pulse: the stamp the
+ * watcher writes at the end of each completed pass is (config.ts), and this is where the two are read together.
+ *
+ * `now` is a parameter so the sentence can be tested without a clock. */
+export const watcherLine = (watcher: MachineReport["watcher"], now: number): string => {
+    if (!watcher.running) {
+        return "Mirror watcher: NOT running — file syncing and port mirroring are both stopped. Run `intentic-sync mirror` to restart it.";
+    }
+    const since = watcher.lastTickAt === undefined ? undefined : now - watcher.lastTickAt;
+    if (watcherStalled(watcher, now) && since !== undefined) {
+        return `Mirror watcher: STALLED (pid ${watcher.pid}) — the process is alive but its last full pass finished ${Math.round(since / 60_000)} minute(s) ago, so port mirroring, the git bridge and any file sync it has not created are stopped. Restart it with \`intentic-sync mirror --stop\` then \`intentic-sync mirror\`, and check ${mirrorLogPath}.`;
+    }
+    /* An agent too old to stamp reports no lastTickAt at all, and so does one whose first pass has not finished.
+     * Neither is a stall, and neither is a clean bill of health, so the line says which of the two it is rather
+     * than picking one — the alternative is the same silent green this field was added to end. */
+    return since === undefined
+        ? `Mirror watcher: running (pid ${watcher.pid}) — no completed pass reported yet (a pass finishes within seconds of startup; an agent older than this one never reports them).`
+        : `Mirror watcher: running (pid ${watcher.pid}), last pass ${Math.round(since / 1000)}s ago`;
+};
+
 const printReport = (report: MachineReport, out: (message: string) => void): void => {
     out(`Paired sandboxes (${report.pairings.length}):`);
     for (const pairing of report.pairings) {
-        const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
-        // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts rather
-        // than clobbering, and nothing else in the product has ever said one was waiting.
-        const state = [
-            pairing.paused === true ? "paused" : pairing.mutagenStatus,
-            pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
-        ]
-            .filter((part) => part !== undefined)
-            .join(", ");
-        out(`  ${pairing.sandboxId}  ${where}${state === "" ? "" : `  [${state}]`}`);
+        out(pairingLine(pairing));
     }
     /* The watcher's liveness is now the whole of sync's liveness, not just mirroring's: it holds the SSH
      * transport every session rides (tunnel.ts), so a dead watcher is a stalled file sync and stalled port
      * forwards, not merely "new ports stop appearing". Said plainly, because the previous wording invited a
      * reader to leave it stopped. */
-    out(
-        report.watcher.running
-            ? `Mirror watcher: running (pid ${report.watcher.pid})`
-            : "Mirror watcher: NOT running — file syncing and port mirroring are both stopped. Run `intentic-sync mirror` to restart it.",
-    );
+    out(watcherLine(report.watcher, Date.now()));
     out(`Ports (${report.ports.length}):`);
     for (const port of report.ports) {
         out(portLine(port));
@@ -393,10 +431,27 @@ const status = buildCommand<StatusFlags>({
             return;
         }
         printReport(report, out);
+        /* Mutagen's own listing, for the pairings whose session EXISTS — and only those.
+         *
+         * `mutagen sync list a b` is all-or-nothing: a name it cannot resolve makes it print nothing at all and
+         * exit 1, and runMutagen turns that into a throw. So one pairing that had lost its session took the whole
+         * command down — no port mirroring section, no exit 0, and an error about a Mutagen "specification" as
+         * the only answer to "is my sync working". That is a diagnostic command failing precisely when there is
+         * something to diagnose. The missing ones are named here instead; the report above has already said the
+         * folder is not syncing. */
         const syncing = report.pairings.filter((pairing) => pairing.mode === "sync");
         if (syncing.length > 0) {
             out("File sync:");
-            runMutagen(mutagen, ["sync", "list", ...syncing.map((pairing) => sessionName(pairing.sandboxId))]);
+            const wanted = syncing.map((pairing) => sessionName(pairing.sandboxId));
+            const live = new Set(existingSyncSessions(mutagen, wanted));
+            if (live.size > 0) {
+                runMutagen(mutagen, ["sync", "list", ...wanted.filter((name) => live.has(name))]);
+            }
+            for (const pairing of syncing.filter((held) => !live.has(sessionName(held.sandboxId)))) {
+                out(
+                    `  ${pairing.sandboxId}: no file-sync session exists on this machine — ${pairing.localDir ?? "its folder"} is NOT syncing. The mirror watcher retries every few minutes; if it stays this way the sandbox is unreachable (check ${mirrorLogPath}).`,
+                );
+            }
         }
         out("Port mirroring:");
         runMutagen(mutagen, ["forward", "list"]);

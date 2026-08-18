@@ -5542,8 +5542,25 @@ export type MachinePort = z.infer<typeof MachinePortSchema>;
 export const MachineWatcherSchema = z.object({
     running: z.boolean(),
     pid: z.number().int().optional(),
+    /* When the watcher last FINISHED a pass — the field that makes `running` mean something. The agent holds its
+     * SSH transport listeners on its own event loop, so a failure that escapes the loop leaves a process that is
+     * alive and a loop that is gone: pid present, unit "active", mirroring and the git bridge stopped. Absent
+     * means the agent has not reported one (too old to stamp, or its first pass has not landed) — which is not
+     * the same as stalled, and readers must not treat it as either state. */
     lastTickAt: z.number().optional(),
 });
+export type MachineWatcher = z.infer<typeof MachineWatcherSchema>;
+
+/* How long a watcher may go without finishing a pass before "running" stops being the honest word for it. Its
+ * loop polls every 5s and its slowest step is bounded by two 10s network timeouts per pairing, so a minute is
+ * several passes of slack — the same yardstick the Computers view already ages a whole report by.
+ *
+ * The rule lives HERE, next to the field, because the terminal and the browser both answer this question and a
+ * machine that is "running" in one and "stalled" in the other is worse than either answer alone. */
+export const WATCHER_STALL_AFTER_MS = 60_000;
+
+export const watcherStalled = (watcher: MachineWatcher, now: number): boolean =>
+    watcher.running && watcher.lastTickAt !== undefined && now - watcher.lastTickAt > WATCHER_STALL_AFTER_MS;
 
 export const MachineReportSchema = z.object({
     /* The OS hostname, and the JOIN KEY. A machine can arrive here two ways at once — volunteered by its sync

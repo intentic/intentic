@@ -19,13 +19,15 @@ import type { CliLauncher } from "./launcher.js";
 const NODE: CliLauncher = ["/usr/bin/node", `${HOST_STATE_ROOT}/sync/dist/cli.js`];
 const BINARY: CliLauncher = ["/home/dev/.intentic/sync/bin/intentic-sync"];
 
-const LAUNCH_AGENT: LaunchAgentSpec = { label: "dev.intentic.sync-mirror", logPath: "/home/dev/.intentic/sync/mirror.log" };
+const LAUNCH_AGENT: LaunchAgentSpec = { label: "dev.intentic.sync-mirror" };
+const LOG = "/home/dev/.intentic/sync/mirror.log";
 
 const SPEC: AutostartSpec = {
     id: "intentic-sync-mirror",
     windowsRunValue: "IntenticSyncMirror",
     desktopName: "Intentic Sync Mirror",
     desktopComment: "Mirror the intentic sandbox's workspace ports onto localhost",
+    logPath: LOG,
     launchAgent: LAUNCH_AGENT,
     detachedArgs: ["mirror"],
     foregroundArgs: ["mirror", "--watch"],
@@ -85,6 +87,18 @@ describe("systemdUserUnit", () => {
     it("sets a PATH that includes the shells-out targets", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
         expect(unit).toContain(`Environment=PATH=${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin`);
+    });
+
+    /* THE LOG THE AGENT ADVERTISES, not the journal. A unit without these lines sends the loop's output to
+     * journald while `intentic-sync status`, every failure note and the docs all name the agent's own file — so on
+     * a systemd machine (most Linux desktops, every WSL distro with systemd on) that file stopped growing the day
+     * autostart started working, and a watcher whose loop had died was diagnosable only by someone who already
+     * knew to reach for journalctl. `append:` and not `file:`, or each restart truncates the pass that explains
+     * why it restarted. */
+    it("writes the loop's output to the agent's own log, appending across restarts", () => {
+        const unit = systemdUserUnit(SPEC, BINARY);
+        expect(unit).toContain(`StandardOutput=append:${LOG}`);
+        expect(unit).toContain(`StandardError=append:${LOG}`);
     });
 });
 

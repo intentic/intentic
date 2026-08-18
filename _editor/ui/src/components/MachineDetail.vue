@@ -135,7 +135,18 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
         <div v-if="watcher || $slots[`heading`]" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <slot name="heading" />
             <div v-if="watcher" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <template v-if="watcher.running">
+                <!-- Alive but not working: the process is up and its loop is not, so the rows below are a
+                     photograph of whenever it last ran. Amber like "stopped", because the errand is the same one
+                     and the difference — that a restart is needed even though nothing looks dead — is exactly
+                     what a reader cannot infer from a green line. -->
+                <template v-if="watcher.stalled === true">
+                    <StatusBadge variant="warning" :dot="true" size="xs" label="Sync agent stalled" />
+                    <span class="text-xs text-warning">
+                        Its process is alive but has stopped making rounds, so ports and commits below may be out of date. Restart it with
+                        <span class="font-mono">intentic-sync mirror --stop</span> then <span class="font-mono">intentic-sync mirror</span>
+                    </span>
+                </template>
+                <template v-else-if="watcher.running">
                     <span class="inline-flex items-center gap-1.5 text-xs text-muted">
                         <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
                         Sync agent running

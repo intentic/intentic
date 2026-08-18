@@ -12,20 +12,20 @@ const scripted = (handlers: Record<string, string | undefined | readonly (string
     const paths = new Set(existing);
     const seen = new Map<string, number>();
     const exec: BridgeExec = {
-        run: (command, args) => {
+        run: async (command, args) => {
             const line = [command, ...args].join(" ");
             calls.push(line);
             for (const [prefix, out] of Object.entries(handlers)) {
                 if (line.startsWith(prefix)) {
                     if (!Array.isArray(out)) {
-                        return out as string | undefined;
+                        return await Promise.resolve(out as string | undefined);
                     }
                     const nth = seen.get(prefix) ?? 0;
                     seen.set(prefix, nth + 1);
-                    return out[Math.min(nth, out.length - 1)];
+                    return await Promise.resolve(out[Math.min(nth, out.length - 1)]);
                 }
             }
-            return "";
+            return await Promise.resolve("");
         },
         exists: (path) => paths.has(path),
     };
@@ -47,27 +47,27 @@ const TIP2 = "d4d4d4"; // where the sandbox's feature branch sits
 const SYMREF_MAIN = `ref: refs/heads/main\tHEAD\n${TIP}\tHEAD\n`;
 
 describe("listSandboxRepos", () => {
-    it("decodes the git-dir names, drops root, and refuses ids that could escape the local dir", () => {
+    it("decodes the git-dir names, drops root, and refuses ids that could escape the local dir", async () => {
         const { exec } = scripted({
             ssh: "root\nintentic\nreferences%2Feve\n..%2F..%2Fetc\n.hidden\n\n",
         });
-        expect(listSandboxRepos(exec, ALIAS)).toEqual(["intentic", "references/eve"]);
+        expect(await listSandboxRepos(exec, ALIAS)).toEqual(["intentic", "references/eve"]);
     });
 
-    it("reports an unreachable sandbox as undefined rather than an empty repo set", () => {
+    it("reports an unreachable sandbox as undefined rather than an empty repo set", async () => {
         const { exec } = scripted({ ssh: undefined });
-        expect(listSandboxRepos(exec, ALIAS)).toBeUndefined();
+        expect(await listSandboxRepos(exec, ALIAS)).toBeUndefined();
     });
 });
 
 describe("bridgeRepo", () => {
-    it("does nothing while the worktree hasn't synced down yet", () => {
+    it("does nothing while the worktree hasn't synced down yet", async () => {
         const { calls, exec } = scripted({});
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toEqual([]);
     });
 
-    it("bootstraps a repo born in the sandbox: init, remote, fetch, then a mixed reset to the sandbox tip", () => {
+    it("bootstraps a repo born in the sandbox: init, remote, fetch, then a mixed reset to the sandbox tip", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": undefined, // no remote yet
@@ -78,35 +78,35 @@ describe("bridgeRepo", () => {
             },
             [DIR], // dir exists, dir/.git does not
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toContain("git init -q");
         expect(calls).toContain(`git remote add sandbox ${ALIAS}:/history/gits/proj`);
         expect(calls).toContain("git fetch -q sandbox +refs/heads/main:refs/remotes/sandbox/main");
         expect(calls).toContain(`git reset -q ${TIP}`);
     });
 
-    it("makes the local repo ignore the exec bit, the way every git command in the sandbox does", () => {
+    it("makes the local repo ignore the exec bit, the way every git command in the sandbox does", async () => {
         const { calls, exec } = scripted({ "git remote get-url": undefined, "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toContain("git config core.fileMode false");
     });
 
-    it("leaves a config that already reads modes the sandbox's way alone", () => {
+    it("leaves a config that already reads modes the sandbox's way alone", async () => {
         const { calls, exec } = scripted({ "git config --get core.fileMode": "false\n", "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).not.toContain("git config core.fileMode false");
     });
 
-    it("URI-encodes a nested repo id in the remote url", () => {
+    it("URI-encodes a nested repo id in the remote url", async () => {
         const { calls, exec } = scripted({ "git remote get-url": undefined, "git ls-remote": undefined }, [
             join(LOCAL, "references", "eve"),
             join(LOCAL, "references", "eve", ".git"),
         ]);
-        bridgeRepo(exec, ALIAS, LOCAL, "references/eve", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "references/eve", () => undefined);
         expect(calls).toContain(`git remote add sandbox ${ALIAS}:/history/gits/references%2Feve`);
     });
 
-    it("fast-forwards when local HEAD is an ancestor of the sandbox tip", () => {
+    it("fast-forwards when local HEAD is an ancestor of the sandbox tip", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -117,12 +117,12 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toContain(`git merge-base --is-ancestor HEAD ${TIP}`);
         expect(calls).toContain(`git reset -q ${TIP}`);
     });
 
-    it("stops at the probe when the sandbox tip hasn't moved, without fetching", () => {
+    it("stops at the probe when the sandbox tip hasn't moved, without fetching", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -132,14 +132,14 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
         // The whole quiet pass is this one round trip — which is what makes running it every tick affordable.
         expect(calls.filter((line) => line.startsWith("git ls-remote"))).toHaveLength(1);
     });
 
-    it("still follows the sandbox's branch when HEAD already sits on its tip under another name", () => {
+    it("still follows the sandbox's branch when HEAD already sits on its tip under another name", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -151,12 +151,12 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toContain("git symbolic-ref HEAD refs/heads/feature");
         expect(calls).toContain(`git reset -q ${TIP2}`);
     });
 
-    it("never resets over local staged work", () => {
+    it("never resets over local staged work", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -167,11 +167,11 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
     });
 
-    it("never resets local commits the sandbox lacks", () => {
+    it("never resets local commits the sandbox lacks", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
             {
@@ -183,7 +183,7 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
         expect(logs.join("\n")).toContain("diverge");
     });
@@ -191,7 +191,7 @@ describe("bridgeRepo", () => {
     // The rewind: the sandbox undoes a commit the bridge had already installed here. HEAD is then a commit the
     // sandbox lacks — indistinguishable from local work by ancestry alone, and refusing it strands the desktop
     // on discarded history while file sync keeps delivering every later commit as uncommitted noise.
-    it("follows the sandbox back when it rewinds history the bridge itself installed", () => {
+    it("follows the sandbox back when it rewinds history the bridge itself installed", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
             {
@@ -205,7 +205,7 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls).toContain(`git reset -q ${TIP}`);
         expect(calls).toContain(`git update-ref refs/intentic/bridged/main ${TIP}`);
         expect(logs.join("\n")).toContain("rewound");
@@ -213,7 +213,7 @@ describe("bridgeRepo", () => {
 
     // The same shape, but the local tip is NOT what the bridge installed — someone committed here. That is work
     // no sync may destroy, so the refusal stands.
-    it("still refuses when the local tip is a commit the bridge never installed", () => {
+    it("still refuses when the local tip is a commit the bridge never installed", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
             {
@@ -227,7 +227,7 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls.some((line) => line.startsWith("git reset"))).toBe(false);
         expect(logs.join("\n")).toContain("diverge");
     });
@@ -238,7 +238,7 @@ describe("bridgeRepo", () => {
      * staged at the wrong moment) and the repo froze for good: hundreds of "changes" that grew with every later
      * sandbox commit and that nothing but a hand-run reset could clear. Here the sandbox has committed many times
      * since the bridge last moved HEAD, and it still recognises its own history. */
-    it("still recognises its own history long after passes that fetched without moving HEAD", () => {
+    it("still recognises its own history long after passes that fetched without moving HEAD", async () => {
         const logs: string[] = [];
         const { calls, exec } = scripted(
             {
@@ -253,7 +253,7 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", (message) => logs.push(message));
         expect(calls).toContain(`git reset -q ${TIP}`);
         // And the decision owes nothing to the remote-tracking ref's value BEFORE the fetch — it is never read there.
         const fetchAt = calls.findIndex((line) => line.startsWith("git fetch"));
@@ -264,7 +264,7 @@ describe("bridgeRepo", () => {
     // Arming the valve costs no divergence: a repo that has never once fallen behind never reaches the reset
     // that records a marker, so the quiet pass records one itself. This is also the state a hand-run recovery
     // leaves behind — and it must not have to freeze a second time before the valve can help.
-    it("records what HEAD holds on a quiet pass, so an install that never falls behind still carries a marker", () => {
+    it("records what HEAD holds on a quiet pass, so an install that never falls behind still carries a marker", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -275,12 +275,12 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).toContain(`git update-ref refs/intentic/bridged/main ${TIP}`);
         expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
     });
 
-    it("leaves an already-current marker alone rather than rewriting it every tick", () => {
+    it("leaves an already-current marker alone rather than rewriting it every tick", async () => {
         const { calls, exec } = scripted(
             {
                 "git remote get-url": `${ALIAS}:/history/gits/proj\n`,
@@ -291,7 +291,7 @@ describe("bridgeRepo", () => {
             },
             [DIR, join(DIR, ".git")],
         );
-        bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
+        await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls.some((line) => line.startsWith("git update-ref"))).toBe(false);
     });
 });
@@ -302,26 +302,26 @@ describe("runGitBridge", () => {
     // is the distinction the config type draws and the bridge reads.
     const { localDir: _localDir, ...withoutLocalDir } = config;
 
-    it("reuses a repo list an earlier pass returned instead of re-listing over ssh", () => {
+    it("reuses a repo list an earlier pass returned instead of re-listing over ssh", async () => {
         const { calls, exec } = scripted({});
-        expect(runGitBridge(exec, config, () => undefined, ["proj"])).toEqual(["proj"]);
+        expect(await runGitBridge(exec, config, () => undefined, ["proj"])).toEqual(["proj"]);
         expect(calls.some((line) => line.startsWith("ssh"))).toBe(false);
     });
 
-    it("lists over ssh when handed none, and hands the list back for the next pass", () => {
+    it("lists over ssh when handed none, and hands the list back for the next pass", async () => {
         const { calls, exec } = scripted({ ssh: "intentic\nroot\n" });
-        expect(runGitBridge(exec, config, () => undefined, undefined)).toEqual(["intentic"]);
+        expect(await runGitBridge(exec, config, () => undefined, undefined)).toEqual(["intentic"]);
         expect(calls.some((line) => line.startsWith("ssh"))).toBe(true);
     });
 
-    it("returns undefined when the sandbox is unreachable, so the next pass lists again", () => {
+    it("returns undefined when the sandbox is unreachable, so the next pass lists again", async () => {
         const { exec } = scripted({ ssh: undefined });
-        expect(runGitBridge(exec, config, () => undefined, undefined)).toBeUndefined();
+        expect(await runGitBridge(exec, config, () => undefined, undefined)).toBeUndefined();
     });
 
-    it("does nothing for a mirror-only enrollment, which has no local tree to bridge into", () => {
+    it("does nothing for a mirror-only enrollment, which has no local tree to bridge into", async () => {
         const { calls, exec } = scripted({ ssh: "intentic\n" });
-        expect(runGitBridge(exec, { ...withoutLocalDir, mode: "mirror" as const }, () => undefined, undefined)).toBeUndefined();
+        expect(await runGitBridge(exec, { ...withoutLocalDir, mode: "mirror" as const }, () => undefined, undefined)).toBeUndefined();
         expect(calls).toEqual([]);
     });
 });

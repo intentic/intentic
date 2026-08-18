@@ -107,9 +107,11 @@ const panelReach = (_method: string, path: string): boolean => !CONNECTION_READ.
  * to this container's sshd and nothing else — no host and no port travel with the request. What it reaches
  * there is guarded a second time and independently, by sshd's public-key check against the key this same
  * enrollment installed, so the grant widens the agent's reach by a transport rather than by a capability. */
+const SYNC_TRANSPORT = "/system/sync/ssh";
+
 const syncReach = (method: string, path: string): boolean =>
     (method === "GET" && path === "/ports") ||
-    (method === "GET" && path === "/system/sync/ssh") ||
+    (method === "GET" && path === SYNC_TRANSPORT) ||
     (method === "POST" && path === "/system/sync/report");
 
 export interface GrantSources {
@@ -118,7 +120,10 @@ export interface GrantSources {
     readonly controlTokens: ControlTokens;
     // Passed in rather than imported so this module stays free of platform/ and every grant is testable with
     // a one-line fake.
-    readonly verifySync: (presented: string) => Promise<boolean>;
+    /* `checkedIn` says whether THIS request is the agent's watcher doing its rounds (the ports poll, the machine
+     * report) as opposed to bytes on the SSH transport, which Mutagen's daemon keeps flowing whether or not the
+     * watcher is alive. Only the first kind may refresh the enrollment's heartbeat — see verifySyncToken. */
+    readonly verifySync: (presented: string, checkedIn: boolean) => Promise<boolean>;
     // An extension backend's minted per-extension token → the manifest's declared `permissions.daemon`
     // (extensions/backend/backend-supervisor.ts). Unknown token ⇒ undefined ⇒ 401.
     readonly verifyExtension: (presented: string) => { readonly permissions: readonly string[] } | undefined;
@@ -165,7 +170,10 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
             if (!syncReach(method, path)) {
                 return "out-of-scope";
             }
-            return (await verifySync(presented)) ? "ok" : "unauthorized";
+            // The transport is not a check-in: it is a pipe Mutagen holds open on its own schedule (see
+            // verifySyncToken). The two polling routes are the watcher's own, and they are what the card's
+            // "Syncing from X, just now" is entitled to be built on.
+            return (await verifySync(presented, path !== SYNC_TRANSPORT)) ? "ok" : "unauthorized";
         },
     },
 ];

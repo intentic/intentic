@@ -1,7 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { hostname, platform } from "node:os";
 import { livePid } from "@intentic/local-agent";
 import type { MachinePairing, MachinePort, MachineReport } from "@intentic/sandbox-contract";
-import { mirrorPidPath, type Pairing, readState, type SyncState } from "./config.js";
+import { mirrorHeartbeatPath, mirrorPidPath, type Pairing, readState, type SyncState } from "./config.js";
 import { readSessionState, sessionName } from "./mutagen.js";
 import { SYNC_VERSION } from "./version.js";
 
@@ -23,12 +24,25 @@ import { SYNC_VERSION } from "./version.js";
  * construction rather than by remembering to filter. `sandboxes` is therefore always empty here, and filled in
  * by whoever is trusted to. */
 
-// The watcher's liveness, read from the pidfile the same way every other cross-process caller reads it. Inlined
-// rather than imported from mirror.ts, which imports this module to post the report — the cycle is not worth a
-// re-export.
+/* The watcher's liveness — the PID it claims AND the last pass it finished, because only the pair is an answer.
+ * A watcher whose loop died still holds its pidfile (its tunnel listeners keep the process alive), so `running`
+ * on its own has twice now reported a stopped mirror, a stopped git bridge and file syncs that were never created
+ * as a healthy machine. The stamp is what makes that visible to every reader at once: this terminal, the Desktop
+ * sync card, and the Computers view all read this shape.
+ *
+ * An unreadable or unparseable stamp is `undefined` — "this watcher has not finished a pass yet", which is true
+ * of a watcher that just started and of one that has never ticked, and both are better read as not-yet-known than
+ * as a number. Read from the pidfile's neighbour the same way every other cross-process caller reads it; inlined
+ * rather than imported from mirror.ts, which imports this module to post the report. */
+const lastTick = async (): Promise<number | undefined> => {
+    const raw = await readFile(mirrorHeartbeatPath, "utf8").catch(() => undefined);
+    const stamped = Number(raw?.trim());
+    return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
+};
+
 const watcherState = async (): Promise<MachineReport["watcher"]> => {
-    const pid = await livePid(mirrorPidPath);
-    return { running: pid !== undefined, pid };
+    const [pid, lastTickAt] = await Promise.all([livePid(mirrorPidPath), lastTick()]);
+    return { running: pid !== undefined, pid, lastTickAt };
 };
 
 const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePairing => {
@@ -37,6 +51,10 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePa
     if (pairing.mode !== "sync" || mutagen === undefined) {
         return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir };
     }
+    /* A sync pairing with NO session is the state this report exists to make visible, so it is carried as the
+     * ABSENCE of a status rather than as some word for it: nothing is syncing that folder, whatever the ports and
+     * the watcher rows say. Every reader renders that one way (see pairingLine) instead of each inventing a
+     * default. A session that exists always has a status — readSessionState resolves Mutagen's omitted zero. */
     const session = readSessionState(mutagen, sessionName(pairing.sandboxId));
     return {
         sandboxId: pairing.sandboxId,

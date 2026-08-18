@@ -99,9 +99,9 @@ describe("enrollment store", () => {
         const a = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false }));
         const b = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false }));
         const c = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-c"), mode: "mirror", takeover: false }));
-        expect(await verifySyncToken(history, a)).toBe(true);
-        expect(await verifySyncToken(history, b)).toBe(true);
-        expect(await verifySyncToken(history, c)).toBe(true);
+        expect(await verifySyncToken(history, a, true)).toBe(true);
+        expect(await verifySyncToken(history, b, true)).toBe(true);
+        expect(await verifySyncToken(history, c, true)).toBe(true);
         expect((await mirrorMachines(history)).toSorted()).toEqual(["laptop-a", "laptop-b", "laptop-c"]);
         // authorized_keys carries every machine's key — sshd authorizes all three forwarders.
         const authKeys = await readFile(join(process.env["HOME"]!, ".ssh", "authorized_keys"), "utf8");
@@ -118,8 +118,8 @@ describe("enrollment store", () => {
         // Takeover moves it — and kills the old holder's token.
         const second = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "sync", takeover: true }));
         expect((await syncHolder(history))?.machine).toBe("laptop-b");
-        expect(await verifySyncToken(history, first)).toBe(false);
-        expect(await verifySyncToken(history, second)).toBe(true);
+        expect(await verifySyncToken(history, first, true)).toBe(false);
+        expect(await verifySyncToken(history, second, true)).toBe(true);
     });
 
     it("mirror enrollments survive a sync takeover — collaborators keep their previews", async () => {
@@ -127,7 +127,7 @@ describe("enrollment store", () => {
         await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false });
         // A sync takeover only displaces the sync holder; the mirror-only machine is untouched.
         await enrollSyncKey({ historyRoot: history, key: key("laptop-c"), mode: "sync", takeover: true });
-        expect(await verifySyncToken(history, mirror)).toBe(true);
+        expect(await verifySyncToken(history, mirror, true)).toBe(true);
         expect(await mirrorMachines(history)).toEqual(["laptop-b"]);
         expect((await syncHolder(history))?.machine).toBe("laptop-c");
     });
@@ -136,8 +136,8 @@ describe("enrollment store", () => {
         const first = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false }));
         const second = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false }));
         expect(first).not.toBe(second);
-        expect(await verifySyncToken(history, first)).toBe(false);
-        expect(await verifySyncToken(history, second)).toBe(true);
+        expect(await verifySyncToken(history, first, true)).toBe(false);
+        expect(await verifySyncToken(history, second, true)).toBe(true);
         expect(await mirrorMachines(history)).toEqual(["laptop-a"]); // still one machine, not duplicated
     });
 
@@ -158,8 +158,8 @@ describe("enrollment store", () => {
             key("laptop-a"),
             key("laptop-b"),
         ]);
-        expect(await verifySyncToken(history, laptop)).toBe(true);
-        expect(await verifySyncToken(history, collaborator)).toBe(true);
+        expect(await verifySyncToken(history, laptop, true)).toBe(true);
+        expect(await verifySyncToken(history, collaborator, true)).toBe(true);
         expect((await syncHolder(history))?.machine).toBe("laptop-a");
     });
 
@@ -181,19 +181,30 @@ describe("enrollment store", () => {
 
         const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
         const before = Date.now();
-        expect(await verifySyncToken(history, holderToken)).toBe(true);
+        expect(await verifySyncToken(history, holderToken, true)).toBe(true);
 
         const seen = (await syncHolder(history))?.seenAt;
         expect(seen).toBeGreaterThanOrEqual(before);
         expect(seen).toBeLessThanOrEqual(Date.now());
     });
 
+    /* THE TRANSPORT IS NOT A CHECK-IN, and this is the assertion that keeps the card honest. Mutagen's daemon
+     * opens and reopens the SSH stream on its own schedule, so its traffic proves only that Mutagen is running —
+     * not that the watcher polling on top of it is. Stamping on it produced the exact failure the heartbeat was
+     * built to prevent, one layer down: a watcher whose loop had died, port mirroring and the git bridge stopped,
+     * and a card reading "Syncing from <machine>, just now" the whole time. */
+    it("does not stamp seenAt for bytes on the SSH transport, only for the watcher's own polls", async () => {
+        const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
+        expect(await verifySyncToken(history, holderToken, false)).toBe(true);
+        expect(await syncHolder(history)).toEqual({ machine: "laptop-a" });
+    });
+
     it("leaves seenAt alone for a rejected token — a stranger's poll must not look like the holder's", async () => {
         const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
-        await verifySyncToken(history, holderToken);
+        await verifySyncToken(history, holderToken, true);
         const stamped = (await syncHolder(history))?.seenAt;
 
-        expect(await verifySyncToken(history, "ist_not-enrolled")).toBe(false);
+        expect(await verifySyncToken(history, "ist_not-enrolled", true)).toBe(false);
 
         expect((await syncHolder(history))?.seenAt).toBe(stamped);
     });
@@ -202,11 +213,11 @@ describe("enrollment store", () => {
     // Throttled, so a burst of polls costs one write — and the stamp stays within a minute of the last poll.
     it("throttles the stamp rather than writing on every poll", async () => {
         const holderToken = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "sync", takeover: false }));
-        await verifySyncToken(history, holderToken);
+        await verifySyncToken(history, holderToken, true);
         const first = (await syncHolder(history))?.seenAt;
 
-        await verifySyncToken(history, holderToken);
-        await verifySyncToken(history, holderToken);
+        await verifySyncToken(history, holderToken, true);
+        await verifySyncToken(history, holderToken, true);
 
         expect((await syncHolder(history))?.seenAt).toBe(first);
     });
@@ -214,7 +225,7 @@ describe("enrollment store", () => {
     // A mirror-only machine's poll verifies too. It must not turn into a file-sync holder on the way through.
     it("does not invent a sync holder out of a mirror-only machine's poll", async () => {
         const mirror = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false }));
-        expect(await verifySyncToken(history, mirror)).toBe(true);
+        expect(await verifySyncToken(history, mirror, true)).toBe(true);
         expect(await syncHolder(history)).toBeUndefined();
         expect(await mirrorMachines(history)).toEqual(["laptop-b"]);
     });
@@ -223,11 +234,11 @@ describe("enrollment store", () => {
         const a = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false }));
         const b = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "mirror", takeover: false }));
         expect(await revokeEnrollmentByToken(history, a)).toBe(true);
-        expect(await verifySyncToken(history, a)).toBe(false);
-        expect(await verifySyncToken(history, b)).toBe(true); // b unaffected
+        expect(await verifySyncToken(history, a, true)).toBe(false);
+        expect(await verifySyncToken(history, b, true)).toBe(true); // b unaffected
         expect(await revokeEnrollmentByToken(history, "ist_never-enrolled")).toBe(false);
         await clearAllEnrollments(history);
-        expect(await verifySyncToken(history, b)).toBe(false);
+        expect(await verifySyncToken(history, b, true)).toBe(false);
         expect(await isKeyEnrolled(history)).toBe(false);
     });
 });

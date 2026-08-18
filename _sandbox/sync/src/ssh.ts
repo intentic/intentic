@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { baseDir, knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import { runProcess } from "./exec.js";
 import { syncSshPort } from "./tunnel.js";
 
 // Paths Mutagen must NOT two-way-sync. Its OWN purpose-built list (not the daemon's search-ignore set): it must
@@ -121,6 +122,31 @@ export const stripManagedIncludes = (config: string): string =>
         .split("\n")
         .filter((line) => !MANAGED_INCLUDE.test(line))
         .join("\n");
+
+/* THE ENTRY THAT CAN ONLY BE WRECKAGE. An earlier build wrote `HostKeyAlias %h` and ssh does not expand it, so
+ * every sandbox's host key landed in one bucket literally named "%h" — after which the first sandbox's key is
+ * the only one accepted and every other pairing is refused with "Host key for %h has changed", permanently,
+ * because accept-new accepts an unknown host but never a changed one.
+ *
+ * Writing the alias literally (sshConfigBlock) stops it being created. It does not remove the one already
+ * sitting in a paired machine's known_hosts, and nothing else ever will: the file is ours, the line names a host
+ * that cannot exist, and the sandboxes it locks out stay locked out through every upgrade. So the agent deletes
+ * it whenever it rewrites the config — a fix that reaches the machines that already have the bug, which is the
+ * only kind worth shipping for a state this durable. */
+const LITERAL_HOST_KEY_ALIAS = "%h";
+
+export const pruneKnownHosts = async (): Promise<boolean> => {
+    const current = await readFile(knownHostsPath, "utf8").catch(() => undefined);
+    if (current === undefined) {
+        return false;
+    }
+    const kept = current.split("\n").filter((line) => line.split(" ")[0] !== LITERAL_HOST_KEY_ALIAS);
+    if (kept.length === current.split("\n").length) {
+        return false;
+    }
+    await writeFile(knownHostsPath, kept.join("\n"), { mode: 0o600 });
+    return true;
+};
 
 // Generate the ed25519 keypair on first setup; return the public key line to enroll on the daemon.
 export const ensureSshKey = async (): Promise<string> => {
@@ -248,10 +274,33 @@ export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort:
 // own words — a key the client reads as world-readable, a tunnel not up yet — instead of arriving as Mutagen's
 // "server magic number" again. It also settles the known_hosts entry before the daemon races on it. Not fatal:
 // Mutagen retries a session forever, so a transient failure is no reason to refuse the setup, only to report it.
-export const probeSshTransport = (ssh: string, alias: string, log: Log): void => {
-    const result = spawnSync(ssh, ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", alias, "true"], { encoding: "utf8" });
-    if (result.status === 0) {
+export const probeSshTransport = async (ssh: string, alias: string, log: Log): Promise<void> => {
+    if (await sshTransportAnswers(ssh, alias)) {
         return;
     }
-    log(`note: a test SSH connection to the sandbox failed — sync may not start:\n${(result.stderr ?? result.error?.message ?? "").trim()}`);
+    log(`note: a test SSH connection to the sandbox failed — sync may not start:\n${sshProbeReason}`);
 };
+
+/* The same one connection, as a QUESTION rather than a note — asked before anything destructive is done to a
+ * session that is currently running (mutagen.ts). Mutagen has no verb that edits a session's configuration, so
+ * bringing an inherited session onto this build's rules means terminating it and creating it again, and a create
+ * against a sandbox that will not answer FAILS: the pairing is then left with no session at all, which is
+ * strictly worse than the drifted one it had. Asking first is what keeps a sandbox that is merely asleep from
+ * costing its folder every sync it had.
+ *
+ * The reason is kept in a module-level slot rather than returned, so the boolean stays usable as a plain
+ * condition; nothing reads it concurrently — every caller here is synchronous. */
+let sshProbeReason = "";
+
+/* ASYNC, because one of its callers is the mirror watcher — the process that SERVES the transport this probe
+ * dials. A blocking spawn there stops the event loop the connection needs, so the probe would fail against every
+ * sandbox, healthy or not, and take its caller's decision with it (see exec.ts). */
+export const sshTransportAnswers = async (ssh: string, alias: string): Promise<boolean> => {
+    const result = await runProcess(ssh, ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", alias, "true"], { timeoutMs: PROBE_TIMEOUT_MS });
+    sshProbeReason = result.stderr.trim();
+    return result.status === 0;
+};
+
+// One connection's worth of patience. ssh's own ConnectTimeout covers the TCP dial only — this covers the rest
+// (a transport that accepts and then never speaks), so a probe can never outlast the pass that made it.
+const PROBE_TIMEOUT_MS = 30_000;

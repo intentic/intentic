@@ -27,6 +27,17 @@ export const userSshConfigPath = join(sshDir, "config");
 export const mirrorPidPath = join(baseDir, "mirror.pid");
 export const mirrorLogPath = join(baseDir, "mirror.log");
 
+/* WHEN THE WATCHER LAST COMPLETED A PASS — a live pid is not the same fact, and the difference is the whole
+ * incident this file exists for. The watcher holds its tunnel listeners on the event loop, so a rejection that
+ * escapes the loop leaves the PROCESS perfectly alive while the loop it was running is gone: the pidfile stays
+ * claimed, `status` keeps saying "running", systemd keeps the unit "active", and mirroring, the git bridge and
+ * every not-yet-created file sync are silently stopped until the next login. That shape has now happened twice.
+ *
+ * Stamped at the END of each tick, so it means "a whole pass finished", not "the process started". Everything
+ * that reads liveness reads THIS beside the pid, and a stamp older than a couple of polls is reported as stalled
+ * rather than as running (see report.ts, and STALL_AFTER_MS in commands.ts). */
+export const mirrorHeartbeatPath = join(baseDir, "mirror.tick");
+
 // One mirrored port: the local bind (same number) + the loopback address the sandbox listener answers at —
 // stored so the watch reconcile can leave unchanged forwards untouched and recreate one whose family moved.
 // `command` rides along for the report only: what the port is ("node …/vite") is the difference between a row a

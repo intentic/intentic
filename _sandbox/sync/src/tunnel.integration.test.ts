@@ -192,6 +192,28 @@ describe("bridgeConnection", () => {
 
         await expect(ended).resolves.toBeUndefined();
     });
+
+    /* THE FAILURE SSH CANNOT SEE. The listener is local, so the TCP connect always succeeds and a sandbox that is
+     * asleep, 502-ing or retired shows up only as a WebSocket that never opens — and never errors either. ssh
+     * then sits in banner exchange, and everything waiting on ssh sits with it: the git bridge's own cap is two
+     * MINUTES, which one unreachable pairing was adding to every watcher pass, serially, ahead of every healthy
+     * pairing's ports and commits. Ending the connection here is what turns that back into seconds. */
+    it("ends a connection whose socket never opens, instead of holding ssh in the handshake", async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal("WebSocket", FakeSocket);
+        const { ssh, accepted, server } = await socketPair();
+        open.push(server, ssh, accepted);
+        const ended = new Promise<void>((resolve) => ssh.once("close", () => resolve()));
+        const said: string[] = [];
+
+        // Neither open nor failed — exactly what a sandbox behind a hung tunnel looks like from this end.
+        bridgeConnection(accepted, target, (message) => said.push(message));
+        await vi.advanceTimersByTimeAsync(10_000);
+        vi.useRealTimers();
+
+        await expect(ended).resolves.toBeUndefined();
+        expect(said[0]).toContain("did not open within 10s");
+    });
 });
 
 describe("startSshTunnel and the pool", () => {

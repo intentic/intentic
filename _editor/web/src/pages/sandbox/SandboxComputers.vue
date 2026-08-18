@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Computer, MachineSandboxOp } from "@intentic/sandbox-contract";
+import { type Computer, type MachineSandboxOp, watcherStalled } from "@intentic/sandbox-contract";
 import {
     InfoHint,
     MachineDetail,
@@ -105,11 +105,19 @@ const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
  * no edge to add to the pile. */
 const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0.5 text-2xs text-muted`;
 
+// Whether this computer's watcher is up but no longer making rounds. Both the badge and the detail block below
+// ask it, off the one rule the terminal uses (watcherStalled), so a row and `intentic-sync status` cannot
+// disagree about the same machine.
+const watcherHalted = (computer: Computer): boolean =>
+    computer.report !== undefined && watcherStalled(computer.report.watcher, now.value);
+
 const tone = (computer: Computer): StatusVariant => {
     if (computer.gap !== undefined) {
         return computer.gap === `offline` ? `neutral` : `warning`;
     }
-    if (reportStale(computer, now.value) || computer.report?.watcher.running === false) {
+    // A stalled watcher is the same errand as a stopped one — nothing is reaching that machine's ports or clones
+    // — and it is the one a green row hides best, because the process it names is alive.
+    if (reportStale(computer, now.value) || computer.report?.watcher.running === false || watcherHalted(computer)) {
         return `warning`;
     }
     return `success`;
@@ -126,7 +134,7 @@ const label = (computer: Computer): string => {
     if (reportStale(computer, now.value)) {
         return `gone quiet`;
     }
-    return computer.report?.watcher.running === false ? `needs attention` : `live`;
+    return computer.report?.watcher.running === false || watcherHalted(computer) ? `needs attention` : `live`;
 };
 
 /* THE MACHINES WORTH READING, FIRST. Sorting the list by name alone put an offline box and a stale one above the
@@ -329,7 +337,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                             :pairings="computer.report.pairings"
                             :ports="computer.report.ports"
                             :sandboxes="computer.report.sandboxes"
-                            :watcher="computer.report.watcher"
+                            :watcher="{ ...computer.report.watcher, stalled: watcherStalled(computer.report.watcher, now) }"
                         >
                             <!-- What the list is, and the state of the agent behind it, on one line — the
                                  watcher is a fact about the MACHINE rather than about any row under it. -->

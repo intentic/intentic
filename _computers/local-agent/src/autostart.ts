@@ -35,15 +35,19 @@ import type { Log } from "./home.js";
 export interface LaunchAgentSpec {
     // Reverse-DNS, launchd's convention — the id `launchctl bootout` and `bootstrap` address it by.
     readonly label: string;
-    // Where launchd sends the loop's stdout and stderr. launchd supervises the process it starts, so the loop
-    // runs in the foreground and its output has to go somewhere.
-    readonly logPath: string;
 }
 
 export interface AutostartSpec {
     /* The agent's slug: the XDG autostart file's base name, and the systemd unit named in the headless note.
      * Not the launchd label — that one is reverse-DNS and does not derive from this. */
     readonly id: string;
+    /* WHERE THE LOOP'S OUTPUT GOES, under every mechanism that supervises it. Not a macOS detail, though it lived
+     * inside the LaunchAgent spec as one: systemd supervises the foreground loop exactly as launchd does, and a
+     * unit that does not say this sends the output to the journal instead — while the agent's own notes, its
+     * status command and its docs all name this file. The result was a log that stopped growing on precisely the
+     * machines whose autostart worked, with the live failure sitting in a journal nobody had been told about. One
+     * sink, named by the agent, honoured by every mechanism that has somewhere to put it. */
+    readonly logPath: string;
     // The value name under HKCU\…\Run. What `unregister` deletes, so it must match what `register` added or an
     // uninstall leaves the agent resurrecting at every login.
     readonly windowsRunValue: string;
@@ -136,15 +140,26 @@ const systemdUserAvailable = (): boolean => {
  * `Restart=on-failure` and not `always`: a deliberate `systemctl --user stop` must stay stopped, which is the same
  * call the macOS LaunchAgent makes by omitting KeepAlive. And PATH is set explicitly because a user unit does NOT
  * inherit a login shell's environment — it starts from a minimal PATH, while these agents shell out to `git` and
- * `ssh` on every tick (the git bridge) and to Mutagen's own ssh transport. */
-export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string =>
-    `[Unit]
+ * `ssh` on every tick (the git bridge) and to Mutagen's own ssh transport.
+ *
+ * THE OUTPUT GOES WHERE THE AGENT SAYS IT GOES. A unit with no StandardOutput sends the loop's stdout to the
+ * journal, while the agent's own commands, its notes and its docs all name its log file — so on exactly the
+ * machines that autostart properly (a systemd box, which is most Linux desktops and every WSL distro with systemd
+ * on), the log a user is told to read froze at whatever the last hand-started run wrote, and the live failure was
+ * in a journal nobody was pointed at. `append:` rather than `file:` for the same reason the file is append-only
+ * everywhere else: a restart must not truncate the pass that explains why it restarted. This is the ONE detail
+ * that decides whether a stalled agent can be diagnosed at all, so it follows the same log path launchd is
+ * already given, and an agent that declares none keeps the journal. */
+export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string => {
+    return `[Unit]
 Description=${spec.desktopName} — ${spec.desktopComment}
 After=network-online.target
 
 [Service]
 Type=simple
 ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
+StandardOutput=append:${spec.logPath}
+StandardError=append:${spec.logPath}
 Restart=on-failure
 RestartSec=5
 Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bin
@@ -152,6 +167,7 @@ Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bi
 [Install]
 WantedBy=default.target
 `;
+};
 
 /* Register (and start) the unit. `enable --now` is one call for both halves — resume at boot, plus running right
  * now — which is why this branch can report that the current session is covered.
@@ -168,7 +184,9 @@ const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, l
     // daemon-reload so a rewritten unit is the one that gets started, not the copy systemd already parsed.
     spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
     register("systemctl", ["--user", "enable", "--now", systemdUnitName(spec)]);
-    log(`registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: journalctl --user -u ${spec.id} -f`);
+    // Named by its LOG rather than by the journal: the unit writes to the agent's own file (see systemdUserUnit),
+    // so that is where a reader finds this run and every earlier one, whichever way the agent was started.
+    log(`registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: tail -f ${spec.logPath}`);
     return true;
 };
 
@@ -195,8 +213,8 @@ export const macLaunchAgentXml = (spec: AutostartSpec, agent: LaunchAgentSpec, l
 ${[...launcher, ...spec.foregroundArgs].map((arg) => `        <string>${arg}</string>`).join("\n")}
     </array>
     <key>RunAtLoad</key><true/>
-    <key>StandardOutPath</key><string>${agent.logPath}</string>
-    <key>StandardErrorPath</key><string>${agent.logPath}</string>
+    <key>StandardOutPath</key><string>${spec.logPath}</string>
+    <key>StandardErrorPath</key><string>${spec.logPath}</string>
 </dict>
 </plist>
 `;

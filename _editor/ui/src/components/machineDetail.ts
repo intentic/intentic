@@ -30,8 +30,15 @@ export interface MachineFolderRow {
     paused?: boolean | undefined;
 }
 
+/* The watcher, in the three states a reader can act on. `stalled` is decided by the CALLER rather than derived
+ * here: this package stays structural on purpose, and the freshness rule belongs beside the field it ages (see
+ * watcherStalled in the sandbox contract) so the browser and the terminal cannot disagree about one machine.
+ *
+ * It exists at all because "running" was a pid, and a pid is not a pulse: the agent keeps its transport listeners
+ * on its own event loop, so a loop that dies leaves a live process mirroring nothing. */
 export interface MachineWatcherState {
     running: boolean;
+    stalled?: boolean | undefined;
     pid?: number | undefined;
 }
 

@@ -226,14 +226,23 @@ const matchEnrollment = (enrollments: readonly SyncEnrollment[], presented: stri
     });
 };
 
-export const verifySyncToken = async (historyRoot: string, presented: string): Promise<boolean> => {
+/* `checkedIn` is what separates the agent DOING ITS JOB from its bytes merely flowing, and the card's whole
+ * meaning rests on it. Every route the sync token opens used to stamp seenAt, including the SSH transport — a
+ * stream Mutagen's daemon opens and reopens on its own, entirely independently of the watcher that is supposed to
+ * be polling. So a watcher whose loop had died left the pill green and the card reading "Syncing from <machine>,
+ * just now" while port mirroring, the git bridge and every not-yet-created file sync were stopped: the heartbeat
+ * was being taken from a machine that was no longer doing the work.
+ *
+ * Only the watcher's OWN periodic calls (the ports poll and the machine report) mean "still on the job", so only
+ * those stamp. The transport still authorizes exactly as before — it just no longer speaks for the agent. */
+export const verifySyncToken = async (historyRoot: string, presented: string, checkedIn: boolean): Promise<boolean> => {
     const enrollments = await readEnrollments(historyRoot);
     const matched = matchEnrollment(enrollments, presented);
     if (matched === undefined) {
         return false;
     }
     const now = Date.now();
-    if (matched.seenAt === undefined || now - matched.seenAt >= SEEN_THROTTLE_MS) {
+    if (checkedIn && (matched.seenAt === undefined || now - matched.seenAt >= SEEN_THROTTLE_MS)) {
         await persist(
             historyRoot,
             // oxlint-disable-next-line oxc/no-map-spread -- an enrollment is readonly; a fresh record for the one machine that polled is the point
