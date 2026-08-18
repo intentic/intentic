@@ -240,11 +240,11 @@ const TOOLS: readonly ToolDefinition[] = [
     {
         name: "swap_sandbox",
         description:
-            "Move one Intentic sandbox on this computer onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES — it pulls an image and recreates the container, and the sandbox is down while it happens. Requires the 'Manage sandboxes on this computer' permission.",
+            "Move one Intentic sandbox on this computer onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES — it pulls an image and recreates the container, and the sandbox is down while it happens. 'prepare' is the exception and the one to reach for first: it does the downloading and building of the next update WITHOUT touching the container, so the sandbox keeps running throughout and the 'update' that follows is a restart of seconds instead of a wait of minutes. Requires the 'Manage sandboxes on this computer' permission.",
         inputSchema: {
             type: "object",
             properties: {
-                op: { type: "string", enum: ["update", "rebuild", "rollback"] },
+                op: { type: "string", enum: ["prepare", "update", "rebuild", "rollback"] },
                 slug: { type: "string", description: "The sandbox's slug, from list_sandboxes." },
                 hash: { type: "string", description: "sha256 of the approved overlay — required for 'rebuild', ignored otherwise." },
             },

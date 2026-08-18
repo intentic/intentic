@@ -4,7 +4,8 @@
   re-base, the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only fetches the
   binary and forwards the parameter shapes the platform's cards hand out: -Slug alone = update, -Slug + -Hash =
   rebuild (the SHA256 is the trust anchor - only overlay content that still hashes to what the owner
-  reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update.
+  reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update, and
+  -Slug + -Prepare = download and build the next update without applying it.
 
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
@@ -12,6 +13,8 @@
   & ([scriptblock]::Create((irm https://intentic.dev/rebuild))) -Slug abc123 -Hash <sha256>   # rebuild
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Rollback   # roll back
+.EXAMPLE
+  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Prepare    # download it now
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Slug,
@@ -19,7 +22,10 @@ param(
     [string]$Hash,
     # The third way through the same shim, matching recreate.sh's --rollback: the image before the last update.
     # A switch rather than a value, so it can never be confused with the digest above.
-    [switch]$Rollback
+    [switch]$Rollback,
+    # The fourth, matching recreate.sh's --prepare: download and build the next update and stop there. The
+    # container is never touched, so this is safe to run while the sandbox is being used.
+    [switch]$Prepare
 )
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -60,6 +66,8 @@ if (-not $Ic) {
 
 if ($Rollback) {
     & $Ic sandbox rollback $Slug
+} elseif ($Prepare) {
+    & $Ic sandbox prepare $Slug
 } elseif ($Hash) {
     & $Ic sandbox rebuild $Slug $Hash
 } else {

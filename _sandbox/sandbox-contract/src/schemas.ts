@@ -5467,19 +5467,23 @@ export type MachineSandbox = z.infer<typeof MachineSandboxSchema>;
 /* ONE OPERATION ON ONE SANDBOX ON ONE MACHINE — the Computers view's buttons, and the only thing that changes a
  * machine's fleet from a browser.
  *
- * All eight ops travel one route because they are one decision to the person clicking, however differently they
- * behave underneath: three are a docker call that returns in a second, three run the `ic` flow for minutes, one
+ * All nine ops travel one route because they are one decision to the person clicking, however differently they
+ * behave underneath: three are a docker call that returns in a second, four run the `ic` flow for minutes, one
  * deletes, and one only reads. Splitting them by duration would put the same button on two doors and give the
  * view two shapes to render. So every op answers as a STREAM of lines ending in a result — the fast ones simply
  * have little to say, and `logs` is the case where the lines ARE the answer.
  *
- * `logs` is here rather than on a route of its own for the same reason: it is a button in the same row as the
- * other seven, on a container that may be too broken to answer any other way, and the stream shape already
- * carries "many lines, then an outcome" exactly as a log tail wants to arrive.
+ * `prepare` is the one that changes nothing on purpose: it downloads and builds the next update and stops
+ * there, leaving the container running the image it was already running. It is what turns `update` from a wait
+ * of minutes into a restart of seconds, and it is safe to offer at any moment for exactly that reason.
  *
- * The machine enforces which of them it will do: `sandboxes` covers the first six and the log tail, removal takes
- * its own switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
-export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "update", "rebuild", "rollback", "remove", "logs"]);
+ * `logs` is here rather than on a route of its own for the same reason the rest share it: it is a button in the
+ * same row as the others, on a container that may be too broken to answer any other way, and the stream shape
+ * already carries "many lines, then an outcome" exactly as a log tail wants to arrive.
+ *
+ * The machine enforces which of them it will do: `sandboxes` covers everything but removal, which takes its own
+ * switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
+export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "prepare", "update", "rebuild", "rollback", "remove", "logs"]);
 export type MachineSandboxOp = z.infer<typeof MachineSandboxOpSchema>;
 
 export const MachineSandboxFlowSchema = z.object({
@@ -6244,6 +6248,31 @@ export const AdapterHealthSchema = z.object({
 });
 export type AdapterHealthReport = z.infer<typeof AdapterHealthSchema>;
 
+/* AN UPDATE ALREADY DOWNLOADED AND BUILT, waiting for the restart that applies it.
+ *
+ * An update is one blocking operation but it was never one kind of work: pulling the new image and re-applying
+ * the environment recipe take the overwhelming majority of the wall clock, and the sandbox is up and serving
+ * through both of them. Only the cutover is downtime, and it is seconds.
+ *
+ * The daemon cannot know any of this by itself — it holds no host Docker socket — so `ic sandbox prepare`
+ * tells it, on the machine that runs the container. That is the whole reason this exists: without it, the
+ * update card had to quote the download as if it were an outage, and "a few minutes, this page loses the
+ * sandbox" is a completely different decision from "about half a minute".
+ *
+ * Advisory only, in the strict sense: it decides what a card SAYS and never what gets installed. The swap
+ * re-derives every one of these facts from the host-side record and refuses the fast path if any has drifted. */
+export const StagedUpdateSchema = z.object({
+    // The version the staged image reports about itself. Absent when the image would not say (an older build,
+    // a probe that failed), which reads as "ready, version unknown" — never as nothing being ready.
+    version: z.string().optional(),
+    // The release channel it was staged FROM, which is not necessarily the one this sandbox follows: preparing
+    // a beta build is not moving onto beta.
+    channel: z.string(),
+    // When it finished downloading, epoch ms — what answers "is this still the update I am being offered?"
+    at: z.number(),
+});
+export type StagedUpdate = z.infer<typeof StagedUpdateSchema>;
+
 export const InfoSchema = z.object({
     name: z.string().optional(),
     image: z.string().optional(),
@@ -6279,6 +6308,9 @@ export const InfoSchema = z.object({
      * turns the update card from an offer into a warning that asks to be read before it hands over the
      * command. Absent for the overwhelming majority of updates, which break nothing. */
     breakingNotes: z.array(z.string()).optional(),
+    /* AN UPDATE THAT HAS ALREADY BEEN DOWNLOADED AND BUILT on the machine that runs this container, and is
+     * waiting for the restart that applies it. Absent for the ordinary case where nothing is staged. */
+    staged: StagedUpdateSchema.optional(),
 });
 export type Info = z.infer<typeof InfoSchema>;
 

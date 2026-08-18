@@ -1,7 +1,7 @@
 # ic
 
-The host-side CLI: the flows that must run on the machine that runs a sandbox — connect, update, rebuild,
-rollback, remove, and enrolling the machine as a deploy target.
+The host-side CLI: the flows that must run on the machine that runs a sandbox — connect, prepare, update,
+rebuild, rollback, remove, and enrolling the machine as a deploy target.
 
 A sandbox is a container, and it deliberately holds no host Docker socket, so it can never recreate itself.
 Every one of these flows therefore runs *outside*, on the user's machine. They used to be ~3,600 lines of
@@ -25,6 +25,10 @@ once, here, in Rust — a single static binary with no runtime to ship.
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
   A swap that cannot read the approved environment out of a sandbox built from one stops there: dropping an
   environment is never a side effect of asking for a newer image.
+- `ic sandbox prepare` — the same flow stopped before the container is touched: pull the next image, rebuild
+  the approved environment on it, record what was built, and leave the sandbox running what it was running.
+  A later `update` recognises the staged build and swaps straight onto it, which is what turns an update from
+  an unbounded wait into a restart of seconds. Safe to run at any moment, and free to abandon.
 - `ic sandbox list / remove` — what is on this machine, and its careful removal (named volumes included).
 - `ic machine enroll / remove` — a Linux server as a deploy target: service user, sshd, its own tunnel, the
   POST /enroll self-registration — and the full teardown.
@@ -40,7 +44,14 @@ once, here, in Rust — a single static binary with no runtime to ship.
 - [src/sandbox/doctor.rs](src/sandbox/doctor.rs) — the reachability chain (postflight + `doctor`): patient
   during connect (fresh DNS propagating is ordinary), instant as a diagnosis.
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup flow.
-- [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — the four swap modes and the rollback record.
+- [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — the four swap modes, the rollback record, and the seam
+  `prepare` stops at (everything above it builds an image; everything below it moves the sandbox onto one).
+- [src/sandbox/staged.rs](src/sandbox/staged.rs) — telling the sandbox an update is downloaded and waiting.
+  The daemon has no host Docker socket and cannot see the host's images or its records, so the fact is written
+  into the container's /history volume, which is daemon-owned and outside the agent's reach.
+- [src/record.rs](src/record.rs) — the host-side channel record: what this sandbox follows, what it can roll
+  back to, and what is built and waiting for it. Host-side is the point — it is outside every volume the agent
+  can write, which is why the fast update path is allowed to trust it.
 - [src/sandbox/remove.rs](src/sandbox/remove.rs) — removal; keep in lockstep with cleanup.sh (below).
 - [src/selfhost.rs](src/selfhost.rs) — the root-side machine mutations connect's SELF_HOST and machine
   enrolment share.

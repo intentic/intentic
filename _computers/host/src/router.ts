@@ -80,6 +80,7 @@ const flowFor = ({ op, slug, hash }: MachineSandboxFlow, scopes: HostScopes): ((
             return (onLine) => removeSandbox(slug, scopes, onLine);
         case "logs":
             return (onLine) => tailSandboxLogs(slug, scopes, onLine);
+        case "prepare":
         case "update":
         case "rebuild":
         case "rollback":

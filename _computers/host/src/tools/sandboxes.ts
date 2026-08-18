@@ -136,13 +136,18 @@ export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostSco
 
 /* ---- the flows that run `ic` ---- */
 
-// A swap is not a delete: update/rollback move the container onto another image and rebuild re-applies the
-// owner-approved overlay, all of them keeping /work and /history. Removal is the separate verb below.
-export type SandboxSwap = "update" | "rebuild" | "rollback";
+/* A swap is not a delete: update/rollback move the container onto another image and rebuild re-applies the
+ * owner-approved overlay, all of them keeping /work and /history. Removal is the separate verb below.
+ *
+ * `prepare` is the odd one and belongs here anyway: it runs the SAME `ic` flow, over the same minutes, with
+ * the same output to narrate — it just stops before the container is touched, downloading and building the
+ * next update so that the update itself is a restart rather than a wait. Grouping it with the swaps is what
+ * keeps one implementation of "run `ic`, stream what it says". */
+export type SandboxSwap = "prepare" | "update" | "rebuild" | "rollback";
 
 export const asSandboxSwap = (value: unknown): SandboxSwap => {
-    if (value !== "update" && value !== "rebuild" && value !== "rollback") {
-        throw new Error(`"op" must be "update", "rebuild" or "rollback".`);
+    if (value !== "prepare" && value !== "update" && value !== "rebuild" && value !== "rollback") {
+        throw new Error(`"op" must be "prepare", "update", "rebuild" or "rollback".`);
     }
     return value;
 };
@@ -241,6 +246,11 @@ export const swapSandbox = async (
     const { code, output } = await runIc(args, onLine);
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this computer.\n\n${output}`);
+    }
+    // `prepare` gets its own sentence because it is the one that did NOT move the sandbox: saying "files were
+    // kept" about a container that was never touched would describe a swap that has not happened yet.
+    if (swap === "prepare") {
+        return `The next update for "${slug}" is downloaded and built. Applying it is now a short restart.`;
     }
     const verb = { update: "Updated", rebuild: "Rebuilt", rollback: "Rolled back" }[swap];
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;

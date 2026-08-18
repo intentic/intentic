@@ -17,9 +17,20 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
  * naming: an update that turns out badly used to have no answer short of re-running the connect wizard, which
  * is a heavy thing to ask of someone whose sandbox just got worse. recreate.sh now records the image it
  * replaced, the daemon reports it, and the way back is one command — but only if it is visible at the moment
- * it is wanted, which is precisely when there is no update to advertise. */
+ * it is wanted, which is precisely when there is no update to advertise.
+ *
+ * AND IT SPLITS THE OFFER IN TWO, because updating was never one kind of work. Downloading the new image and
+ * rebuilding the environment recipe are the minutes, and the sandbox is up and serving through both of them;
+ * the restart at the end is the seconds. This card used to quote the whole span as downtime — "a few minutes
+ * and this page loses the sandbox" — which is an outage several times longer than the one that happens, on the
+ * same card that asks you to weigh it against interrupting agents mid-turn.
+ *
+ * So: download now, apply when it suits. Once the host says the image is staged (info.staged, written by
+ * `ic sandbox prepare`), the offer stops being an unbounded wait and becomes a bounded restart, and the card
+ * says so. That sentence is the single largest change here; the button that produces it is the second. */
 
-const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, info, serverManaged, slug } = useSandboxVersion();
+const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, updateStaged, stagedBehind, info, serverManaged, slug } =
+    useSandboxVersion();
 const { cmdOs } = useOsPreference();
 
 /* A BREAKING UPDATE MUST NOT LOOK ROUTINE. When the gap carries breaking notes the card changes character —
@@ -51,7 +62,15 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
             :heading="2"
             :icon="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `history`"
             :tone="breaking ? `danger` : `default`"
-            :title="breaking ? `Update available — changes how things work` : updateAvailable ? `Update available` : `Sandbox image`"
+            :title="
+                breaking
+                    ? `Update available — changes how things work`
+                    : updateAvailable
+                      ? updateStaged
+                          ? `Update ready to apply`
+                          : `Update available`
+                      : `Sandbox image`
+            "
         >
             <template #description>
                 <template v-if="breaking">
@@ -61,14 +80,23 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                         >what updates never break</a
                     >.
                 </template>
+                <!-- The sentence this whole card was rebuilt around. A bounded half-minute is a completely
+                     different decision from an unbounded "a few minutes", and until the host started reporting
+                     what it had already downloaded there was no way to tell the two apart. -->
+                <template v-else-if="updateAvailable && updateStaged">
+                    It is already downloaded and built on the computer that runs this sandbox. Applying it restarts your sandbox for about half a
+                    minute — your files (in /work) are kept.
+                </template>
                 <template v-else-if="updateAvailable">
-                    A newer sandbox image has been released. Updating pulls it and recreates your sandbox — your files (in /work) are kept.
+                    A newer sandbox image has been released. Downloading it interrupts nothing — your sandbox keeps working until you apply it, and
+                    your files (in /work) are kept.
                 </template>
                 <template v-else>
                     You are on the newest image for this channel. If the last update caused trouble, you can go back to the one before it.
                 </template>
             </template>
             <template #meta>
+                <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="Downloaded" dot />
                 <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </template>
@@ -112,9 +140,24 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
             </p>
         </div>
 
+        <!-- The restart is what costs a turn, and it is now the only part that does — so the way out of this
+             warning is no longer "come back later", it is the button above that downloads without restarting.
+             Only offered where there is something to download: on a card showing nothing but a rollback, that
+             sentence would be advice about work that does not exist. -->
         <p v-if="midTurn > 0" class="text-2xs text-warning">
-            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now — recreating the sandbox interrupts
-            {{ midTurn === 1 ? `its` : `their` }} work. Wait for the fleet to settle, or continue if that is acceptable.
+            {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now — restarting the sandbox interrupts
+            {{ midTurn === 1 ? `its` : `their` }} work.
+            <template v-if="updateAvailable && !updateStaged">
+                Downloading it now costs {{ midTurn === 1 ? `it` : `them` }} nothing, and the restart can wait.
+            </template>
+            <template v-else>Wait for the fleet to settle, or continue if that is acceptable.</template>
+        </p>
+
+        <!-- A prepared update a newer release has overtaken. Rare, and worth a sentence anyway: applying now
+             hands over the older one, and a card that stayed silent would be promising the newer. -->
+        <p v-if="updateAvailable && stagedBehind" class="text-2xs text-muted">
+            {{ stagedBehind }} is already downloaded here, but {{ latest }} has been released since. Updating now gives you {{ stagedBehind }} — or
+            download the newer one first.
         </p>
 
         <template v-if="serverManaged">
@@ -129,8 +172,18 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
             <template v-if="breaking && !acknowledged">
                 <Button label="I've read what changes — show me the update" size="small" severity="secondary" @click="acknowledged = true" />
             </template>
+            <!-- ONE OFFER WHEN THE IMAGE IS HERE, TWO WHEN IT IS NOT. The pair is not clutter: it is the
+                 decision this card exists to put in front of someone, and until the download could be taken on
+                 its own there was only ever the expensive half of it. The card already renders two blocks side
+                 by side when a rollback is offered alongside an update, so the shape is the established one. -->
+            <template v-else-if="updateAvailable && updateStaged">
+                <p class="text-xs font-medium text-content">Apply it — this restarts your sandbox:</p>
+                <HostRecreate :slug="slug" action="Update" ready />
+            </template>
             <template v-else-if="updateAvailable">
-                <p class="text-xs font-medium text-content">To update, recreate your sandbox on the new image:</p>
+                <p class="text-xs font-medium text-content">Download it now — nothing restarts until you say so:</p>
+                <HostRecreate :slug="slug" action="Download" />
+                <p class="text-xs font-medium text-content">Or do both now, downloading and restarting in one go:</p>
                 <HostRecreate :slug="slug" action="Update" />
             </template>
             <!-- Offered alongside an available update too: "this one broke it, put it back" is exactly as

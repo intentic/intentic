@@ -82,6 +82,14 @@ enum SandboxCommand {
         #[arg(long)]
         channel: Option<String>,
     },
+    /// Download and build the next update WITHOUT applying it, so the update itself is a short restart
+    Prepare {
+        /// The sandbox to prepare an update for (omit when this machine runs exactly one)
+        slug: Option<String>,
+        /// Prepare a release channel other than the one this sandbox follows — preparing does NOT move it
+        #[arg(long)]
+        channel: Option<String>,
+    },
     /// Rebuild the owner-approved environment overlay (the Environment card's flow)
     Rebuild {
         /// The sandbox whose overlay was approved
@@ -148,6 +156,7 @@ fn main() {
             SandboxCommand::Update { slug, channel } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Update { channel }, slug)
             }
+            SandboxCommand::Prepare { slug, channel } => sandbox::recreate::prepare(slug, channel),
             SandboxCommand::Rebuild { slug, hash } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Rebuild { hash }, Some(slug))
             }
@@ -246,10 +255,27 @@ mod tests {
     }
 
     #[test]
+    fn preparing_takes_the_same_shape_as_updating_because_it_is_the_same_flow_stopped_early() {
+        // The card and the connected-computer agent build `prepare` and `update` command lines from one
+        // place; an argument that binds differently between them would download for one channel and swap
+        // onto another.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Prepare { slug, channel }),
+        }) = parse(&["sandbox", "prepare", "abc123", "--channel", "beta"])
+        else {
+            panic!("prepare did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc123"));
+        assert_eq!(channel.as_deref(), Some("beta"));
+        assert!(parse(&["sandbox", "prepare", "abc123", "--channel"]).is_err());
+        assert!(parse(&["sandbox", "prepare", "extra", "extra2"]).is_err());
+    }
+
+    #[test]
     fn the_slug_is_optional_exactly_where_one_sandbox_can_be_inferred() {
-        // update/rollback/dev fall back to detecting the single sandbox; rebuild never does (it is always
-        // handed a specific slug by the Environment card).
-        for verb in ["update", "rollback", "dev"] {
+        // update/rollback/dev/prepare fall back to detecting the single sandbox; rebuild never does (it is
+        // always handed a specific slug by the Environment card).
+        for verb in ["update", "rollback", "dev", "prepare"] {
             assert!(
                 parse(&["sandbox", verb]).is_ok(),
                 "{verb} must accept a bare invocation"

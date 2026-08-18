@@ -49,7 +49,7 @@ the machine answers.
 | `write_file` / `trash_file` | Also need the write switch, which is **off** unless the user turned it on. There is no delete tool — `trash_file` moves the file somewhere recoverable. |
 | `screenshot` | Windows via .NET; Linux via grim/spectacle/import/scrot, picked by session type. |
 | `list_sandboxes` / `manage_sandbox` | The Intentic sandboxes running on this machine: list them, start/stop/restart one (tunnel sidecar included). Managing takes its own switch, **off** by default — narrower than `run_command`, so the machine's fleet can be delegated to a sandbox without handing it a shell. Listing is subsumed by either switch. |
-| `swap_sandbox` / `sandbox_logs` | Update one onto a newer image, roll it back, rebuild its approved overlay — and read its container log. The swap runs `ic`, takes minutes, and keeps /work and /history; it rides the same `sandboxes` switch, and logs ride the same rule as listing. |
+| `swap_sandbox` / `sandbox_logs` | Update one onto a newer image, roll it back, rebuild its approved overlay, prepare its next update — and read its container log. The swap runs `ic`, takes minutes, and keeps /work and /history; it rides the same `sandboxes` switch, and logs ride the same rule as listing. `prepare` is the one that changes nothing: it downloads and builds the next image without touching the container, so the sandbox keeps serving and the update that follows is a restart of seconds. |
 | `remove_sandbox` | Delete one, with its files and its history. Its **own** switch, off by default: everything under `sandboxes` is undone by doing it again, and this is undone by nothing. |
 
 ## The sandbox flows are not reimplemented here
@@ -70,10 +70,16 @@ So `hostContract` carries one **typed, streaming** procedure beside the opaque `
 which the browser's Computers view reads live. Both doors call the same functions in `src/tools/sandboxes.ts`,
 so what a person watches and what the agent is told can never describe one run differently.
 
-The log tail rides that same procedure (`op: "logs"`), which is the one op there that changes nothing. It is
-not a route of its own for the reason the other seven share one: it is a button in the same row, on a container
-that may be too broken to answer any other way, and the stream's shape is already "many lines, then an
-outcome" — which is what a log tail is. Same reading as the `sandbox_logs` tool, same gate.
+The log tail rides that same procedure (`op: "logs"`), which is one of the two ops there that change nothing.
+It is not a route of its own for the reason the other eight share one: it is a button in the same row, on a
+container that may be too broken to answer any other way, and the stream's shape is already "many lines, then
+an outcome" — which is what a log tail is. Same reading as the `sandbox_logs` tool, same gate.
+
+`op: "prepare"` is the other, and it is the reason the update card can now quote a real number. Downloading
+the image and rebuilding the environment recipe are the minutes; the restart at the end is the seconds, and
+the sandbox is up and serving through everything before it. Doing the first part on its own — from a button,
+while the fleet is busy, with nothing interrupted — is what leaves the update itself a restart of about half
+a minute instead of an unbounded wait.
 
 Typed, unlike `mcp`, because the reader is different: a model gains nothing from a line as it arrives and
 everything from this machine learning tools without a daemon release, while a person watching a progress log

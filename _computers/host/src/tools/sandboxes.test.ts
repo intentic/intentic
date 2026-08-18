@@ -77,9 +77,10 @@ test("an op outside start/stop/restart is rejected before anything is looked at"
 
 /* ---- the flows that run `ic` ---- */
 
-test("a swap outside update/rebuild/rollback is rejected before anything is looked at", () => {
+test("a swap outside prepare/update/rebuild/rollback is rejected before anything is looked at", () => {
     expect(() => asSandboxSwap("remove")).toThrow(/update.*rebuild.*rollback/);
     expect(asSandboxSwap("rollback")).toBe("rollback");
+    expect(asSandboxSwap("prepare")).toBe("prepare");
 });
 
 /* The argv, both platforms' worth of risk in one place: an argument that regresses to a different position binds
@@ -88,6 +89,12 @@ test("each swap builds the argv ic actually takes", () => {
     expect(icSwapArgs("update", "work", undefined)).toEqual(["sandbox", "update", "work"]);
     expect(icSwapArgs("rollback", "work", undefined)).toEqual(["sandbox", "rollback", "work"]);
     expect(icSwapArgs("rebuild", "work", "deadbeef")).toEqual(["sandbox", "rebuild", "work", "deadbeef"]);
+    // `prepare` is the one that must NEVER reach `update`: the whole reason it is offered is that it does not
+    // restart the sandbox, and a verb that slipped would recreate a container someone was told nothing about.
+    expect(icSwapArgs("prepare", "work", undefined)).toEqual(["sandbox", "prepare", "work"]);
+    // A hash tagging along changes nothing — prepare re-applies whatever the owner has approved, and taking
+    // a digest here would silently turn it into a rebuild.
+    expect(icSwapArgs("prepare", "work", "deadbeef")).toEqual(["sandbox", "prepare", "work"]);
 });
 
 test("a rebuild without the approved digest is refused rather than built against nothing", () => {

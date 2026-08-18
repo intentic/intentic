@@ -5,6 +5,7 @@
 #
 #   curl -fsSL https://intentic.dev/rebuild | sh -s -- <SLUG> <SHA256>   # rebuild: the owner-approved overlay
 #   curl -fsSL https://intentic.dev/update  | sh -s -- <SLUG>            # update: the fresh :stable base
+#   sh recreate.sh <SLUG> --prepare                                      # download the next update, apply later
 #   sh recreate.sh <SLUG> --channel <tag>                                # move onto a release channel
 #   sh recreate.sh <SLUG> --rollback                                     # back to the previous image
 #   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
@@ -125,6 +126,9 @@ case "${1:-}" in
         case "${1:-}" in
             "") exec "$IC" sandbox update "$slug" ;;
             --rollback) exec "$IC" sandbox rollback "$slug" ;;
+            # Download and build the next update without applying it — the sandbox keeps running, and the
+            # update that follows is a restart rather than a wait.
+            --prepare) exec "$IC" sandbox prepare "$slug" ;;
             --channel)
                 shift
                 exec "$IC" sandbox update "$slug" --channel "${1:?--channel needs a tag, e.g. --channel stable}"

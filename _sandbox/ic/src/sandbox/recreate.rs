@@ -1,11 +1,12 @@
 use std::path::Path;
 
+use crate::checks;
 use crate::contract::{self, RunRequest};
 use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::record;
-use crate::sandbox::{resolve_slug, CONTAINER_PREFIX};
+use crate::sandbox::{resolve_slug, staged, CONTAINER_PREFIX};
 use crate::util::{bail, sha256_hex, Fail, Result};
 
 /* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and
@@ -20,7 +21,26 @@ use crate::util::{bail, sha256_hex, Fail, Result};
  * The sandbox holds no HOST Docker socket (its own engine is nested — it cannot recreate its own
  * container), which is why every mode runs HERE, on the machine that runs the container.
  *
- * HOW THE CONTAINER IS RUN is deliberately not written in this file — see contract.rs. */
+ * HOW THE CONTAINER IS RUN is deliberately not written in this file — see contract.rs.
+ *
+ * ——— AND ONE VERB THAT STOPS HALFWAY ———
+ *
+ *   ic sandbox prepare [slug]             pull and build the next update, WITHOUT applying it
+ *
+ * An update is one blocking operation but it is not one kind of work. Resolving what to build costs a second,
+ * pulling the new base and re-applying the overlay costs the overwhelming majority of the wall clock, and the
+ * cutover — stop, park, run, wait for health — costs seconds. Only the last of those is downtime: the sandbox
+ * is up and serving through everything above the `image_exists(&target_image)` check below, and the container
+ * is not touched until well past it.
+ *
+ * So that check is the seam, and `prepare` is the same engine stopped at it. What it leaves behind is a built
+ * image plus the `staged_*` keys in the host record naming it, which a later `ic sandbox update` recognises
+ * and swaps straight onto. The click then costs what the cutover costs, which is the number the update card
+ * can finally quote honestly.
+ *
+ * Two properties make this safe to run at any moment, and both are properties the file already had: nothing
+ * above the seam touches the container, so an abandoned or failed prepare costs exactly nothing; and the
+ * staged image is a real local tag, so a routine `docker image prune` cannot silently drop it. */
 
 const APPROVED_FILE: &str = "/work/.intentic/environment.approved.Dockerfile";
 const DEV_TAG: &str = "intentic-sandbox:dev";
@@ -44,11 +64,35 @@ impl Mode {
     }
 }
 
+/// How far a run goes. `Applied` is every verb that ends with the sandbox on a different image; `Staged`
+/// stops at the seam — everything that BUILDS the target, and nothing that touches the container.
+#[derive(Clone, Copy, PartialEq)]
+enum Reach {
+    Staged,
+    Applied,
+}
+
 pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
+    recreate(mode, slug, Reach::Applied)
+}
+
+/// `ic sandbox prepare` — the pull and the overlay rebuild, taken off the click. Runs against a live sandbox
+/// that keeps serving throughout, and leaves the container untouched whether it succeeds or fails.
+pub fn prepare(slug: Option<String>, channel: Option<String>) -> Result<()> {
+    recreate(Mode::Update { channel }, slug, Reach::Staged)
+}
+
+fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
     if !docker::cli_present() {
         bail!("docker is required — run this on the machine that runs the sandbox.");
     }
-    let slug = resolve_slug(slug, &format!("ic sandbox {}", mode.name()))?;
+    // What the user typed, for every re-run hint below: `prepare` is `update` stopped early, so the mode's own
+    // name would send someone back to the command that does the whole thing.
+    let verb = match reach {
+        Reach::Staged => "prepare",
+        Reach::Applied => mode.name(),
+    };
+    let slug = resolve_slug(slug, &format!("ic sandbox {verb}"))?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let parked = format!("{container}.previous");
     if !docker::container_exists(&container) {
@@ -62,6 +106,22 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         println!("intentic: restoring the sandbox an interrupted recreate left parked…");
         docker::quiet(&["rename", &parked, &container]);
         docker::quiet(&["start", &container]);
+    }
+
+    /* Preparing holds a SECOND full copy of the image until a swap consumes it, and a machine that also
+     * carries a rollback pin can be holding three. Asked before the pull rather than discovered as docker's
+     * "no space left" several minutes into one — and only for prepare, which is the flow that can be
+     * declined without cost: an update the owner is waiting on has already weighed this. */
+    if reach == Reach::Staged {
+        match checks::check_disk() {
+            checks::Outcome::Fail { problem, remedy } => bail!(
+                "{problem}\n       {remedy}\n       Nothing was downloaded and your sandbox is untouched."
+            ),
+            checks::Outcome::Warn { problem } => {
+                println!("intentic: {problem}");
+            }
+            _ => {}
+        }
     }
 
     // The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered
@@ -103,12 +163,15 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         current_base.as_deref().and_then(docker::image_id)
     };
 
-    let log = Log::create_named("recreate", &format!("recreate-{}", mode.name()))?;
+    let log = Log::create_named("recreate", &format!("recreate-{verb}"))?;
     let workdir = tempfile::tempdir()?;
     let overlay_path = workdir.path().join("overlay.Dockerfile");
 
     // ——— The mode pre-step: produce target/base/env-hash and the overlay file (may be empty). ———
     let mut env_hash: Option<String> = None;
+    // Whether this update is riding an image `prepare` already built. Decided in the Update arm below, read
+    // again by the build block, which then has nothing left to build.
+    let mut prepared = false;
     match &mode {
         Mode::Rebuild { hash } => {
             // Copy the approved overlay out ONCE and hash/build that same copy — byte-exact, no window
@@ -124,31 +187,67 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
             env_hash = Some(hash.clone());
         }
         Mode::Update { .. } => {
-            // Pull the latest base up front — a moved tag is exactly what makes an update available, and
-            // `docker run` reuses a cached tag without re-pulling. A no-op is reported honestly, not
-            // recreated into the same image and claimed as success.
-            println!("intentic: pulling {registry_image}…");
-            let cached = docker::image_id(&registry_image);
-            let _ = docker::pull(&registry_image, &log);
-            let pulled = docker::image_id(&registry_image);
-            if pulled.is_none() {
-                bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
-            }
-            /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull
-             * moved nothing. Two sandboxes share one daemon: the first update refreshes the cache, and a
-             * cache-only before/after told the second it was current while it ran last week's build. The
-             * cache heuristic survives only for a base whose identity is unknowable. */
-            let already_current = match (&old_base_id, &pulled) {
-                (Some(old), Some(new)) => old == new,
-                _ => cached.is_some() && cached == pulled,
-            };
-            if already_current {
-                println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
-                println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
-                return Ok(());
-            }
-            // Re-apply the approved overlay (if any) FROM the fresh base, so the extended environment carries on.
+            /* The approved overlay comes out FIRST here, ahead of the decision below, because whether a
+             * staged build is still the right answer is a question about that overlay: `prepare` recorded
+             * the hash it built with, and an owner who has re-approved a different recipe since must get the
+             * recipe they approved, not the one that happened to be staged. Re-applying it FROM the fresh
+             * base is what carries the extended environment across the swap either way. */
             stage_overlay(&container, &overlay_path)?;
+            let approved = std::fs::read(&overlay_path).unwrap_or_default();
+            let approved_hash = (!approved.is_empty()).then(|| sha256_hex(&approved));
+
+            /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of
+             * preparing. Never consulted on a prepare run itself: that run is the thing that produces it, and
+             * a prepare that found its own previous output would refuse to refresh a stale one. */
+            prepared = reach == Reach::Applied
+                // SANDBOX_IMAGE names an exact image to run — a pinned build, a locally-built one. Someone
+                // who passed it asked for THAT image, not for whatever was staged for the channel.
+                && image_override.is_none()
+                && staged_still_fits(&saved, &channel, approved_hash.as_deref(), old_base_id.as_deref())
+                && docker::image_exists(saved.staged.as_deref().unwrap_or_default());
+            /* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in
+             * one call, because the two disagreeing is the state that produces a wrong card. It is not merely
+             * a stale key: the sandbox has been told an update is downloaded and ready, and offering a
+             * thirty-second restart onto an image that is gone, superseded, or built from a recipe the owner
+             * has since replaced is worse than offering the ordinary update. */
+            if !prepared && reach == Reach::Applied {
+                if saved.staged.is_some() {
+                    println!("intentic: the prepared update no longer fits this sandbox — updating the ordinary way.");
+                }
+                clear_staged(&slug, &container, &saved);
+            }
+            if prepared {
+                println!("intentic: using the update prepared earlier — nothing to download.");
+            } else {
+                // Pull the latest base up front — a moved tag is exactly what makes an update available, and
+                // `docker run` reuses a cached tag without re-pulling. A no-op is reported honestly, not
+                // recreated into the same image and claimed as success.
+                println!("intentic: pulling {registry_image}…");
+                let cached = docker::image_id(&registry_image);
+                let _ = docker::pull(&registry_image, &log);
+                let pulled = docker::image_id(&registry_image);
+                if pulled.is_none() {
+                    bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
+                }
+                /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull
+                 * moved nothing. Two sandboxes share one daemon: the first update refreshes the cache, and a
+                 * cache-only before/after told the second it was current while it ran last week's build. The
+                 * cache heuristic survives only for a base whose identity is unknowable. */
+                let already_current = match (&old_base_id, &pulled) {
+                    (Some(old), Some(new)) => old == new,
+                    _ => cached.is_some() && cached == pulled,
+                };
+                if already_current {
+                    /* Nothing is waiting for this sandbox, whatever the record last said. This is the one
+                     * clear a PREPARE run also needs: it is how "re-prepare a sandbox that has since caught
+                     * up by another route" stops offering a restart that would change nothing. (An update
+                     * reaching here has already dropped a mis-fitting entry above; this is idempotent.) */
+                    clear_staged(&slug, &container, &saved);
+                    println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
+                    println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
+                    return Ok(());
+                }
+            }
         }
         Mode::Rollback => {
             let Some(previous) = saved.previous.clone() else {
@@ -254,6 +353,14 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
                 if env_hash.is_none() {
                     env_hash = Some(hash);
                 }
+            }
+            /* A prepared update is the same derivation already performed, so this arm's own answer and the
+             * record's staged image are the same string by construction. Taken from the RECORD anyway rather
+             * than re-derived: the record is what `image_exists` was checked against, and a swap must go onto
+             * the image that was verified to be there rather than onto a name that ought to resolve to it. */
+            if prepared {
+                target_image = saved.staged.clone().unwrap_or(target_image);
+            } else if !overlay.is_empty() {
                 println!(
                     "intentic: rebuilding your environment overlay on the {} base…",
                     if fresh { "new" } else { "rollback" }
@@ -275,6 +382,25 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     }
     if !docker::image_exists(&target_image) {
         bail!("{target_image} is not available (pull or overlay build failed) — the sandbox is untouched. Log: {}", log.path.display());
+    }
+
+    /* ——— THE SEAM. Everything above prepared an image; everything below moves the sandbox onto it. ———
+     *
+     * `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has
+     * not been read from since the overlay copy, has not been stopped, and does not know this happened. */
+    if reach == Reach::Staged {
+        return record_staged(
+            Prepared {
+                slug: &slug,
+                container: &container,
+                channel: &channel,
+                image: &target_image,
+                base_image: &base_image,
+                env_hash: env_hash.as_deref(),
+            },
+            &saved,
+            &log,
+        );
     }
 
     // ——— Ask the TARGET IMAGE for its own run command: env in, command out. ———
@@ -377,9 +503,22 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
-    // The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then
-    // crash-loops is exactly the case rollback is for. A launch that fails outright rewinds it below.
-    record::write(&slug, &channel, &base_image, next.as_deref())?;
+    /* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then
+     * crash-loops is exactly the case rollback is for. A launch that fails outright rewinds it below.
+     *
+     * Every staged key goes with it. The sandbox is taking an image NOW: whatever was waiting for it is
+     * either the thing it is taking or something it has moved past, and both mean nothing is waiting any
+     * more. (A failed launch rewinds to `saved`, which still carries them — the prepared image is untouched
+     * on this machine and still worth swapping onto.) */
+    record::write(
+        &slug,
+        &record::ChannelRecord {
+            channel: Some(channel.clone()),
+            current: Some(base_image.clone()),
+            previous: next.clone(),
+            ..record::ChannelRecord::default()
+        },
+    )?;
 
     /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a
      * replacement that answers health earns the rm. Every failure path below puts the parked container
@@ -403,12 +542,12 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         {
             Ok(retry_argv) => retry_argv,
             Err(err) => {
-                restore_parked(&container, &parked, &slug, &channel, &saved);
+                restore_parked(&container, &parked, &slug, &saved);
                 return Err(err);
             }
         };
         if !docker::run_argv(&retry_argv, &log) {
-            restore_parked(&container, &parked, &slug, &channel, &saved);
+            restore_parked(&container, &parked, &slug, &saved);
             let tail = log.tail(5);
             bail!(
                 "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{tail}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
@@ -424,11 +563,18 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         &log,
         "\n       Your previous sandbox was restored — the update did not take.",
     ) {
-        restore_parked(&container, &parked, &slug, &channel, &saved);
+        restore_parked(&container, &parked, &slug, &saved);
         return Err(err);
     }
     health::wait_ready(&container);
     docker::quiet(&["rm", "-f", &parked]);
+
+    /* Take the "an update is ready for you" offer back, now that the swap is real. The marker lives on the
+     * /history volume, which SURVIVES a recreate by design — so the replacement container inherits whatever
+     * the old one was told, and without this the update card would keep offering an image the sandbox is
+     * already running. Done here rather than before the cutover for the same reason the record is rewound on
+     * failure: until health answers, the prepared image is still the thing worth swapping onto. */
+    staged::withdraw(&container);
 
     /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a
      * whole extra image, forever. Never the pin the record still names, and never the base just moved
@@ -460,6 +606,87 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
         log.path.display()
     );
     Ok(())
+}
+
+/* WHAT `prepare` LEAVES BEHIND: a built image, the host record naming it, and the sandbox told about it.
+ *
+ * In that order, and the order matters. The image exists before anything claims it does; the record — host
+ * side, outside every volume the agent can reach — is the trust anchor a later update reads; the marker
+ * inside the container is only ever a copy of that fact, for a daemon that has no way to see the other two.
+ *
+ * The sandbox's OWN channel is deliberately not touched. Preparing a beta build is not moving onto beta, and
+ * a prepared update that is never applied must leave `ic sandbox update` following exactly what it followed
+ * before — which is why the channel it was staged from is recorded under a key of its own. */
+/// What a prepare built, named the way the record and the marker both need it.
+struct Prepared<'a> {
+    slug: &'a str,
+    container: &'a str,
+    channel: &'a str,
+    image: &'a str,
+    base_image: &'a str,
+    env_hash: Option<&'a str>,
+}
+
+fn record_staged(what: Prepared<'_>, saved: &record::ChannelRecord, log: &Log) -> Result<()> {
+    let version = staged::image_version(what.image);
+    record::write(
+        what.slug,
+        &record::ChannelRecord {
+            staged: Some(what.image.to_string()),
+            staged_base: docker::image_id(what.base_image),
+            staged_env: what.env_hash.map(str::to_string),
+            staged_channel: Some(what.channel.to_string()),
+            staged_version: version.clone(),
+            ..saved.clone()
+        },
+    )?;
+    staged::announce(
+        what.container,
+        version.as_deref(),
+        what.channel,
+        what.image,
+        log,
+    );
+    match &version {
+        Some(version) => println!("intentic: {version} is downloaded and built, and your sandbox is still running on the old one."),
+        None => println!("intentic: the next update is downloaded and built, and your sandbox is still running on the old one."),
+    }
+    println!(
+        "          Applying it is now a restart of about half a minute: ic sandbox update {}",
+        what.slug
+    );
+    Ok(())
+}
+
+/// Forget a staged update, on both sides at once — the host record and the sandbox's own copy of the fact.
+/// Best-effort on the record: this runs where something better has already been decided, and a record that
+/// cannot be rewritten must not turn a working update into a failed command.
+fn clear_staged(slug: &str, container: &str, saved: &record::ChannelRecord) {
+    if saved.staged.is_none() {
+        return;
+    }
+    let _ = record::write(slug, &saved.without_staged());
+    staged::withdraw(container);
+}
+
+/// Is what `prepare` left still the right thing to swap onto? Pure, because every clause here is a way for a
+/// fast update to hand someone the wrong image, and none of them is observable afterwards:
+///
+///   • a DIFFERENT CHANNEL was asked for — a `--channel beta` update must not take a stable build
+///   • the OWNER RE-APPROVED a different environment recipe since — they get the recipe they approved
+///   • the sandbox has ALREADY REACHED that base by another route — there is nothing left to apply
+///
+/// The staged image's own existence is checked by the caller (it needs a daemon); everything else is here.
+fn staged_still_fits(
+    saved: &record::ChannelRecord,
+    channel: &str,
+    approved_hash: Option<&str>,
+    old_base_id: Option<&str>,
+) -> bool {
+    saved.staged.is_some()
+        && saved.staged_channel.as_deref() == Some(channel)
+        && saved.staged_env.as_deref() == approved_hash
+        && (saved.staged_base.is_none() || saved.staged_base.as_deref() != old_base_id)
 }
 
 /// What a copy of the approved overlay came back with. `Stock` is a sandbox that has no overlay at all — no
@@ -618,27 +845,18 @@ fn next_previous(
 /// container returns and starts, and the channel record is rewound to what it said before the swap — the
 /// swap it described did not happen. Best-effort on every step: this runs on the failure path, where the
 /// one job is to leave the machine as close to "before" as it can reach.
-fn restore_parked(
-    container: &str,
-    parked: &str,
-    slug: &str,
-    channel: &str,
-    saved: &record::ChannelRecord,
-) {
+fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::ChannelRecord) {
     if !docker::container_exists(parked) {
         return;
     }
     docker::quiet(&["rm", "-f", container]);
     docker::quiet(&["rename", parked, container]);
     docker::quiet(&["start", container]);
-    match &saved.current {
-        Some(current) => {
-            let _ = record::write(
-                slug,
-                saved.channel.as_deref().unwrap_or(channel),
-                current,
-                saved.previous.as_deref(),
-            );
+    match saved.current {
+        // Byte for byte what was there, staged keys included: the swap this record described did not happen,
+        // and a prepared image that was never applied is still sitting on this machine waiting to be.
+        Some(_) => {
+            let _ = record::write(slug, saved);
         }
         // No record existed before this swap — none must exist after its failure.
         None => {
@@ -665,7 +883,109 @@ mod tests {
             channel: Some("stable".to_string()),
             current: current.map(str::to_string),
             previous: previous.map(str::to_string),
+            ..record::ChannelRecord::default()
         }
+    }
+
+    /// A record with an update prepared for `channel`, built from base id `base` with overlay hash `env`.
+    fn prepared(channel: &str, base: &str, env: Option<&str>) -> record::ChannelRecord {
+        record::ChannelRecord {
+            staged: Some("intentic-sandbox-env-abc:0123456789ab".to_string()),
+            staged_base: Some(base.to_string()),
+            staged_env: env.map(str::to_string),
+            staged_channel: Some(channel.to_string()),
+            staged_version: Some("1.4.2".to_string()),
+            ..saved(Some("ghcr.io/intentic/sandbox:stable"), None)
+        }
+    }
+
+    #[test]
+    fn a_prepared_update_for_this_channel_and_this_recipe_is_taken() {
+        // The ordinary case, and the whole point: the pull and the overlay build already happened, so the
+        // click is a cutover. `old` is what the container runs now; `new` is what was staged.
+        assert!(staged_still_fits(
+            &prepared("stable", "sha256:new", Some("deadbeef")),
+            "stable",
+            Some("deadbeef"),
+            Some("sha256:old")
+        ));
+        // A stock sandbox has no overlay on either side, and absent must match absent.
+        assert!(staged_still_fits(
+            &prepared("stable", "sha256:new", None),
+            "stable",
+            None,
+            Some("sha256:old")
+        ));
+    }
+
+    #[test]
+    fn a_prepared_update_for_a_different_channel_is_not_this_update() {
+        // `ic sandbox update --channel beta` on a sandbox with a stable build staged must fetch beta. Taking
+        // the staged one would move the sandbox onto a channel by the name of the one it was asked for.
+        assert!(!staged_still_fits(
+            &prepared("stable", "sha256:new", None),
+            "beta",
+            None,
+            Some("sha256:old")
+        ));
+    }
+
+    #[test]
+    fn a_recipe_the_owner_has_re_approved_since_invalidates_what_was_staged() {
+        /* The staged image bakes the overlay it was built with. An owner who approved a new recipe between
+         * preparing and updating must get the recipe they approved — otherwise the fast path silently hands
+         * back an environment that was reviewed and replaced, and the Environment card would show Applied
+         * against a hash that is not what is running. */
+        assert!(!staged_still_fits(
+            &prepared("stable", "sha256:new", Some("deadbeef")),
+            "stable",
+            Some("cafebabe"),
+            Some("sha256:old")
+        ));
+        // Approved since a STOCK prepare: still not what is staged.
+        assert!(!staged_still_fits(
+            &prepared("stable", "sha256:new", None),
+            "stable",
+            Some("cafebabe"),
+            Some("sha256:old")
+        ));
+        // And the reverse — a recipe withdrawn after the prepare.
+        assert!(!staged_still_fits(
+            &prepared("stable", "sha256:new", Some("deadbeef")),
+            "stable",
+            None,
+            Some("sha256:old")
+        ));
+    }
+
+    #[test]
+    fn a_sandbox_that_already_reached_the_staged_base_has_nothing_to_apply() {
+        // Prepared, then updated by some other route (a second machine's flow, a hand-typed command). The
+        // container is already on it, so the ordinary path runs and reports "already current" honestly
+        // instead of the fast path performing a restart that changes nothing.
+        assert!(!staged_still_fits(
+            &prepared("stable", "sha256:same", None),
+            "stable",
+            None,
+            Some("sha256:same")
+        ));
+    }
+
+    #[test]
+    fn a_record_with_nothing_staged_never_takes_the_fast_path() {
+        assert!(!staged_still_fits(
+            &saved(Some("img:1"), None),
+            "stable",
+            None,
+            Some("sha256:old")
+        ));
+        // A base identity that could not be resolved at prepare time is not a match against the container's:
+        // it is an unknown, and an unknown must not be read as "already applied".
+        let unknown_base = record::ChannelRecord {
+            staged_base: None,
+            ..prepared("stable", "sha256:new", None)
+        };
+        assert!(staged_still_fits(&unknown_base, "stable", None, None));
     }
 
     #[test]

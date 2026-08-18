@@ -29,6 +29,7 @@ import { captureScrollback, isValidSessionName, jobSessionLabel } from "../termi
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNewer, latestVersion } from "../platform/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/release-notes.js";
+import { stagedUpdate } from "../platform/staged-update.js";
 import { runtimeHealth } from "../agent/adapter-health.js";
 import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";
@@ -236,7 +237,7 @@ async function* systemEvents(
 export const createSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
     return {
-        info: i.info.handler(() => {
+        info: i.info.handler(async () => {
             const info = services.info;
             if (info === undefined) {
                 return {};
@@ -246,6 +247,12 @@ export const createSystemRoutes = (services: Services) => {
             // /info query refetches. Same shape for both, for the same reason — see adapter-health.ts.
             const latest = latestVersion();
             const runtimes = runtimeHealth();
+            /* Whether the machine that runs this container has ALREADY downloaded and built the next update —
+             * the one fact on this route the daemon cannot work out for itself, and the one that decides
+             * whether taking an update costs minutes or costs a restart. Read from the /history volume rather
+             * than cached: it is written from outside this process, and a card minutes behind the download it
+             * describes is the exact problem the marker exists to fix (see platform/staged-update.ts). */
+            const staged = await stagedUpdate(services.config.historyRoot);
             // What the update actually contains, capped so a long-neglected sandbox gets a card rather than a
             // scroll. The remainder travels as a count: "and 9 more" is what sends someone to the changelog,
             // where an unbounded list on a hub card would just bury everything under it.
@@ -261,6 +268,7 @@ export const createSystemRoutes = (services: Services) => {
                 ...(shown.length > 0 ? { updateNotes: shown } : {}),
                 ...(notes.length > shown.length ? { moreUpdateNotes: notes.length - shown.length } : {}),
                 ...(breaking.length > 0 ? { breakingNotes: breaking } : {}),
+                ...(staged !== undefined ? { staged } : {}),
             };
         }),
         /* What the daemon could not read in its own `.intentic/` manifests.

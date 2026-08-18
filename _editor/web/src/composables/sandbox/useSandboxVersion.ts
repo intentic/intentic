@@ -38,6 +38,26 @@ export function useSandboxVersion() {
     // offer into a warning that asks to be read before it hands over the command.
     const breakingNotes = computed<readonly string[]>(() => info.value?.breakingNotes ?? []);
 
+    /* WHETHER THE UPDATE HAS ALREADY BEEN DOWNLOADED — the fact that decides what taking it costs, and the one
+     * the card had no way to know until the host started saying so (see platform/staged-update.ts).
+     *
+     * An update is not one kind of work. Pulling the image and rebuilding the environment recipe are the
+     * minutes; the restart at the end is the seconds. The sandbox is up and serving through the first part, so
+     * a card that quotes the whole span as downtime is describing an outage that does not happen — and "a few
+     * minutes, this page loses the sandbox" is a completely different decision from "about half a minute",
+     * especially on a card that also says three agents are mid-turn.
+     *
+     * A staged update with no version on it still counts as ready: the version is a nicety the image may not
+     * report, and treating its absence as "nothing is staged" would throw away the whole benefit. What does
+     * NOT count is a staged update a newer release has overtaken since — applying that gives the older one,
+     * and `stagedBehind` is what lets the card say so instead of promising the newer one. */
+    const staged = computed(() => info.value?.staged);
+    const updateStaged = computed(() => {
+        const ready = staged.value;
+        return ready !== undefined && (ready.version === undefined || latest.value === undefined || ready.version === latest.value);
+    });
+    const stagedBehind = computed(() => (staged.value !== undefined && !updateStaged.value ? staged.value.version : undefined));
+
     /* Which agent runtimes can serve a turn right now, keyed by AgentCapabilities.runtime — the daemon probes
      * this off the turn path so a picker can say a subscription is missing BEFORE the user writes a prompt.
      *
@@ -61,6 +81,8 @@ export function useSandboxVersion() {
         updateNotes,
         moreUpdateNotes,
         breakingNotes,
+        updateStaged,
+        stagedBehind,
         runtimeIssue,
         serverManaged,
         slug,

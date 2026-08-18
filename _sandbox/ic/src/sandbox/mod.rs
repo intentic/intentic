@@ -2,6 +2,7 @@ pub mod connect;
 pub mod doctor;
 pub mod recreate;
 pub mod remove;
+pub mod staged;
 
 use crate::docker;
 use crate::util::{bail, Result};
