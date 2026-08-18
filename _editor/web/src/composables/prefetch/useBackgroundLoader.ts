@@ -24,16 +24,28 @@ const { reachable } = useSandbox();
 const { conversations } = useChat();
 
 /* REGISTRATION ORDER IS THE TIE-BREAK WITHIN A BAND (warmPlan), so it is the app's own answer to "which of two
- * equally-near things first". The board's cards lead: opening an agent is the most repeated gesture in the
- * product, and the two reads behind it are the ones the user waits on today. Then the review's diffs, then the
- * rail — the shell's own furniture before the extensions', because two of the shell's reads (the panels, the
- * capability manifest) are what the rail DETECTS its extension tiles from, so a tile whose data arrived before
- * the tile itself would have gained nothing by going first.
+ * equally-near things first".
+ *
+ * THE WORKSPACE REVIEW LEADS, ahead of the board. It is the surface every agent's work ends up on — a clean turn
+ * lands as uncommitted changes in the user's own tree — and it is the one the user commits from, so it is where
+ * the app has to be instant. It is also the only one whose whole contents are thrown away on a schedule the user
+ * does not control: a turn ending invalidates the review and every diff under it at once, so the reads that
+ * refill it are needed most at the exact moment a busy board has the most to say for itself. Behind the board's
+ * cards those reads came last, and the panel was reliably cold when it was opened.
+ *
+ * Then the board's cards: opening an agent is the most repeated gesture in the product, and the two reads behind
+ * it are what the click waits on. It gives up first place because a card opens onto a conversation — the pane
+ * fills as it streams, so a round trip there is absorbed — where the review opens onto ± numbers that are wrong
+ * until they are read.
+ *
+ * Then the rail — the shell's own furniture before the extensions', because two of the shell's reads (the
+ * panels, the capability manifest) are what the rail DETECTS its extension tiles from, so a tile whose data
+ * arrived before the tile itself would have gained nothing by going first.
  *
  * The terminals go FIRST of all, and only because of where their band comes from: theirs is the one wish that
  * can be `now`, and it is `now` exactly when the panel is open — a surface already on screen with nothing in it
  * until this list lands. Anything else at `now` is a place the user has gone, not one they are looking at. */
-const SOURCES = [terminalsWarmSource, agentsWarmSource, changesWarmSource, railWarmSource, extensionsWarmSource];
+const SOURCES = [terminalsWarmSource, changesWarmSource, agentsWarmSource, railWarmSource, extensionsWarmSource];
 
 const gates: LoaderGates = {
     /* NOBODY LOOKING, OR NOTHING TO LOOK AT. `onScreen` is asked of every window this tab renders into rather

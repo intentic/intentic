@@ -73,6 +73,19 @@ const openAgentId = (): string | undefined => {
     return route.name === `agent` ? String(route.params[`id`] ?? ``) : undefined;
 };
 
+/* WHOSE WORK IS ALREADY IN THE USER'S TREE. `landed` is the status the auto-land flow flips a cleanly-completed
+ * turn to within ms of it ending (agentStatus' laneOf), and it means exactly what reviewsToRead needs it to: the
+ * delta is sitting in the workspace as uncommitted changes, so the workspace review is reading the same files —
+ * differently, and it is the one being read ahead. `ready` is deliberately NOT here: that is work HELD on the
+ * branch because auto-land is off, so this review is the only place it can be read at all. */
+const landedAgents = (board: readonly (readonly FleetAgent[])[]): ReadonlySet<string> =>
+    new Set(
+        board
+            .flat()
+            .filter((agent) => agent.status === `landed`)
+            .map((agent) => agent.id),
+    );
+
 export const agentsWarmSource = (): readonly WarmTask[] => {
     const board = lanes.value;
     /* The card the chat is pointing at gets the `now` band — it is not "one click away", it is the thing on
@@ -93,6 +106,7 @@ export const agentsWarmSource = (): readonly WarmTask[] => {
         openAgentId(),
         focused,
         board.attention.filter((agent) => !unregistered(agent.status)).map((agent) => agent.id),
+        landedAgents([board.attention, board.active, board.finished]),
     ).flatMap(reviewRowWishes);
     return [...reviews, ...cards];
 };

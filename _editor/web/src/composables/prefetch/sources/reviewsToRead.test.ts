@@ -48,4 +48,37 @@ describe(`reviewsToRead`, () => {
         expect(read).toHaveLength(3);
         expect(read.map((review) => review.agentId)).toEqual([`waiting-0`, `waiting-1`, `waiting-2`]);
     });
+
+    /* WORK THAT HAS LANDED IS READ ONCE, through the workspace review. The two reads are different questions over
+     * the same file (see the header), so this is not a cache sharing its answer — it is the plan declining to buy
+     * the same bytes twice under two different names, on the surface that is no longer the one being reviewed. */
+    it(`leaves a landed agent's review to the workspace review that now holds the same work`, () => {
+        expect(reviewsToRead(undefined, `chatting`, [`waiting`], new Set([`chatting`, `waiting`]))).toEqual([]);
+    });
+
+    it(`still reads a landed agent's review whole when its own page is open`, () => {
+        // The reader is looking at it. "The same bytes are warm somewhere else, under a different question" is no
+        // answer to a pane that is on screen.
+        const [first] = reviewsToRead(`open`, undefined, [], new Set([`open`]));
+
+        expect(first).toMatchObject({ agentId: `open`, band: `now` });
+    });
+
+    it(`keeps reading work that is HELD on the branch, which no other review can reach`, () => {
+        // Auto-land off: the delta never entered the workspace, so this review is the only place it exists.
+        expect(reviewsToRead(undefined, `holding`, [], new Set([`someone-else`])).map((review) => review.agentId)).toEqual([`holding`]);
+    });
+
+    it(`fills the attention lane's three places from the reviews it is still reading`, () => {
+        // The cap is on what is WORTH reading, so a landed card must not spend one of its places — the lane would
+        // otherwise go shallow for the agents that are actually waiting on the user.
+        const read = reviewsToRead(
+            undefined,
+            undefined,
+            [`landed-a`, `waiting-a`, `landed-b`, `waiting-b`, `waiting-c`],
+            new Set([`landed-a`, `landed-b`]),
+        );
+
+        expect(read.map((review) => review.agentId)).toEqual([`waiting-a`, `waiting-b`, `waiting-c`]);
+    });
 });

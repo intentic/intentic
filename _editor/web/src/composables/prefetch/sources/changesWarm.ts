@@ -24,23 +24,29 @@ import { warmRows } from "./warmRows";
  * where it is not (a fresh connection, an invalidation) without this file having to own a second observer whose
  * lifetime nothing manages. */
 
-/* HOW CLOSE THE READER IS, in the two things that say so — which page they are on, and which sidebar panel is
- * open on it.
+/* HOW CLOSE THE READER IS — and the floor under the answer, which is the point of this file.
  *
- * THE LIST BEING ON SCREEN IS `now`, and that is the whole of this file's claim on the plan. These rows are not
- * one click away when the Changes panel is the open one: they ARE the thing being read, and the +/− beside each
- * of them is worked out from exactly this read (useCodeStats), so a band that put them behind the board's cards
- * put the numbers on the screen in front of the user behind reads for screens that are not. It did: on the
- * workspace route these sat in `near` after the focused conversation's whole review — up to a hundred and twenty
- * rows of it, in the same band, filed under different keys — so a panel opened beside a working agent showed
- * provisional counts for minutes.
+ * THE LIST BEING ON SCREEN IS `now`. These rows are not one click away when the Changes panel is the open one:
+ * they ARE the thing being read, and the +/− beside each of them is worked out from exactly this read
+ * (useCodeStats), so a band that put them behind the board's cards put the numbers on the screen in front of the
+ * user behind reads for screens that are not.
  *
- * Standing in the workspace with another panel open they are one click away and belong beside the board's cards;
- * standing anywhere else they are still the primary work surface — the plan's whole point is that they stay
- * warm — but the board's cards are nearer, and a band is a claim about distance rather than about importance. */
+ * FROM ANYWHERE ELSE IN THE APP THEY ARE `near`, AND NEVER LOWER. This is the review the user commits from, and
+ * every turn that ends drops the whole of it — list and every diff together, since the diffs are filed under the
+ * list's own key (useChanges' changesKey) and a turn ending invalidates that family. So the moment the work
+ * becomes reviewable is the moment this all goes cold, and it has to be read back before the user walks over to
+ * look at it.
+ *
+ * It used to be `work` off the workspace route, which put it behind the board — every card's transcript and file
+ * list, plus the focused conversation's whole review, up to two hundred reads ahead of it at a quarter-second
+ * apiece. A turn ending on the agents board therefore emptied this and then re-read it last, which is the one
+ * ordering that guarantees the panel is cold exactly when it is about to be opened. It is now read ahead of the
+ * board from everywhere: the trade is that opening a card on a busy board pays its round trip more often, and
+ * that is the cheaper of the two waits — a card opens onto a conversation that streams in either way, while the
+ * review opens onto numbers that must already be right. */
 const band = (): WarmBand => {
     if (router.currentRoute.value.name !== `workspace`) {
-        return `work`;
+        return `near`;
     }
     const layout = useLayout();
     // Collapsed counts as closed: the aside is not drawn at all, so the rows are a click on the mode switch away
@@ -49,7 +55,9 @@ const band = (): WarmBand => {
 };
 
 export const changesWarmSource = (): readonly WarmTask[] => {
-    const list = warmQuery(`changes:list`, `work`, { queryKey: changesKey(), queryFn: fetchChanges });
+    // The list rides the same band as its rows rather than a fixed lower one: nothing here can be warmed until it
+    // lands, so a list left in a band below its own rows is a plan that reads the second thing first, forever.
+    const list = warmQuery(`changes:list`, band(), { queryKey: changesKey(), queryFn: fetchChanges });
     const held = queryClient.getQueryData<GitChangesResponse>(changesKey());
     if (held === undefined) {
         // Nothing to walk yet — the list itself is the only wish, and the rows follow on the beat after it lands.

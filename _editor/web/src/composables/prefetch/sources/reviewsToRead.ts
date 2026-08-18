@@ -2,9 +2,9 @@ import type { WarmBand } from "../warmPlan";
 
 /* WHICH AGENT REVIEWS ARE READ BEFORE THEY ARE OPENED, HOW NEAR EACH IS, AND HOW FAR DOWN IT IS READ.
  *
- * A LEAF — a pure projection over three ids, no store, no query, no Vue — for the same reason warmRows is one: the
- * source that builds the wishes and the test that pins this policy can both reach it without dragging in the app
- * shell.
+ * A LEAF — a pure projection over a handful of ids, no store, no query, no Vue — for the same reason warmRows is
+ * one: the source that builds the wishes and the test that pins this policy can both reach it without dragging in
+ * the app shell.
  *
  * The policy exists because of what reading a row's diff BUYS: the +/− the review prints beside it with the
  * comments taken out (useCodeStats). A review read only once its page is open has numbers that arrive while its
@@ -24,7 +24,25 @@ import type { WarmBand } from "../warmPlan";
  *
  * NEAREST FIRST, because warmPlan takes the first declaration of a key: the open page usually IS the focused
  * conversation, and this ordering is what makes its rows land in the nearer band rather than a race deciding it.
- * Duplicates are therefore expected and harmless. */
+ * Duplicates are therefore expected and harmless.
+ *
+ * AND WORK THAT HAS LANDED IS NOT READ TWICE.
+ *
+ * A clean turn lands as UNCOMMITTED changes in the user's own tree (the daemon's land.ts), so from that moment the
+ * same file is reachable through two reviews at once — this one and the workspace's. They are not the same read
+ * and cannot be made into one: this one asks "what did this agent do to this file", answered out of the agent's
+ * own worktree against the base its conversation recorded, and its answer is deliberately fixed so that landing
+ * does not empty it out; the workspace's asks "what is uncommitted here", answered out of the main tree against
+ * HEAD and split by whether the row is staged, unstaged or conflicted. A partially staged file has two of the
+ * latter and neither is the former. Two agents landing into one file, or a user edit after the land, part them
+ * further. Filing both under one key would hand whichever review asked second the other one's diff.
+ *
+ * So the double read is removed by not making it: once an agent's work is in the workspace, THE WORKSPACE REVIEW
+ * IS THE ONE READ AHEAD, and this one is left to be read when it is opened. That is the surface the user commits
+ * from, it is warmed ahead of the board now (useBackgroundLoader), and a landed agent's own review is the rarer
+ * visit — a look back at what one agent did, not the thing standing between the user and a commit. Its rows are
+ * still read whole the moment its page IS open, which is the same bargain the rows past the caps below get: git's
+ * counts hold at half weight until something reads them (ReviewStat). */
 
 /* How far down A REVIEW BEING READ the rows are taken — the same bound, and the same reason, as the workspace
  * review's (warmRows' WARM_LIMIT): far enough that an ordinary review is covered whole, since its numbers are what
@@ -56,8 +74,20 @@ export const reviewsToRead = (
     focused: string | undefined,
     // The attention lane's agent ids, in the order the lane draws them.
     attention: readonly string[],
-): readonly ReviewToRead[] => [
-    ...(open !== undefined && open !== `` ? [{ agentId: open, band: `now` as const, rows: WHOLE_REVIEW }] : []),
-    ...(focused !== undefined && focused !== `` ? [{ agentId: focused, band: `near` as const, rows: WHOLE_REVIEW }] : []),
-    ...attention.slice(0, MAX_ATTENTION_REVIEWS).map((agentId) => ({ agentId, band: `work` as const, rows: LIKELY_REVIEW })),
-];
+    /* The agents whose work is already in the workspace — see the header. Not read ahead here, because the
+     * workspace review reads the same files and is warmed ahead of this. Defaulted empty so the projection stays
+     * usable by a caller that has no roster to answer it from; the app's caller always does. */
+    landed: ReadonlySet<string> = new Set(),
+): readonly ReviewToRead[] => {
+    // The OPEN page is exempt: the reader is looking at it, and "somewhere else has the same bytes under a
+    // different question" is no answer to a pane that is on screen right now.
+    const worthReading = (agentId: string | undefined): agentId is string => agentId !== undefined && agentId !== `` && !landed.has(agentId);
+    return [
+        ...(open !== undefined && open !== `` ? [{ agentId: open, band: `now` as const, rows: WHOLE_REVIEW }] : []),
+        ...(worthReading(focused) ? [{ agentId: focused, band: `near` as const, rows: WHOLE_REVIEW }] : []),
+        ...attention
+            .filter((agentId) => worthReading(agentId))
+            .slice(0, MAX_ATTENTION_REVIEWS)
+            .map((agentId) => ({ agentId, band: `work` as const, rows: LIKELY_REVIEW })),
+    ];
+};
