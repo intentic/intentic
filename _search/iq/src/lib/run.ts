@@ -50,6 +50,21 @@ export const engineFromEnv = (featuresSpec?: string): ReturnType<typeof createEn
 // Verbs whose query is (or starts with) a workspace path — resolved like --in, not searched.
 const PATH_QUERY_VERBS = new Set<Verb>(["outline", "context", "who"]);
 
+// `impact` is the one verb whose query is a LIST of paths rather than a single anchor, and an empty one is
+// meaningful (it means "read my uncommitted changes"), so it cannot go through the anchor resolver.
+const resolveQuery = (verb: Verb, query: string, root: string): string => {
+    if (verb === "impact") {
+        return rootRelativePaths(
+            query
+                .split(",")
+                .map((path) => path.trim())
+                .filter((path) => path !== ""),
+            root,
+        ).join(",");
+    }
+    return PATH_QUERY_VERBS.has(verb) ? rootRelativeAnchor(query, root) : query;
+};
+
 // The sandbox pins WORKSPACE_ROOT (to /work), but agent sessions run in per-conversation worktrees OUTSIDE the
 // pin — transcript mining showed every such session silently searching the main checkout instead of its own
 // tree, and every worktree path zero-hitting. A pin the caller is not inside points at the wrong code: re-root
@@ -76,7 +91,7 @@ export const runSearch = async (context: CommandContext, verb: Verb, query: stri
     const mode = resolveMode(rawFlags, loadConfig().intenticOutput);
     const root = workspaceRoot();
     const flags = rawFlags.in === undefined ? rawFlags : { ...rawFlags, in: rootRelativePaths(rawFlags.in, root) };
-    const resolvedQuery = PATH_QUERY_VERBS.has(verb) ? rootRelativeAnchor(query, root) : query;
+    const resolvedQuery = resolveQuery(verb, query, root);
     const outcome = await engineFromEnv(flags.features).run({
         verb,
         query: resolvedQuery,
@@ -279,7 +294,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
             try {
                 parsed = {
                     ...parsed,
-                    query: PATH_QUERY_VERBS.has(parsed.verb) ? rootRelativeAnchor(parsed.query, root) : parsed.query,
+                    query: resolveQuery(parsed.verb, parsed.query, root),
                     scope: parsed.scope.in === undefined ? parsed.scope : { ...parsed.scope, in: rootRelativePaths(parsed.scope.in, root) },
                 };
             } catch (error) {

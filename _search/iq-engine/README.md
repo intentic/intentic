@@ -23,11 +23,18 @@ and no displayed score moves by more than the 0.01 it is rounded to. A vector is
 text, so nothing here is precious — [embed/vector-cache.ts](src/embed/vector-cache.ts) keeps full-precision
 copies in a sidecar the index dir's own deletion never touches.
 
-Two engines answer "orient me" rather than "find X", and read the index rather than searching it:
+Three engines answer "orient me" rather than "find X", and read the index rather than searching it:
 [engines/map.ts](src/engines/map.ts) PageRanks files over the import graph — specifiers captured by
 [indexer/imports.ts](src/indexer/imports.ts) at index time, resolved against the indexed file set at query
 time — and [engines/hotspots.ts](src/engines/hotspots.ts) multiplies git churn by the per-file branch count
 that [indexer/complexity.ts](src/indexer/complexity.ts) stores alongside symbols.
+[engines/impact.ts](src/engines/impact.ts) walks the same import edges backwards *and* forwards from a set of
+changed files to answer "what does this reach, and which tests reach it". It stops at ONE hop, which is the
+benchmark's answer rather than a hedge: `iq-bench impact` grades strategies against what past commits actually
+changed together, and there two hops lost to one outright — precision collapses long before the extra recall
+arrives. The resolution both it and the map depend on now lives once, in
+[engines/import-graph.ts](src/engines/import-graph.ts), which builds the edges in both directions together
+because reversing them on demand costs a second pass over every edge.
 [engines/health.ts](src/engines/health.ts) is those two rankings as NUMBERS rather than rendered lines, for a
 host that plots them: the daemon serves it at `/workspace/health` and the browser draws one repo's
 codebase-health panel from it. One ranking, two presentations — the verbs keep printing text for the agent.

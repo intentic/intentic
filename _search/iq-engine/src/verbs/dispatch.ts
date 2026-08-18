@@ -4,8 +4,10 @@ import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchRes
 import { astSearch } from "../engines/astq.js";
 import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch } from "../engines/files.js";
-import { logSearch, recentFiles, whoAnchor } from "../engines/git.js";
+import { changedFiles, logSearch, recentFiles, whoAnchor } from "../engines/git.js";
 import { hotspotFiles } from "../engines/hotspots.js";
+import { IMPACT_DEFAULTS, impactOf, testsCovering } from "../engines/impact.js";
+import { buildImportGraph, fileHeads } from "../engines/import-graph.js";
 import { type RgOptions, type RgResult, rgSearch } from "../engines/lexical.js";
 import { repoMap } from "../engines/map.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
@@ -324,7 +326,11 @@ const packGroups = async (db: IndexDb, root: string, groups: readonly RankedGrou
     );
 };
 
-const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who", "hotspots", "map"]);
+const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who", "hotspots", "map", "impact"]);
+
+// How many paths an `impact` header note spells out before it starts counting instead. A 16-file change with no
+// test coverage named every one of them and cost more than the answer underneath.
+const NOTE_PATHS = 5;
 
 // grep escapes metachars that rust regex takes literally — `a\|b` matches the text "a|b", not "a or b". Agents
 // reflexively write this (benchmarked: the single most common wasted query), so it's worth catching proactively.
@@ -673,6 +679,43 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             showTags: false,
             headerNote: "churn × complexity — commits over all history unless --since narrows it",
             ...(groups.length === 0 ? { hint: "no file has both commits and branch points in scope — is this a git repo with history?" } : {}),
+        };
+    }
+
+    if (request.verb === "impact") {
+        // The graph spans the WHOLE corpus, never `allowed`: a change reaches what it reaches, and narrowing
+        // the graph to the scope the asker happened to be looking at would silently shorten the answer.
+        const every = new Set(context.db.all("SELECT path FROM files").map((row) => row["path"] as string));
+        const graph = buildImportGraph(context.db, every, fileHeads(context.db));
+        const seeds = request.query === "" ? await changedFiles(context.root, entries) : request.query.split(",").map((path) => path.trim()).filter((path) => path !== "");
+        if (seeds.length === 0) {
+            return { groups: [], unit: "files", style: "paths", showTags: false, hint: "no uncommitted change in the sweep — name one or more paths to ask about them instead: iq impact src/app.ts" };
+        }
+        const result = impactOf(graph, seeds, IMPACT_DEFAULTS);
+        const untested = seeds.filter((seed) => graph.idByPath.has(seed) && classOf(seed) !== "tests" && testsCovering(graph, seed).length === 0);
+        const groups = result.reached.map((file, rank) => {
+            const score = 1 / (rank + 1);
+            const role = classOf(file.path) === "tests" ? "test" : "code";
+            return { path: file.path, score, hits: [{ path: file.path, line: 1, text: `${file.hops} hop   ${role}`, tags: [], score }] };
+        });
+        // Everything the walk could not answer is said out loud. A short list that looks complete is the exact
+        // failure this verb exists to avoid — but saying it must not itself cost the budget the verb is here to
+        // save, so the named paths are capped and the remainder is counted rather than spelled out.
+        const some = (paths: readonly string[]): string =>
+            paths.length <= NOTE_PATHS ? paths.join(", ") : `${paths.slice(0, NOTE_PATHS).join(", ")} +${paths.length - NOTE_PATHS} more`;
+        const notes = [
+            `${seeds.length} changed file${seeds.length === 1 ? "" : "s"}`,
+            ...(result.truncated > 0 ? [`${result.truncated} more reachable, not shown`] : []),
+            ...(result.unknownSeeds.length > 0 ? [`not indexed, no reach known: ${some(result.unknownSeeds)}`] : []),
+            ...(untested.length > 0 ? [`NO TEST REACHES: ${some(untested)}`] : []),
+        ];
+        return {
+            groups,
+            unit: "files",
+            style: "paths",
+            showTags: false,
+            headerNote: `one hop each way over the import graph — ${notes.join(" · ")}`,
+            ...(groups.length === 0 ? { hint: "nothing in the index imports these files or is imported by them — a leaf change, or the imports did not resolve" } : {}),
         };
     }
 

@@ -1,4 +1,5 @@
 import { CONFIGS } from "./configs.js";
+import { IMPACT_BASELINES, IMPACT_STRATEGIES, type ImpactMeta, type ImpactRow } from "./impact.js";
 import type { RepoMeta } from "./retrieval.js";
 import type { CaseRow, CaseScore, RunRecord } from "./schema.js";
 import { meanScores } from "./score.js";
@@ -106,7 +107,7 @@ const binomial = (n: number, k: number): number => {
 };
 
 // Exact two-sided sign test over non-tie pairs (H0: wins and losses equally likely).
-const signTest = (wins: number, losses: number): number | undefined => {
+export const signTest = (wins: number, losses: number): number | undefined => {
     const n = wins + losses;
     if (n === 0) {
         return undefined;
@@ -224,6 +225,88 @@ export const renderAgentsReport = (records: readonly RunRecord[]): string => {
     const shas = [...new Set(records.map((record) => `${record.repo}@${record.sha.slice(0, 10)}`))].join(", ");
     parts.push(`---\nruns: ${records.length} · vendor-reported spend: $${spend.toFixed(2)} · repos: ${shas}`);
     parts.push("Deltas are within-model (iq − baseline); cross-model absolute comparisons are intentionally not reported.");
+    return parts.join("\n");
+};
+
+const mean = (values: readonly number[]): number | undefined => (values.length === 0 ? undefined : values.reduce((sum, value) => sum + value, 0) / values.length);
+
+// Paired on (sha, seed): every strategy saw exactly the same cases, so a win is a win on the same question.
+const impactVs = (rows: readonly ImpactRow[], challenger: string, baseline: string): string => {
+    const keyed = (name: string): Map<string, ImpactRow> => new Map(rows.filter((row) => row.strategy === name).map((row) => [`${row.sha}:${row.seed}`, row]));
+    const left = keyed(challenger);
+    const right = keyed(baseline);
+    // A name that matches no rows used to render 0/0/0, which reads as a measured tie rather than a wiring
+    // mistake. It is the same class of bug as a thrown tool call scoring as a win, and it stays loud.
+    if (left.size === 0 || right.size === 0) {
+        return `| ${challenger} vs ${baseline} | **no rows — strategy name does not exist** | | | |`;
+    }
+    let wins = 0;
+    let losses = 0;
+    let ties = 0;
+    for (const [key, row] of left) {
+        const other = right.get(key);
+        if (other === undefined) {
+            continue;
+        }
+        if (row.f1 > other.f1) {
+            wins += 1;
+        } else if (row.f1 < other.f1) {
+            losses += 1;
+        } else {
+            ties += 1;
+        }
+    }
+    const p = signTest(wins, losses);
+    return `| ${challenger} vs ${baseline} | ${wins} | ${losses} | ${ties} | ${p === undefined ? "—" : p < 0.001 ? "<0.001" : p.toFixed(3)} |`;
+};
+
+export const renderImpactReport = (rows: readonly ImpactRow[], meta: ImpactMeta): string => {
+    const parts = [
+        "# iq impact benchmark (tier 1b) — co-change ground truth\n",
+        ...(meta.shallow
+            ? [
+                  `> ⚠ **${meta.repo} is a shallow clone** — there is no commit history to mine, so every number below is\n` +
+                      "> computed over whatever tiny sample survived. This benchmark needs a full clone; the lock file's repos\n" +
+                      "> are fetched at `--depth 1` and cannot be used for it as they stand.\n",
+              ]
+            : []),
+        `## ${meta.repo} — ${meta.graphFiles} indexed files, ${meta.graphEdges} resolved import edges\n`,
+        `Scanned ${meta.commitsScanned} commits: ${meta.commitsUsable} usable, ${meta.droppedTooSmall} dropped (fewer than two code files), ` +
+            `${meta.droppedNotIndexed} dropped (code files the current index does not know — renamed or deleted since). ` +
+            `${meta.cases} graded cases, each one seed file against the rest of its commit.\n`,
+    ];
+    const table = ["| strategy | cases | precision | recall | F1 | median F1 | predicted/case | empty | truncated/case |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"];
+    for (const strategy of IMPACT_STRATEGIES) {
+        const strategyRows = rows.filter((row) => row.strategy === strategy.name);
+        if (strategyRows.length === 0) {
+            continue;
+        }
+        const empty = strategyRows.filter((row) => row.predictedCount === 0).length;
+        table.push(
+            `| ${strategy.name} | ${strategyRows.length} | ${fmt(mean(strategyRows.map((row) => row.precision)))} | ${fmt(mean(strategyRows.map((row) => row.recall)))} | ` +
+                `${fmt(mean(strategyRows.map((row) => row.f1)))} | ${fmt(median(strategyRows.map((row) => row.f1)))} | ${fmt(mean(strategyRows.map((row) => row.predictedCount)), 1)} | ` +
+                `${((100 * empty) / strategyRows.length).toFixed(0)}% | ${fmt(mean(strategyRows.map((row) => row.truncated)), 1)} |`,
+        );
+    }
+    parts.push(table.join("\n"), "");
+    parts.push("## Paired head-to-head (F1 per case, exact two-sided sign test)\n");
+    const pairs = ["| comparison | wins | losses | ties | p |", "|---|---:|---:|---:|---:|"];
+    for (const baseline of IMPACT_BASELINES) {
+        for (const strategy of IMPACT_STRATEGIES) {
+            if (strategy.name === baseline) {
+                continue;
+            }
+            pairs.push(impactVs(rows, strategy.name, baseline));
+        }
+    }
+    parts.push(pairs.join("\n"), "");
+    parts.push(
+        `> THE GATE: a strategy ships only if it beats BOTH baselines — ${IMPACT_BASELINES.map((name) => `\`${name}\``).join(" and ")}.\n` +
+            "> The first consults no graph at all; the second is the reach the related line already gives us, so a\n" +
+            "> strategy that cannot beat it is not worth building. Co-change is a proxy: batched unrelated edits and\n" +
+            "> affected-but-unedited files both push precision down, so read recall as the signal and precision as a\n" +
+            "> loose upper bound on noise.",
+    );
     return parts.join("\n");
 };
 

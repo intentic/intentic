@@ -1719,16 +1719,17 @@
           "what": "installing as a background agent, per platform."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "computers",
       "dir": "_computers/host",
       "files": 26,
       "hasTests": true,
-      "loc": 2948,
+      "loc": 2952,
       "name": "@intentic/host",
       "oneLiner": "The small program on your own computer that lets your sandbox work there.",
       "readmeRev": "2eb428ddf061997005ff32c0a4f3afa23a135e05",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1787043696000
     },
     {
@@ -1754,16 +1755,16 @@
           "what": "cliLauncher(), including the compiled-binary argv case."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "computers",
       "dir": "_computers/local-agent",
       "files": 9,
       "hasTests": true,
-      "loc": 756,
+      "loc": 788,
       "name": "@intentic/local-agent",
       "oneLiner": "The plumbing every intentic CLI that lives on a user's own computer needs, and none of what any of them does.",
       "readmeRev": "a5fec68666f6cf92d1fcc61bf4d7dd2a26454f06",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786137817000
     },
@@ -2126,16 +2127,16 @@
           "what": "design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 126,
       "hasTests": false,
-      "loc": 13228,
+      "loc": 13246,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
       "readmeRev": "923b428476368bdc1b410e261e0d27d2ef1d5415",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786879509000
     },
@@ -2166,17 +2167,18 @@
           "what": "the full route table."
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 910,
+      "files": 912,
       "hasTests": true,
-      "loc": 151659,
+      "loc": 151958,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
-      "readmeRev": "f9605e172afafad1800a6dd4c0749f62b1bcead2",
-      "stale": false,
-      "updatedAt": 1787070651000
+      "readmeRev": "08649c9768c7f55548fe5fc1376cd5578a2ff00b",
+      "reason": "2 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1787093157000
     },
     {
       "anchors": [
@@ -3608,12 +3610,12 @@
       "dir": "_sandbox/sandbox",
       "files": 842,
       "hasTests": true,
-      "loc": 146623,
+      "loc": 146651,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "f9605e172afafad1800a6dd4c0749f62b1bcead2",
+      "readmeRev": "08649c9768c7f55548fe5fc1376cd5578a2ff00b",
       "stale": false,
-      "updatedAt": 1787070651000
+      "updatedAt": 1787093157000
     },
     {
       "anchors": [
@@ -3658,16 +3660,16 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 25,
+      "behind": 27,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 104,
       "hasTests": true,
-      "loc": 19458,
+      "loc": 19475,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "996ce7771d24ec5c5c4739773133a87496844584",
-      "reason": "25 commits have touched this package since its README was written",
+      "reason": "27 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786833176000
     },
@@ -3770,16 +3772,16 @@
           "what": "the CLI surface a user actually types."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "sandbox",
       "dir": "_sandbox/sync",
-      "files": 24,
+      "files": 26,
       "hasTests": true,
-      "loc": 4440,
+      "loc": 4932,
       "name": "@intentic/sync",
       "oneLiner": "Keeps a folder on your own computer in step with a sandbox, both ways, so you can use your own editor.",
       "readmeRev": "bf8d1a121bf2c60dea77d4658b9abe39ecb87321",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786888074000
     },
@@ -3888,9 +3890,9 @@
       "behind": 4,
       "component": "search",
       "dir": "_search/iq",
-      "files": 28,
+      "files": 29,
       "hasTests": true,
-      "loc": 2109,
+      "loc": 2153,
       "name": "@intentic/iq",
       "oneLiner": "Agent-native workspace search — one intent-first CLI over lexical, structural, semantic, and git engines.",
       "readmeRev": "30afa15c696215fcf39fdd1f899c5e60e9eab381",
@@ -3924,11 +3926,11 @@
       "behind": 3,
       "component": "search",
       "dir": "_search/iq-bench",
-      "files": 21,
+      "files": 22,
       "hasTests": true,
-      "loc": 2027,
+      "loc": 2354,
       "name": "@intentic/iq-bench",
-      "oneLiner": "Benchmark harness answering two questions about iq:",
+      "oneLiner": "Benchmark harness answering three questions about iq:",
       "readmeRev": "30afa15c696215fcf39fdd1f899c5e60e9eab381",
       "reason": "3 commits have touched this package since its README was written",
       "stale": true,
@@ -3968,9 +3970,9 @@
       "behind": 3,
       "component": "search",
       "dir": "_search/iq-engine",
-      "files": 86,
+      "files": 89,
       "hasTests": true,
-      "loc": 8535,
+      "loc": 8850,
       "name": "@intentic/iq-engine",
       "oneLiner": "The search engine behind the iq CLI, and the heavy lib of the iq cluster.",
       "readmeRev": "a24d629002ded981c76e43a8eea7afeb9a710860",
@@ -4700,7 +4702,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787089234106,
+  "generatedAt": 1787095338816,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

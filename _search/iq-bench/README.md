@@ -1,9 +1,10 @@
 # @intentic/iq-bench
 
-Benchmark harness answering two questions about `iq`:
+Benchmark harness answering three questions about `iq`:
 
 1. **Which retrieval pipeline configuration works best?** — tier 1, no LLM, ~$0.
-2. **Does iq make real coding agents more reliable and cheaper than grep/rg?** — tier 2, vendor CLIs, a few dollars.
+2. **Does impact analysis predict what a change touches?** — tier 1b, no LLM, ~$0.
+3. **Does iq make real coding agents more reliable and cheaper than grep/rg?** — tier 2, vendor CLIs, a few dollars.
 
 ## Tier 1 — retrieval quality
 
@@ -18,6 +19,22 @@ node dist/cli.js retrieval --repo hono --config no-rerank # filtered
 - Metrics: recall@{1,5,10}, MRR@10, nDCG@10 over ranked file groups (+`related` and `candidates` anchors — everything the one response hands back openable), output tokens/query (iq's own estimator), p50 latency (includes the revalidation sweep — the honest CLI-equivalent number), index build time.
 - Embedding models auto-fetch to `.cache/models` (~57 MB); if unavailable, semantic/rerank configs are **skipped**, never silently degraded.
 - Deterministic on a frozen index: rerun ⇒ identical scores.
+
+## Tier 1b — impact accuracy
+
+```sh
+pnpm --filter @intentic/iq-bench bench:impact       # the monorepo's own history
+```
+
+Only the monorepo works today: the lock file's external repos are fetched at `--depth 1` for tier 1, which leaves no history to mine. Pointing `--repo` at one is not silently empty — the report leads with a shallow-clone warning — but making them usable means a deeper fetch, which tier 1 does not need and nothing has paid for yet.
+
+- **Ground truth is git, never the graph.** Show the predictor ONE file from a past commit; grade it on which *other* files that commit touched. The dataset is mined at run time from the last 400 commits — nothing to hand-curate, and nothing to keep in step with the corpus.
+- This is the trap the idea came from. A well-known tool published recall of 1.0 for the same feature, measured against a set derived from the graph doing the predicting: circular by construction, and it cannot fail. Its one independent measurement returned zero.
+- **Two baselines, both of which a strategy must beat**: `same-dir` consults no graph at all (co-change is strongly local, so folder siblings are a genuinely hard bar), and `importers-1` is the reach the `related:` line already gives us. Strategies sweep direction (`importers`, `imports`, `both`), depth, and the truncation cap.
+- Metrics: precision/recall/F1 per case, plus the share of cases where the strategy predicted **nothing** — a silent empty answer reads as "nothing is affected" and is the failure mode that matters most here. Head-to-head is paired per case with an exact sign test.
+- Commits are dropped, and counted in the report, when they touch fewer than two code files or when the current index does not know their files (renamed or deleted since). The graph describes the working tree; grading it against paths that no longer exist would measure drift, not accuracy.
+
+**Reading it honestly:** co-change is a proxy. Authors batch unrelated edits into one commit, and a genuinely affected file that needed no edit scores as a false positive — both push measured precision down, so a strategy that wins here is not being flattered. Read recall as the signal and precision as a loose upper bound on noise.
 
 ## Tier 2 — end-to-end agent runs
 

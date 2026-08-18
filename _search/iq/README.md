@@ -34,6 +34,7 @@ The index self-manages: it builds on first query and revalidates against disk on
 |---|---|
 | the repo's shape | `iq map --budget 4000` |
 | where risk concentrates | `iq hotspots --in _apps` |
+| what my change reaches | `iq impact` |
 | text/regex match | `iq find 'createServer\(' --lang ts` |
 | a file by name | `iq files wkignore` (`--exact` for globs) |
 | where X is defined | `iq def createIgnoreScope` |
@@ -92,6 +93,10 @@ An earlier version built edges from exported-symbol name matches instead. It doe
 `hotspots` multiplies **git churn** (commits touching a file) by **complexity** (branch points, counted at index time from the same ast-grep parse that extracts symbols, with a lexical fallback for languages that have no grammar). Neither half is interesting alone: a churning config file is trivial, a gnarly file nobody edits costs nobody anything. Data and markup score zero — keyword scans there read content, not code paths.
 
 Complexity is reported as a **raw branch count**, not a composite score: counts are comparable to the file in front of you, and you can recount them by hand.
+
+`impact` answers "what does this change reach?" over the same import graph. With no argument it reads your uncommitted changes; given paths, it answers about those. Each result carries its distance and whether it is a test, and the header names what the walk could **not** answer: seeds the index has never seen, how many reachable files the cap dropped, and — the useful half — which changed files no test reaches at all.
+
+It walks exactly **one hop, in both directions**, and that is a measured choice rather than a cautious one. Against 762 co-change cases mined from this repo's own history (`iq-bench impact`), one hop each way beat the no-graph "same folder" baseline 444 wins to 168 and beat one hop of importers alone 318 to 159, both at p < 0.001. Depth made it worse, not better: two hops of importers *lost* to one hop, and two hops in both directions reach hundreds of files per seed at 0.06 precision. Coverage depth is deliberately separate and deliberately timid — a test that imports the file directly counts, nothing further — because the co-change benchmark measured which files change together, which is not the same question as which tests exercise what, and borrowing its answer would be borrowing evidence never collected.
 
 ## Benchmarks
 

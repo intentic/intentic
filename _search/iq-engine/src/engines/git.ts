@@ -44,6 +44,35 @@ const toWorkspacePath = (repo: string, repoRel: string): string => (repo === "" 
 // character. A path that is already repo-relative passes through untouched.
 const toRepoPath = (repo: string, path: string): string => (repo !== "" && path.startsWith(`${repo}/`) ? path.slice(repo.length + 1) : path);
 
+// What the working tree has changed against HEAD, across every repo in the sweep — the seed set `impact` uses
+// when the caller names no paths, which is the question people actually have ("what does what I am doing right
+// now touch?"). Untracked files count: a brand-new file is exactly the kind of change whose reach someone
+// wants, and a plain `git diff` cannot see it.
+export const changedFiles = async (root: string, entries: readonly FileEntry[]): Promise<string[]> => {
+    const inSweep = new Set(entries.map((entry) => entry.path));
+    const paths = new Set<string>();
+    for (const repo of reposOf(entries)) {
+        const [tracked, untracked] = await Promise.all([
+            git(root, repo, ["diff", "--name-only", "HEAD"]),
+            git(root, repo, ["ls-files", "--others", "--exclude-standard"]),
+        ]);
+        for (const line of `${tracked}\n${untracked}`.split("\n")) {
+            const repoRel = line.trim();
+            if (repoRel === "") {
+                continue;
+            }
+            const path = toWorkspacePath(repo, repoRel);
+            // A change to something outside the sweep — floor-denied, ignored, unindexed — has no reachable
+            // graph node, so it is not a seed. It is still a real change, which is why the caller is told the
+            // seed set it got rather than left to assume its diff was read whole.
+            if (inSweep.has(path)) {
+                paths.add(path);
+            }
+        }
+    }
+    return [...paths].toSorted();
+};
+
 export interface ChurnOptions {
     // Omitted means all of history — what `hotspots` wants, where `recent` always has a window.
     readonly since?: string;

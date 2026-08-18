@@ -39,6 +39,10 @@ export type {
 } from "./types.js";
 export type { CodebaseHealth, HealthRequest, HealthTotals, KeyModule } from "./engines/health.js";
 export type { HotspotFile } from "./engines/hotspots.js";
+export { impactOf } from "./engines/impact.js";
+export type { ImpactDirection, ImpactedFile, ImpactOptions, ImpactResult } from "./engines/impact.js";
+export { loadImportGraph } from "./engines/import-graph.js";
+export type { ImportGraph } from "./engines/import-graph.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";

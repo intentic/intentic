@@ -12,6 +12,7 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "bench:retrieval": "node dist/cli.js retrieval",
+        "bench:impact": "node dist/cli.js impact",
         "bench:agents": "IQ_BENCH_AGENTS=1 node dist/cli.js agents"
     },
     "dependencies": {

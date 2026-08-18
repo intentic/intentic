@@ -6,6 +6,7 @@ import { loadConfig } from "./env.config.js";
 import { files } from "./commands/files.command.js";
 import { find } from "./commands/find.command.js";
 import { hotspots } from "./commands/hotspots.command.js";
+import { impact } from "./commands/impact.command.js";
 import { indexCommand } from "./commands/index-cmd/index-cmd.routes.js";
 import { version } from "./lib/version.js";
 import { log } from "./commands/log.command.js";
@@ -42,6 +43,7 @@ natural language semantically — there is no second verb for questions:
   iq context src/app.ts:48                enclosing function of an anchor
   iq map --budget 4000                    repo skeleton: top files + their exports
   iq hotspots --in src                    churn × complexity — where risk sits
+  iq impact                               what your uncommitted change reaches, and its tests
   iq recent --since 2d                    recently changed files
   iq log "MAX_MATCHES" --path src         git history of a string
   iq who src/app.ts:15                    blame an anchor
@@ -77,6 +79,7 @@ export const app = buildApplication(
             context,
             map,
             hotspots,
+            impact,
             recent,
             log,
             who,
