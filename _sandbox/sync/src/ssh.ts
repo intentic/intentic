@@ -86,9 +86,16 @@ export const sshConfigBlock = (args: {
         "    IdentitiesOnly yes",
         `    UserKnownHostsFile "${slashPath(args.knownHostsFile)}"`,
         "    StrictHostKeyChecking accept-new",
-        // Every pairing's transport answers on 127.0.0.1, so the host key must be remembered against the PORT
-        // too — without this, pairing a second sandbox looks to ssh like the first one's key changing.
-        "    HostKeyAlias %h",
+        /* Every pairing's transport answers on 127.0.0.1, so the host key must be remembered against something
+         * that distinguishes the SANDBOX — without it, pairing a second one looks to ssh like the first one's
+         * key changing. The alias is written out literally, because ssh does NOT expand %-tokens in
+         * HostKeyAlias: `%h` is taken as the six-character name "%h", which every sandbox then shares. That is
+         * the exact failure this line exists to prevent, delivered by the line itself — the FIRST sandbox to
+         * connect writes its key under "%h" and every later one is refused with REMOTE HOST IDENTIFICATION HAS
+         * CHANGED, permanently, because `accept-new` accepts an unknown host but never a changed one. It is
+         * invisible with one pairing and breaks every pairing after it, taking that sandbox's file sync and git
+         * bridge down with it. Verified with `ssh -G`, which reports the alias literally. */
+        `    HostKeyAlias ${args.alias}`,
         "",
     ].join("\n");
 

@@ -321,6 +321,44 @@ const dropRevokedPairing = async (mutagen: string, sandboxId: string, log: Log):
     retireOrphanSessions(mutagen, (await readState()).pairings, log);
 };
 
+/* ONE FALLIBLE STEP, ISOLATED — the rule that keeps one broken pairing from taking the watcher with it.
+ *
+ * Almost everything this loop does can reject: mutagen throws on any non-zero exit (mutagen.ts's runMutagen),
+ * the tunnel pool binds sockets, the reports go over the network. There is exactly ONE loop serving EVERY
+ * pairing, and an unguarded rejection in it does not crash the process — the tunnel listeners keep the event
+ * loop alive on their own. What is left behind is the worst shape a background service can take: a live pid, a
+ * `status` that still says "running", a file sync mutagen still reports as "Watching for changes", and a loop
+ * that stopped ticking. Nothing tells the user, because the thing that would have told them was the loop.
+ *
+ * Observed, and the reason this exists: one sandbox whose zone had been retired failed its `mutagen sync create`
+ * inside ensureSyncSession during STARTUP — before the tick loop was entered at all. Two perfectly healthy
+ * pairings lost their git bridge for a fortnight. The desktop kept syncing files the whole time, so the sandbox
+ * committed work the local clone never learned about, and every `git status` there showed the landed changes as
+ * uncommitted edits — the "desync" that gets reported as a file-sync bug and never is one.
+ *
+ * So: every step that can reject is wrapped, and a failure costs its own step and nothing else. Failures are
+ * always logged — a watcher running degraded must say so on every pass, because the alternative is this bug
+ * again with better manners. */
+const guard = async (log: Log, what: string, step: () => void | Promise<void>): Promise<boolean> => {
+    try {
+        await step();
+        return true;
+    } catch (error) {
+        log(`  ${what} failed: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+};
+
+/* How often a pairing whose file sync could NOT be prepared is tried again. Only those: a session that exists
+ * and matches costs a `mutagen sync list` to confirm, which is not worth spending every POLL_MS on all of them.
+ *
+ * This exists because ensureSyncSession runs once, at startup. Guarding it stops one dead sandbox from taking
+ * the watcher down, but without a retry the fix trades a dead watcher for a pairing that is dead until the next
+ * login — and a sandbox that was merely asleep, or behind a tunnel that took a minute to come up, would need a
+ * restart to sync again. Five minutes is far below the session a laptop keeps open and far above the seconds a
+ * transport needs to settle. */
+const SESSION_RETRY_EVERY_TICKS = 60;
+
 /* The watcher loop — one resident process per machine, serving every pairing. Started detached by
  * `startMirrorWatcher`; also runnable in the foreground (`mirror --watch`) to watch it live, which is what
  * supervisors run too (a systemd user unit, a launchd LaunchAgent).
@@ -358,14 +396,25 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
      * below, for the same reason the pairing list is re-read: a sandbox paired or dropped while this is running
      * must gain or lose its transport without a restart. */
     const tunnels = createTunnelPool(log);
-    await tunnels.reconcile(tunnelTargets(initial.pairings));
+    await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(initial.pairings)));
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
     // syncs it INHERITED — Mutagen bakes a session's ignores at creation, so an install that swapped the binary
     // without re-pairing would otherwise keep syncing on whatever rules were current the day it first paired.
+    //
+    // Per pairing, because a sandbox that has gone away fails here EVERY time and there is nothing to fix from
+    // this side: mutagen cannot create a session against an endpoint that will not answer, and it throws saying
+    // so. That refusal is about one pairing and must cost one pairing — see `guard`.
+    //
+    // A pairing that fails here is remembered, not abandoned: the tick loop retries it on SESSION_RETRY_EVERY_TICKS.
+    const sessionsPending = new Set<string>();
     for (const pairing of initial.pairings) {
-        ensureSyncSession(mutagen, pairing, log);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as below; the guard is what makes the order safe
+        const ready = await guard(log, `${pairing.sandboxId}: preparing its file sync`, () => ensureSyncSession(mutagen, pairing, log));
+        if (!ready) {
+            sessionsPending.add(pairing.sandboxId);
+        }
     }
-    retireOrphanSessions(mutagen, initial.pairings, log);
+    await guard(log, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, log));
     log(`mirror watcher started (pid ${process.pid}); polling ${initial.pairings.length} paired sandbox(es) every ${POLL_MS / 1000}s`);
 
     // Per-pairing, keyed by sandbox id: consecutive token rejections, and the cached repo list its git bridge
@@ -396,7 +445,20 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             // Before the port reconcile, because that reconcile and the git bridge under it both ride this
             // transport: a pairing added since the last tick needs its listener up before anything asks it to
             // carry an ssh connection.
-            await tunnels.reconcile(tunnelTargets(state.pairings));
+            await guard(log, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(state.pairings)));
+            // A sandbox whose file sync could not be created — asleep, mid-rebuild, a transport still coming up —
+            // gets another go now that its transport has just been reconciled above. Nothing to do in the common
+            // case: the set is empty and this costs a subtraction.
+            if (sessionsPending.size > 0 && tick % SESSION_RETRY_EVERY_TICKS === 0) {
+                for (const pairing of state.pairings.filter((held) => sessionsPending.has(held.sandboxId))) {
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as at startup
+                    const ready = await guard(log, `${pairing.sandboxId}: preparing its file sync`, () => ensureSyncSession(mutagen, pairing, log));
+                    if (ready) {
+                        sessionsPending.delete(pairing.sandboxId);
+                        log(`  ${pairing.sandboxId}: file sync is running again`);
+                    }
+                }
+            }
             // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
             const claimedBy = new Map<number, string>();
             for (const pairing of state.pairings) {
@@ -420,6 +482,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                             );
                             rejectedPolls.delete(pairing.sandboxId);
                             repos.delete(pairing.sandboxId);
+                            sessionsPending.delete(pairing.sandboxId);
                             // oxlint-disable-next-line eslint/no-await-in-loop -- teardown of the pairing being abandoned, before the next one is served
                             await dropRevokedPairing(mutagen, pairing.sandboxId, log);
                             continue;
@@ -449,7 +512,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             // and the report is built by re-reading that state — so reporting last is what makes it report NOW
             // rather than the previous pass.
             if (tick % REPORT_EVERY_TICKS === 0) {
-                await postReports(state.pairings, mutagen, reportUnsupported, log);
+                await guard(log, "posting this machine's reports", async () => await postReports(state.pairings, mutagen, reportUnsupported, log));
             }
         }
         await sleep(POLL_MS);

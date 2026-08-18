@@ -46,7 +46,21 @@ describe("sshConfigBlock", () => {
     // Every sandbox's transport answers on 127.0.0.1, so without an alias the host key of the second sandbox
     // paired reads as the first one's key having changed — which ssh refuses, loudly, in a log nobody reads.
     it("keys known_hosts by the alias, so two sandboxes on one loopback address never collide", () => {
-        expect(block).toContain("HostKeyAlias %h");
+        expect(block).toContain("HostKeyAlias intentic-sync-x");
+    });
+    /* The alias must be LITERAL. ssh expands no %-tokens in HostKeyAlias, so a `%h` here is the name "%h" — one
+     * entry shared by every sandbox, which is the collision this option exists to prevent. It shipped that way:
+     * with a single pairing nothing looks wrong, and the second sandbox onwards is refused with REMOTE HOST
+     * IDENTIFICATION HAS CHANGED for good, since `accept-new` never accepts a CHANGED key. */
+    it("writes the alias literally — a %-token would silently collapse every sandbox onto one known_hosts entry", () => {
+        expect(block).not.toContain("%");
+        const other = sshConfigBlock({
+            alias: "intentic-sync-y",
+            port: 24568,
+            identityFile: "/home/u/.intentic/sync/id_ed25519",
+            knownHostsFile: "/home/u/.intentic/sync/known_hosts",
+        });
+        expect(other).toContain("HostKeyAlias intentic-sync-y");
     });
     it("no longer routes through a tunnel client — the transport is local", () => {
         expect(block).not.toContain("ProxyCommand");
