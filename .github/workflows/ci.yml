@@ -829,6 +829,14 @@ jobs:
       # merge job publishes the plain multi-arch tags; dind-host stays single-arch (publish-images.sh says why).
       - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
         shell: bash
+      # THE HALVES MUST BOOT BEFORE ANY MOVING TAG POINTS AT THEM. Everything upstream of this job ran in the
+      # development install; the image runs a `pnpm deploy --prod` tree, and a daemon that dies on an import
+      # missing from THAT tree leaves every check above green (smoke-image.sh's header tells the story). This
+      # is the first and only per-push step that starts the artifact. It runs against the SHA tags just pushed
+      # — the published bytes, not a local build — and a red step means images-merge never stitches `latest`,
+      # so consumers stay on the previous good pair.
+      - run: bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-amd64"
+        shell: bash
       # NO `latest` HERE, deliberately — the immutable SHA tag only. dind-host has no halves to stitch, so it
       # used to get its moving tag written right here, in the same step that built it, while sandbox:latest
       # waited for images-merge. That made the two images move at different times, and images-arm64 is the leg
@@ -887,6 +895,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: bash _tools/scripts/prepare-image-trees.sh
       - run: TAGS="latest sha-${GITHUB_SHA::8}" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+        shell: bash
+      # The arm64 half's own boot gate — the counterpart of the amd64 one above, and the reason it runs HERE
+      # rather than once somewhere central: an image can only be booted on the architecture it was built for,
+      # so each half is proven on the runner that produced it. SMOKE_RMI because this is a GitHub-hosted runner
+      # with a hosted runner's disk (smoke-image.sh says why the pull is a second copy).
+      - run: SMOKE_RMI=1 bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-arm64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-arm64"
         shell: bash
 
   # Stitch the two halves into the plain tags — two manifest calls per tag, no bytes moved. Until this runs,

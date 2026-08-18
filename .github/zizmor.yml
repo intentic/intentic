@@ -78,4 +78,6 @@ rules:
     artipacked:
         ignore:
             - release.yml:61
-            - release.yml:349
+            # Was 349; the two image-smoke steps above it moved `publish`'s checkout down nine lines. Re-read
+            # and re-approved as the paragraph above requires: same checkout, same job, same reason.
+            - release.yml:358

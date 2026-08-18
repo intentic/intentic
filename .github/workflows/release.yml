@@ -157,6 +157,12 @@ jobs:
       - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/prepare-image-trees.sh
       - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-arm64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      # THE RELEASE GATE: this version's arm64 half is booted before anything moves onto it. `publish` needs
+      # this job to succeed, so a daemon that cannot start means no tag, no GitHub Release, no npm publish and
+      # — the one that reaches users — no `stable`. Version-tagged halves are all that exist at this point, so
+      # a red step orphans two tags nothing references and leaves every consumer on the previous release.
+      # SMOKE_RMI for the hosted runner's disk, as ci.yml's arm64 half does.
+      - run: SMOKE_RMI=1 bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-arm64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-arm64"
 
   # The amd64 halves of the released images, on the fleet, while Windows verifies — the exact counterpart of
   # sandbox-arm64, and the ~11 minutes that used to run INSIDE the publish job's publishCmd, serialized after
@@ -204,6 +210,9 @@ jobs:
       - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
       - run: bash _tools/scripts/prepare-image-trees.sh
       - run: TAGS="$RELEASE_VERSION" ARCH_SUFFIX=-amd64 IMAGES=sandbox bash _tools/scripts/publish-images.sh
+      # The amd64 half of the same release gate — see sandbox-arm64 above. Before dind-host, so the cheapest
+      # thing that can stop a broken release stops it first.
+      - run: bash _tools/scripts/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-amd64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-amd64"
       - run: TAGS="$RELEASE_VERSION" IMAGES=dind-host bash _tools/scripts/publish-images.sh
 
   # The release's Linux-side artifacts, while Windows verifies: the Linux desktop bundles — installed and

@@ -337,3 +337,15 @@ conversation's worktree instead of a path that still reaches the shared checkout
 - Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
   purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
   Claude session files; provider-native state that still shares an auth home is never guessed at destructively.
+- **The image runs a different dependency graph than the tests do**, and nothing but booting it says so. Every
+  check upstream of the image jobs runs in the development install — all devDependencies present, every
+  workspace package linked — while `prepare-image-trees.sh` prunes the shipped tree with `pnpm deploy --prod`.
+  A host-side module that reaches a browser-facing barrel therefore type-checks, builds and tests green, and
+  then dies at `ERR_MODULE_NOT_FOUND` as PID 1: that is how a `vue` re-export inside `@intentic/extension-api`
+  killed the daemon on boot (hence `@intentic/extension-api/protocol`, the vue-free entry point host code
+  imports). The rule that follows: **daemon code importing a package that also ships browser modules takes a
+  node-safe entry point, never the root barrel** — type-only imports from the root are fine, they are erased.
+  `_tools/scripts/smoke-image.sh` is the gate. It boots each freshly built half on the arch that produced it
+  and requires `/health` to report `ok` with `boot.ready` and no failed step, before `images-merge` stitches
+  `latest` and before the release can move `stable` — so a daemon that cannot start now fails the pipeline that
+  built it rather than the nightly a day later.
