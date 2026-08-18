@@ -166,22 +166,33 @@ const ensureLanguage = async (monaco: typeof Monaco, lang: string | undefined): 
     }
 };
 
-/* THE CODE SURFACE'S TYPE, in one place because both surfaces are the same surface to a reader: a file and its
- * diff must not be set in different sizes. Monaco paints its own text from numbers, so unlike the rest of the
- * app it does not follow the base text size on its own — these are stated AT that size and converted, and an
- * editor already on screen re-reads them through `watchEditorType`. Without that, choosing a bigger text size
- * left the one surface made entirely of text at the old one. */
-const EDITOR_FONT_PX = 13;
-const EDITOR_LINE_PX = 20;
+/* THE CODE SURFACE'S TYPE, in one place because both surfaces read from the same knob. Monaco paints its own
+ * text from numbers, so unlike the rest of the app it does not follow the base text size on its own — these
+ * are stated AT that size and converted, and an editor already on screen re-reads them through
+ * `watchEditorType`. Without that, choosing a bigger text size left the one surface made entirely of text at
+ * the old one.
+ *
+ * The diff is set a step TIGHTER than the file: its panes hold the same code at half the width (side-by-side)
+ * and a review reads by scanning, not by settling in — so at the file's size it crowded out everything else
+ * on screen. */
+const TYPE_PX = {
+    file: { font: 13, line: 20 },
+    diff: { font: 12, line: 17 },
+} as const;
 
-export const editorType = (): { fontSize: number; lineHeight: number } => ({
-    fontSize: toScreenPx(EDITOR_FONT_PX),
-    lineHeight: toScreenPx(EDITOR_LINE_PX),
+export type EditorSurface = keyof typeof TYPE_PX;
+
+export const editorType = (surface: EditorSurface = `file`): { fontSize: number; lineHeight: number } => ({
+    fontSize: toScreenPx(TYPE_PX[surface].font),
+    lineHeight: toScreenPx(TYPE_PX[surface].line),
 });
 
 /** Keep an editor's type current for as long as the component holding it lives. */
-export const watchEditorType = (apply: (type: { fontSize: number; lineHeight: number }) => void): void => {
-    watch(useTextSize().scale, () => apply(editorType()));
+export const watchEditorType = (
+    apply: (type: { fontSize: number; lineHeight: number }) => void,
+    surface: EditorSurface = `file`,
+): void => {
+    watch(useTextSize().scale, () => apply(editorType(surface)));
 };
 
 export function useMonaco() {

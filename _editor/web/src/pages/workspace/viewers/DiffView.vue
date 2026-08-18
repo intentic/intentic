@@ -199,7 +199,7 @@ onMounted(async () => {
         scrollBeyondLastLine: false,
         renderMarginRevertIcon: false,
         fontFamily: mono,
-        ...editorType(),
+        ...editorType(`diff`),
     });
     diff.value = editor;
     // Empty models first: `render` owns what goes in them, so the toggle and the first paint take one path.
@@ -224,7 +224,7 @@ watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
 
 // The app's text size, in place: the diff is the surface most worth resizing and the least willing to do it on
 // its own (see editorType).
-watchEditorType((type) => diff.value?.updateOptions(type));
+watchEditorType((type) => diff.value?.updateOptions(type), `diff`);
 
 watch(showComments, async () => {
     if (diff.value === undefined) {
