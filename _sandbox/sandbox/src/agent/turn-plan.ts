@@ -4,7 +4,6 @@ import {
     type AgentEvent,
     type AgentTurn,
     type Capability,
-    type IqContextOutcome,
     type Rule,
     type SandboxSettings,
     type SystemPromptMode,
@@ -12,7 +11,6 @@ import {
     SandboxSettingsSchema,
     capabilitiesOf,
     envSuffix,
-    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { accountsServer } from "../browser/accounts-tools.js";
 import { secretsServer } from "../browser/secrets-tools.js";
@@ -53,7 +51,6 @@ import { subagentWaitServer } from "./subagent-wait.js";
 import { watchServer } from "./watch-server.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
-import { retrieveTurnContext } from "./turn-context.js";
 import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-preamble.js";
 import { workspaceMapNote } from "./workspace-map.js";
 import { createDepsServer } from "../workspace/deps-tools.js";
@@ -99,16 +96,6 @@ export type TurnPlan =
           // It rides the plan rather than the request: the request is what the SDK is handed, and the steer has
           // already been folded into the prompt by the time one exists.
           readonly terseArm?: boolean;
-          // The same, for the pre-injected workspace context (UsageTurn.iqContext). True means the turn was
-          // ASSIGNED the retrieval, not that it found anything — see the ledger field's note on why the arms
-          // have to be the coin flip's populations rather than the ones retrieval happened to serve.
-          readonly contextArm?: boolean;
-          // What became of the retrieval (UsageTurn.iqContextOutcome). The companion to `contextArm`, not a
-          // replacement for it: the arm keeps the experiment honest, this says how much of the treatment arm the
-          // treatment reached and what took away the rest — the difference between a small effect and a diluted
-          // one, and then between a dilution worth fixing and one that is the gate doing its job.
-          readonly contextOutcome?: IqContextOutcome;
-          readonly contextDurationMs?: number;
           // The iq-search teaching experiment's CONVERSATION-level arm. It cannot flip per turn: once a skill
           // has entered a provider session, a later control turn in that session is already contaminated.
           readonly searchArm?: boolean;
@@ -741,8 +728,6 @@ export const planHarnessTurn = async (
     const {
         hashlineEdits,
         iqSearch,
-        iqContext,
-        iqContextHoldout,
         outputCleaners,
         outputHoldout,
         rules,
@@ -755,57 +740,6 @@ export const planHarnessTurn = async (
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
     const turnEndingRules = standing(rules, "turn.ending");
-    /* Retrieval starts HERE and is awaited at the prompt, so its (deadline-capped) latency runs underneath the
-     * gates below — the dependency probe, the delegation lookup, the browser servers — instead of on top of
-     * them. `input.prompt` is the user's own words: `context.base.prompt` may already carry a switched
-     * conversation's history preamble, whose opening lines would then be what got searched. */
-    /* NOT FOR AN UNATTENDED TURN, whose prompt is not a question — it is a brief some surface composed (a loop
-     * iteration, a chore, an acceptance story). Retrieval reads the opening 400 characters as its query, and
-     * for those the opening is scaffolding: a loop's iteration heading and its "you are one iteration of a
-     * loop" preamble were being searched against the index, and the ranked answer to THAT was pasted on top of
-     * the step's real instructions. Every workflow step opened with a page of it.
-     *
-     * AND NOT FOR THE RESUME SENTENCE, which is the same failure one layer in: a turn re-run after a renewed
-     * credential, a provider outage or a sandbox restart carries the daemon's own explanation of the
-     * interruption in front of the prompt (turn-resume.ts), and 400 characters of that is the whole query. Six
-     * turns in one week searched the index for "the Claude credential ... has been renewed" and pasted the
-     * ranked answer to it over the question the user had actually asked. The words underneath are the ask.
-     *
-     * ONE NOTE PER CONVERSATION, AND ONLY WHERE A PERSON OPENED ONE BY TYPING — which is the rule the three
-     * paragraphs above are special cases of, and the only rule that holds without a list of stopwords behind it.
-     *
-     * A week of real turns, scored on whether the agent then opened a file the note named: 75% on a
-     * conversation's opening message against a 27% chance floor, 37% on every later message against 13% — and
-     * the later ones mostly re-name files the conversation was already sitting in. The reason is structural. A
-     * follow-up means what the turn above it meant, so "Yes, fix it.", "Next iteration." and "Done. Verify if
-     * all is good." are questions to the index only if you cannot see that turn — and the index cannot. An
-     * opening message is the one place where the words on screen carry the whole ask.
-     *
-     * The three clauses are that sentence, spelled: `unattended` drops everything a surface started (a loop
-     * iteration, a chore, an acceptance story, and every automation wake — a schedule mints a FRESH conversation
-     * on each fire, so nothing else here would tell it from a person opening one); `forkOf` drops a
-     * conversation cut from another, whose opening message continues a transcript it was handed rather than
-     * starting one; and a turn count of zero is what makes it once per conversation rather than once per
-     * message — the registry counts every turn that ran, however it ended. */
-    const conversationTurns =
-        context.conversationTurns ?? (input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0));
-    const contextEligible = iqContext && input.unattended !== true && input.forkOf === undefined && conversationTurns === 0;
-    /* PRE-INJECTION'S OWN COIN FLIP, on the same terms as the terse steer's — a fraction of otherwise-eligible
-     * turns run without the retrieved context so the two arms are populations of the same command stream.
-     * Independent of the terse flip on purpose: two independent flips leave each experiment's other-arm turns
-     * evenly spread, where a shared one would confound them into a single four-cell design nothing here reads.
-     *
-     * FLIPPED ONLY WHERE THE MECHANISM APPLIES, which is what makes the arms mean anything. An arm stamped onto
-     * a turn retrieval was never going to run for puts the same dead weight in both populations, and the delta
-     * it dilutes is already small — the experiment carried that flaw while every unattended and follow-up turn
-     * was being stamped, and scoping retrieval to opening messages would have made the diluting majority the
-     * whole ledger. What is left in the two arms now is turns the note could have ridden. */
-    const contextArm = contextEligible && iqContextHoldout > 0 ? Math.random() >= iqContextHoldout : undefined;
-    // Past the gate, the holdout arm is the only thing left that can take the note away.
-    const contextNote =
-        contextEligible && contextArm !== false
-            ? retrieveTurnContext({ iq: services.iq, logger: services.logger }, withoutResumeNote(input.prompt))
-            : undefined;
     /* THE SECOND ROUND, and the last of the planning I/O: an extension scan, the browser bring-up, and the
      * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs
      * `stableSystemPrompt`), which is why these could not join the round before it — and why they had no
@@ -943,24 +877,7 @@ export const planHarnessTurn = async (
     const literalSlash = isUnknownSlashCommand(input.agent ?? "claude", promptWithAttachments);
     // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
     // protocol, not something the user said (turn-preamble.ts).
-    // The workspace context retrieved for this very message (turn-context.ts), if the flip gave this turn the
-    // treatment arm and the retrieval found something worth prepending. Awaited here, where the notes are
-    // assembled, so everything above ran while it was in flight.
-    // The skip's REASON travels to the ledger, not just the fact of it: an arm that delivers on one turn in five
-    // is either a gate working as designed or a deadline eating the feature, and the two call for opposite
-    // responses. A boolean could not tell them apart, so the loss stayed unattributable for as long as it existed.
-    const retrieved = await contextNote;
-    const contextOutcome = retrieved === undefined ? undefined : "note" in retrieved ? "note" : retrieved.skipped;
-    const contextDurationMs = retrieved?.durationMs;
-    const prompt = withTurnPreamble(
-        [
-            // After the standing protocol notes and before the slash note: those two are about how to read the
-            // conversation, this is about the message itself, so it belongs against it.
-            ...(retrieved !== undefined && "note" in retrieved ? [retrieved.note] : []),
-            ...(literalSlash ? [LITERAL_SLASH_NOTE] : []),
-        ],
-        promptWithAttachments,
-    );
+    const prompt = withTurnPreamble(literalSlash ? [LITERAL_SLASH_NOTE] : [], promptWithAttachments);
     /* Fast speed is a NATIVE-turn ask, so it is held back here and handed only to the branch that keeps the
      * Anthropic credential. A routed turn (codex/grok/kimi/gemini/endpoint under this same loop) is pointed at
      * the sandbox's translator, and the harness refuses fast mode on anything that isn't first-party — so
@@ -972,9 +889,6 @@ export const planHarnessTurn = async (
         ok: true,
         run: services.agent,
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
-        ...(contextArm !== undefined ? { contextArm } : {}),
-        ...(contextOutcome !== undefined ? { contextOutcome } : {}),
-        ...(contextDurationMs !== undefined ? { contextDurationMs } : {}),
         request: {
             ...routable,
             prompt,

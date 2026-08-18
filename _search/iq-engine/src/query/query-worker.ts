@@ -14,10 +14,6 @@ import type { EngineHit } from "../types.js";
  * synchronous, so the scan cannot yield, and transformers.js tokenizes in JS before ONNX ever sees the batch.
  * Agents search on every turn, so that is ~700ms of dead loop per turn on the thread that streams their output.
  *
- * The cost was already being paid in a feature that was switched off rather than shipped: turn-context ran
- * WITHOUT the cross-encoder because on a busy box the full pipeline missed its 3s deadline 71% of the time —
- * 104 of 133 turns computed a better answer and threw it away. That trade is what this thread buys back.
- *
  * READ-ONLY, and that is the whole concurrency story. The index worker writes; this side and the host only
  * read; WAL lets all three hold the file at once. Nothing here is stateful between requests either, so requests
  * need no ordering and no queue — each message is answered on its own, and `id` is what pairs an answer with

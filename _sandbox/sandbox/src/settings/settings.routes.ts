@@ -11,9 +11,9 @@ import { reconcileSkills } from "./skills.js";
 // The per-sandbox agent-settings routes. `get` applies defaults when the manifest is absent; `set` overwrites it;
 // `savings` reports what each token-reduction mechanism was worth over the requested window — the cleaners from
 // the ledger of whichever backend is currently doing the compressing (so the setting that decides which cleaner
-// runs also decides which ledger is read), the terse steer and the pre-injected workspace context from the
-// spend ledger's experiment arms; `defaultPrompt` reads Claude Code's own system prompt out of the installed
-// CLI (preset-prompt.ts).
+// runs also decides which ledger is read), the terse steer and the iq search teaching from the spend ledger's
+// experiment arms; `defaultPrompt` reads Claude Code's own system prompt out of the installed CLI
+// (preset-prompt.ts).
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
     return {

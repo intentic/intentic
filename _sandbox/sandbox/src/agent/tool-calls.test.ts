@@ -33,10 +33,10 @@ test("toolCategoryOf categorizes builtin names case-insensitively", () => {
     expect(toolCategoryOf("mystery")).toBe("other");
 });
 
-/* THE CATEGORY ALONE CANNOT ANSWER "was this a search", and the pre-injection experiment is judged on the
+/* THE CATEGORY ALONE CANNOT ANSWER "was this a search", and the search-teaching experiment is judged on the
  * answer. This workspace's own search tool is a CLI — `iq q "…"` is Bash, which categorizes as `execute` — so
  * counting the `search` category would miss every search on a sandbox with iq switched on, which is the sandbox
- * the retrieval is being measured against. */
+ * the teaching is being measured against. */
 test("isSearchCall counts the CLI searches the category misses, and leaves shell plumbing alone", () => {
     expect(isSearchCall({ category: "search", target: "createServer" })).toBe(true);
     expect(isSearchCall({ category: "execute", target: `iq q "where is the floor enforced"` })).toBe(true);

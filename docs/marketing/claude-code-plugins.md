@@ -86,9 +86,6 @@ corpus is), listed in the root `marketplace.json` beside iq.
 
 **Explicitly out of v1:**
 
-- `iqContext` pre-turn retrieval as a UserPromptSubmit hook — the eligibility gate lives in daemon
-  TypeScript and wants a careful port; it also couples `trim` to the iq binary. Phase 2, possibly as part
-  of the iq plugin instead (where the dependency already exists).
 - Any per-cleaner UI, the savings charts, holdout experiments — sandbox-only instrumentation.
 
 **Estimate:** adapter + log rotation + payload verification ≈ a day (tests included, reusing the existing
@@ -100,5 +97,4 @@ the cleaner's own history says the corpus, not the fixtures, is where the surpri
 
 1. iq plugin: version + validate + submit (unblocks the discoverability story immediately).
 2. `trim` v1: adapter build, moves, dogfood, submit.
-3. Phase 2 (separate decision): `iqContext` port, `trim-savings` polish, cross-promo between the two
-   plugin READMEs.
+3. Phase 2 (separate decision): `trim-savings` polish, cross-promo between the two plugin READMEs.

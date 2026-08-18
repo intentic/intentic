@@ -9,7 +9,7 @@ import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
-import { compositionOf, dilutionOf, verdictsOf } from "./savingsChart";
+import { compositionOf, verdictsOf } from "./savingsChart";
 import SavingsArmsChart from "./SavingsArmsChart.vue";
 import SavingsCard from "./SavingsCard.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
@@ -149,25 +149,15 @@ const { savings } = useSavings(window);
 const composition = computed(() => (savings.value === undefined ? undefined : compositionOf(savings.value.input)));
 // A section that would only say "nothing yet" is not shown at all — every other panel on this tab is about
 // turns that ran, and an empty savings card on a sandbox that never enabled a cleaner is just furniture.
-const hasSavings = computed(
-    () => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined || savings.value?.context !== undefined,
-);
+const hasSavings = computed(() => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined);
 // Which calendar these numbers are on, said next to them rather than left to the range picker above — a total
 // under a 7-day filter and the same total over all time are the same digits with different meanings.
 const savingsPeriod = computed(() => (preset.value === `all` ? `all time` : `this range`));
 
-/* Both experiments' headlines come from one function, so "Measuring" and "Off" land in the same slot, at the
- * same size, as a delta would — see verdictsOf. It takes the undefined case itself, which is what lets these be
- * two plain computeds and the cards one shape.
- *
- * A LIST, because an experiment can be read more than one way: the retrieval reports the searches a turn ran
- * and the searches it ran before touching a file, off one coin flip. The first is the card's headline and the
- * rest stack under it — a second card would claim a second experiment, which there isn't. */
+/* The experiment's headline comes from one function, so "Measuring" and "Off" land in the same slot, at the
+ * same size, as a delta would — see verdictsOf. It takes the undefined case itself, which is what lets this be
+ * a plain computed and the card one shape. */
 const outputVerdicts = computed(() => verdictsOf(savings.value?.output));
-const contextVerdicts = computed(() => verdictsOf(savings.value?.context));
-// How much of the assigned arm the retrieval actually reached — one sentence about the coin flip, so it sits
-// under the readings rather than inside any of them.
-const contextDilution = computed(() => (savings.value?.context === undefined ? `` : dilutionOf(savings.value.context)));
 
 // ---- the table and the export -------------------------------------------------------------------------------
 
@@ -346,19 +336,19 @@ const hasSpend = computed(() => current.value.length > 0);
 
                 <!-- SAVINGS — what the token-reduction settings were worth. Separate cards, never one ranking
                      of all the mechanisms together: the first is measured (every command carries its own raw
-                     baseline, so the numbers are exact), the two after it are experiments (a turn cannot be
-                     re-run unsteered, or uninformed, so each needs a control group, an n and a margin). Bars
-                     side by side would lend the experiments the first card's confidence. They are also
-                     different units of value — a saved tool-output token is saved again on every later request
-                     of the conversation, an output token is saved once but costs several times as much, and
-                     pre-injection trades input tokens for turns — which is why no card totals into another.
+                     baseline, so the numbers are exact), the second is an experiment (a turn cannot be re-run
+                     unsteered, so it needs a control group, an n and a margin). Bars side by side would lend
+                     the experiment the first card's confidence. They are also different units of value — a
+                     saved tool-output token is saved again on every later request of the conversation, an
+                     output token is saved once but costs several times as much — which is why no card totals
+                     into another.
 
                      Different subjects, but ONE shape: title, verdict, evidence, provenance, in that order and
                      those positions (SavingsCard). The cards used to be written independently and had drifted
-                     into three different ones — only the first led with a number, and the other two opened with
-                     a paragraph of method where their answer should have been — so the row could not be scanned
-                     and every card had to be read to learn whether it said anything at all. The method text is
-                     not gone; it moved behind each title's (i), which is the altitude it belongs at.
+                     apart — only the first led with a number, and the others opened with a paragraph of method
+                     where their answer should have been — so the row could not be scanned and every card had to
+                     be read to learn whether it said anything at all. The method text is not gone; it moved
+                     behind each title's (i), which is the altitude it belongs at.
 
                      A CONTAINER grid, not a viewport one. This section sits behind the rail, the chat panel and
                      the tab's padding, so `xl:grid-cols-3` was asking the window a question only the card knows
@@ -453,57 +443,6 @@ const hasSpend = computed(() => current.value.length > 0);
                             </template>
 
                             <template #footnote>terse steer · A/B against a random holdout</template>
-                        </SavingsCard>
-
-                        <!-- Pre-injected search context. Judged on SEARCHES — the thing it removes — after cost
-                             per turn spent nine days measuring which arm had drawn the bigger jobs. Two readings
-                             off one coin flip, so they share a card: the headline counts every search a turn
-                             ran, the line under the bars counts only the ones before it opened a file. -->
-                        <SavingsCard
-                            title="Search before the turn"
-                            :value="contextVerdicts.headline.value"
-                            :unit="contextVerdicts.headline.unit"
-                            :tone="contextVerdicts.headline.tone"
-                        >
-                            <template #hint>
-                                Mean searches per turn when the daemon retrieves for the message up front, against a random control that starts cold.
-                                Scored in searches on purpose: the retrieval hands over the anchors a turn would otherwise go and find, so searches
-                                are the thing it moves. Cost per turn cannot see it — a turn's price is dominated by how big the job was, and the coin
-                                flip does not deal both arms the same jobs.
-                            </template>
-
-                            <SavingsArmsChart
-                                v-if="savings?.context !== undefined"
-                                :reading="savings.context.metrics[0]"
-                                :detail="contextVerdicts.headline.detail"
-                                on-label="context injected"
-                                off-label="cold start · control"
-                            />
-                            <!-- The narrower reading, as a line rather than a second pair of bars: it is the same
-                                 turns counted differently, and drawing it again at full size would read as a
-                                 second experiment agreeing with the first. -->
-                            <p v-for="verdict in contextVerdicts.also" :key="verdict.unit" class="text-2xs text-subtle">
-                                <span class="tabular-nums" :class="verdict.tone === `success` ? `text-success` : `text-muted`">{{
-                                    verdict.value
-                                }}</span>
-                                {{ verdict.unit }} · {{ verdict.detail }}
-                            </p>
-                            <!-- Said once, under every reading, because it qualifies all of them: the arm is the
-                                 coin flip's, and most of it may never have been treated at all. -->
-                            <p v-if="contextDilution !== ``" class="text-2xs text-subtle">{{ contextDilution }}</p>
-                            <template v-else>
-                                <p class="text-xs text-muted">
-                                    Needs the switch on and a turn holdout set — with no control arm there is nothing to compare against.
-                                </p>
-                                <RouterLink
-                                    :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `running` } }"
-                                    class="flex items-center gap-1 self-start text-xs text-link hover:underline"
-                                >
-                                    Retrieve before the turn<Icon name="chevron-right" />
-                                </RouterLink>
-                            </template>
-
-                            <template #footnote>pre-injected context · A/B against a random holdout</template>
                         </SavingsCard>
                     </div>
                 </section>

@@ -4,9 +4,8 @@ import { computed } from "vue";
 import { meanLabel } from "./savingsChart";
 import { providerColor } from "./usageChart";
 
-/* ONE READING's two arms. Every turn-level reading this sandbox produces renders through here — the terse
- * steer's, and both of the pre-injected context's — because they differ in nothing a reader cares about except
- * which arm is which and what the bars measure.
+/* ONE READING's two arms. Every turn-level reading this page charts renders through here, because readings
+ * differ in nothing a reader cares about except which arm is which and what the bars measure.
  *
  * Two bars rather than a trend line, because the subject is a comparison of two populations, not a quantity
  * over time — and the arms are not sampled evenly through the window (the holdout is a minority by design), so

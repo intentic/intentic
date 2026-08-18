@@ -125,7 +125,7 @@ it(`puts each group in exactly one category`, async () => {
     expect(seen.toSorted()).toEqual(EVERY_GROUP.toSorted());
 });
 
-// Usage's "Retrieve before the turn" link, end to end: it names a category, and the setting it promised is drawn.
+// A link that names a category, end to end: the category opens and the setting it promised is drawn.
 it(`opens the category a link named`, async () => {
     const { el } = await mount({ section: `running` });
     expect(shown(el)).toContain(`Code search`);

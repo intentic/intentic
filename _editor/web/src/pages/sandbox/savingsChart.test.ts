@@ -1,6 +1,6 @@
 import type { InputSavings, TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { compositionOf, dilutionOf, meanLabel, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
+import { compositionOf, meanLabel, savedByCleaner, stageLabel, verdictsOf } from "./savingsChart";
 
 // The composition bar's one invariant: its segments are a decomposition of the raw output, so they sum to it
 // exactly. Everything else on the card is read against that — a stack whose parts don't add up to the whole is
@@ -94,10 +94,10 @@ describe(`verdictsOf`, () => {
         expect(headlineOf([reading({ deltaPct: 7, marginPct: 3 })])).toMatchObject({ value: `↑7%`, tone: `content` });
     });
 
-    /* SEARCHES, NOT COST, and in whole ones. Retrieval removes searching, so searching is the quantity that can
-     * see it; cost per turn spent nine days reporting which arm had drawn the bigger jobs. A mean difference
-     * carries a spare decimal, and a fifth of a search is not something anybody avoided. */
-    it(`scores the retrieval experiment in searches, rounded to ones a turn could actually have run`, () => {
+    /* SEARCHES, NOT COST, and in whole ones. The teaching changes searching, so searching is the quantity that
+     * can see it; cost per turn mostly reports which arm had drawn the bigger jobs. A mean difference carries a
+     * spare decimal, and a fifth of a search is not something anybody avoided. */
+    it(`scores the search experiment in searches, rounded to ones a turn could actually have run`, () => {
         const verdict = headlineOf([reading({ metric: `searchCalls`, deltaPct: -48, marginPct: 9, saved: 91.4 })]);
         expect(verdict.unit).toBe(`searches per turn`);
         expect(verdict.detail).toBe(`±9pp (95%) · ~91 searches saved in this range`);
@@ -152,38 +152,6 @@ describe(`verdictsOf`, () => {
     it(`treats an experiment that isn't running as a verdict of its own, not a missing card`, () => {
         expect(verdictsOf(undefined).headline).toMatchObject({ value: `Off`, unit: `not being measured`, tone: `muted` });
         expect(verdictsOf(undefined).also).toHaveLength(0);
-    });
-});
-
-/* A delta over a mostly-untreated arm is a fraction of the delta over the treated ones, and the number alone
- * cannot say so. Pre-injection's arm is the coin flip by design — so this qualifies EVERY reading over it, which
- * is why it is one sentence beside them rather than a clause repeated inside each. */
-describe(`dilutionOf`, () => {
-    it(`says how much of the treated arm the mechanism actually reached`, () => {
-        expect(dilutionOf(experiment([reading()], { deliveredPct: 19 }))).toBe(`The note actually landed on 19% of the treated arm.`);
-    });
-
-    /* Assigned and eligible delivery are separate denominators. The former qualifies the experiment; the latter
-     * diagnoses the mechanism. Real sessions looked mostly ineligible overall while deadlines ate most eligible
-     * attempts, and naming only the largest bucket hid the actionable failure. */
-    it(`separates by-design ineligibility from losses among eligible retrievals`, () => {
-        const dilution = dilutionOf(
-            experiment([reading()], {
-                deliveredPct: 17.9,
-                outcomes: [
-                    { outcome: `ineligible`, turns: 230 },
-                    { outcome: `deadline`, turns: 159 },
-                    { outcome: `note`, turns: 85 },
-                ],
-            }),
-        );
-        expect(dilution).toBe(
-            `85/474 assigned turns received a note. 230 were ineligible by design. Of 244 eligible turns, 159 missed the deadline.`,
-        );
-    });
-
-    it(`is empty for an experiment whose treatment always lands, so no card prints an empty clause`, () => {
-        expect(dilutionOf(experiment([reading()]))).toBe(``);
     });
 });
 

@@ -1,34 +1,24 @@
-import type { DayWindowQuery, IqContextOutcome, TurnExperiment, TurnMetricReading, UsageTurn } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, TurnExperiment, TurnMetricReading, UsageTurn } from "@intentic/sandbox-contract";
 import type { UsageStore } from "./usage-store.js";
 
-/* THE TURN-LEVEL EXPERIMENTS, read back out of the spend ledger: what the terse steer and the pre-injected
- * workspace context are each worth, measured rather than asserted.
+/* THE TURN-LEVEL EXPERIMENTS, read back out of the spend ledger: what the terse steer and the iq search
+ * teaching are each worth, measured rather than asserted.
  *
  * A cleaned command carries its own baseline — the raw capture and the emitted result come out of the same
  * event — so the input-side report can be exact. A turn cannot: there is no second run of the same turn to see
- * what it would have cost unsteered, or without the context it opened with. The only honest number therefore
- * comes from a holdout, which flips a fraction of eligible work to the control arm and stamps which arm ran
- * onto the ledger. Terse output and pre-injection flip turns; iq search teaching flips whole conversations so
- * a session that already learned the skill can never be relabelled as cold on its next turn.
+ * what it would have cost unsteered. The only honest number therefore comes from a holdout, which flips a
+ * fraction of eligible work to the control arm and stamps which arm ran onto the ledger. Terse output flips
+ * turns; iq search teaching flips whole conversations so a session that already learned the skill can never be
+ * relabelled as cold on its next turn.
  *
  * BOTH EXPERIMENTS SHARE EVERY LINE OF THE STATISTICS and differ only in which field carries the arm and what
  * the turns are judged on — so the metric is a parameter, not a second copy of Welch. A turn can sit in both at
  * once (the flips are independent), which is exactly why each is read as its own two populations: the other
  * experiment's coin flip is then just noise, distributed evenly across both of these arms.
  *
- * AND EACH EXPERIMENT MAY BE READ SEVERAL WAYS. One coin flip, one arm assignment, one delivery rate — and, for
- * pre-injection, two metrics over them, because the searches a turn ran and the searches it ran before touching
- * a file answer different halves of the same question. They are readings, not experiments: the arms underneath
- * them are the same turns.
- *
- * WHAT THE WITHHELD NUMBER OWED THE READER, and what it cost to learn. Nine days of real use put pre-injection
- * at +27.0% ± 29.9pp on COST — withheld, correctly, because that interval runs from −2.9% to +56.9%. Read
- * against the transcripts the gap turned out not to be the mechanism at all: every raw outcome moved with it
- * (reads +58%, duration +73%, cache-read tokens +28%), and every outcome with turn size divided out was flat to
- * within a point. It was the coin flip handing the treatment arm the bigger jobs. Cost per turn is the price of
- * a whole turn's work; retrieval moves one part of it; so the part lived inside the noise of the rest and no
- * amount of waiting was going to separate them — the same trap output tokens laid for the terse steer. The
- * metrics below are the fix: count the thing the mechanism actually removes.
+ * AND AN EXPERIMENT MAY BE READ SEVERAL WAYS: the teaching reports the searches a turn ran and the searches it
+ * ran before touching a file, off one coin flip, because the two answer different halves of the same question.
+ * They are readings, not experiments: the arms underneath them are the same turns.
  *
  * WHY A NUMBER IS WITHHELD, TWICE. Per-turn quantities are wildly heteroscedastic — one turn is "yes", the next
  * is a forty-tool refactor — so a delta over a handful of turns is noise wearing a percentage sign. The first
@@ -57,12 +47,12 @@ const Z_95 = 1.96;
  * so a fifth off the narration moved the reported number by 1.6% and the measurement was left reporting which
  * arm drew the bigger tasks.
  *
- * Pre-injection is judged on SEARCHES, for exactly that reason — it removes searches, so searches are what can
- * see it. Twice over, because the two readings fail differently and neither alone is enough: `searchCalls` is
- * every search the turn ran, which is the whole of what the mechanism displaces but still grows with the size
- * of the job; `openingSearches` stops at the first file the turn opened or changed, which is the orientation
- * retrieval is actually aimed at and is roughly the same act whatever the job turns out to be. A real effect
- * shows in both. An effect that shows only in the first is the arms drawing different-sized work again.
+ * The search teaching is judged on SEARCHES, for exactly that reason — it changes how the agent searches, so
+ * searches are what can see it. Twice over, because the two readings fail differently and neither alone is
+ * enough: `searchCalls` is every search the turn ran, which still grows with the size of the job;
+ * `openingSearches` stops at the first file the turn opened or changed, which is the orientation the teaching
+ * is actually aimed at and is roughly the same act whatever the job turns out to be. A real effect shows in
+ * both. An effect that shows only in the first is the arms drawing different-sized work again.
  *
  * A metric can also be UNMEASURED on a turn (a row written before it was recorded), which is not the same as
  * zero — `of` returns undefined there and the turn leaves the population rather than dragging the mean down. A
@@ -104,29 +94,6 @@ const armOfValues = (values: readonly number[]): Arm => {
 };
 
 const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => armOfValues(turns.map(metric.of).filter((value) => value !== undefined));
-
-/* WHAT REACHED THE TREATMENT ARM, and what took away the rest. Both come off the same field, because a rate
- * without its reasons is a number nobody can act on: 81% of an assigned arm delivering nothing reads as a
- * broken mechanism until you can see that most of it is the eligibility gate declining on prompts that named
- * their own file, which is the gate working. Undefined ⇒ no turn in the window recorded an outcome. */
-const deliveryOf = (
-    turns: readonly UsageTurn[],
-): { readonly deliveredPct: number; readonly outcomes: { outcome: IqContextOutcome; turns: number }[] } | undefined => {
-    const known = turns.map((turn) => turn.iqContextOutcome).filter((outcome) => outcome !== undefined);
-    if (known.length === 0) {
-        return undefined;
-    }
-    const counts = new Map<IqContextOutcome, number>();
-    for (const outcome of known) {
-        counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
-    }
-    return {
-        deliveredPct: round1(((counts.get("note") ?? 0) / known.length) * 100),
-        // Largest first, and sorted HERE so every reader gets the order the contract promises — a screen that
-        // re-sorts to find the biggest loss is a screen that can disagree with the ledger about what it was.
-        outcomes: [...counts].map(([outcome, count]) => ({ outcome, turns: count })).toSorted((a, b) => b.turns - a.turns),
-    };
-};
 
 /* The resolution this is aiming AT. A mechanism that moves its own metric by less than a tenth is not one
  * anybody would act on — the turn-to-turn spread of what people ask for swamps it — so ±10pp is where the
@@ -263,25 +230,20 @@ const experimentOf = (
     // is why the tuple shape travels all the way from here to the contract rather than being an array anyone
     // downstream has to check for emptiness.
     metrics: readonly [Metric, ...Metric[]],
-    // Delivery is asked of pre-injection alone: its arm is the coin flip, and a turn can be assigned the
-    // retrieval and still have nothing to prepend. The steer, once assigned, always lands.
-    asksDelivery = false,
 ): TurnExperiment | undefined => {
     // Only turns the experiment applied to. A turn with no arm stamped had the mechanism out of play entirely
-    // (a custom system prompt drops the steer, an ineligible prompt is never retrieved for, and so does the
-    // experiment being off) — pooling those into the off-arm would compare the treated turns against a
-    // population selected by something other than the coin flip.
+    // (a custom system prompt drops the steer, and so does the experiment being off) — pooling those into the
+    // off-arm would compare the treated turns against a population selected by something other than the coin
+    // flip.
     const on = turns.filter((turn) => arm(turn) === true);
     const off = turns.filter((turn) => arm(turn) === false);
     if (on.length === 0 && off.length === 0) {
         return undefined;
     }
-    const delivery = asksDelivery ? deliveryOf(on) : undefined;
     const [headline, ...rest] = metrics;
     return {
         metrics: [readingOf(on, off, headline), ...rest.map((metric) => readingOf(on, off, metric))],
         minTurns: MIN_ARM_TURNS,
-        ...(delivery !== undefined ? { deliveredPct: delivery.deliveredPct, outcomes: delivery.outcomes } : {}),
     };
 };
 
@@ -289,14 +251,12 @@ const experimentOf = (
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<{ readonly output?: TurnExperiment; readonly search?: TurnExperiment; readonly context?: TurnExperiment }> => {
+): Promise<{ readonly output?: TurnExperiment; readonly search?: TurnExperiment }> => {
     const turns = await usage.turns(window);
     const output = experimentOf(turns, (turn) => turn.terse, [PROSE_CHARS]);
     const search = conversationExperimentOf(turns, [SEARCH_CALLS, OPENING_SEARCHES]);
-    const context = experimentOf(turns, (turn) => turn.iqContext, [SEARCH_CALLS, OPENING_SEARCHES], true);
     return {
         ...(output !== undefined ? { output } : {}),
         ...(search !== undefined ? { search } : {}),
-        ...(context !== undefined ? { context } : {}),
     };
 };

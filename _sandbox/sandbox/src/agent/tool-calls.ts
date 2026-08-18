@@ -159,13 +159,13 @@ const commandHeads = (command: string): string[] =>
         return head.split("/").pop() ?? head;
     });
 
-/* DID THIS TOOL CALL GO LOOKING FOR CODE — what the pre-injection experiment is judged on, and a question the
+/* DID THIS TOOL CALL GO LOOKING FOR CODE — what the search-teaching experiment is judged on, and a question the
  * category alone cannot answer.
  *
  * `toolCategoryOf` reads a tool's NAME, and this workspace's own search tool is a CLI: `iq q "…"` arrives as
  * Bash and categorizes as `execute`, next to every `grep`/`rg`/`find` the model runs by hand. Counting only the
- * `search` category would score retrieval against the searches it does not replace while missing every one it
- * does — precisely backwards on a sandbox with iq turned on. */
+ * `search` category would miss every iq search — precisely backwards on a sandbox with iq turned on, which is
+ * the sandbox the teaching is measured against. */
 export const isSearchCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "search") {
         return true;

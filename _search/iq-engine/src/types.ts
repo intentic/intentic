@@ -68,8 +68,8 @@ export interface QueryRequest {
     readonly echo: string;
     /* THIS QUERY'S PIPELINE, when it is not the engine's. A resident engine serves several callers off one
      * index, and they do not all want the same trade: a human's `iq` call wants the best ranking the box can
-     * produce, while a caller answering under a deadline (the daemon's pre-injected turn context) would rather
-     * drop the cross-encoder than drop the answer. One engine, one index, per-call stages.
+     * produce, while a caller answering under a deadline would rather drop the cross-encoder than drop the
+     * answer. One engine, one index, per-call stages.
      *
      * Absent ⇒ the engine's own set, which is every stage unless the host disabled some. The disabled list
      * travels out in WorkspaceSearchResult.features either way, so a cheaper run says so. */

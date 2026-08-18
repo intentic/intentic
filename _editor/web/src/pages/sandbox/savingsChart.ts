@@ -118,7 +118,7 @@ export const compositionOf = (input: InputSavings): Composition => {
 // --- the turn experiments -------------------------------------------------------------------------------------
 
 /* WHAT EACH METRIC IS A QUANTITY OF, said in the reader's words rather than the ledger's. The unit is never
- * decoration: "↓12%" alone does not say twelve percent of what, and the retrieval experiment reports two
+ * decoration: "↓12%" alone does not say twelve percent of what, and the search experiment reports two
  * readings at once whose whole difference is which of these they count.
  *
  * `searches per turn` and `searches before the first file` are deliberately near-identical phrases. They ARE
@@ -161,9 +161,7 @@ export interface ExperimentVerdict {
     readonly detail: string;
 }
 
-/* ONE READING'S verdict, and only what that reading can answer for. The clause about how much of the arm the
- * treatment reached is NOT in here: it is a fact about the coin flip, equally true of every reading over it,
- * and folding it into each one would print it as many times as there are metrics — see dilutionOf. */
+// ONE READING'S verdict, and only what that reading can answer for.
 export const readingVerdict = (
     reading: TurnMetricReading,
     minTurns: number,
@@ -205,48 +203,6 @@ export const readingVerdict = (
         tone: reading.deltaPct < 0 ? `success` : `content`,
         detail: `±${reading.marginPct}pp (95%)${(reading.saved ?? 0) > 0 ? ` · ~${savedLabel(reading)} saved in this range` : ``}`,
     };
-};
-
-/* THE DILUTION SENTENCE, printed once under all of an experiment's readings because it qualifies every one of
- * them equally: what an arm was worth is a claim about the turns the mechanism REACHED, and pre-injection
- * reaches only some of the arm it is assigned (a prompt that named its own file is retrieved for and finds
- * nothing worth prepending). A delta over a four-fifths-untreated arm is a fifth of the delta over the treated
- * ones, and a reader has no way to know that from the number.
- *
- * …and WHERE THE REST WENT, when the ledger knows, with the turns behind it. Assigned delivery answers whether
- * the measured arm was diluted; eligible delivery answers whether retrieval itself works. Collapsing those into
- * one percentage hid the live failure: ineligibility was the largest overall bucket, while deadlines consumed
- * most attempts that actually ran. Empty ⇒ delivery is not a separate question here (the terse steer lands). */
-export const dilutionOf = (experiment: TurnExperiment): string => {
-    if (experiment.deliveredPct === undefined) {
-        return ``;
-    }
-    if (experiment.outcomes === undefined || experiment.outcomes.length === 0) {
-        return `The note actually landed on ${experiment.deliveredPct}% of the treated arm.`;
-    }
-    const turns = (outcome: NonNullable<TurnExperiment[`outcomes`]>[number][`outcome`]): number =>
-        experiment.outcomes?.find((row) => row.outcome === outcome)?.turns ?? 0;
-    const notes = turns(`note`);
-    const ineligible = turns(`ineligible`);
-    const assigned = experiment.outcomes.reduce((sum, row) => sum + row.turns, 0);
-    const eligible = assigned - ineligible;
-    const losses = [
-        { outcome: `deadline` as const, text: `missed the deadline` },
-        { outcome: `indexing` as const, text: `found the index still building` },
-        { outcome: `no-hits` as const, text: `found no hits` },
-        { outcome: `failed` as const, text: `failed` },
-    ]
-        .map(({ outcome, text }) => ({ turns: turns(outcome), text }))
-        .filter((row) => row.turns > 0)
-        .map((row) => `${row.turns} ${row.text}`);
-    const eligibility = ineligible > 0 ? ` ${ineligible} were ineligible by design.` : ``;
-    const attempted =
-        eligible === 0
-            ? ``
-            : losses.length === 0
-              ? ` All ${eligible} eligible turns received it.`
-              : ` Of ${eligible} eligible turns, ${losses.join(`; `)}.`;
-    return `${notes}/${assigned} assigned turns received a note.${eligibility}${attempted}`;
 };
 
 /* Every reading an experiment carries, split the way a card reads it: the `headline` fills the verdict slot at

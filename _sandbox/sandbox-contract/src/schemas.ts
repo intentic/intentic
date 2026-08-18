@@ -1725,11 +1725,6 @@ export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
 //   iqSearchHoldout   — conversation-level measurement control for iqSearch (UsageTurn.iqSearchArm). The arm
 //                        stays fixed because teaching already loaded into a session cannot be removed next turn.
-//   iqContext         — retrieves for the user's message BEFORE the turn starts and prepends the ranked answer
-//                        to it, so the model opens with the anchors instead of paying a search round-trip to
-//                        find them. Independent of iqSearch: that one teaches the agent to search, this one
-//                        answers ahead of it.
-//   iqContextHoldout  — measurement control for iqContext, same shape as terseHoldout (UsageTurn.iqContext).
 //   workspaceMap      — computes an AREA index of the project a run starts in and prepends it to the
 //                        conversation's opening message, so the turn does not have to buy its own orientation
 //                        with a directory listing. Generated from the filesystem every time, never stored.
@@ -1799,29 +1794,12 @@ export const SandboxSettingsSchema = z.object({
      * a valid control here: once the teaching enters a provider session, withholding it from the next request
      * does not make the model forget it. 0 ⇒ no measurement and every conversation receives the teaching. */
     iqSearchHoldout: z.number().min(0).max(1).default(0),
-    /* RETRIEVE BEFORE THE TURN, don't wait to be asked. The daemon runs the user's message through the resident
-     * iq engine and prepends the ranked answer to it, so a turn that would have opened with two or three search
-     * calls opens with the anchors already in hand. Independent of `iqSearch`, which only teaches the agent to
-     * reach for the CLI once it decides to search — this one answers ahead of that decision, and the two
-     * compose: the injected capsule names the anchors, the CLI is there for what it missed.
-     *
-     * It rides the USER message (turn-context.ts), never the system prompt, for the same reason the setup
-     * notice does: it changes every turn, and the system prefix is kept byte-stable for the prompt cache.
-     * Off by default — it spends input tokens on every eligible turn, and whether that trade pays is exactly
-     * what the holdout below is for. */
-    iqContext: z.boolean().default(false),
-    // Measurement control for the pre-injection, identical in shape to `terseHoldout`: a fraction [0,1] of
-    // otherwise-eligible turns run WITHOUT the retrieved context and stamp their arm onto the ledger
-    // (UsageTurn.iqContext), so the report compares two real populations of turns instead of asserting a saving.
-    iqContextHoldout: z.number().min(0).max(1).default(0),
     /* THE MAP THE TURN OPENS WITH — which areas the project a run starts in has, one derived line on what each
      * is for, and where the run is standing among them (agent/workspace-map.ts).
      *
-     * A different answer to the same question `iqContext` answers. That one retrieves for the WORDS of the
-     * message and is only as good as the question; this one answers the question every first turn has whatever
-     * it was asked — "what is this and where am I in it" — which across a hundred sessions of this workspace was
-     * being bought with a directory listing in two turns out of five, and with ~5.3k tokens of tool results
-     * before the job was touched. The two compose: this says which area, retrieval says which file.
+     * It answers the question every first turn has whatever it was asked — "what is this and where am I in
+     * it" — which across a hundred sessions of this workspace was being bought with a directory listing in two
+     * turns out of five, and with ~5.3k tokens of tool results before the job was touched.
      *
      * ROOTED AT THE RUN'S STARTING FOLDER rather than at the workspace: a persona's start folder, an isolated
      * conversation's worktree, or wherever the turn's cwd is. It maps the project containing that folder and
@@ -2059,34 +2037,17 @@ export type InputSavings = z.infer<typeof InputSavingsSchema>;
 // without it. A mean PER TURN, because the arms never hold the same number of turns.
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 
-/* WHAT BECAME OF A TURN'S PRE-TURN RETRIEVAL. `note` is the only outcome that reaches the model; the rest are
- * the ordinary ways it declines, and none of them is an error — each is a turn that proceeded exactly as it
- * would have without the feature.
- *
- *   ineligible — the prompt failed a lexical gate before retrieval ran (it named its own file, or said nothing
- *                to search for). By design, and the largest share by far.
- *   deadline   — the resident engine outran its budget and the turn went on without it.
- *   indexing   — the index had not caught up with disk, so any answer would have been confidently partial.
- *   no-hits    — the query matched nothing.
- *   failed     — retrieval threw; swallowed on purpose, since this is an optimisation nobody asked for.
- *
- * It lives in the contract rather than in the daemon because two things downstream of the daemon have to speak
- * it: the ledger row that records it (UsageTurnSchema.iqContextOutcome) and the experiment that reads it back
- * (TurnExperimentSchema.outcomes). Declared here, above both. */
-export const IqContextOutcomeSchema = z.enum(["note", "ineligible", "deadline", "indexing", "no-hits", "failed"]);
-export type IqContextOutcome = z.infer<typeof IqContextOutcomeSchema>;
-
 /* ONE METRIC'S READING of a turn-level experiment: the two arms, and whatever the arithmetic over them will
  * stand behind. An experiment can carry several — see TurnExperimentSchema.
  *
  * `metric` says what `mean` counts and what `deltaPct` is a delta in, and choosing it is most of the work.
  *   proseChars      — the terse steer: the thing it steers, and the only part of the model's output that
  *                     responds to being asked to be brief (UsageTurn.proseChars has why output tokens cannot).
- *   searchCalls     — pre-injection: the searches a turn ran, which the retrieval directly removes.
- *   openingSearches — pre-injection, narrower: the searches before the turn first touched a file.
- * Pre-injection used to be judged on COST, and could not be. UsageTurn.searchCalls has the nine days of data
- * that settled it — cost is a whole turn's work, retrieval moves one part of it, and the part sat inside the
- * noise of the rest exactly as the steer's effect once sat inside its tool-call arguments. */
+ *   searchCalls     — the search teaching: the searches a turn ran, which the teaching directly changes.
+ *   openingSearches — the same, narrower: the searches before the turn first touched a file.
+ * Search mechanisms must not be judged on COST. Cost is a whole turn's work, a search mechanism moves one part
+ * of it, and the part sits inside the noise of the rest exactly as the steer's effect once sat inside its
+ * tool-call arguments. */
 export const TurnMetricReadingSchema = z.object({
     metric: z.enum(["proseChars", "searchCalls", "openingSearches"]),
     on: SavingsArmSchema,
@@ -2134,11 +2095,11 @@ export type TurnMetricReading = z.infer<typeof TurnMetricReadingSchema>;
  * counted: a turn under a custom system prompt drops the terse steer along with everything else the daemon
  * appends, so it belongs to neither arm.
  *
- * ONE COIN FLIP, SEVERAL READINGS. `metrics` is a list because pre-injection is judged on two — the searches a
- * turn ran, and the ones it ran before touching a file — and they are two readings of the SAME experiment, not
- * two experiments. Splitting them into separate entries would duplicate the arm assignment and the delivery
- * rate below, and let a screen show a turn count on one that disagrees with the other. Headline first: the
- * screens read `metrics[0]` for the big number and the rest as supporting lines. */
+ * ONE COIN FLIP, SEVERAL READINGS. `metrics` is a list because the search teaching is judged on two — the
+ * searches a turn ran, and the ones it ran before touching a file — and they are two readings of the SAME
+ * experiment, not two experiments. Splitting them into separate entries would duplicate the arm assignment and
+ * let a screen show a turn count on one that disagrees with the other. Headline first: the screens read
+ * `metrics[0]` for the big number and the rest as supporting lines. */
 export const TurnExperimentSchema = z.object({
     // A head and a tail rather than a plain array, because an experiment judged on nothing is not an experiment:
     // the screens take the first reading for their headline and stack the rest under it, and this is what makes
@@ -2155,32 +2116,16 @@ export const TurnExperimentSchema = z.object({
     // Content-addressed treatment version. Present where mixing rows from two instruction revisions would turn
     // one experiment into two unnamed ones; the reader filters to this (latest) cohort.
     cohort: z.string().optional(),
-    /* How much of the treatment arm the treatment actually REACHED, when that is knowable and less than all of
-     * it — pre-injection's arm is the coin flip (intention-to-treat, deliberately), and a turn can be assigned
-     * the retrieval and still have nothing to prepend. Measured at four turns in five, which is the difference
-     * between a mechanism worth little and one worth five times what the delta says.
-     *
-     * Absent ⇒ delivery is not a separate question for this experiment (the terse steer always lands) or no
-     * turn in the window recorded it. The screen shows the delta as diluted rather than silently scaling it:
-     * the correction is a division by a rate this small only when the rate is itself well measured. */
-    deliveredPct: z.number().optional(),
-    /* WHERE THE REST OF THE TREATMENT ARM WENT, most common first. `deliveredPct` says a mechanism reached one
-     * turn in five; this says whether the other four were the eligibility gate declining on purpose or a
-     * two-second deadline quietly eating the feature, which are the same number and opposite problems.
-     *
-     * Absent ⇒ the experiment has no delivery question (the terse steer always lands) or no turn recorded one. */
-    outcomes: z.array(z.object({ outcome: IqContextOutcomeSchema, turns: z.number() })).optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 
-// `output`/`context` are absent when that experiment isn't running at all (its flag off, or no holdout set) — a
+// `output`/`search` are absent when that experiment isn't running at all (its flag off, or no holdout set) — a
 // section that isn't there reads as "not measured", which is the truth, while zeros would read as "measured,
 // worth nothing".
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     output: TurnExperimentSchema.optional(),
     search: TurnExperimentSchema.optional(),
-    context: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 
@@ -6507,31 +6452,6 @@ export const UsageTurnSchema = z.object({
      * no control to be compared against. Pooling those into the off-arm would compare steered turns against a
      * population selected by something other than the coin flip, which is not a control at all. */
     terse: z.boolean().optional(),
-    /* Which arm of the pre-injection experiment this turn ran on (settings.iqContextHoldout), on the same terms
-     * as `terse` above: absent ⇒ outside the experiment.
-     *
-     * TRUE means the turn was ASSIGNED the retrieved context, not that a note was necessarily prepended — a
-     * treatment turn whose retrieval came back empty or unconfident injects nothing. That is deliberate: the
-     * arms have to be the coin flip's populations, and re-labelling a turn by what retrieval happened to find
-     * would sort turns by how searchable their question was, which is a property of the question. The control
-     * arm contains the same unsearchable questions in the same proportion, so they cancel. */
-    iqContext: z.boolean().optional(),
-    /* WHAT ACTUALLY HAPPENED to the retrieval on this turn — the companion to `iqContext`, and the answer to the
-     * question that field's design deliberately refuses to answer.
-     *
-     * Keeping the arm on the coin flip is right, and it costs something: the treatment arm contains turns the
-     * treatment never reached, so the delta it yields is diluted by however many those are. Measured over nine
-     * days of real use that was four turns in five, which makes the difference between "this mechanism is worth
-     * little" and "this mechanism is worth five times what the number says".
-     *
-     * IT RECORDS THE REASON, not merely a yes/no, because the yes/no left the whole loss unexplained. 81% of an
-     * assigned arm delivering nothing is either a gate doing its job or a deadline quietly eating the feature,
-     * and those call for opposite responses — one is working as designed, the other is a two-second timeout to
-     * raise. A boolean cannot tell them apart, so nothing downstream could act on the number it produced.
-     *
-     * `note` is delivery; every other value is a turn that ran exactly as the control arm would have, labelled
-     * with what took the treatment away. Absent ⇒ outside the experiment, exactly as for the arm. */
-    iqContextOutcome: IqContextOutcomeSchema.optional(),
     /* Which arm of the iq SEARCH-TEACHING experiment this conversation runs on
      * (settings.iqSearchHoldout). Stable for every turn in one conversation: the treatment is instruction
      * loaded into a provider session, so flipping it per turn would call a remembered treatment a control.
@@ -6540,10 +6460,6 @@ export const UsageTurnSchema = z.object({
     // Hash of the plugin nudge + skill body used for this arm. Control turns carry it too, so a report can keep
     // both sides of one treatment revision together and exclude older wording after an upgrade.
     iqSearchCohort: z.string().optional(),
-    /* Wall time spent deciding the pre-turn retrieval outcome, including the full deadline on a timeout.
-     * Absent on rows written before latency was recorded or turns outside the retrieval experiment. Keeping it
-     * per outcome is what lets the report distinguish a slow engine from an eligibility gate. */
-    iqContextDurationMs: z.number().nonnegative().optional(),
     /* Characters of the model's own PROSE this turn — the `delta` frames only, so no tool-call arguments and no
      * thinking. What the terse steer is judged on, and the reason it can be judged at all.
      *
@@ -6562,33 +6478,29 @@ export const UsageTurnSchema = z.object({
     proseChars: z.number().optional(),
     /* SEARCHES THIS TURN RAN — every tool call that went looking for code, the dedicated search tools and the
      * CLI searches alike (isSearchCall owns the rule; `iq q` is Bash and would otherwise not be counted at all).
-     * What pre-injection is judged on, and the same correction `proseChars` is to the terse steer.
+     * What the search teaching is judged on, and the same correction `proseChars` is to the terse steer.
      *
-     * COST PER TURN CANNOT SERVE, which is what this replaced. Nine days of real use reported +27.0% ± 29.9pp on
-     * cost, an interval from −2.9% to +56.9%, and reading it against the transcripts showed the gap was not the
-     * mechanism: every raw per-turn outcome moved with it (reads +58%, duration +73%, cache-read tokens +28%)
-     * and every one of them was flat to within a point once turn size was divided out. It was the coin flip
-     * handing the treatment arm the bigger jobs. Cost is a whole turn's worth of work, and retrieval touches one
-     * part of it, so the part lives inside the noise of the rest — exactly the shape that made output tokens
-     * unable to see the steer.
+     * COST PER TURN CANNOT SERVE: cost is a whole turn's worth of work, a search mechanism touches one part of
+     * it, and the part lives inside the noise of the rest — exactly the shape that made output tokens unable to
+     * see the steer. Nine days of a since-removed retrieval experiment proved it with an interval from −2.9% to
+     * +56.9%, driven entirely by which arm had drawn the bigger jobs.
      *
-     * Searches are what the mechanism acts on directly: a turn handed the anchors up front does not go and find
-     * them. Turns that never search stay in the population at zero rather than being filtered out — they dilute
-     * both arms equally, while selecting on "did it search" would select on the treatment itself.
+     * Searches are what the mechanism acts on directly. Turns that never search stay in the population at zero
+     * rather than being filtered out — they dilute both arms equally, while selecting on "did it search" would
+     * select on the treatment itself.
      *
      * Absent ⇒ the turn predates this being measured; `armOf` drops it rather than reading it as a turn that
      * searched nothing. */
     searchCalls: z.number().optional(),
-    /* …and how many of them came BEFORE the turn first opened or changed a file — the orientation burst, which
-     * is the part retrieval is actually aimed at. A turn that already knows where to look starts working; one
-     * that doesn't goes hunting first, and pre-injection's whole claim is that it removes that hunt.
+    /* …and how many of them came BEFORE the turn first opened or changed a file — the orientation burst. A turn
+     * that already knows where to look starts working; one that doesn't goes hunting first.
      *
      * The narrower of the two readings and the less confounded: `searchCalls` still grows with the size of the
      * job, while the walk up to the first file is roughly the same act whatever the job turns out to be.
      *
      * A turn that never reads or edits counts all of its searches here — it never arrived, so all of it was
-     * orientation. Dropping those instead would select the population by an OUTCOME the treatment moves (a turn
-     * handed its anchors is likelier to reach a file), which is the one bias an arm-based reading cannot absorb.
+     * orientation. Dropping those instead would select the population by an OUTCOME the treatment moves, which
+     * is the one bias an arm-based reading cannot absorb.
      *
      * Absent ⇒ as for `searchCalls`. */
     openingSearches: z.number().optional(),

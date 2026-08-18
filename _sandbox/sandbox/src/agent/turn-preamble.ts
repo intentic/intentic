@@ -4,14 +4,12 @@ import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace
 import { PERSONA_NOTE_HEADER } from "../personas/personas.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
-import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
 // Turn preambles: notes the daemon prepends to a user message before it reaches the model — the delegation
 // how-to (when stableSystemPrompt keeps it out of the system prompt), the dependency-readiness notice (which
 // must ride the user message because it changes the moment an install finishes, while the system prefix stays
-// byte-stable for the prompt cache), the workspace context retrieved for this very message (same reason), and
-// the literal-slash note below. They are protocol, not something the
+// byte-stable for the prompt cache), and the literal-slash note below. They are protocol, not something the
 // user said — but the SDK transcript stores the combined prompt verbatim, so a reopened tab would redraw them
 // as the user's own words: the "Dependencies are NOT installed" text stapled onto their message after every
 // refresh or sandbox rebuild. Builder and stripper live together so restore recognizes exactly what a turn
@@ -101,7 +99,6 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // Computed off the filesystem when the conversation opened, so the reader can check what the agent was told
     // the project looks like against what it actually looks like — the one disclosure a generated map needs.
     { header: WORKSPACE_MAP_NOTE_HEADER, title: "Map of this project" },
-    { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },

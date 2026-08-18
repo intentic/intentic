@@ -921,9 +921,9 @@ async function* runTurn(
      * the number and cannot be seen there. Counted here because `delta` is the only frame that carries prose,
      * and nothing downstream of this loop still knows which bytes were which. */
     let proseChars = 0;
-    /* The turn's search work — pre-injection's metric, on exactly the same footing as `proseChars` above: the
-     * mechanism removes searches, so searches are what it has to be scored on, and cost per turn could never see
-     * it (UsageTurn.searchCalls carries the nine days of data that says so).
+    /* The turn's search work — the search teaching's metric, on exactly the same footing as `proseChars` above:
+     * the mechanism changes how the turn searches, so searches are what it has to be scored on, and cost per
+     * turn could never see it (UsageTurn.searchCalls says why).
      *
      * `openingSearches` stops at the first file the turn opens or changes, which is the moment orientation ended
      * and the work began. Counted here for the same reason as the prose: the frame stream is the only place that
@@ -1221,16 +1221,13 @@ async function* runTurn(
                     // output total and no breakdown — see UsageTurn.proseChars.
                     proseChars,
                     // Likewise off the frames, and in their order — see UsageTurn.searchCalls for why the
-                    // pre-injection experiment is judged on these and not on what the turn cost.
+                    // search-teaching experiment is judged on these and not on what the turn cost.
                     searchCalls,
                     openingSearches,
                     // The turn experiments' arms, when this turn was in them — the ledger is the only place they
-                    // are recorded, and without them the steer's and the pre-injection's effects are
-                    // unmeasurable after the fact.
+                    // are recorded, and without them the steer's and the teaching's effects are unmeasurable
+                    // after the fact.
                     ...(plan.terseArm !== undefined ? { terse: plan.terseArm } : {}),
-                    ...(plan.contextArm !== undefined ? { iqContext: plan.contextArm } : {}),
-                    ...(plan.contextOutcome !== undefined ? { iqContextOutcome: plan.contextOutcome } : {}),
-                    ...(plan.contextDurationMs !== undefined ? { iqContextDurationMs: plan.contextDurationMs } : {}),
                     ...(plan.searchArm !== undefined ? { iqSearchArm: plan.searchArm } : {}),
                     ...(plan.searchCohort !== undefined ? { iqSearchCohort: plan.searchCohort } : {}),
                 })
