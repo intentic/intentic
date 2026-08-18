@@ -23,7 +23,6 @@
         "check": "pnpm check:bytes && pnpm check:paths && pnpm build && pnpm typecheck && pnpm lint && pnpm format:check",
         "dev": "pnpm db:up && turbo run dev --filter=@intentic-app/api --filter=@intentic-app/web --filter=@intentic-dev/site",
         "dev:light": "pnpm db:up && turbo run dev --filter=@intentic-app/api --filter=@intentic-app/web",
-        "dev:public": "node --env-file-if-exists=.env _tools/dev-public/src/main.ts",
         "cert:trust": "pnpm --filter @intentic-app/localhost-https trust",
         "e2e": "turbo run e2e --ui=stream",
         "e2e:browser": "turbo run e2e:browser --ui=stream",

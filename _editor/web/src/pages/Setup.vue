@@ -760,12 +760,16 @@ const onEmailed = (): void => {
     track(`sandbox_setup_link_emailed`, { resuming: resuming.value });
 };
 
-// DEV PLATFORM ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container
-// never reads it), and both — like `ic` — default it to the production api. So a dev platform rides its own
-// api origin into the command, WHEREVER it is served: localhost, or the public tunnel origin `pnpm dev:public`
-// mints (which is not localhost, verifies TLS cleanly, and would otherwise send the claim to production). For
-// a production build this is undefined and the command is unchanged.
-const platformUrlOverride = computed<string | undefined>(() => (environment.production ? undefined : new URL(environment.api.url).origin));
+// LOCAL DEV ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container never
+// reads it), so when the platform is served locally we ride the localhost origin into the command. For the
+// hosted platform this is undefined and the command is unchanged (the scripts default to api.intentic.dev).
+const platformUrlOverride = computed<string | undefined>(() => {
+    const api = new URL(environment.api.url);
+    if (api.hostname !== `localhost` && api.hostname !== `127.0.0.1`) {
+        return undefined;
+    }
+    return api.origin;
+});
 
 // Hand this setup over to the desktop app: the same code, claimed by the same connect script, run by a
 // process that is already on the machine. See environments/desktop.ts for why it is a link and not IPC.

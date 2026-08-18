@@ -1512,21 +1512,6 @@
     },
     {
       "dev": true,
-      "from": "_tools/dev-public",
-      "to": "_tools/fake-zrok"
-    },
-    {
-      "dev": true,
-      "from": "_tools/dev-public",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_tools/dev-public",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
       "from": "_tools/e2e",
       "to": "_platform/api-contract"
     },
@@ -2185,7 +2170,7 @@
       "dir": "_editor/web",
       "files": 910,
       "hasTests": true,
-      "loc": 151503,
+      "loc": 151492,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "14616fc05dde9c74623ffc60b3db682bf98d6595",
@@ -3182,7 +3167,7 @@
       "dir": "_platform/api",
       "files": 90,
       "hasTests": true,
-      "loc": 15258,
+      "loc": 15232,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "9e7598f9ba06f0e5aa327d4787ef2645f03db7b5",
@@ -4358,40 +4343,6 @@
     {
       "anchors": [
         {
-          "path": "_tools/dev-public/src/main.ts",
-          "what": "the orchestrator: seed → grant → agent → shares → pnpm dev:light."
-        },
-        {
-          "path": "_tools/dev-public/src/hub.ts",
-          "what": "the three admin calls, faithful to the platform's own client"
-        },
-        {
-          "path": "_tools/dev-public/src/naming.ts",
-          "what": "the id, the two labels, the account email."
-        },
-        {
-          "path": "_tools/dev-public/src/probe.ts",
-          "what": "the port check, and why publishing a leftover dev server is worse than"
-        },
-        {
-          "path": "_tools/dev-public/src/hub.test.ts",
-          "what": "the calls against @intentic/fake-zrok, including the duplicate-500"
-        }
-      ],
-      "behind": 0,
-      "dir": "_tools/dev-public",
-      "files": 7,
-      "hasTests": true,
-      "loc": 556,
-      "name": "@intentic/dev-public",
-      "oneLiner": "Serve a local dev platform on the internet through the tunnel hub — pnpm dev:public.",
-      "readmeRev": "eb9beef6cb2d8d6061f59554372998e4bd9e2b1c",
-      "stale": false,
-      "updatedAt": 1787060955000
-    },
-    {
-      "anchors": [
-        {
           "path": "_tools/dind-host/Dockerfile",
           "what": "the image."
         },
@@ -4747,7 +4698,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787065568595,
+  "generatedAt": 1787067273279,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

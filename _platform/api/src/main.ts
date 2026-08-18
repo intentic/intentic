@@ -27,33 +27,6 @@ if (!config.google.clientId || !config.google.clientSecret) {
 if (!config.secrets.key) {
     logger.warn(`SECRETS_KEY unset — OAuth/sandbox tokens will be persisted in plaintext (never run production like this)`);
 }
-
-/* A PUBLIC ORIGIN REFUSES DEV-GRADE SECRETS. The two warnings above are enough while the platform answers only
- * this machine — a placeholder session key and plaintext tokens leak to nobody. The moment API_URL or
- * WEB_ORIGIN names an address the internet can reach (`pnpm dev:public`, or any deployment), the same gaps mean
- * anyone can forge sessions and a copied database reads out every stored token, so they become a refusal rather
- * than a line in a log nobody re-reads. The closed local list mirrors the one every sandbox→platform caller
- * trusts (the daemon's local-tls.ts / ic's is_local). */
-const PLACEHOLDER_AUTH_SECRET = `replace-me-with-a-32-char-random-string`;
-const isLocalOrigin = (url: string): boolean => {
-    try {
-        return [`localhost`, `127.0.0.1`, `host.docker.internal`].includes(new URL(url).hostname);
-    } catch {
-        return false;
-    }
-};
-if (!isLocalOrigin(config.api.url) || !isLocalOrigin(config.webOrigin)) {
-    const gaps = [
-        ...(config.betterAuth.secret === PLACEHOLDER_AUTH_SECRET ? [`BETTER_AUTH_SECRET is the .env.example placeholder`] : []),
-        ...(config.secrets.key ? [] : [`SECRETS_KEY is unset`]),
-    ];
-    if (gaps.length > 0) {
-        logger.error(
-            `API_URL/WEB_ORIGIN name a public origin, but ${gaps.join(` and `)} — generate real values (openssl rand -base64 32) before serving this platform to the internet.`,
-        );
-        process.exit(1);
-    }
-}
 if (!config.email.apiKey || !config.email.from) {
     logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset — sandbox invite links will be logged instead of emailed`);
 }
