@@ -1512,6 +1512,21 @@
     },
     {
       "dev": true,
+      "from": "_tools/dev-public",
+      "to": "_tools/fake-zrok"
+    },
+    {
+      "dev": true,
+      "from": "_tools/dev-public",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_tools/dev-public",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": true,
       "from": "_tools/e2e",
       "to": "_platform/api-contract"
     },
@@ -2037,12 +2052,12 @@
       "dir": "_editor/desktop-app",
       "files": 11,
       "hasTests": false,
-      "loc": 1747,
+      "loc": 1749,
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
-      "readmeRev": "93b802e1b031a762f0fe392ed62259c721f30466",
+      "readmeRev": "ed486e793bc1175370618cc20a9d0c0c33efbf44",
       "stale": false,
-      "updatedAt": 1787037882000
+      "updatedAt": 1787058662000
     },
     {
       "anchors": [
@@ -2063,14 +2078,14 @@
           "what": "the Rust dependencies."
         }
       ],
-      "behind": 19,
+      "behind": 20,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 9,
       "hasTests": false,
-      "loc": 2916,
+      "loc": 2923,
       "oneLiner": "The Rust half of the desktop app — the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "2c041c29d2a91cd8ac3a3bcbf25b967dc55fff0e",
-      "reason": "19 commits have touched this package since its README was written",
+      "reason": "20 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1785938033000
     },
@@ -2125,16 +2140,17 @@
           "what": "design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 126,
       "hasTests": false,
-      "loc": 13206,
+      "loc": 13228,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
       "readmeRev": "923b428476368bdc1b410e261e0d27d2ef1d5415",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1786879509000
     },
     {
@@ -2164,16 +2180,16 @@
           "what": "the full route table."
         }
       ],
-      "behind": 6,
+      "behind": 8,
       "component": "editor",
       "dir": "_editor/web",
       "files": 910,
       "hasTests": true,
-      "loc": 151579,
+      "loc": 151744,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "14616fc05dde9c74623ffc60b3db682bf98d6595",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787044262000
     },
@@ -3166,7 +3182,7 @@
       "dir": "_platform/api",
       "files": 90,
       "hasTests": true,
-      "loc": 15231,
+      "loc": 15258,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "9e7598f9ba06f0e5aa327d4787ef2645f03db7b5",
@@ -4286,7 +4302,7 @@
           "what": "what the installer is put through once the image is up."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "tools",
       "dir": "_tools/desktop-smoke",
       "files": 0,
@@ -4295,7 +4311,7 @@
       "name": "@intentic/desktop-smoke",
       "oneLiner": "The image that meets a desktop installer the way a user's machine does.",
       "readmeRev": "860d983ced11034fc7ca9f38baef291016b6a163",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786354800000
     },
@@ -4326,17 +4342,47 @@
           "what": "what Windows, Docker, and the desktop say is true."
         }
       ],
-      "behind": 6,
+      "behind": 7,
       "dir": "_tools/desktop-smoke-windows",
       "files": 17,
       "hasTests": true,
-      "loc": 2059,
+      "loc": 2060,
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "The tiers that meet the Windows installer the way a user's machine does — by running it.",
       "readmeRev": "81b3c788dfa4d84b33fe8548996f73bf04a78dc7",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786358209000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_tools/dev-public/src/main.ts",
+          "what": "the orchestrator: seed → grant → agent → shares → pnpm dev:light."
+        },
+        {
+          "path": "_tools/dev-public/src/hub.ts",
+          "what": "the three admin calls, faithful to the platform's own client"
+        },
+        {
+          "path": "_tools/dev-public/src/naming.ts",
+          "what": "the id, the two labels, the account email."
+        },
+        {
+          "path": "_tools/dev-public/src/hub.test.ts",
+          "what": "the calls against @intentic/fake-zrok, including the duplicate-500"
+        }
+      ],
+      "behind": 0,
+      "dir": "_tools/dev-public",
+      "files": 5,
+      "hasTests": true,
+      "loc": 473,
+      "name": "@intentic/dev-public",
+      "oneLiner": "Serve a local dev platform on the internet through the tunnel hub — pnpm dev:public.",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
     },
     {
       "anchors": [
@@ -4696,7 +4742,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787058356807,
+  "generatedAt": 1787060381714,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [
