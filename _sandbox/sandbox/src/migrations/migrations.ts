@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type MigrationApply, type MigrationPlan, type MigrationReport } from "@intentic/sandbox-contract";
+import { type Capability, type MigrationApply, type MigrationHost, type MigrationPlan, type MigrationReport } from "@intentic/sandbox-contract";
 import { ENV_FILE } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { capabilityCtx } from "../capabilities/capability.js";
@@ -15,7 +15,9 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { type Files, type SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
 import { applyMigration, type MigrationDeps, SecretsInactiveError } from "./apply.js";
+import { diagnoseArchive } from "./diagnose.js";
 import { detectHermes, planHermes } from "./hermes.js";
+import { probeHost, scanHost } from "./host-scan.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
 /* THE MIGRATION SURFACE'S COMPOSITION — the held upload, the plan/apply pair the routes call, and the six-
@@ -50,16 +52,18 @@ const ADAPTERS = [
     plan: (files: Files) => SourcePlan;
 }[];
 
-export const PACK_HINTS = ["tar czf hermes-setup.tar.gz -C ~ .hermes", "tar czf openclaw-setup.tar.gz -C ~ .openclaw"] as const;
-
 export interface Migrations {
     readonly plan: (body: ReadableStream<Uint8Array>, limit: number) => Promise<MigrationPlan>;
+    // Every enrolled machine, and whether a setup is sitting on it. Probed on card render.
+    readonly hosts: () => Promise<MigrationHost[]>;
+    // Read one machine's setup directly — the same plan, without the packing.
+    readonly scan: (hostId: string) => Promise<MigrationPlan>;
     readonly apply: (input: MigrationApply) => Promise<MigrationReport>;
     readonly abandon: () => boolean;
 }
 
-// What the archive reader declined to hold, worded for the plan's refused list.
-const skippedLines = (skipped: readonly string[]): string[] => skipped.map((entry) => `${entry} (not read from the archive)`);
+// What a reader declined to hold, worded for the plan's refused list.
+const skippedLines = (skipped: readonly string[]): string[] => skipped.map((entry) => `${entry} (not read)`);
 
 const migrationDeps = (services: Services): MigrationDeps => {
     const workspacePath = (relPath: string): string => {
@@ -128,24 +132,66 @@ const planOf = (source: MigrationPlan["source"], files: Files): SourcePlan =>
 export const createMigrations = (services: Services): Migrations => {
     let pending: PendingMigration | undefined;
 
+    // Hold a freshly read setup and render its plan. Shared by both doors, so an upload and a direct read
+    // cannot drift in what they return or in what they leave pending.
+    const hold = (source: MigrationPlan["source"], files: Files, skipped: readonly string[]): MigrationPlan => {
+        const planned = planOf(source, files);
+        pending = { token: randomUUID(), source, files, skipped };
+        return {
+            source,
+            token: pending.token,
+            items: planned.planned.map((entry) => entry.item),
+            refused: [...planned.refused, ...skippedLines(skipped)],
+            needsAction: [...planned.needsAction],
+        };
+    };
+
+    const hostCapabilities = async (): Promise<Extract<Capability, { kind: "host" }>[]> =>
+        (await services.capabilities.list()).filter((capability): capability is Extract<Capability, { kind: "host" }> => capability.kind === "host");
+
     return {
         plan: async (body, limit) => {
             const archive = await readForeignArchive(body, limit);
             const recognized = recognize(archive.files);
             if (recognized === undefined) {
-                throw new MigrationFormatError(
-                    `this does not look like a Hermes or OpenClaw home directory — pack one with \`${PACK_HINTS.join("` or `")}\` and upload that`,
-                );
+                // The archive's own contents, not the instruction they already followed — see diagnose.ts.
+                throw new MigrationFormatError(diagnoseArchive(archive.files));
             }
-            const source = recognized.plan(recognized.files);
-            pending = { token: randomUUID(), source: recognized.source, files: recognized.files, skipped: archive.skipped };
-            return {
-                source: recognized.source,
-                token: pending.token,
-                items: source.planned.map((planned) => planned.item),
-                refused: [...source.refused, ...skippedLines(archive.skipped)],
-                needsAction: [...source.needsAction],
-            };
+            return hold(recognized.source, recognized.files, archive.skipped);
+        },
+        /* Every enrolled machine with a one-call probe each, run concurrently — the card renders this before the
+         * owner has read anything, so a sleeping laptop must cost the render nothing but a row that says so. */
+        hosts: async () =>
+            await Promise.all(
+                (await hostCapabilities()).map(async (capability): Promise<MigrationHost> => {
+                    if (!services.hostHub.online(capability.id)) {
+                        return { id: capability.id, online: false, detail: "asleep or offline right now" };
+                    }
+                    const facts = services.hostHub.state(capability.id).facts;
+                    if (facts === undefined) {
+                        return { id: capability.id, online: true, detail: "connected, but it has not described itself yet" };
+                    }
+                    const found = await probeHost(services.hostHub, capability.id, facts.home).catch(() => undefined);
+                    return found === undefined
+                        ? { id: capability.id, online: true, detail: "no Hermes or OpenClaw setup in its home folder" }
+                        : { id: capability.id, online: true, found };
+                }),
+            ),
+        scan: async (hostId) => {
+            const capability = (await hostCapabilities()).find((entry) => entry.id === hostId);
+            if (capability === undefined) {
+                throw new MigrationFormatError(`"${hostId}" is not one of your connected computers`);
+            }
+            const facts = services.hostHub.state(hostId).facts;
+            if (!services.hostHub.online(hostId) || facts === undefined) {
+                throw new MigrationFormatError(`${hostId} is not connected right now — wake it, or pack the folder by hand instead`);
+            }
+            const found = await probeHost(services.hostHub, hostId, facts.home);
+            if (found === undefined) {
+                throw new MigrationFormatError(`${hostId} has no Hermes or OpenClaw folder in ${facts.home}`);
+            }
+            const scan = await scanHost(services.hostHub, hostId, facts.home, found);
+            return hold(scan.source, scan.files, scan.skipped);
         },
         apply: async (input) => {
             if (pending === undefined || pending.token !== input.token) {

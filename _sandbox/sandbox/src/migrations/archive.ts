@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
+import { skipReason } from "./scan-policy.js";
 
 /* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD — a gzipped tar of `~/.hermes` (or wherever the source tool
  * kept house), landed as a bounded in-memory file map the adapters can be PURE over.
@@ -27,30 +28,6 @@ export interface ForeignArchive {
     readonly skipped: readonly string[];
 }
 
-// Directory SEGMENTS never worth holding, wherever they sit: session transcripts, logs, the tool's own install,
-// dependency trees. These are the classes both Hermes' and OpenClaw's own export tooling excludes too.
-const SKIPPED_SEGMENTS = new Set([
-    "sessions",
-    "logs",
-    "plugins",
-    "mcp-tokens",
-    "plans",
-    "hermes-agent",
-    // OpenClaw's channel state — WhatsApp ratchets and friends. Never held, not merely refused: state that
-    // DESYNCS when copied (their own migration guide's warning) has no business even sitting in memory here.
-    "credentials",
-    "node_modules",
-    ".git",
-    "__pycache__",
-    "venv",
-    ".venv",
-]);
-// File suffixes that mean machine state, not setup — databases and their journals.
-const SKIPPED_SUFFIXES = [".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm", ".pyc"];
-
-// A single file larger than this is not configuration. Memory files, skills and configs are kilobytes; the
-// megabyte-scale entries in these homes are exactly the state the plan refuses.
-const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 5000;
 
 const normalize = (name: string): string | undefined => {
@@ -64,21 +41,6 @@ const normalize = (name: string): string | undefined => {
         return undefined;
     }
     return parts.join("/");
-};
-
-const skipReason = (relPath: string, size: number): string | undefined => {
-    const parts = relPath.split("/");
-    const segment = parts.find((part) => SKIPPED_SEGMENTS.has(part));
-    if (segment !== undefined) {
-        return `${parts.slice(0, parts.indexOf(segment) + 1).join("/")}/`;
-    }
-    if (SKIPPED_SUFFIXES.some((suffix) => relPath.endsWith(suffix))) {
-        return relPath;
-    }
-    if (size > MAX_FILE_BYTES) {
-        return `${relPath} (too large to be configuration)`;
-    }
-    return undefined;
 };
 
 const drain = (source: Readable): Promise<void> =>

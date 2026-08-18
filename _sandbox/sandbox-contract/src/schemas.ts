@@ -6049,6 +6049,26 @@ export const MigrationPlanSchema = z.object({
 });
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
 
+/* One of the owner's own computers, as an import SOURCE — the answer to "where is my setup" that needs no
+ * packing at all. Read on the card's first render for every enrolled machine, so the offer appears before the
+ * owner has read a single instruction.
+ *
+ * `found` absent means "connected, and nothing to import here" — which is a real answer worth rendering
+ * quietly, not an error: the machine may simply be a different one from the machine the assistant runs on. */
+export const MigrationHostSchema = z.object({
+    id: z.string(),
+    online: z.boolean(),
+    found: MigrationSourceSchema.optional(),
+    // Why this machine cannot be read right now, when it cannot — offline, or its own refusal, in its words.
+    detail: z.string().optional(),
+});
+export const MigrationHostsSchema = z.object({ hosts: z.array(MigrationHostSchema) });
+export type MigrationHost = z.infer<typeof MigrationHostSchema>;
+
+// Read the setup off a connected computer instead of an upload. Answers with a plan, exactly as the upload
+// route does — everything after this point is identical whichever door the setup came through.
+export const MigrationScanSchema = z.object({ host: z.string().min(1) });
+
 export const MigrationApplySchema = z.object({
     token: z.string(),
     // The ticked item ids. Ids the re-derived plan does not contain are ignored rather than erroring — the

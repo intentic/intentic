@@ -6,6 +6,7 @@ import {
     GrantedRoleSchema,
     MachineReportSchema,
     MigrationApplySchema,
+    MigrationScanSchema,
     roleAtLeast,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -1062,6 +1063,34 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         try {
             return c.json(await migrations.plan(body, MAX_UPLOAD_BYTES));
+        } catch (error) {
+            if (error instanceof MigrationFormatError) {
+                return c.json({ error: error.message }, 400);
+            }
+            throw error;
+        }
+    });
+    /* The owner's own computers as import sources — probed live, because the whole value is that the offer
+     * appears BEFORE they read a packing instruction. Never fails the card: a machine that is asleep or holds
+     * nothing is a row saying so, which is why every probe is caught into its own `detail`. */
+    app.get("/migrations/hosts", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ hosts: await migrations.hosts() });
+    });
+    app.post("/migrations/scan", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = MigrationScanSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ error: "expected { host }" }, 400);
+        }
+        try {
+            return c.json(await migrations.scan(parsed.data.host));
         } catch (error) {
             if (error instanceof MigrationFormatError) {
                 return c.json({ error: error.message }, 400);

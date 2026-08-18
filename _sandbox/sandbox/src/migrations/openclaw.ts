@@ -155,12 +155,10 @@ export const planOpenclaw = (files: Files): SourcePlan => {
             },
             apply: {
                 target: "file",
-                files: dailies
-                    .toReversed()
-                    .map((path) => ({
-                        relPath: `imports/openclaw/memory/${path.slice(`${WS}memory/`.length)}`,
-                        content: files.get(path) ?? Buffer.alloc(0),
-                    })),
+                files: dailies.toReversed().map((path) => ({
+                    relPath: `imports/openclaw/memory/${path.slice(`${WS}memory/`.length)}`,
+                    content: files.get(path) ?? Buffer.alloc(0),
+                })),
             },
         });
     }

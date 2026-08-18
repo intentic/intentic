@@ -262,6 +262,22 @@ recognizes which tool packed the archive. Calls this doc made that the build cor
   year of `memory/YYYY-MM-DD.md` into files every turn reads. The build keeps the curated stores plus the
   newest two weeks in the fence and lands the whole diary under `imports/openclaw/memory/` for the agent to
   search on demand.
+- **The instruction turned out to be the hard part, and it got its own pass.** One caption holding both
+  tools' archive commands assumed six things at once — that you know which command is yours, that you have a
+  shell, that it is on the machine the assistant runs on, that your setup is at the default path, that you
+  know where the file lands, and that you know it will hold your keys. Every wrong assumption failed *after*
+  packing, copying and uploading. The card now asks in the order that resolves fastest: a connected computer
+  first (§4's route 2, now built — `host-scan.ts` walks the machine's own folder over the socket it already
+  holds, so there is nothing to pack), then one tool, then one command with its output location named, with a
+  server, a container and a moved folder each answered in a fold beside it. OpenClaw's path uses that tool's
+  own backup command rather than teaching an archive: it cannot get the paths wrong.
+- **The direct read reads, it never runs.** A shell command would be one call instead of many, and `shell` is
+  a scope an owner may have switched off; reads inside a machine's roots need no scope at all. It also reads
+  only what an adapter can consume (`scan-policy.ts`), while sharing the skip policy with the archive path —
+  so `credentials/` is never read down either door.
+- **An unrecognized upload diagnoses itself** (`diagnose.ts`) instead of repeating the instruction that just
+  failed: an empty archive, the workspace folder packed instead of the whole setup, a whole home directory,
+  or a list of what the archive actually held.
 - **`schedule.kind: "every"` converts only where cron says it cleanly** (whole minutes/hours/a day); "every
   90 minutes" is refused with the reason rather than approximated onto a rhythm the owner never chose.
   One-time `at` jobs are refused too — by import day they are jobs in the past. HEARTBEAT.md becomes one

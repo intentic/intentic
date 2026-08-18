@@ -1,34 +1,88 @@
 <script setup lang="ts">
-import { MigrationPlanSchema, MigrationReportSchema, type MigrationPlan, type MigrationReport } from "@intentic-app/api-contract";
-import { Card, NoticeStack, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import {
+    MigrationHostsSchema,
+    MigrationPlanSchema,
+    MigrationReportSchema,
+    type MigrationHost,
+    type MigrationPlan,
+    type MigrationReport,
+    type MigrationSource,
+} from "@intentic-app/api-contract";
+import { Card, Code, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { helpTopics, SOURCE_GUIDES } from "./migrationGuide";
 
-/* ARRIVING FROM ANOTHER ASSISTANT — a packed `~/.hermes` uploaded, previewed as a ticked checklist, applied as
- * native pieces (docs/assistant-import-design.md; daemon side in _sandbox/sandbox/src/migrations/).
+/* ARRIVING FROM ANOTHER ASSISTANT — a Hermes or OpenClaw setup read in, previewed as a ticked checklist, and
+ * applied as native pieces (docs/assistant-import-design.md; daemon side in _sandbox/sandbox/src/migrations/).
  *
- * PREVIEW-FIRST IS THE WHOLE CARD. The upload answers with a plan, not with changes: every item arrives with
- * the adapter's default tick (`recommended`), the owner edits, and only the apply writes. Secrets are a second,
- * separate consent — the same lock-row anatomy as the bundle card beside this one, because it is the same
- * decision. The plan lives on the daemon under a token and dies with a cancel, an apply, or a daemon restart;
- * this card holds nothing but the rendering, so re-uploading after any staleness costs seconds.
+ * THE CARD'S REAL SUBJECT IS "WHERE IS YOUR SETUP", not "upload a file", and that reordering is the whole
+ * design. The first version was one button under a grey line holding both tools' archive commands — which is
+ * only an instruction if you already have a shell on the machine the assistant runs on. Most people do not:
+ * these tools live on a VPS reached over a tunnel, or in a container, and the browser reading this is
+ * somewhere else entirely. So the card asks the question in that order:
  *
- * The report is the deliverable, exactly as a bundle restore's is: what landed, what failed and why, and the
- * `needsAction` list — channels to reconnect, logins that never travel — that makes "seamless" honest. */
+ *   1. Is the machine already connected here? Then there is nothing to pack — one click reads it. This is the
+ *      answer the whole flow is built around, and it renders FIRST because it deletes every step below it.
+ *   2. Otherwise: which tool? One question with an answer nobody has to look up.
+ *   3. Then exactly one command, with what it prints and where the file lands — and the three ways this
+ *      actually goes wrong (a server, a container, a moved folder) folded underneath, each answered in place.
+ *
+ * PREVIEW-FIRST SURVIVES BOTH DOORS. Whichever way the setup arrives it becomes a plan, never a change: every
+ * item carries the adapter's default tick, the owner edits, and only the apply writes. Secrets are a second,
+ * separate consent. The report at the end is the deliverable, exactly as a bundle restore's is. */
 
 const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 
+const hosts = ref<MigrationHost[]>([]);
+const picked = ref<MigrationSource | undefined>(undefined);
 const plan = ref<MigrationPlan | undefined>(undefined);
 const ticked = ref<Record<string, boolean>>({});
 const withSecrets = ref(false);
 const report = ref<MigrationReport | undefined>(undefined);
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
+
+/* Probed once on mount rather than polled: enrolling a computer is not something that happens while this card
+ * is open, and a live probe costs a round trip to every machine the owner owns. Failure is silence — the
+ * manual path below is complete on its own, and a card that shouted about an unreachable laptop would be
+ * pushing people away from the flow that works. */
+onMounted(async () => {
+    if (!isOwner.value) {
+        return;
+    }
+    hosts.value = MigrationHostsSchema.parse(await sandboxJson(`/migrations/hosts`).catch(() => ({ hosts: [] }))).hosts;
+});
+
+const ready = computed(() => hosts.value.filter((host) => host.found !== undefined));
+const guide = computed(() => (picked.value === undefined ? undefined : SOURCE_GUIDES[picked.value]));
+const help = computed(() => (guide.value === undefined ? [] : helpTopics(guide.value)));
+
+const adopt = (parsed: MigrationPlan): void => {
+    plan.value = parsed;
+    ticked.value = Object.fromEntries(parsed.items.map((item) => [item.id, item.recommended]));
+    withSecrets.value = false;
+    report.value = undefined;
+};
+
+// The zero-packing path: the daemon walks the machine's own folder over the socket it already holds.
+const readFromHost = (host: MigrationHost): Promise<void> =>
+    runPlan(async () => {
+        adopt(
+            MigrationPlanSchema.parse(
+                await sandboxJson(`/migrations/scan`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    body: JSON.stringify({ host: host.id }),
+                }),
+            ),
+        );
+    }, `Could not read the setup from that computer.`);
 
 const chooseArchive = ref<HTMLInputElement>();
 const uploadArchive = (event: Event): Promise<void> =>
@@ -38,12 +92,7 @@ const uploadArchive = (event: Event): Promise<void> =>
             return;
         }
         report.value = undefined;
-        const parsed = MigrationPlanSchema.parse(
-            await sandboxJson(`/migrations/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit),
-        );
-        plan.value = parsed;
-        ticked.value = Object.fromEntries(parsed.items.map((item) => [item.id, item.recommended]));
-        withSecrets.value = false;
+        adopt(MigrationPlanSchema.parse(await sandboxJson(`/migrations/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit)));
     }, `Could not read that archive.`);
 
 // Stable reading order — what the agent will know, then what runs, then what connects, then the keys.
@@ -69,12 +118,14 @@ const apply = (): Promise<void> =>
             }),
         );
         plan.value = undefined;
+        picked.value = undefined;
     }, `Could not apply the import.`);
 
 const cancel = (): Promise<void> =>
     runPlan(async () => {
         await sandboxJson(`/migrations`, { method: `DELETE` });
         plan.value = undefined;
+        picked.value = undefined;
         report.value = undefined;
     }, `Could not discard the plan.`);
 </script>
@@ -90,27 +141,85 @@ const cancel = (): Promise<void> =>
         />
 
         <template v-if="isOwner">
-            <!-- Idle: the one gesture, and the exact commands that produce its input. Which tool the archive
-                 came from is the daemon's to recognize — one button, not one per ecosystem. -->
-            <div v-if="plan === undefined" class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-center gap-2">
-                    <Button label="Upload a packed setup" size="small" :loading="planning" @click="chooseArchive?.click()">
-                        <template #icon><Icon name="upload" /></template>
-                    </Button>
-                    <input ref="chooseArchive" type="file" accept=".gz,.tgz,application/gzip" class="hidden" @change="uploadArchive" />
+            <template v-if="plan === undefined">
+                <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected computer needs no archive, no
+                     transfer and no file dialog, so it goes above everything and reads as the answer rather
+                     than as a shortcut. Only machines that actually hold a setup appear: an offer that leads
+                     to "nothing here" is worse than no offer. -->
+                <RowGroup v-if="ready.length > 0">
+                    <Row v-for="host in ready" :key="host.id" density="compact" icon="check">
+                        <template #title
+                            ><span class="text-xs"
+                                >Found a {{ host.found === `hermes` ? `Hermes` : `OpenClaw` }} setup on {{ host.id }}</span
+                            ></template
+                        >
+                        <template #description>Nothing to pack — it can be read straight off that computer.</template>
+                        <template #control>
+                            <Button label="Bring it in" size="small" :loading="planning" @click="readFromHost(host)" />
+                        </template>
+                    </Row>
+                </RowGroup>
+
+                <!-- Step 1, and it is a question rather than a form: which tool you run is the one thing you
+                     never have to look up, and answering it halves everything below. -->
+                <div v-if="picked === undefined" class="flex flex-col gap-2">
+                    <p class="text-xs text-content">{{ ready.length > 0 ? `Somewhere else?` : `Which one are you moving?` }}</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button label="Hermes" size="small" severity="secondary" @click="picked = `hermes`" />
+                        <Button label="OpenClaw" size="small" severity="secondary" @click="picked = `openclaw`" />
+                    </div>
                 </div>
-                <p class="text-2xs text-subtle">
-                    Pack it on the old machine with
-                    <code class="font-mono">tar czf setup.tar.gz -C ~ .hermes</code> or
-                    <code class="font-mono">tar czf setup.tar.gz -C ~ .openclaw</code>
-                </p>
-            </div>
+
+                <!-- Step 2: one command, what it prints, where the file lands, then the picker. Never two
+                     commands — the reader has already told us which one is theirs. -->
+                <div v-else-if="guide" class="flex flex-col gap-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-xs text-content">1. Run this where {{ guide.label }} lives:</p>
+                        <button type="button" :class="ui.iconButton()" aria-label="Choose a different assistant" @click="picked = undefined">
+                            <Icon name="times" class="text-sm" />
+                        </button>
+                    </div>
+                    <Code :code="guide.command" lang="bash" :wrap="true" :copyable="true" />
+                    <p class="text-2xs text-subtle">{{ guide.lands }}</p>
+
+                    <p class="text-xs text-content">2. Pick that file:</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button label="Choose the packed file" size="small" :loading="planning" @click="chooseArchive?.click()">
+                            <template #icon><Icon name="upload" /></template>
+                        </Button>
+                        <input ref="chooseArchive" type="file" accept=".gz,.tgz,application/gzip" class="hidden" @change="uploadArchive" />
+                    </div>
+
+                    <!-- The three cliffs, each answered where a reader hits it. Folded shut so the person
+                         whose assistant runs right here never reads past step 2. -->
+                    <div class="flex flex-col gap-1">
+                        <details v-for="topic in help" :key="topic.title" class="text-2xs">
+                            <summary class="cursor-pointer text-subtle">{{ topic.title }}</summary>
+                            <div class="mt-1 flex flex-col gap-1 pb-1">
+                                <p class="text-subtle">{{ topic.body }}</p>
+                                <Code v-if="topic.command" :code="topic.command" lang="bash" :wrap="true" :copyable="true" />
+                            </div>
+                        </details>
+                        <details v-if="guide.fallbackCommand" class="text-2xs">
+                            <summary class="cursor-pointer text-subtle">That command isn't available</summary>
+                            <div class="mt-1 flex flex-col gap-1 pb-1">
+                                <p class="text-subtle">{{ guide.fallbackNote }}</p>
+                                <Code :code="guide.fallbackCommand" lang="bash" :wrap="true" :copyable="true" />
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- Said BEFORE the file exists, not after: a tarball of somebody's keys lives in
+                         Downloads forever if nobody mentions it while they are still thinking about it. -->
+                    <p class="text-2xs text-warning">That file holds your keys. Delete it once the import is done.</p>
+                </div>
+            </template>
 
             <!-- The plan: every item a row with its tick. Nothing below this writes until Apply. -->
             <template v-else>
                 <div class="flex items-center gap-2">
-                    <StatusBadge variant="info" :label="plan.source === 'hermes' ? 'Hermes' : 'OpenClaw'" />
-                    <p class="text-2xs text-subtle">Recognized. Untick anything you don't want; nothing is written until you apply.</p>
+                    <StatusBadge variant="info" :label="plan.source === `hermes` ? `Hermes` : `OpenClaw`" />
+                    <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you import.</p>
                 </div>
                 <RowGroup>
                     <Row v-for="item in orderedItems" :key="item.id" as="label" density="compact" class="cursor-pointer">
@@ -164,7 +273,7 @@ const cancel = (): Promise<void> =>
 
                 <div class="flex flex-wrap items-center gap-2">
                     <Button
-                        :label="`Import ${tickedCount} item${tickedCount === 1 ? '' : 's'}`"
+                        :label="`Import ${tickedCount} item${tickedCount === 1 ? `` : `s`}`"
                         size="small"
                         :loading="applying"
                         :disabled="tickedCount === 0"
