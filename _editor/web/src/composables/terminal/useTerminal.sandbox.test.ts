@@ -118,7 +118,7 @@ test("coming back to a sandbox whose list has not landed yet shows no tabs at al
     // The panel reopens (its open state is remembered per sandbox) and asks a daemon that is still waking.
     const back = panel([shell(`web-1`)]);
     back.failNextLists();
-    await expect(back.attach()).rejects.toThrow();
+    await expect(back.attach()).resolves.toBe(false);
 
     expect(back.names()).toEqual([]);
     expect(back.tabs.groups.value).toEqual([]);
@@ -139,7 +139,7 @@ test("the split arrangement survives a switch, and a list that failed on the way
 
     const back = panel([shell(`web-1`), shell(`web-2`), shell(`web-3`)]);
     back.failNextLists();
-    await expect(back.attach()).rejects.toThrow();
+    await expect(back.attach()).resolves.toBe(false);
     expect(back.tabs.groups.value).toEqual([]);
 
     // The daemon answers the next time it is asked.
@@ -159,7 +159,7 @@ test("a list refused on the way in is asked again, and the terminals arrive on t
     try {
         const back = panel([shell(`web-1`), shell(`web-2`)]);
         back.failNextLists();
-        await expect(back.attach()).rejects.toThrow();
+        await expect(back.attach()).resolves.toBe(false);
         expect(back.names()).toEqual([]);
 
         // Nobody touches anything.
@@ -180,7 +180,7 @@ test("the re-asking is bounded", async () => {
     try {
         const back = panel([shell(`web-1`)]);
         back.failNextLists(99);
-        await expect(back.attach()).rejects.toThrow();
+        await expect(back.attach()).resolves.toBe(false);
 
         await vi.advanceTimersByTimeAsync(60_000);
 
@@ -198,7 +198,7 @@ test("the re-asking stops when the panel closes", async () => {
     try {
         const back = panel([shell(`web-1`)]);
         back.failNextLists(99);
-        await expect(back.attach()).rejects.toThrow();
+        await expect(back.attach()).resolves.toBe(false);
         const asked = back.asked();
 
         back.tabs.detach();
@@ -251,7 +251,7 @@ test("a sandbox that never answers is reported as such, not as empty", async () 
     try {
         const { tabs, attach, failNextLists } = panel([shell(`web-1`)]);
         failNextLists(99);
-        await expect(attach()).rejects.toThrow();
+        await expect(attach()).resolves.toBe(false);
         expect(tabs.answer.value).toBe(`waiting`);
 
         await vi.advanceTimersByTimeAsync(60_000);

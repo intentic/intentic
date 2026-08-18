@@ -236,6 +236,58 @@ test("a list that fails mid-wait does not strand the panel", async () => {
     expect(names()).toEqual([`job-checks`]);
 });
 
+/* THE WORST SHAPE THE PUSH BUG EVER TOOK, and the reason attaching swallows a refused list.
+ *
+ * The panel's mount does two things in order: attach, then go and ask for the session it was opened FOR. When
+ * attaching rethrew the list that dropped — which is exactly what a suite pinning its own sandbox makes likely —
+ * the second half was skipped wholesale. The strip then retried its way back to looking perfectly healthy while
+ * nothing anywhere was asking for the check, so the suite ran to the end in a terminal nothing ever showed. */
+test("a first list that drops still lets the panel go and ask for the check it was opened for", async () => {
+    const { tabs, daemonLists, failNextList, attach, names } = panel([]);
+
+    failNextList();
+    await expect(attach(`job-checks`)).resolves.toBe(false);
+
+    // The mount's second half now runs, so the standing wait is placed — and the check arrives when it arrives.
+    await tabs.focus(`job-checks`);
+    daemonLists([job(`checks`, true)]);
+    await tabs.refresh();
+
+    expect(names()).toEqual([`job-checks`]);
+    expect(tabs.activeName.value).toBe(`job-checks`);
+    expect(tabs.pending.value).toBeUndefined();
+});
+
+// A strip we could not read is not an empty sandbox. Opening the empty panel's shell over one would put a real
+// tmux session behind a "1" nobody asked for, on the strength of an answer that never came.
+test("a first list that drops opens no shell of its own", async () => {
+    const { failNextList, attach, names } = panel([]);
+
+    failNextList();
+    await attach();
+
+    expect(names()).toEqual([]);
+});
+
+/* THE WEDGE. Relists used to run one at a time to keep a stale answer from landing on a fresh one — so a list
+ * that never came back (a fetch paused against a tunnel the browser thinks is offline settles neither way) held
+ * up every relist after it for the life of the panel. The strip sat on its standing wait forever, while the work
+ * popover — reading the same shared list directly — showed the very job it was waiting for as running. */
+test("a list that never comes back cannot hold up the ones asked after it", async () => {
+    const { tabs, daemonLists, attach, names, holdNextList } = panel([]);
+    await attach(`job-checks`);
+
+    // Asked, and simply never answered. Nothing releases this one — it is still out there at the end of the test.
+    holdNextList();
+    void tabs.refresh();
+
+    daemonLists([job(`checks`, true)]);
+    await tabs.focus(`job-checks`);
+
+    expect(names()).toEqual([`job-checks`]);
+    expect(tabs.pending.value).toBeUndefined();
+});
+
 // Start opens the panel for a dev-server session the daemon hasn't created yet. The empty-panel shell exists so
 // nobody stares at a blank pane, but here it would flash a stray `web-*` "1" beside the tab that was asked for.
 test("a panel opened FOR a session that doesn't exist yet waits for it instead of spawning a shell", async () => {

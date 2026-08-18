@@ -143,7 +143,9 @@ export interface TerminalTabs {
     // request is superseded). What the panel says "this is starting" about.
     readonly pending: Ref<string | undefined>;
     // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one, unless
-    // `awaited` names the session the panel was opened for — see attach).
+    // `awaited` names the session the panel was opened for — see attach). NEVER rejects: a list this instance
+    // could not get is its own to report and to ask again about, and the surface attaching has work to do
+    // afterwards that a throw from here would silently cost it.
     readonly attach: (el: HTMLElement, awaited?: string) => Promise<boolean>;
     readonly detach: () => void;
     readonly refresh: () => Promise<void>;
@@ -356,10 +358,18 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (container === undefined) {
             return;
         }
+        const ticket = ++asked;
         const listed = await source.list();
         if (container === undefined) {
             return;
         }
+        // An older question's answer, arriving after a newer one has already been written (see `asked`). It is
+        // dropped rather than applied: it describes a sandbox that has since moved on, and writing it is exactly
+        // how a push watched its own check get un-listed a beat after it appeared.
+        if (ticket <= answered) {
+            return;
+        }
+        answered = ticket;
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
         processes.value = listed.filter((tab) => tab.kind === `process`);
         // Before the filter, not after: a session that just finished has to lose its reveal in time for THIS
@@ -405,7 +415,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
     };
 
-    /* RELISTS RUN ONE AT A TIME, and this queue is why the push bug's last form is gone.
+    /* RELISTS ARE ORDERED BY WHEN THEY WERE ASKED, NOT BY WHEN THEY ANSWER — and these two counters are the
+     * whole of that rule.
      *
      * Four things ask for a list, and they ask AT ONCE: the panel's mount, the daemon's `terminals` frame, the
      * focus request a flow just made, and the strip's own refresh button. Each used to fetch and then write
@@ -414,9 +425,17 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
      * The tab was mounted and then un-listed in the same breath: an empty panel, no wait standing any more (the
      * newer list had already spent it), and a push watching "Nothing runs under that name" while the suite ran.
      *
-     * Chaining the whole read-and-apply — not just the apply — means every list is FETCHED after the previous one
-     * has been applied, so no answer can be older than the state it is written over. */
-    let listing: Promise<void> = Promise.resolve();
+     * Every ask takes a ticket; an answer is written only if its ticket beats the last one written. So a stale
+     * answer is DISCARDED rather than applied, which is the same guarantee without the cost the queue this
+     * replaces charged for it.
+     *
+     * THAT COST WAS A WEDGE, and it is the reason this is not a queue any more. Chaining meant each list was
+     * fetched only after the previous one had been APPLIED — so one list that never came back (a paused fetch
+     * against a tunnel the browser thinks is offline, which is a request that settles neither way) blocked every
+     * relist after it for the life of the panel. The strip then sat on its standing wait forever while the work
+     * popover, reading the same shared entry directly, showed the very job it was waiting for as running. */
+    let asked = 0;
+    let answered = 0;
 
     /* A LIST THAT WAS REFUSED HAS TO BE ASKED AGAIN, and this is the only place that can.
      *
@@ -459,11 +478,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     const refresh = (): Promise<void> => {
-        // Both arms run the relist: a rejected predecessor (a dropped tunnel request) is that caller's failure to
-        // report, never a reason to stop the next caller from asking.
-        const next = listing.then(relist, relist);
-        // The queue itself must stay resolvable, or one failed list would reject every relist after it forever.
-        listing = next.catch(() => undefined);
+        // Asked straight away: a caller waiting on this one must never be held up by somebody else's list, and
+        // ordering is the tickets' job now rather than a queue's.
+        const next = relist();
         // Watched rather than awaited: the caller keeps the promise (and the failure to report), while the retry
         // above is this instance's own business.
         next.then(stopRetrying, retryLater);
@@ -489,7 +506,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         mountedNames = [];
         // A fresh daemon gets fresh tries — whatever the one we just left refused us is spent.
         stopRetrying();
-        void refresh();
+        // And every question still out is void: it was asked of the sandbox we just left, and its answer would
+        // otherwise beat the new daemon's own and paint the old machine's sessions onto this one for a beat.
+        answered = asked;
+        void refresh().catch(() => undefined);
     });
 
     // The preference toggled while the panel is open (the bar menu, the palette, the Settings row): relist, so
@@ -497,14 +517,18 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // them from `order` and `groups`; refresh() re-mounts around the survivors if the focused tab was one of
     // them, and their sockets stay parked in the cache in case the user flips back.
     watch(showWorkTerminals, () => {
-        void refresh().then(() => {
-            // Hiding the last tab would leave the panel around a blank pane (only endSession retires it), which
-            // is the one case where the strip can empty without a session ending — so it opens a shell instead,
-            // the same thing attach() does for an empty panel.
-            if (order.value.length === 0 && source.create !== undefined) {
-                newTab();
-            }
-        });
+        // A list that dropped leaves the strip as it was and the retry asks again — nothing to do here, and
+        // nobody to tell, so the failure is absorbed rather than left to ride out as an unhandled rejection.
+        void refresh()
+            .catch(() => undefined)
+            .then(() => {
+                // Hiding the last tab would leave the panel around a blank pane (only endSession retires it), which
+                // is the one case where the strip can empty without a session ending — so it opens a shell instead,
+                // the same thing attach() does for an empty panel.
+                if (order.value.length === 0 && source.create !== undefined) {
+                    newTab();
+                }
+            });
     });
 
     // `awaited` is the session the panel was OPENED FOR (Start, Run tests, a capability install — whatever set
@@ -513,11 +537,27 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // actually asked for — plus a real tmux session behind it — for every Start on an otherwise-empty panel.
     const attach = async (el: HTMLElement, awaited?: string): Promise<boolean> => {
         container = el;
-        await refresh();
+        /* A REFUSED FIRST LIST IS NOT THIS CALL'S TO THROW, and swallowing it here is the fix for the worst
+         * shape the push bug ever took.
+         *
+         * Attaching answers exactly one question — did I open the empty panel's shell — and the surface above
+         * has more to do once it has that answer, starting with the request that brought the panel up at all.
+         * Rethrown, that work was skipped WHOLESALE: a push whose list dropped under the load of its own suite
+         * opened a panel that then never went and asked for the check, so the suite ran to completion in a
+         * terminal nothing ever showed, behind a strip that quietly retried its way to looking fine.
+         *
+         * The refusal is already this instance's to report and to ask again about (`answer`, `retryLater`), and
+         * a caller has nothing to do with it that those two do not do better. */
+        let listed = true;
+        await refresh().catch(() => {
+            listed = false;
+        });
         // Torn down (or re-attached) while the list was in flight — spawning the empty panel's opening shell
         // here would leave a real tmux session nobody asked for and nothing shows, which is how a rapid Ctrl+`
-        // used to silt the sandbox up with orphan `web-*` shells.
-        if (container !== el) {
+        // used to silt the sandbox up with orphan `web-*` shells. A list that never landed is the same refusal
+        // by another route: an empty strip we could not verify is not an empty sandbox, so nothing is created
+        // over it — the retry will say what is really running.
+        if (container !== el || !listed) {
             return false;
         }
         if (order.value.length === 0 && awaited === undefined && source.create !== undefined) {
@@ -644,7 +684,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         const held = revealed.size;
         retireFinished(order.value);
         if (revealed.size !== held) {
-            void refresh();
+            void refresh().catch(() => undefined);
         }
     };
 

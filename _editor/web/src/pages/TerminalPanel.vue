@@ -105,7 +105,9 @@ watch(
 const listed = useTerminalsQuery();
 watch(
     () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
-    () => void tabs.refresh(),
+    // Absorbed: a dropped list is the strip's own to report and to ask again about, and a reaction nobody
+    // awaits is the one place a throw goes nowhere but the console.
+    () => void tabs.refresh().catch(() => undefined),
 );
 
 /* AND THE DAEMON COMING BACK IS ITSELF A RELIST — for an outage that outlasts asking again.
@@ -117,7 +119,7 @@ watch(
  * running while we were cut off". */
 watch(useSandbox().reachable, (isReachable) => {
     if (isReachable) {
-        void tabs.refresh();
+        void tabs.refresh().catch(() => undefined);
     }
 });
 
@@ -847,31 +849,43 @@ const emptyHint = computed(() => {
 const openRequested = async (request: TerminalRequest): Promise<void> => {
     about.value = request;
     clearTerminalRequest();
-    await tabs.focus(request.name);
+    // A list that dropped on the way is NOT a failed open: `focus` records the standing wait BEFORE it asks
+    // anything, so the tab still arrives whenever the session does. Absorbed because the alternative is an
+    // unhandled rejection out of a watcher, over a thing that is already recovering by itself.
+    await tabs.focus(request.name).catch(() => undefined);
 };
 
 onMounted(async () => {
     registerPanelCommands();
-    if (container.value === undefined) {
+    const pane = container.value;
+    if (pane === undefined) {
+        // Nothing to attach to, so nothing asked of this panel can be honoured. Both requests are MODULE state
+        // though, and one left standing is not held for its asker — it is handed to whatever unrelated thing
+        // mounts a panel next. So they are spent here, where they died.
+        consumeSpawnRequest();
+        clearTerminalRequest();
         return;
     }
     // `initial` at mount means the panel was opened FOR that session (Start, Run tests, a capability install) —
     // attach skips the empty-panel shell for it, so the asked-for tab arrives alone instead of behind a stray
     // `web-*` "1" that filled the second before the daemon's session existed.
-    const attaching = tabs.attach(container.value, initial?.name);
+    const attaching = tabs.attach(pane, initial?.name);
     if (newTab !== undefined) {
         disposeSpawn = registerTerminalSpawn(newTab);
     }
-    let autoCreated = false;
-    try {
-        autoCreated = await attaching;
-    } finally {
-        // A "New Terminal" issued while no panel was mounted; an empty panel's auto-created shell IS it. In the
-        // `finally` for the same reason the hook goes up first: a spawn the user asked for still opens its
-        // shell when the list is what broke, since the create needs nothing from it.
-        if (live && newTab !== undefined && consumeSpawnRequest() && !autoCreated) {
-            newTab();
-        }
+    const autoCreated = await attaching;
+    /* THE SPAWN REQUEST IS SPENT BY THIS MOUNT, WHATEVER THIS MOUNT MANAGES TO DO WITH IT — so it is read
+     * before any decision, never from behind a `&&` that can skip reading it.
+     *
+     * A "New Terminal" pressed with no panel mounted stands in module state until a panel takes it. Left there
+     * by a mount that raced a Ctrl+` (`live` false by the time we get here), it does not go back to that press:
+     * it lies in wait and opens a shell into whatever brings a panel up next — which is the stray "1" that
+     * turns up beside a push's checks, minutes or hours later.
+     *
+     * An empty panel's auto-created shell IS that terminal, so it is never opened twice. */
+    const spawnAsked = consumeSpawnRequest();
+    if (live && newTab !== undefined && spawnAsked && !autoCreated) {
+        newTab();
     }
     if (live && initial !== undefined) {
         await openRequested(initial);
@@ -1088,7 +1102,7 @@ const endResize = (event: PointerEvent): void => {
                     v-else
                     type="button"
                     :class="ui.iconButton()"
-                    @click="void tabs.refresh()"
+                    @click="void tabs.refresh().catch(() => undefined)"
                     v-tooltip.top="'Refresh sessions'"
                     aria-label="Refresh sessions"
                 >
