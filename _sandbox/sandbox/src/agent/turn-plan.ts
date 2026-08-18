@@ -55,6 +55,7 @@ import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 import { retrieveTurnContext } from "./turn-context.js";
 import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-preamble.js";
+import { workspaceMapNote } from "./workspace-map.js";
 import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
 import { setupNoticeFor } from "../workspace/workspace-setup.js";
@@ -296,9 +297,24 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
         ...(delegation !== undefined ? { delegation } : {}),
     };
+    /* WHO GETS THE PROJECT MAP: the opening message of a conversation, once, and never again in it.
+     *
+     * ONCE, because the map is already in the transcript by the second turn and the layout has not moved since —
+     * paying for it again would be the repetition that turns a note written to be read once into context bloat,
+     * which is the mistake the dependency notice already had to be walked back from.
+     *
+     * NOT A FORK, whose opening message continues a transcript it was handed rather than starting one; the map
+     * it inherited is the map it needs.
+     *
+     * UNATTENDED TURNS DO GET IT, which is where this parts company with the retrieved-context note above. That
+     * one searches for the WORDS of the message, and an automation's brief is scaffolding that searches badly.
+     * This one answers a question that does not depend on the words at all — what is this project and where am I
+     * standing in it — and an unattended wake is precisely the run with nobody around to answer it. A schedule
+     * mints a fresh conversation on every fire, so this is its only turn. */
+    const workspaceMapEligible = settings.workspaceMap && input.forkOf === undefined && conversationTurns === 0;
     const planned: TurnContext = {
         ...shared,
-        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt),
+        base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt, workspaceMapEligible),
         persona,
     };
     // The dispatch, through the registry rather than an if/else chain over the same union — so the set of
@@ -370,6 +386,12 @@ const honoured = (
     // Which system prompt this turn runs on, with the persona's answer already resolved against the sandbox's
     // (personas.ts personaPrompt).
     prompt: { readonly mode: SystemPromptMode; readonly systemPrompt: string },
+    /* Whether this turn is the one that gets the project map (settings.workspaceMap, and the opening message of
+     * a conversation a person or a wake actually started). Decided by the caller because the gates read `input`,
+     * and spent HERE because this is the only place that knows where the run starts — the card's own folder is
+     * resolved a few lines down, and mapping /work for a run that begins inside one project is the failure the
+     * whole feature is written against. */
+    workspaceMapEligible: boolean,
 ): AgentRequest => {
     const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say.
@@ -391,11 +413,41 @@ const honoured = (
         terseOutput: terseArm ?? settings.terseOutput,
         ...(actingNote === undefined ? {} : { personaNote: actingNote }),
     });
+    /* WHERE THE CARD SAYS TO STAND — a folder under the turn's own root, which is the worktree for an isolated
+     * turn and the workspace for a shared one, so "start in this repo" means the same thing either way.
+     *
+     * Resolved through the workspace escape guard, and a path that fails it is DROPPED rather than refused: the
+     * card is committed config a person hand-edits, and the honest failure for a typo'd folder is a session
+     * that opens at the workspace root — not one that will not start at all, at 3am, for a job whose actual
+     * work was never going to touch that folder anyway. */
+    const startIn = persona.workspace?.startIn;
+    const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
+    /* THE SAME STARTING POSITION, AS THE DAEMON REACHES IT. `startPath` is the path the AGENT will be handed,
+     * which for an isolated turn is a namespace address the daemon is not inside; anything the daemon must read
+     * off disk has to go through `localCwd` instead (the same split hashline edits and the dependency probe
+     * make). The map is walked here, so it takes this one.
+     *
+     * The ROOT moves with it, and that is the point rather than an accident: an isolated conversation's world IS
+     * its worktree, so the "what else is in this workspace" line must name that tree's neighbours and not the
+     * shared checkout's. */
+    const mapRoot = isolated ? context.localCwd : services.workspace.root;
+    const mapCwd = startIn === undefined || startIn === "" ? mapRoot : resolveWithin(mapRoot, startIn);
+    /* THE PROJECT MAP, on the opening message of a conversation and nowhere else (workspace-map.ts). Placed in
+     * this list rather than in the harness arm's for the same reason the dependency notice is: it is a fact
+     * about the FILESYSTEM, so it is as true of a Codex or Grok turn as of a Claude one, and this is the single
+     * point all six runtimes pass through.
+     *
+     * Read as an ordering: who you are, where your files are, what this project looks like, then what is wrong
+     * with it (the dependency notice) — general to specific, each note answering a question the one before it
+     * raises. `mapCwd` outside the root is dropped by the escape guard, and a dropped start folder maps the root
+     * exactly as it opens the session there. */
+    const mapNote = workspaceMapEligible && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
     const notes = [
         // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
         // ahead of anything about the files or the tools it is about to use.
         ...(placement.userNotes ?? []),
         ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
+        ...(mapNote === undefined ? [] : [mapNote]),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.
          *
@@ -418,15 +470,6 @@ const honoured = (
     // The shelves that are not capability-shaped, as tool names the runtime knows. Concatenated with whatever
     // the request already carried (the hashline swap sets its own) rather than replacing it.
     const denied = [...(disallowedTools ?? []), ...personaDisallowedTools(persona, installed)];
-    /* WHERE THE CARD SAYS TO STAND — a folder under the turn's own root, which is the worktree for an isolated
-     * turn and the workspace for a shared one, so "start in this repo" means the same thing either way.
-     *
-     * Resolved through the workspace escape guard, and a path that fails it is DROPPED rather than refused: the
-     * card is committed config a person hand-edits, and the honest failure for a typo'd folder is a session
-     * that opens at the workspace root — not one that will not start at all, at 3am, for a job whose actual
-     * work was never going to touch that folder anyway. */
-    const startIn = persona.workspace?.startIn;
-    const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
     const dependencyDir = startIn ?? "";
     const dependencyInstallAllowed = persona.powers.files === "write" && persona.powers.shell;
     /* THE JS EXECUTION BACKEND'S PLAN, resolved here because this is the point where the persona, the turn's

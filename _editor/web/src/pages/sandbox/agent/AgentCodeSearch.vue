@@ -8,9 +8,13 @@ import { asPercent, commitPercent } from "./numberInputs";
 import { dilutionOf, readingVerdict } from "../savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 
-/* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Two settings that compose and are easy to confuse, which is
+/* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Three settings that compose and are easy to confuse, which is
  * exactly why they share a group: the first teaches the assistant to search with iq instead of grep, the second
- * searches for the user's message before the turn starts and hands over the answer with it. */
+ * searches for the user's message before the turn starts and hands over the answer with it, and the third hands
+ * over the shape of the project before either of them has a question to ask.
+ *
+ * Ordered by when each one happens, which is also the order they are worth explaining in: search on demand,
+ * search ahead of demand, and the map that comes before there is anything to search for. */
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -171,6 +175,34 @@ const contextDilution = computed(() => (savings.value?.context === undefined ? `
                         <p v-if="contextDilution !== ``" class="text-muted">{{ contextDilution }}</p>
                     </div>
                 </template>
+            </template>
+        </Row>
+
+        <!-- The project map — one question earlier than the two above. Both of those answer "where is this
+             thing"; this answers "what is this and which part of it am I in", which every new conversation has
+             to buy for itself and, left to itself, buys with a folder listing. Read off disk each time a
+             conversation opens rather than written down anywhere, which is the whole reason it is a switch here
+             and not a paragraph somebody maintains by hand. -->
+        <Row
+            icon="sitemap"
+            title="Project map"
+            description="Hand the assistant the main parts of the project it opens in, read fresh from your folders."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.workspaceMap ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
+                />
+            </template>
+            <template #below>
+                <!-- No holdout here, unlike its two neighbours. What the map removes is the opening look around,
+                     and that is one or two calls on the first message of a conversation — too small a slice of
+                     too few turns for a split to say anything before the layout it describes has changed. -->
+                <p v-if="settings?.workspaceMap === true" class="text-2xs text-muted">
+                    Sent once per conversation, above your first message, where you can read exactly what it said. Follows where the conversation was
+                    opened: the project you are in gets mapped, the rest of the workspace is named on one line.
+                </p>
             </template>
         </Row>
     </RowGroup>

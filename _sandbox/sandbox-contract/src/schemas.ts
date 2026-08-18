@@ -1730,6 +1730,9 @@ export const SkillRemoveSchema = z.object({ name: SkillNameSchema });
 //                        find them. Independent of iqSearch: that one teaches the agent to search, this one
 //                        answers ahead of it.
 //   iqContextHoldout  — measurement control for iqContext, same shape as terseHoldout (UsageTurn.iqContext).
+//   workspaceMap      — computes an AREA index of the project a run starts in and prepends it to the
+//                        conversation's opening message, so the turn does not have to buy its own orientation
+//                        with a directory listing. Generated from the filesystem every time, never stored.
 //   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
 //                        "" = all cleaners on, else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
@@ -1811,6 +1814,25 @@ export const SandboxSettingsSchema = z.object({
     // otherwise-eligible turns run WITHOUT the retrieved context and stamp their arm onto the ledger
     // (UsageTurn.iqContext), so the report compares two real populations of turns instead of asserting a saving.
     iqContextHoldout: z.number().min(0).max(1).default(0),
+    /* THE MAP THE TURN OPENS WITH — which areas the project a run starts in has, one derived line on what each
+     * is for, and where the run is standing among them (agent/workspace-map.ts).
+     *
+     * A different answer to the same question `iqContext` answers. That one retrieves for the WORDS of the
+     * message and is only as good as the question; this one answers the question every first turn has whatever
+     * it was asked — "what is this and where am I in it" — which across a hundred sessions of this workspace was
+     * being bought with a directory listing in two turns out of five, and with ~5.3k tokens of tool results
+     * before the job was touched. The two compose: this says which area, retrieval says which file.
+     *
+     * ROOTED AT THE RUN'S STARTING FOLDER rather than at the workspace: a persona's start folder, an isolated
+     * conversation's worktree, or wherever the turn's cwd is. It maps the project containing that folder and
+     * names the rest of the workspace on one line, because a run three levels inside one project is not asking
+     * about the others.
+     *
+     * REGENERATED, NEVER STORED, which is the whole reason it is a mechanism rather than a paragraph in the
+     * system prompt or a hand-written CLAUDE.md: in the ten days that motivated it this repo's two busiest
+     * top-level directories stopped existing, and every written-down copy of the layout was wrong by the end of
+     * the window. Off by default — it spends its tokens on the opening message of every conversation. */
+    workspaceMap: z.boolean().default(false),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
     /* The models behind the small automatic jobs that are not a conversation — today the commit message

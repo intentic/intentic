@@ -252,6 +252,16 @@ reports the profile.
   (the question and plan cards, the checklist tools, the secret references, the outside-content envelopes, the
   browser servers). [src/codex/codex-instructions.ts](src/codex/codex-instructions.ts) is the Codex half — two
   undocumented config keys, verified by reading what reached the wire.
+- [src/agent/workspace-map.ts](src/agent/workspace-map.ts) — the AREAS of the project a run starts in, read off
+  the filesystem when a conversation opens and prepended to its first message (opt-in: `workspaceMap`). Rooted at
+  where the run actually begins — a persona's start folder, an isolated worktree — rather than at `/work`, and
+  the shelf it is standing in is the one that opens. Every rule in it is structural rather than named, so it
+  answers the same way in a repository shaped like nothing here: areas are whatever directories a project has, a
+  `packages/`-style shelf is recognised as a directory of manifest-bearing directories, and each line's purpose
+  is that folder's own manifest description or the first prose line of its README — empty where there is neither,
+  never invented. It is REGENERATED and never stored, which is the whole argument for it being a mechanism
+  instead of a paragraph: over the ten days that motivated it, this repo's two busiest top-level directories
+  stopped existing and ten sessions went on naming them.
 - [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.

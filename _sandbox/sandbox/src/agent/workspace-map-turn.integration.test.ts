@@ -1,0 +1,182 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { expect, test, vi } from "vitest";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../composition.js";
+import { testConfig } from "../testing.js";
+import { workspaceSetup } from "../workspace/workspace-setup.js";
+import type { AgentRequest } from "./agent.js";
+import { planTurn, type TurnContext } from "./turn-plan.js";
+import { preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
+import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
+
+/* WHO ACTUALLY RECEIVES THE PROJECT MAP — the gates, asserted through a real plan rather than by reading them.
+ *
+ * The generator has its own suite (workspace-map.integration.test.ts); this file is about the four decisions
+ * around it that live in turn-plan, and each one is a way the feature fails silently rather than loudly:
+ *
+ *   OFF MEANS OFF. An opt-in that leaks would spend the owner's tokens on a setting they never turned on, and
+ *   nothing in the transcript would look wrong.
+ *
+ *   ONCE PER CONVERSATION. The map is stable and already above the follow-up in the transcript, so re-sending it
+ *   is the exact repetition the dependency notice had to be walked back from — invisible, and paid every turn.
+ *
+ *   EVERY RUNTIME, not just the Claude Code loop. It is placed in honoured() for the reason the worktree note
+ *   and the dependency notice are: a fact about the filesystem is as true of a Codex turn, and the harness arm
+ *   is the one place that reaches only one of the six.
+ *
+ *   AND IT FOLLOWS THE RUN, which is the whole feature: a turn whose tree is an isolated worktree must be told
+ *   about THAT tree. Getting this wrong produces a note that is well-formed, plausible, and about a directory
+ *   the turn cannot edit. */
+
+vi.mock("./harness-credentials.js", () => ({
+    resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
+}));
+
+// A project with enough shape to be worth a map: three areas, one of them describing itself.
+const projectAt = async (prefix: string, marker: string): Promise<string> => {
+    const root = await mkdtemp(join(tmpdir(), prefix));
+    await writeFile(join(root, "package.json"), `{"name":"app"}`);
+    for (const [area, description] of [
+        ["billing", `The ${marker} billing area`],
+        ["mailer", `The ${marker} mailer area`],
+        ["docs", ""],
+    ] as const) {
+        await mkdir(join(root, area), { recursive: true });
+        await writeFile(join(root, area, "index.ts"), "");
+        if (description !== "") {
+            await writeFile(join(root, area, "package.json"), JSON.stringify({ name: area, description }));
+        }
+    }
+    return root;
+};
+
+// The message the model actually receives is built from the CONTEXT's prompt, not the turn's — the route has
+// already folded attachments into it by the time a plan is made — so the tests below read it back from here.
+const contextIn = (root: string, localCwd = root, prompt = "do the thing"): TurnContext => ({
+    base: { prompt, cwd: root, signal: new AbortController().signal },
+    attachmentPaths: [],
+    localCwd,
+    effectiveCwd: localCwd,
+    cliEnv: {},
+    steering: undefined,
+});
+
+const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, overrides: Partial<Services> = {}): Services =>
+    unstubbed<Services>("services", {
+        tools: [],
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
+        dependencies: unstubbed<Services["dependencies"]>("dependencies", {
+            status: () => workspaceSetup(root, unstubbed<Services["processes"]>("processes", { running: () => false })),
+            issueAt: async () => undefined,
+        }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse(settings),
+        }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+            accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
+        }),
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        codexAgent: async function* () {},
+        grokAgent: async function* () {},
+        agent: async function* () {},
+        ...overrides,
+    });
+
+const promptOf = async (services: Services, turn: AgentTurn, context: TurnContext): Promise<string> => {
+    const plan = await planTurn(services, turn, context);
+    expect(plan).toMatchObject({ ok: true });
+    return (plan as { request: AgentRequest }).request.prompt;
+};
+
+test("the map rides the opening message when the setting is on, and the user's words still end it", async () => {
+    const root = await projectAt("wsmap-on-", "shared");
+
+    const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
+
+    expect(prompt).toContain(WORKSPACE_MAP_NOTE_HEADER);
+    expect(prompt).toContain("The shared billing area");
+    expect(prompt.endsWith("do the thing")).toBe(true);
+});
+
+test("an opt-in that is off adds nothing at all", async () => {
+    const root = await projectAt("wsmap-off-", "shared");
+
+    const prompt = await promptOf(servicesIn(root, {}), { prompt: "do the thing" } as AgentTurn, contextIn(root));
+
+    expect(prompt).toBe("do the thing");
+});
+
+test("a follow-up in the same conversation is not charged for the map again", async () => {
+    const root = await projectAt("wsmap-again-", "shared");
+    const services = servicesIn(
+        root,
+        { workspaceMap: true },
+        {
+            // The registry counts every turn that ran, however it ended — a non-zero count is a conversation already
+            // carrying the map in its own transcript.
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 3 }) as ReturnType<Services["agents"]["entry"]> }),
+        },
+    );
+
+    const prompt = await promptOf(services, { prompt: "and now this", conversationId: "conv-1" } as AgentTurn, contextIn(root, root, "and now this"));
+
+    expect(prompt).toBe("and now this");
+});
+
+test("a native Codex turn gets the same map — it is a fact about the filesystem, not about one loop", async () => {
+    const root = await projectAt("wsmap-codex-", "shared");
+    const services = servicesIn(
+        root,
+        { workspaceMap: true },
+        {
+            codexThreadExists: async () => true,
+            codexModels: unstubbed<Services["codexModels"]>("codexModels", {
+                models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
+            }),
+        },
+    );
+
+    const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
+
+    expect(prompt).toContain(WORKSPACE_MAP_NOTE_HEADER);
+    expect(prompt).toContain("The shared billing area");
+});
+
+/* THE STARTING POSITION, and the one case where getting it wrong is invisible.
+ *
+ * An isolated conversation edits a worktree, and the daemon reaches that worktree at `localCwd` while the shared
+ * checkout still sits at the workspace root. A map built from the root would name the root's areas — real
+ * directories, plausibly described, and not the ones this turn can write to. The two trees are given different
+ * area descriptions here precisely so that a map of the wrong one cannot pass. */
+test("an isolated turn is mapped against its own tree, not the shared checkout", async () => {
+    const root = await projectAt("wsmap-root-", "shared");
+    const worktree = await projectAt("wsmap-wt-", "branch");
+
+    const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root, worktree));
+
+    expect(prompt).toContain("The branch billing area");
+    expect(prompt).not.toContain("The shared billing area");
+});
+
+/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID — the half a new preamble is most likely to forget.
+ *
+ * The provider stores the combined prompt verbatim, so a note missing from turn-preamble.ts's registry is
+ * invisible three ways at once: the message flattens wrong, a reopened tab redraws the map as the user's own
+ * words, and the chat never offers it to read. Registering it is one line and forgetting it fails silently,
+ * which is exactly the pair worth a test. */
+test("the map strips back off the stored message, and the chat is given a row for it", async () => {
+    const root = await projectAt("wsmap-strip-", "shared");
+
+    const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
+
+    expect(stripTurnPreamble(prompt)).toBe("do the thing");
+    expect(preambleNotes(prompt).map((note) => note.title)).toContain("Map of this project");
+});
