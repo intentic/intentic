@@ -2032,7 +2032,7 @@
     },
     {
       "anchors": [],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 11,
@@ -2041,7 +2041,8 @@
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
       "readmeRev": "ed486e793bc1175370618cc20a9d0c0c33efbf44",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1787058662000
     },
     {
@@ -2063,14 +2064,14 @@
           "what": "the Rust dependencies."
         }
       ],
-      "behind": 20,
+      "behind": 21,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 9,
       "hasTests": false,
-      "loc": 2923,
+      "loc": 2996,
       "oneLiner": "The Rust half of the desktop app — the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "2c041c29d2a91cd8ac3a3bcbf25b967dc55fff0e",
-      "reason": "20 commits have touched this package since its README was written",
+      "reason": "21 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1785938033000
     },
@@ -2165,18 +2166,17 @@
           "what": "the full route table."
         }
       ],
-      "behind": 15,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 915,
+      "files": 910,
       "hasTests": true,
-      "loc": 152163,
+      "loc": 151659,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
-      "readmeRev": "14616fc05dde9c74623ffc60b3db682bf98d6595",
-      "reason": "15 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787044262000
+      "readmeRev": "f9605e172afafad1800a6dd4c0749f62b1bcead2",
+      "stale": false,
+      "updatedAt": 1787070651000
     },
     {
       "anchors": [
@@ -3162,16 +3162,16 @@
           "what": "@puristic/env config; src/prisma.ts — client factory; src/types.ts — the shared Prisma type."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "platform",
       "dir": "_platform/api",
       "files": 90,
       "hasTests": true,
-      "loc": 15231,
+      "loc": 15291,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "9e7598f9ba06f0e5aa327d4787ef2645f03db7b5",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787034498000
     },
@@ -3186,16 +3186,16 @@
           "what": "the Zod schemas and inferred types."
         }
       ],
-      "behind": 27,
+      "behind": 28,
       "component": "platform",
       "dir": "_platform/api-contract",
       "files": 2,
       "hasTests": false,
-      "loc": 1335,
+      "loc": 1350,
       "name": "@intentic-app/api-contract",
       "oneLiner": "The single source of truth for the platform's API surface — the oRPC contract and its Zod schemas.",
       "readmeRev": "e1af9a03167daea435040e618bf90573ba487e6c",
-      "reason": "27 commits have touched this package since its README was written",
+      "reason": "28 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786131270000
     },
@@ -3599,26 +3599,21 @@
           "what": "the minimum trust tier per route, in one table. src/auth/auth.ts resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches."
         },
         {
-          "path": "_sandbox/sandbox/src/auth/join-links.ts",
-          "what": "owner-minted links that put an outsider on the members list without the platform: the link carries a role, the visitor's Google sign-in carries their name, and redeeming (POST /join, the one route exempt from the bearer middleware) can do nothing but add that verified email. Hashed at rest, revocable, bounded by expiry and by PEOPLE rather than openings; refused outright while no owner is bound, since ownership is trust-on-first-use."
-        },
-        {
           "path": "_sandbox/sandbox/src/workflows",
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 845,
+      "files": 842,
       "hasTests": true,
-      "loc": 147264,
+      "loc": 146623,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "0551141d556182838c62f098f9bf1233ac28e6cc",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787050432000
+      "readmeRev": "f9605e172afafad1800a6dd4c0749f62b1bcead2",
+      "stale": false,
+      "updatedAt": 1787070651000
     },
     {
       "anchors": [
@@ -3663,16 +3658,16 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 24,
+      "behind": 25,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 104,
       "hasTests": true,
-      "loc": 19465,
+      "loc": 19458,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "996ce7771d24ec5c5c4739773133a87496844584",
-      "reason": "24 commits have touched this package since its README was written",
+      "reason": "25 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786833176000
     },
@@ -3775,16 +3770,16 @@
           "what": "the CLI surface a user actually types."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/sync",
       "files": 24,
       "hasTests": true,
-      "loc": 4356,
+      "loc": 4440,
       "name": "@intentic/sync",
       "oneLiner": "Keeps a folder on your own computer in step with a sandbox, both ways, so you can use your own editor.",
       "readmeRev": "bf8d1a121bf2c60dea77d4658b9abe39ecb87321",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786888074000
     },
@@ -4374,6 +4369,10 @@
           "what": "the browser journeys themselves."
         },
         {
+          "path": "_tools/e2e/smoke-signin.mjs",
+          "what": "the post-deploy front-door check, the only thing here that meets real Google."
+        },
+        {
           "path": "_tools/e2e/stack.ts",
           "what": "bringing the whole stack up, including the published daemon image."
         },
@@ -4390,18 +4389,17 @@
           "what": "the data the journeys rest on."
         }
       ],
-      "behind": 13,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/e2e",
-      "files": 17,
+      "files": 18,
       "hasTests": true,
-      "loc": 1968,
+      "loc": 2084,
       "name": "@intentic-app/e2e",
       "oneLiner": "The browser smoke tier — Playwright against the whole stack, including the published daemon image.",
-      "readmeRev": "2a66186dbabcf0fa071b569a79f8488241302fc3",
-      "reason": "13 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1786014398000
+      "readmeRev": "3791b3a71a3746b5edb652ddf2d0020585f9bb49",
+      "stale": false,
+      "updatedAt": 1787069973000
     },
     {
       "anchors": [
@@ -4702,7 +4700,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787070048881,
+  "generatedAt": 1787089234106,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

@@ -41,7 +41,6 @@ import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.
 import { createPiAgent } from "./pi/pi-agent.js";
 import { piSpawner } from "./pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
-import { fileJoinLinks, type JoinLinks } from "./auth/join-links.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
@@ -71,7 +70,6 @@ import {
     type Caller,
     createAuthorizer,
     createGoogleVerifier,
-    type IdTokenVerifier,
     fileMembersStore,
     fileOwnerStore,
     type MembersStore,
@@ -293,14 +291,6 @@ export interface Services {
     // ACP editor bridge today (x-intentic-control header). Each carries the scope it was minted with; what a
     // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
     readonly controlTokens: ControlTokens;
-    // Owner-minted links that let a person from outside onto the members list by signing in with Google — the
-    // platform-free half of sharing a sandbox (auth/join-links.ts). The link grants a role; the sign-in says
-    // who. Persisted in /work/.intentic beside owner/members/control-tokens.
-    readonly joinLinks: JoinLinks;
-    // Verifies the Google ID token of someone who is NOT a member yet — the join route's only credential, and
-    // the same verifier (same client id, same key cache) the authorizer checks every bearer with. Undefined on
-    // a sandbox with no Google client id, i.e. a loopback box with no outsiders to admit.
-    readonly verifyVisitor?: IdTokenVerifier;
     // This sandbox's identity for the platform's Connections card; undefined ⇒ /info returns {} (loopback/test).
     readonly info:
         | {
@@ -681,10 +671,6 @@ export interface Services {
               // once (auth/session.ts rotate). Backs the owner-only "sign out everywhere" route.
               readonly rotateSessions: () => Promise<void>;
               readonly disableBrowserAccess: () => Promise<void>;
-              // Has an owner been bound yet? The join route asks before admitting anyone: ownership is
-              // trust-on-first-use, so letting a guest onto an UNBOUND sandbox would make them its owner on
-              // their very next call — the one case where widening access could give the box away.
-              readonly ownerBound: () => Promise<boolean>;
               readonly connections: AuthConnections;
           }
         | undefined;
@@ -752,25 +738,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
               }
             : undefined;
     const members = fileMembersStore(statePath(workspace.root, ".intentic/members.json"));
-    // Hoisted: the authorizer binds and reads ownership through it, and the join route asks the same store
-    // whether anyone is bound at all. One store, so those two can never disagree about who owns this box.
-    const ownerStore = fileOwnerStore(statePath(workspace.root, ".intentic/owner.json"));
     // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();
     const browserAccess = fileBrowserAccess(join(config.historyRoot, "browser-access-disabled"));
-    /* ONE verifier for this sandbox's Google client, shared by the two things that check a signature: the
-     * authorizer (every browser bearer) and the join route (a visitor who is not a member yet). Its whole
-     * value is its JWKS key cache, so a second instance for the second caller would mean fetching Google's
-     * certs twice and missing the cache on every alternation. */
-    const verifyVisitor = config.google.clientId === "" ? undefined : createGoogleVerifier(config.google.clientId);
     const authorizer =
-        verifyVisitor !== undefined
+        config.google.clientId !== ""
             ? createAuthorizer({
-                  verify: verifyVisitor,
+                  verify: createGoogleVerifier(config.google.clientId),
                   session: sessions.verify,
-                  owner: ownerStore,
+                  owner: fileOwnerStore(statePath(workspace.root, ".intentic/owner.json")),
                   members,
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
@@ -785,7 +763,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
               mintSession: sessions.mint,
               rotateSessions: sessions.rotate,
               disableBrowserAccess: browserAccess.disable,
-              ownerBound: async () => (await ownerStore.read()) !== undefined,
               connections: authConnections,
           }
         : undefined;
@@ -1071,8 +1048,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/control-tokens.json")),
-        joinLinks: fileJoinLinks(statePath(workspace.root, ".intentic/join-links.json")),
-        ...(verifyVisitor === undefined ? {} : { verifyVisitor }),
         automations: fileAutomationsStore(
             statePath(workspace.root, ".intentic/automations.json"),
             statePath(workspace.root, ".intentic/automation-runs.json"),

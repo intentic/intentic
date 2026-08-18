@@ -656,9 +656,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                       disableBrowserAccess: async () => {
                           throw new Error("auth.disableBrowserAccess was called, and this test did not stub it");
                       },
-                      // An exposed daemon in these suites is one somebody already owns — that is what makes its
-                      // routes reachable at all. A join-link suite testing the unbound box overrides it.
-                      ownerBound: async () => true,
                       connections: createAuthConnections(),
                       ...auth,
                   },

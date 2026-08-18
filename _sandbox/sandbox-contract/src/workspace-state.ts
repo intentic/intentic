@@ -517,13 +517,6 @@ const STATE_FILES = [
         note: "Mint fresh control tokens — the old ones authenticate against the source sandbox.",
     },
     {
-        path: ".intentic/join-links.json",
-        invalidates: [],
-        why: "Hashed join links (the owner's way to let someone in without the platform) plus who came in through each — read on demand by the owner.",
-        portability: "identity",
-        note: "Mint fresh join links — the old ones name the source sandbox's guests.",
-    },
-    {
         path: ".intentic/owner.json",
         invalidates: [],
         why: "Bound once on first use; a change here means the sandbox was re-owned, which re-authenticates anyway.",

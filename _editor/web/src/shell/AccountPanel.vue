@@ -4,7 +4,6 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
-import { clearGuestAccess, guestAccess } from "../composables/sandbox/guestAccess";
 import { useAuth } from "../composables/useAuth";
 import { environment } from "../environments/environment";
 import AccountCredits from "./AccountCredits.vue";
@@ -58,19 +57,7 @@ const openSettings = (): void => {
     void router.push(`/settings`);
 };
 
-/* A GUEST HAS NO PLATFORM ACCOUNT TO SHOW OR SIGN OUT OF. They arrived through a join link, so the identity
- * this menu should name is the Google address the BOX admitted, and the way out is to forget the visit rather
- * than to end a session that never existed. The membership itself stays — only its owner can take that back,
- * which is why the wording is "leave" and not "remove". */
-const guest = guestAccess;
-const identityEmail = computed(() => user.value?.email ?? guest.value?.email);
-
 const logout = async (): Promise<void> => {
-    if (guest.value !== undefined) {
-        clearGuestAccess();
-        globalThis.location.href = `/`;
-        return;
-    }
     await signOut();
     // A full navigation, not a router push: the environment's landing may live outside this SPA entirely (the
     // demo's is the site's homepage).
@@ -129,11 +116,8 @@ const logout = async (): Promise<void> => {
             <div class="flex items-center gap-2 px-2 py-1.5">
                 <Avatar :size="28" :src="avatarImage" />
                 <div class="min-w-0 flex-1">
-                    <span class="truncate text-xs font-medium text-content">{{ identityEmail }}</span>
+                    <span class="truncate text-xs font-medium text-content">{{ user?.email }}</span>
                     <div v-if="user?.name" class="truncate text-2xs text-muted">{{ user.name }}</div>
-                    <!-- A guest is signed in to the SANDBOX, not to intentic — saying so is what keeps the
-                         blank half of this menu from reading as a broken account. -->
-                    <div v-else-if="guest" class="truncate text-2xs text-muted">Guest of this sandbox</div>
                 </div>
             </div>
 
@@ -160,7 +144,7 @@ const logout = async (): Promise<void> => {
                 @click="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-xs text-muted" /></span>
-                {{ guest ? `Leave this sandbox` : `Sign out` }}
+                Sign out
             </button>
         </div>
     </AnchoredOverlay>
