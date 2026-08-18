@@ -36,9 +36,31 @@ Those tiers each declare the credentials they need with `e2eTier` (`_tools/testi
 naming what was missing, which is what lets CI ask for all of them at once. This suite declares nothing —
 its requirement is a whole local stack, which no environment variable can announce.
 
+## The one thing here that runs against production: `smoke:signin`
+
+```sh
+pnpm --filter @intentic-app/e2e smoke:signin https://app.intentic.dev
+```
+
+Everything above stubs Google out, and rightly so — a hermetic suite cannot depend on someone else's console.
+The consequence was a blind spot with nothing behind it: whether Google still *accepts the deployed origin*
+for our OAuth client is state that lives outside this repo, and when it stopped being true every Google button
+on the site went dead while the entire pipeline stayed green. This is the check that goes red for that. It
+loads the real login page in a real browser and asserts two things: Google's button reaches a pressable size
+(a refused one still exists, at 0×0), and the fallback link that bypasses Google's frame is present.
+
+It runs in the **platform deploy job**, straight after the health wait, so a deploy that shuts the front door
+fails the job that rolled it. It is not part of `e2e:browser`: it needs the internet and a live deployment,
+which is the opposite of what that suite is for.
+
+Why a browser rather than a curl, given a browser costs a install step in a deploy job: the identical request
+is answered **200 to curl and 400 to Chromium** — with matching origin, referer, user-agent, fetch-metadata
+headers and the page's own `cas` value. An HTTP probe would have stayed green for the whole outage, which is
+worse than no check at all. [smoke-signin.mjs](smoke-signin.mjs) carries the evidence.
+
 ## Not covered here (by design)
 
-Real Google OAuth and invites — platform unit tests cover their logic. Everything that needs
+Real Google OAuth beyond the origin check above, and invites — platform unit tests cover their logic. Everything that needs
 real infrastructure or real Discord lives in the gated tiers beside this one: `_deploy/cli/src/cli.e2e.test.ts`
 (Cloudflare), `_sandbox/sandbox/src/discord.e2e.test.ts` (Discord + Whisper), and
 `_deploy/cli/src/hermetic.e2e.test.ts` (the secret-free control-plane run). `ARCHITECTURE.md` → *What each tier
@@ -47,6 +69,7 @@ needs* is the table.
 ## Key files
 
 - [specs](specs) — the browser journeys themselves.
+- [smoke-signin.mjs](smoke-signin.mjs) — the post-deploy front-door check, the only thing here that meets real Google.
 - [stack.ts](stack.ts) — bringing the whole stack up, including the published daemon image.
 - [playwright.config.ts](playwright.config.ts) — projects, retries, and what runs where.
 - [global-setup.ts](global-setup.ts) — what must exist before any spec runs.

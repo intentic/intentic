@@ -186,6 +186,21 @@ export const desktopContract = {
         .route({ method: "POST", path: "/desktop/redeem" })
         .input(z.object({ handoff: z.string().min(1), verifier: z.string().min(43).max(128) }))
         .output(z.object({ ott: z.string(), idToken: z.string() })),
+
+    /* The Google ID token this platform ALREADY holds for the signed-in user, so the hand-off page does not
+     * have to ask Google a second time for a credential the browser just proved it has.
+     *
+     * Scoped to the desktop hand-off on purpose, and it is the one place worth the trade. Everywhere else the
+     * browser mints its own token and this platform never issues one — the property the sandbox daemon's
+     * comment describes. Here the alternative is worse: the app has already sent someone to their browser,
+     * and if Google's in-page button cannot run (a blocked frame, an origin Google is refusing, a webview
+     * that has no FedCM) they are left on a screen with no way forward and no way to tell why.
+     *
+     * The token is Google-signed either way — same issuer, same audience, verified against Google's JWKS by
+     * the daemon exactly as before. What changes is only WHO handed the browser the bytes. Optional output
+     * because "we hold nothing usable" is an ordinary answer (a sign-in that left no refresh token), and the
+     * page's answer to it is the Google button it already shows. */
+    googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),
 };
 
 // The creator-pool membership, browser side: where the settings card reads its state and where its two

@@ -165,6 +165,21 @@ as solid as advertised.
 Reasonable as a *desktop-only* stopgap. Weak as the general answer, because option 1 achieves the same result
 without it.
 
+> **Shipped, desktop-only, as this file recommended.** `desktop.googleIdToken` (`_platform/api/src/desktop/`)
+> answers with the Google ID token Better Auth already holds for the caller's session, and `DesktopAuth.vue`
+> asks it BEFORE showing anything of Google's. The scope is exactly the hand-off page: nowhere else does the
+> platform hand a credential back, and the browser still mints its own everywhere else.
+>
+> What pushed it from "reasonable stopgap" to "do it now" was watching option 1 fail in the field. Google
+> began refusing the deployed origin for our OAuth client — correct configuration, rejected anyway,
+> intermittently — and every in-page Google button went dead at once. Option 1 has no answer to that, because
+> the failure is invisible to the page: the button renders, takes the click, and does nothing. This path needs
+> none of Google's frame machinery, so it is both the fast path and the only escape from that class of
+> failure. The unconditional link to Google's own redirect page sits under it as the second.
+>
+> Not a general answer, still. It works only for an account whose sign-in left a refresh token, and it is why
+> §4's "verify access and refresh tokens" line is now load-bearing rather than a nicety.
+
 ### Option 4 — Let the daemon trust the platform directly
 
 Publish a signing key at the platform; have the daemon verify short-lived, sandbox-scoped assertions signed by
@@ -241,6 +256,10 @@ here, because the sandbox this was built in has no platform or Google client to 
   this path; it runs off the same internal adapter, but it has not been watched doing so.
 - **Safari and Firefox with third-party cookies blocked** — the rendered button is what the whole design
   leans on when One Tap is suppressed, so its behaviour there is the load-bearing unknown.
+- **That the deployed origin is one Google will accept.** Not a design question at all, which is why it went
+  unasked for so long — and then cost a release. It is now checked on every platform deploy by a real browser
+  (`_tools/e2e/smoke-signin.mjs`); an HTTP probe cannot, because Google answers curl 200 and Chromium 400 for
+  the identical request.
 - **Whether the silent path fails for the reason given in §1.** No longer urgent: after this change the
   browser DOES have a prior sign-in of its own on this origin, which is the record automatic
   re-authentication needs. If the reasoning is right, returning users should now be signed in with no click

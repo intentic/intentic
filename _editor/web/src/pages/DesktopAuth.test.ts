@@ -38,6 +38,9 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
             get query() {
                 return query.value;
             },
+            get fullPath() {
+                return `/desktop-auth?${new URLSearchParams(query.value).toString()}`;
+            },
         }) as never,
 }));
 
@@ -47,10 +50,23 @@ const getIdToken = vi.fn<(options?: { gate?: boolean; usableFor?: number }) => P
 // True: an ordinary browser, where Google's button renders. The refusal case (the desktop webview) and what
 // every surface owes the reader there is signInSurfaces.test.ts's whole subject.
 const renderButton = vi.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
-vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
-vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+const adoptIdToken = vi.fn<(credential: string) => boolean>().mockReturnValue(true);
+vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
+const signInWithGoogle = vi.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
+vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle }) }));
 const handoff = vi.fn();
-vi.mock(`../composables/useApi`, () => ({ apiClient: { desktop: { handoff } } }));
+// The credential the platform already holds. Undefined answer = it holds nothing usable, which is the case
+// the Google button below exists for.
+const googleIdToken = vi.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
+vi.mock(`../composables/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
+
+// A Google credential shaped the way idTokenClaims (not mocked here) actually reads one, so the page's own
+// freshness check runs for real rather than against a stub that always says yes.
+const credential = (livesForMs: number): string => {
+    const payload = { email: `owner@example.com`, exp: Math.floor((Date.now() + livesForMs) / 1000) };
+    const body = btoa(JSON.stringify(payload)).replace(/\+/g, `-`).replace(/\//g, `_`).replace(/=+$/, ``);
+    return `header.${body}.signature`;
+};
 
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");
 
@@ -78,7 +94,10 @@ beforeEach(() => {
     query.value = { state: `nonce-1`, challenge: `chal-1` };
     getIdToken.mockClear();
     renderButton.mockClear();
+    adoptIdToken.mockClear();
+    signInWithGoogle.mockClear();
     handoff.mockReset();
+    googleIdToken.mockReset().mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -87,10 +106,12 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`puts Google's button on the first frame, with no timer between`, async () => {
+it(`puts Google's button up the moment the platform says it holds nothing, with no timer between`, async () => {
     await mount();
 
-    // No fake clock is advanced anywhere in this test — the button is asked for on mount or not at all.
+    // No fake clock is advanced anywhere in this test. The button waits on one answer — does the platform
+    // already hold this credential — and on nothing else; the five-second guard it used to sit behind ran
+    // AFTER a silent Google attempt that says nothing in most browsers, so the wait was never informative.
     expect(renderButton).toHaveBeenCalledTimes(1);
     expect(renderButton.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
 });
@@ -114,6 +135,79 @@ it(`says what the button is for while the sign-in is outstanding`, async () => {
     expect(el.textContent).toContain(`Continue with Google`);
     // The handoff line belongs to the LATER wait — showing it now described a step that has not started.
     expect(el.textContent).not.toContain(`Handing your sign-in`);
+});
+
+/* THE SECOND ASK, GONE. Someone here pressed sign in inside the app and is already signed in in this browser.
+ * A Google button on top of that is a third act of consent for something twice agreed to, and it is the step
+ * people were stalling on — so the credential is asked of the platform, and Google is never shown. */
+it(`finishes with no Google surface at all when the platform already holds the credential`, async () => {
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    const el = await mount();
+    await nextTick();
+
+    expect(handoff).toHaveBeenCalledWith({ idToken: expect.any(String), challenge: `chal-1` });
+    expect(renderButton).not.toHaveBeenCalled();
+    expect(getIdToken).not.toHaveBeenCalled();
+    expect(el.textContent).not.toContain(`Continue with Google`);
+});
+
+// The same credential this browser's own sandbox gate wants, so one fetch settles both rather than leaving a
+// second Google prompt waiting inside the workspace.
+it(`keeps the platform's credential for this browser too`, async () => {
+    const held = credential(60 * 60 * 1000);
+    googleIdToken.mockResolvedValue({ idToken: held });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    await mount();
+    await nextTick();
+
+    expect(adoptIdToken).toHaveBeenCalledWith(held);
+});
+
+/* This token LEAVES for a process that may not spend it for a whole setup, so one the daemon would reject on
+ * arrival is worth no more than none at all — take Google's button instead, where a fresh one can be had. */
+it(`treats a nearly-dead held credential as nothing held`, async () => {
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 1000) });
+
+    const el = await mount();
+    await nextTick();
+
+    expect(handoff).not.toHaveBeenCalled();
+    expect(renderButton).toHaveBeenCalledTimes(1);
+    expect(el.textContent).toContain(`Continue with Google`);
+});
+
+// A platform that does not answer this at all — an older build, a self-hosted one — is not an error state.
+// It holds nothing, which is precisely the case the button already covered.
+it(`falls back to Google's button when the platform cannot answer`, async () => {
+    googleIdToken.mockRejectedValue(new Error(`no such route`));
+
+    const el = await mount();
+    await nextTick();
+
+    expect(renderButton).toHaveBeenCalledTimes(1);
+    expect(el.textContent).toContain(`Continue with Google`);
+    expect(el.textContent).not.toContain(`Couldn't finish signing in`);
+});
+
+/* The failure nothing on this page can see: Google's button renders, takes the click, and does nothing —
+ * a blocked frame, an extension, an origin Google has stopped accepting. Without a way out that needs none of
+ * that machinery, the screen is indistinguishable from one that is simply broken. */
+it(`always offers Google's own page while the embedded button is up`, async () => {
+    const el = await mount();
+    await nextTick();
+
+    const escape = [...el.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Google's own page`));
+    expect(escape).toBeDefined();
+
+    escape?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    await nextTick();
+
+    // Back to THIS link, state and challenge intact, so the hand-off resumes by itself on return.
+    expect(signInWithGoogle).toHaveBeenCalledWith(expect.stringContaining(`state=nonce-1`));
+    expect(signInWithGoogle.mock.calls[0]?.[0]).toContain(`challenge=chal-1`);
 });
 
 it(`asks Google for nothing when the link is missing its handoff values`, async () => {

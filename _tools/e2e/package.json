@@ -5,7 +5,8 @@
     "type": "module",
     "scripts": {
         "typecheck": "tsc --noEmit",
-        "e2e:browser": "playwright test"
+        "e2e:browser": "playwright test",
+        "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {
         "@intentic-app/api-contract": "workspace:*",

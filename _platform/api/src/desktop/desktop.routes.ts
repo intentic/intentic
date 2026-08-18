@@ -71,4 +71,27 @@ export const desktopRoutes = {
         }
         return { ott: decryptSecret(context.config, row.ott), idToken: decryptSecret(context.config, row.idToken) };
     }),
+
+    /* The Google ID token already on file for this session's user, refreshed by Better Auth off the stored
+     * refresh token when the one it holds has aged out. The hand-off page tries this BEFORE Google's own
+     * button, so the ordinary desktop sign-in asks Google once — in the browser, where the user already
+     * answered — rather than twice.
+     *
+     * Everything here is best-effort by design. Google does not always return an ID token on a refresh, a
+     * sign-in that produced no refresh token has nothing to refresh, and an account can have been unlinked
+     * since. All of those are "we hold nothing", not failures worth a 500: the caller's fallback is the
+     * Google button it is already showing, and an error would only replace a working screen with a broken
+     * one. The caller re-checks the expiry itself — this promises provenance, never freshness. */
+    googleIdToken: os.desktop.googleIdToken.handler(async ({ context }) => {
+        requireUser(context);
+        try {
+            const granted = await context.auth.api.getAccessToken({
+                body: { providerId: `google` },
+                headers: context.headers,
+            });
+            return { idToken: granted?.idToken };
+        } catch {
+            return {};
+        }
+    }),
 };

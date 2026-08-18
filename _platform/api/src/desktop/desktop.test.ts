@@ -83,6 +83,43 @@ describe(`desktop handoff`, () => {
         expect(remove).not.toHaveBeenCalled();
     });
 
+    /* The credential the platform already holds, which is what lets the hand-off page finish without putting a
+     * Google button in front of someone who has just signed in twice. Session-scoped, and never an error when
+     * there is nothing to give: the caller's fallback IS the Google button, and a 500 would replace a page
+     * that still works with one that does not. */
+    it(`hands back the Google token already on file for this session`, async () => {
+        const getAccessToken = vi.fn().mockResolvedValue({ accessToken: `at`, idToken: `google-jwt`, scopes: [] });
+        const headers = new Headers({ cookie: `session=abc` });
+        const ctx = context({ auth: { api: { getAccessToken } } as unknown as OrpcContext[`auth`], headers });
+
+        await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: `google-jwt` });
+        expect(getAccessToken).toHaveBeenCalledWith({ body: { providerId: `google` }, headers });
+    });
+
+    it(`says it holds nothing rather than failing when Google returns no id token`, async () => {
+        const ctx = context({
+            auth: { api: { getAccessToken: vi.fn().mockResolvedValue({ accessToken: `at`, scopes: [] }) } } as unknown as OrpcContext[`auth`],
+        });
+
+        await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: undefined });
+    });
+
+    // A sign-in that left no refresh token, or an account since unlinked. Both are "we hold nothing", and the
+    // page answers them the same way it always did — by showing Google's button.
+    it(`says it holds nothing rather than failing when the refresh is refused`, async () => {
+        const ctx = context({
+            auth: {
+                api: { getAccessToken: vi.fn().mockRejectedValue(new Error(`no refresh token`)) },
+            } as unknown as OrpcContext[`auth`],
+        });
+
+        await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({});
+    });
+
+    it(`refuses to hand back a Google token without a session`, async () => {
+        await expect(call(desktopRoutes.googleIdToken, {}, { context: context({ user: null }) })).rejects.toBeInstanceOf(ORPCError);
+    });
+
     it(`a wrong verifier neither returns credentials nor consumes the app's attempt`, async () => {
         const remove = vi.fn().mockResolvedValue({ count: 1 });
         const ctx = context({

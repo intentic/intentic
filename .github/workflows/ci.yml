@@ -993,6 +993,24 @@ jobs:
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/deploy-platform.sh
         shell: bash
 
+      # AND THEN CHECK THAT A STRANGER CAN STILL SIGN IN, which nothing else here does.
+      #
+      # The step above proves the api boots and answers /health. It says nothing about the front door, and the
+      # front door is not ours alone: sign-in also depends on Google still accepting this origin for the OAuth
+      # client, which is state living in a console outside this repo and outside this pipeline. When that
+      # stopped being true, every Google button on the site went dead and the whole pipeline stayed green —
+      # the browser tier runs on a seeded session with no real Google, and so does every unit test.
+      #
+      # It is a real browser because it has to be: the same request answers 200 to curl and 400 to Chromium
+      # (smoke-signin.mjs has the evidence), so an HTTP probe would have been green throughout the outage.
+      # That is the whole cost justification for installing a browser in a deploy job.
+      - run: npx playwright install --with-deps chromium
+        working-directory: _tools/e2e
+      - run: pnpm smoke:signin "${WEB_ORIGIN}"
+        working-directory: _tools/e2e
+        env:
+          WEB_ORIGIN: https://app.intentic.dev
+
   # The whole release lifecycle is one reusable-workflow call because the exact NSIS candidate has to cross an
   # OS boundary before semantic-release may publish. The call holds the `release` concurrency lock throughout:
   # plan version → cross-build once → execute on Windows → stage those same bytes → publish. A lock on only the

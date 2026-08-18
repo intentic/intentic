@@ -36,25 +36,57 @@ use tauri_plugin_opener::OpenerExt;
 struct PendingAttempt {
     state: String,
     verifier: String,
+    /// The page this attempt was opened at, kept so a second click can open THE SAME one again. Without it a
+    /// repeat click had nothing to re-open and did nothing at all — see [`start`].
+    url: String,
     started_at: Instant,
 }
 
-/// The sign-in currently in flight, if any. Repeated starts inside its three-minute lifetime are idempotent:
+/// The sign-in currently in flight, if any. Repeated starts inside its three-minute lifetime REUSE it:
 /// one click cannot replace the state/verifier another browser tab is already returning with.
 #[derive(Default)]
 pub struct PendingAuth(Mutex<Option<PendingAttempt>>);
 
 const ATTEMPT_TTL: Duration = Duration::from_secs(3 * 60);
 
+impl PendingAuth {
+    /// The page a click should re-open, when an attempt is still in flight — `None` when a fresh one is due.
+    ///
+    /// Split out from [`start`] because it is the whole of the bug: everything else on that path needs a Tauri
+    /// handle to exercise, and this needs nothing, so this is where the regression can be held down.
+    fn live_url(&self) -> Option<String> {
+        self.0
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|attempt| attempt.started_at.elapsed() < ATTEMPT_TTL)
+            .map(|attempt| attempt.url.clone())
+    }
+}
+
+fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|error| format!("could not open your browser to sign in: {error}"))
+}
+
+/* Open the sign-in page in the default browser — and open it EVERY time, which is the whole subtlety here.
+ *
+ * A live attempt is reused rather than replaced, because the tab already carrying this state/verifier has to
+ * stay able to come back; minting a new pair would strand it. That much was always right. What was missing is
+ * that reuse still has to OPEN something: the earlier version returned success without touching the browser,
+ * so the second click of any three-minute window was silently swallowed. The user closes the tab (or never
+ * saw it), clicks sign in again, and the app does nothing — for three minutes, with no way to tell that from
+ * a broken button. Quitting and relaunching cleared the slot, which is exactly the ritual people arrived at.
+ *
+ * Re-opening the same URL is safe precisely because it is the same URL: the platform page is idempotent, and
+ * the attempt it belongs to is untouched. */
 pub fn start(app: &AppHandle) -> Result<(), String> {
     let pending = app.state::<PendingAuth>();
-    let mut slot = pending.0.lock().unwrap();
-    if slot
-        .as_ref()
-        .is_some_and(|attempt| attempt.started_at.elapsed() < ATTEMPT_TTL)
-    {
-        return Ok(());
+    if let Some(url) = pending.live_url() {
+        return open_browser(app, &url);
     }
+    let mut slot = pending.0.lock().unwrap();
     let state = uuid::Uuid::new_v4().to_string();
     let verifier = format!(
         "{}{}",
@@ -71,13 +103,11 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     *slot = Some(PendingAttempt {
         state,
         verifier,
+        url: url.clone(),
         started_at: Instant::now(),
     });
     drop(slot);
-    let opened = app
-        .opener()
-        .open_url(url, None::<&str>)
-        .map_err(|error| format!("could not open your browser to sign in: {error}"));
+    let opened = open_browser(app, &url);
     if opened.is_err() {
         *pending.0.lock().unwrap() = None;
     }
@@ -101,4 +131,47 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
         args.handoff, attempt.verifier
     );
     crate::windows::show_workspace_at(app, Some(&path));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attempt(age: Duration, url: &str) -> PendingAuth {
+        PendingAuth(Mutex::new(Some(PendingAttempt {
+            state: "state".into(),
+            verifier: "verifier".into(),
+            url: url.into(),
+            started_at: Instant::now() - age,
+        })))
+    }
+
+    #[test]
+    fn nothing_in_flight_means_a_fresh_attempt() {
+        assert_eq!(PendingAuth::default().live_url(), None);
+    }
+
+    /* THE REGRESSION. A sign-in already in flight used to make the next click a no-op, so anyone whose first
+     * attempt did not finish — closed the tab, never saw it open, hit a Google error — was told nothing and
+     * had no way forward but quitting the app. A live attempt must still hand back a page to open. */
+    #[test]
+    fn a_second_click_reopens_the_same_page() {
+        let pending = attempt(
+            Duration::from_secs(5),
+            "https://app.intentic.dev/desktop-auth?state=a&challenge=b",
+        );
+        assert_eq!(
+            pending.live_url().as_deref(),
+            Some("https://app.intentic.dev/desktop-auth?state=a&challenge=b"),
+            "a click during a live attempt must re-open that attempt's page, not do nothing"
+        );
+    }
+
+    #[test]
+    fn an_expired_attempt_makes_way_for_a_fresh_one() {
+        assert_eq!(
+            attempt(ATTEMPT_TTL + Duration::from_secs(1), "https://old").live_url(),
+            None
+        );
+    }
 }

@@ -4,6 +4,7 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { idTokenClaims } from "../composables/googleToken";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
@@ -28,16 +29,17 @@ import { signInThroughBrowser } from "../environments/desktop";
  * sign-in IT started, and not a link that arrived from somewhere else. */
 
 const route = useRoute();
-const { user } = useAuth();
-const { getIdToken, renderButton } = useGoogleIdentity();
+const { user, signInWithGoogle } = useAuth();
+const { getIdToken, renderButton, adoptIdToken } = useGoogleIdentity();
 const { scheme } = useTheme();
 
 const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
-/* Which of the two waits the user is in. They are different lengths and only one of them is theirs to end:
- * `signin` is Google (and may need a click), `handing` is one call to the platform. Naming them apart is what
- * lets the Google button stand on the page during the first without lingering through the second. */
-const stage = ref<`signin` | `handing` | `done`>(`signin`);
+/* Which wait the user is in. They are different lengths and only one of them is theirs to end: `checking`
+ * and `handing` are round trips to the platform, `signin` is Google and may need a click. Naming them apart
+ * is what lets the Google button stand on the page during the one wait it can shorten — and, more to the
+ * point, stay OFF it during the two it cannot. */
+const stage = ref<`checking` | `signin` | `handing` | `done`>(`checking`);
 
 const googleButton = ref<HTMLElement>();
 
@@ -47,6 +49,46 @@ const googleButton = ref<HTMLElement>();
  * workspace's own sign-in gate now offers this same hand-off when the hour does run out. */
 const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
 
+/* THE CREDENTIAL THE PLATFORM ALREADY HOLDS — tried first, so the ordinary desktop sign-in shows no Google
+ * surface at all. Arriving here means the user pressed sign in inside the app AND is signed in to this
+ * platform in this browser; a Google button on top of that is a third act of consent for something they have
+ * already twice agreed to, and it is the step people were getting stuck on.
+ *
+ * It is also the only escape that works when Google's in-page button CANNOT run — a blocked frame, an
+ * extension, an origin Google is refusing. Those are invisible from this page: the button renders, takes the
+ * click, and does nothing. Asking the platform costs one round trip and needs none of that machinery.
+ *
+ * The expiry is re-checked HERE rather than trusted, because this token leaves for another process that may
+ * not spend it for a whole setup. Anything the daemon would reject on arrival is treated as nothing held, and
+ * the Google button becomes the answer after all. Adopted into the shared cache on the way through: it is the
+ * same credential this browser's own sandbox gate wants, so one fetch settles both. */
+const platformHeldToken = async (): Promise<string | undefined> => {
+    try {
+        const { idToken } = await apiClient.desktop.googleIdToken();
+        if (idToken === undefined || idToken === ``) {
+            return undefined;
+        }
+        const claims = idTokenClaims(idToken);
+        if (claims === undefined || Date.now() >= claims.expiresAt - HANDOFF_USABLE_FOR_MS) {
+            return undefined;
+        }
+        adoptIdToken(idToken);
+        return idToken;
+    } catch {
+        // A platform without this route (an older or self-hosted build) is not an error here — it is simply
+        // one that holds nothing, and the Google button below is exactly what that case already had.
+        return undefined;
+    }
+};
+
+/* Google's own page, as the last way out. Everything above can fail silently in a browser that will not run
+ * Google's frame, and this depends on none of it: it is a full-page redirect, which is the one sign-in Google
+ * accepts everywhere. It returns to THIS url — state and challenge intact — with the account's Google tokens
+ * freshly stored, so the check above then answers on the first try and the hand-off completes by itself. */
+const useGooglesOwnPage = async (): Promise<void> => {
+    await signInWithGoogle(route.fullPath);
+};
+
 const hand = async (): Promise<void> => {
     const state = route.query[`state`];
     const challenge = route.query[`challenge`];
@@ -54,14 +96,27 @@ const hand = async (): Promise<void> => {
         error.value = noticeOf(`This link is missing the value that ties it to your app — open Intentic and sign in from there.`);
         return;
     }
+    // Park the credentials for one pickup and send the app the row's id — never the credentials themselves.
+    const deliver = async (idToken: string): Promise<void> => {
+        stage.value = `handing`;
+        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
+        stage.value = `done`;
+        globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
+    };
     working.value = true;
     error.value = undefined;
-    stage.value = `signin`;
+    stage.value = `checking`;
     try {
-        /* The daemon's credential. `gate: false` because the button is already ON this page: the shared
-         * overlay's job is to interrupt a screen that was doing something else, and this screen is doing
-         * nothing else. The silent attempt (auto re-auth for a returning user) races that button — whichever
-         * produces a credential first resolves this, so a returning user never sees the button used.
+        const held = await platformHeldToken();
+        if (held !== undefined) {
+            await deliver(held);
+            return;
+        }
+        stage.value = `signin`;
+        /* The daemon's credential, when the platform held none. `gate: false` because the button is already
+         * ON this page: the shared overlay's job is to interrupt a screen that was doing something else, and
+         * this screen is doing nothing else. The silent attempt (auto re-auth for a returning user) races that
+         * button — whichever produces a credential first resolves this.
          *
          * `usableFor` because this token LEAVES: the app cannot spend it until it has a daemon to spend it
          * on, which after a fresh install is a whole setup away. A cached one with minutes left would satisfy
@@ -72,10 +127,7 @@ const hand = async (): Promise<void> => {
             error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
         }
-        stage.value = `handing`;
-        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
-        stage.value = `done`;
-        globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
+        await deliver(idToken);
     } catch (err) {
         error.value = noticeFrom(err, `Couldn't finish signing in to the app.`);
     } finally {
@@ -132,6 +184,13 @@ onMounted(() => void hand());
                 <Icon name="spinner" spin class="mt-0.5 shrink-0" />
                 <span>Handing your sign-in to the app…</span>
             </p>
+            <!-- The ordinary path ends here and shows no Google surface at all: the user pressed sign in in the
+                 app and is already signed in to this browser, so the credential is asked of the platform, not
+                 of them. Only when that comes back empty does the Google block below appear. -->
+            <p v-else-if="stage === `checking`" class="flex items-start gap-2 text-xs text-muted">
+                <Icon name="spinner" spin class="mt-0.5 shrink-0" />
+                <span>Finishing your sign-in…</span>
+            </p>
             <!-- The sign-in wait. Google may answer it on its own (auto re-auth for a returning user, no click
                  at all); when it doesn't, this button is the only thing that can, so it is here from the start.
                  color-scheme:light matches Google's light-scheme button iframe so the browser paints no opaque
@@ -143,6 +202,20 @@ onMounted(() => void hand());
                 </p>
                 <div v-show="googleReady" ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
                 <Button v-if="!googleReady" label="Open this in your browser" severity="secondary" class="self-start" @click="signInThroughBrowser" />
+
+                <!-- Unconditional, for the same reason the login page's is. A button that renders but cannot
+                     work — a blocked frame, a policy, an origin Google has stopped accepting — is invisible
+                     from this page, and every one of those looks identical to a screen that simply does
+                     nothing. This way out depends on none of that machinery: a full-page redirect, back to
+                     this same link, after which the check above answers on its own. -->
+                <button
+                    v-if="googleReady"
+                    type="button"
+                    class="w-full text-center text-xs text-subtle transition-colors hover:text-content"
+                    @click="useGooglesOwnPage"
+                >
+                    Trouble signing in? Use Google's own page.
+                </button>
             </template>
 
             <Button
