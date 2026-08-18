@@ -36,6 +36,15 @@ once into a private HOME, `agent start` supervised (the agent holds the shares),
   `BETTER_AUTH_SECRET` is the `.env.example` placeholder or `SECRETS_KEY` is unset; this tool refuses first,
   with the same words. Anyone on the internet can reach a public dev platform — treat the mode as opt-in per
   run, and `--reset` as the kill switch (it revokes the hub account, which takes both names down with it).
+- **A dev platform already running is refused, not published.** The tunnel forwards two local ports and does
+  not care which process holds them, so a leftover `pnpm dev` would be served to the internet — configured
+  with localhost origins, and therefore still minting invite links (and every other link the platform builds)
+  that point at localhost, while the public address answers perfectly and looks healthy. The tool checks both
+  ports before it mints anything and names that consequence. Stop the running dev first.
+- **The invite link is the platform's `WEB_ORIGIN`, and nothing else builds it.** It is composed in
+  `_platform/api/src/invite/email.ts` at send time, so a link that says localhost means the *api process* was
+  started with a localhost origin — recreating a sandbox cannot change it, and neither can anything inside the
+  box. Restart the platform through this tool and re-send.
 - **`--insecure` is for the LOCAL hop only.** The dev servers present the repo-CA certificate no system
   trusts, so the agent's proxy skips verifying its own machine's listener; the public certificate is the hub
   frontend's wildcard either way.
@@ -52,5 +61,7 @@ once into a private HOME, `agent start` supervised (the agent holds the shares),
 - [src/hub.ts](src/hub.ts) — the three admin calls, faithful to the platform's own client
   (`_platform/api/src/sandbox/zrok.ts`).
 - [src/naming.ts](src/naming.ts) — the id, the two labels, the account email.
+- [src/probe.ts](src/probe.ts) — the port check, and why publishing a leftover dev server is worse than
+  failing to start.
 - [src/hub.test.ts](src/hub.test.ts) — the calls against `@intentic/fake-zrok`, including the duplicate-500
   recovery.

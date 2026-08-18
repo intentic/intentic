@@ -2180,16 +2180,16 @@
           "what": "the full route table."
         }
       ],
-      "behind": 8,
+      "behind": 14,
       "component": "editor",
       "dir": "_editor/web",
       "files": 910,
       "hasTests": true,
-      "loc": 151744,
+      "loc": 151503,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "14616fc05dde9c74623ffc60b3db682bf98d6595",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "14 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787044262000
     },
@@ -3177,7 +3177,7 @@
           "what": "@puristic/env config; src/prisma.ts — client factory; src/types.ts — the shared Prisma type."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "platform",
       "dir": "_platform/api",
       "files": 90,
@@ -3186,7 +3186,7 @@
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "9e7598f9ba06f0e5aa327d4787ef2645f03db7b5",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787034498000
     },
@@ -3618,16 +3618,17 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 0,
+      "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
       "files": 842,
       "hasTests": true,
-      "loc": 146916,
+      "loc": 146623,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "0551141d556182838c62f098f9bf1233ac28e6cc",
-      "stale": false,
+      "reason": "3 commits have touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1787050432000
     },
     {
@@ -3673,16 +3674,16 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 23,
+      "behind": 24,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 104,
       "hasTests": true,
-      "loc": 19546,
+      "loc": 19458,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "996ce7771d24ec5c5c4739773133a87496844584",
-      "reason": "23 commits have touched this package since its README was written",
+      "reason": "24 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786833176000
     },
@@ -3980,16 +3981,16 @@
           "what": "the node:sqlite index itself."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "search",
       "dir": "_search/iq-engine",
       "files": 86,
       "hasTests": true,
-      "loc": 8539,
+      "loc": 8535,
       "name": "@intentic/iq-engine",
       "oneLiner": "The search engine behind the iq CLI, and the heavy lib of the iq cluster.",
       "readmeRev": "a24d629002ded981c76e43a8eea7afeb9a710860",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786823338000
     },
@@ -4369,20 +4370,24 @@
           "what": "the id, the two labels, the account email."
         },
         {
+          "path": "_tools/dev-public/src/probe.ts",
+          "what": "the port check, and why publishing a leftover dev server is worse than"
+        },
+        {
           "path": "_tools/dev-public/src/hub.test.ts",
           "what": "the calls against @intentic/fake-zrok, including the duplicate-500"
         }
       ],
       "behind": 0,
       "dir": "_tools/dev-public",
-      "files": 5,
+      "files": 7,
       "hasTests": true,
-      "loc": 473,
+      "loc": 556,
       "name": "@intentic/dev-public",
       "oneLiner": "Serve a local dev platform on the internet through the tunnel hub — pnpm dev:public.",
-      "readmeRev": "",
+      "readmeRev": "eb9beef6cb2d8d6061f59554372998e4bd9e2b1c",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1787060955000
     },
     {
       "anchors": [
@@ -4742,7 +4747,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787060381714,
+  "generatedAt": 1787065568595,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

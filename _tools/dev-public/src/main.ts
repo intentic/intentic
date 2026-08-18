@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deleteAccount, type HubConfig, mintAccount, publicNamespaceToken } from "./hub.ts";
 import { accountEmail, apiName, apiOrigin, devPlatformId, webName, webOrigin } from "./naming.ts";
+import { isListening } from "./probe.ts";
 
 /* SERVE THE LOCAL DEV PLATFORM ON THE INTERNET — `pnpm dev:public`.
  *
@@ -32,6 +33,10 @@ import { accountEmail, apiName, apiOrigin, devPlatformId, webName, webOrigin } f
  * .env.example placeholder once API_URL is public; this tool refuses first, with the same words). */
 
 const ZROK_VERSION = `2.0.4`; // Keep in step with the sandbox image (its Dockerfile's ARG ZROK_VERSION).
+
+// The SPA dev server's port, fixed in _editor/web/vite.config.ts (strictPort) — the api's is configurable
+// (API_PORT), this one is not.
+const WEB_PORT = 47145;
 
 // The .env.example value — serving a public origin on it would mean everyone on the internet can forge sessions.
 const PLACEHOLDER_AUTH_SECRET = `replace-me-with-a-32-char-random-string`;
@@ -94,6 +99,20 @@ if (hub.adminToken === ``) {
 if (env(`BETTER_AUTH_SECRET`) === `` || env(`BETTER_AUTH_SECRET`) === PLACEHOLDER_AUTH_SECRET || env(`SECRETS_KEY`) === ``) {
     fail(
         `a public origin refuses dev-grade secrets: set BETTER_AUTH_SECRET (not the .env.example placeholder) and SECRETS_KEY in the root .env — openssl rand -base64 32 for each.`,
+    );
+}
+
+/* ── Nothing may already hold the ports the tunnel will publish ──────────────────────────────────────────────
+ * A dev platform already running was started with localhost origins, and the tunnel would publish THAT — the
+ * api this tool starts would die on EADDRINUSE inside a wall of vite output while the public address kept
+ * answering from the old process. The only visible symptom is every minted link (invite mail first) still
+ * saying localhost, which is indistinguishable from this tool not working at all. See probe.ts. */
+const busy = (await Promise.all([Number(apiPort), WEB_PORT].map(async (port: number) => ((await isListening(port)) ? port : undefined)))).filter(
+    (port): port is number => port !== undefined,
+);
+if (busy.length > 0) {
+    fail(
+        `something is already serving on ${busy.join(` and `)} — almost certainly a \`pnpm dev\` from an earlier session. Stop it first: it was started with localhost origins, and publishing it would keep sending invite links (and every other minted link) to localhost while the public address looked healthy.`,
     );
 }
 
@@ -221,7 +240,7 @@ const bindShare = async (label: string, target: string): Promise<void> => {
     }
     fail(`could not bind ${label} on the hub:\n${lastRefusal}\nAgent log: ${agentLog}`);
 };
-await bindShare(webName(id), `https://localhost:47145`);
+await bindShare(webName(id), `https://localhost:${WEB_PORT}`);
 await bindShare(apiName(id), `https://localhost:${apiPort}`);
 
 // ── Say where it lives, then hand over to dev ───────────────────────────────────────────────────────────────
