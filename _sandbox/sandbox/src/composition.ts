@@ -53,7 +53,7 @@ import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./c
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
 import { contributionRegistry } from "./capabilities/contributions.js";
-import { fileSecretVault } from "./capabilities/secret-vault.js";
+import { fileSecretVault, type SecretVault } from "./capabilities/secret-vault.js";
 import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
 import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
@@ -181,7 +181,10 @@ import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/agent-tools.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
+import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
+import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
+import { installedExtensions } from "./extensions/installed-extensions.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,
@@ -307,6 +310,13 @@ export interface Services {
     // A boot step (main.ts), and an invariant rather than a one-time conversion — the manifest is a file the
     // agent may edit, so a real value can arrive in it at any time (capabilities/capabilities-store.ts).
     readonly vaultManifestSecrets: () => Promise<readonly string[]>;
+    /* The same vault, for the same reason, one table over: values of `contributes.settings` entries an extension
+     * declared `secret: true`. Held as the store rather than behind a function because three call sites read
+     * settings and each needs rehydration (extension-settings.ts owns what that means). */
+    readonly extensionSecretVault: SecretVault;
+    // The settings twin of vaultManifestSecrets — a boot step, and an invariant for the same reason: the tracked
+    // settings file is one the agent may edit, so a real token can arrive in it at any time.
+    readonly vaultExtensionSettingSecrets: () => Promise<readonly string[]>;
     // Every credential this sandbox stores under its stable name — the capability vault, the DevOps .env and
     // the deploy engine's generated values — read by the agent's masking (values → `{{secret:name}}`) and by
     // the two exits that resolve the same reference back (secrets/secret-registry.ts).
@@ -857,6 +867,32 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger.warn(
             `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")} — left in the manifest, which the agent can read`,
         );
+    /* THE EXTENSION-SETTINGS HALF OF THE SAME SPLIT (extensions/extension-settings.ts). A second vault file
+     * rather than rows in the capability one: the two are keyed differently — a capability entry id there, a
+     * manifest identity (publisher.name) here — and one namespace holding both would collide the day an
+     * extension capability and its own manifest identity share a name, which is the common case.
+     *
+     * The resolver reads the manifests through the same minimal adapter `secretFieldConnectors` builds, and over
+     * `installedExtensions` rather than the enabled ones: a switched-off extension's stored token is exactly as
+     * readable as a running one's, so the sweep must reach it. */
+    const extensionSecretVault = fileSecretVault(join(authRoot, "extension-secrets.json"));
+    const extensionHostAdapter = {
+        workspace: { root: workspace.root },
+        files: { read: readWorkspaceFile },
+        capabilities: capabilityManifest,
+        config: { extensionsDir: config.extensionsDir },
+    };
+    const settingSecretKeys = async (): Promise<SecretKeyResolver> => {
+        const declared = new Map<string, ReadonlySet<string>>(
+            (await installedExtensions(extensionHostAdapter)).map((extension) => [
+                extensionIdOf(extension.manifest),
+                new Set((extension.manifest.contributes?.settings ?? []).filter((setting) => setting.secret === true).map((setting) => setting.key)),
+            ]),
+        );
+        return (extensionId) => declared.get(extensionId) ?? new Set<string>();
+    };
+    const onUnvaultableSetting = (id: string, keys: readonly string[]): void =>
+        logger.warn(`extension settings: "${id}" declares ${keys.join(", ")} secret but stores a non-string — left in the tracked settings file`);
     const capabilities = withTrialEndpoint(
         withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
         config,
@@ -984,6 +1020,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
+        extensionSecretVault,
+        vaultExtensionSettingSecrets: async () =>
+            vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
         secretUses: fileSecretUses(statePath(workspace.root, ".intentic/secret-uses.json")),
         trial,

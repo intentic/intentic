@@ -70,7 +70,16 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             revealable: true,
         },
         { key: "EXTRA_TOKEN", kind: "env", status: "set", requiredBy: [], storedAt: "desired-state/.env", revealable: true },
-        { key: "github", kind: "capability", status: "connected", requiredBy: [], storedAt: `${STATE_DIR}/capabilities.json`, revealable: true },
+        // The vault, not the manifest: the manifest keeps the shape of the connection and is reviewable in git,
+        // so pointing "where does this live" at it would name a file the credential is deliberately not in.
+        {
+            key: "github",
+            kind: "capability",
+            status: "connected",
+            requiredBy: [],
+            storedAt: `${STATE_DIR}/auth/capability-secrets.json`,
+            revealable: true,
+        },
         {
             key: "claude:default",
             kind: "provider",

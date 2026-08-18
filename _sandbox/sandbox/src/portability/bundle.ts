@@ -139,6 +139,18 @@ const environmentFacts = async (services: Services): Promise<BundleManifest["env
     };
 };
 
+/* One credential sweep, best-effort. The thunk is what makes it best-effort in BOTH directions: a seam that
+ * throws where it stands rather than rejecting (a fake that was never given this member) becomes a rejection
+ * here, so an export can never fail on the way to protecting itself. */
+const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> => {
+    try {
+        await run();
+    } catch {
+        // Deliberately silent: the export proceeds, and whatever the sweep could not move is packed only for the
+        // entries whose classification already keeps them out of a secret-less bundle.
+    }
+};
+
 /* Stream a bundle of this sandbox's environment. `secrets` is the owner's choice at the export dialog and the
  * ONLY thing that varies what is packed — everything else is the manifests.
  *
@@ -152,6 +164,19 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
 
     void (async () => {
         try {
+            /* SWEEP BEFORE PACKING, and this is the step the two credential splits made necessary rather than
+             * merely tidy. The capability manifest and the extension settings file both `carry` now — they hold
+             * the shape of a connection and no longer its credential — which is only true of the bytes on disk
+             * while nothing has hand-written a real token back into them. The boot sweep is what normally keeps
+             * that so, and between a boot and an export there is a whole session in which the agent (for whom
+             * both files are deliberately readable and writable) can put one back.
+             *
+             * Everywhere else that gap costs a value the agent could already read. HERE it costs the promise the
+             * export dialog makes: "without secrets" is what the owner believes when they email the bundle, and
+             * a carried file is packed by its bytes, not by its classification. So the vaults are filled first
+             * and the packer reads what the sweep left. Best-effort by the same argument as at boot: a manifest
+             * this daemon cannot rewrite must not be the thing that fails an export. */
+            await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
             const manifest: BundleManifest = {
                 version: 1,
                 ...(services.config.sandbox.name === "" ? {} : { sandbox: { name: services.config.sandbox.name } }),

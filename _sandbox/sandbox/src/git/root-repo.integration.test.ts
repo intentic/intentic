@@ -93,8 +93,12 @@ test("the baseline commits the config slice and still refuses every credential a
     // A CONSUMED QUEUE beside them, and the counterexample that keeps the line honest: a held wake is removed the
     // moment it is answered, so tracking it would commit an add and a delete about a decision recorded elsewhere.
     await writeFile(join(work, `${STATE_DIR}`, "approvals", "wake-1.json"), "{}\n");
-    // Credentials and identity — never tracked, whatever else changes.
+    /* WHAT THIS SANDBOX IS CONNECTED TO — tracked, and the entry that reads most like a credential without being
+     * one. The values are in the vault off /work and the manifest keeps the shape (an id, a kind, an address);
+     * granting a connected computer shell access is a decision, and it belongs in the same review as the rules
+     * that decide how the agent behaves. */
     await writeFile(join(work, `${STATE_DIR}`, "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
+    // Credentials and identity — never tracked, whatever else changes.
     await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "auth", "claude", "token.json"), "{}\n");
     await writeFile(join(work, `${STATE_DIR}`, "browser", "reddit-work", "Cookies"), "secret\n");
@@ -109,6 +113,7 @@ test("the baseline commits the config slice and still refuses every credential a
     // Exactly the tracked slice out of that directory — both directory carve-outs included, nothing else.
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
         ".intentic/automations.json",
+        ".intentic/capabilities.json",
         ".intentic/drafts/reddit-launch.json",
         ".intentic/environment.custom.Dockerfile",
         ".intentic/environment.d/rust.Dockerfile",

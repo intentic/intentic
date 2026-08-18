@@ -36,22 +36,30 @@ const cleanup = async (): Promise<void> => {
     }
 };
 
-// Services shaped for the bundler: the real roots, real file reads (it reads the custom overlay off disk), and
-// whatever capability manifest the test wants the environment facts derived from.
-const bundlerServices = (work: string, history: string, capabilities: Capability[] = []): Services =>
+/* Services shaped for the bundler: the real roots, real file reads (it reads the custom overlay off disk), and
+ * whatever capability manifest the test wants the environment facts derived from.
+ *
+ * The two vault sweeps are stubbed to no-ops by DEFAULT rather than left unstubbed, because the export now runs
+ * them before it walks (bundle.ts says why) and a fake that throws its own name would make every test here about
+ * that seam. One test overrides them to prove the ordering. */
+const bundlerServices = (work: string, history: string, capabilities: Capability[] = [], sweeps: Partial<Services> = {}): Services =>
     services({
         workspace: workspacePaths(work),
         config: { ...testConfig, workspaceRoot: work, historyRoot: history },
         capabilities: memoryCapabilitiesStore(capabilities),
         files: fakeFiles({ read: async (absPath) => readFile(absPath, "utf8").catch(() => undefined) }),
+        vaultManifestSecrets: async () => [],
+        vaultExtensionSettingSecrets: async () => [],
+        ...sweeps,
     } as Parameters<typeof services>[0]);
 
 const bundleOf = async (
     source: { work: string; history: string },
     secrets: boolean,
     capabilities: Capability[] = [],
+    sweeps: Partial<Services> = {},
 ): Promise<ReadableStream<Uint8Array>> => {
-    const stream = packBundle(bundlerServices(source.work, source.history, capabilities), { secrets, now: 1_700_000_000_000 });
+    const stream = packBundle(bundlerServices(source.work, source.history, capabilities, sweeps), { secrets, now: 1_700_000_000_000 });
     // Buffered here only so one test can restore it twice; the route streams it straight to the wire.
     const chunks: Uint8Array[] = [];
     const reader = stream.getReader();
@@ -137,18 +145,54 @@ test("identity never travels and is refused on the way in even when a bundle car
 test("secrets obey the owner's export choice, in both directions", async () => {
     const source = await makeRoots();
     await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/capabilities.json`), `[{"id":"mcp1","kind":"mcp","config":{"token":"t"}}]`);
     await writeFile(join(source.work, `${STATE_DIR}/ci.json`), `{"secret":"webhook"}`);
 
     const withoutSecrets = await makeRoots();
     await restoreBundle(await bundleOf(source, false), { workspaceRoot: withoutSecrets.work, historyRoot: withoutSecrets.history }, LIMIT);
-    await expect(readFile(join(withoutSecrets.work, ".intentic/capabilities.json"), "utf8")).rejects.toThrow();
     await expect(readFile(join(withoutSecrets.work, ".intentic/ci.json"), "utf8")).rejects.toThrow();
 
     const withSecrets = await makeRoots();
     await restoreBundle(await bundleOf(source, true), { workspaceRoot: withSecrets.work, historyRoot: withSecrets.history }, LIMIT);
-    expect(await readFile(join(withSecrets.work, ".intentic/capabilities.json"), "utf8")).toContain("mcp1");
     expect(await readFile(join(withSecrets.work, ".intentic/ci.json"), "utf8")).toContain("webhook");
+    await cleanup();
+});
+
+/* THE CAPABILITY MANIFEST CHANGED SIDES, and this is the pair of assertions that says why it was allowed to.
+ *
+ * It used to be asserted beside ci.json above: classed `secret`, dropped wholesale from a no-secrets bundle. It
+ * now travels in every bundle, because the credential VALUES are no longer in it (capabilities-store.ts's vault)
+ * and what is left is the shape of each connection — which is the difference between a target that arrives
+ * listing its connections unauthenticated and one that arrives blank with a list of homework.
+ *
+ * That is only true of the BYTES while nothing has hand-written a real token back in, which is why the export
+ * sweeps first and why the second half of this test is about ordering rather than about classification. The
+ * stubbed sweep stands in for the vault: if it runs before the walk, the packed file holds the marker; if it
+ * runs after — or not at all — the packed file holds the token, and a bundle the owner was told carried no
+ * secrets carries one. */
+test("the capability manifest travels without its credentials, swept before the walk", async () => {
+    const source = await makeRoots();
+    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
+    const manifestPath = join(source.work, `${STATE_DIR}/capabilities.json`);
+    await writeFile(manifestPath, `[{"id":"mcp1","kind":"mcp","config":{"url":"https://mcp.example.com","token":"REAL-TOKEN"}}]`);
+
+    const target = await makeRoots();
+    await restoreBundle(
+        await bundleOf(source, false, [], {
+            vaultManifestSecrets: async () => {
+                await writeFile(manifestPath, `[{"id":"mcp1","kind":"mcp","config":{"url":"https://mcp.example.com","token":"__intentic_vaulted__"}}]`);
+                return ["mcp1"];
+            },
+        }),
+        { workspaceRoot: target.work, historyRoot: target.history },
+        LIMIT,
+    );
+
+    const restored = await readFile(join(target.work, ".intentic/capabilities.json"), "utf8");
+    // The shape arrived — the id, the kind and the address the owner would otherwise have to remember.
+    expect(restored).toContain("mcp1");
+    expect(restored).toContain("https://mcp.example.com");
+    // The credential did not, and it is the sweep's ordering that decided that.
+    expect(restored).not.toContain("REAL-TOKEN");
     await cleanup();
 });
 
@@ -215,7 +259,7 @@ test("the composed overlay is left for the target to recompose; its source secti
     await cleanup();
 });
 
-test("the report names the capabilities a no-secrets bundle left behind", async () => {
+test("the report names the capabilities a no-secrets bundle left unauthenticated", async () => {
     const source = await makeRoots();
     const target = await makeRoots();
     const report = await restoreBundle(
@@ -223,7 +267,7 @@ test("the report names the capabilities a no-secrets bundle left behind", async 
         { workspaceRoot: target.work, historyRoot: target.history },
         LIMIT,
     );
-    const action = report.needsAction.find((entry) => entry.subject === "Re-add capabilities");
+    const action = report.needsAction.find((entry) => entry.subject === "Reconnect capabilities");
     expect(action?.detail).toContain("docker");
     await cleanup();
 });

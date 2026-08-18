@@ -165,7 +165,7 @@ export const createExtensionsRoutes = (services: Services) => {
             const { manifest } = await find(input.id);
             const declared = manifest.contributes?.settings ?? [];
             const secretKeys = new Set(declared.filter((setting) => setting.secret === true).map((setting) => setting.key));
-            const stored = (await readAllExtensionSettings(root))[extensionIdOf(manifest)] ?? {};
+            const stored = (await readAllExtensionSettings(root, services.extensionSecretVault))[extensionIdOf(manifest)] ?? {};
             // Strip secret values from the wire; report which secret keys hold a value so the UI can show "set".
             const settings: Record<string, string | number | boolean> = {};
             const secretsSet: string[] = [];
@@ -193,7 +193,7 @@ export const createExtensionsRoutes = (services: Services) => {
             }
             // Merge, so a secret key absent from the payload keeps its stored value (the masked UI round-trips
             // non-secret edits without resending secrets); an empty-string secret clears it.
-            const stored = (await readAllExtensionSettings(root))[extensionIdOf(manifest)] ?? {};
+            const stored = (await readAllExtensionSettings(root, services.extensionSecretVault))[extensionIdOf(manifest)] ?? {};
             const next = { ...stored };
             for (const key of declaredKeys) {
                 if (key in input.settings) {
@@ -202,7 +202,12 @@ export const createExtensionsRoutes = (services: Services) => {
                     delete next[key];
                 }
             }
-            await writeExtensionSettings(root, extensionIdOf(manifest), next);
+            /* The split lands here: declared-secret values go to the vault off /work, the rest to the tracked
+             * settings file. The read above was rehydrated, so `next` carries whole values and this is the only
+             * place that has to know which of them are credentials. */
+            await writeExtensionSettings(root, services.extensionSecretVault, extensionIdOf(manifest), next, secretKeys, (id, keys) =>
+                services.logger.warn(`extension settings: "${id}" declares ${keys.join(`, `)} secret but stores a non-string`),
+            );
             return { ok: true } as const;
         }),
         recordUsage: i.recordUsage.handler(async ({ input }) => {

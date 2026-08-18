@@ -109,12 +109,31 @@ export interface WorkspaceStateFile extends StateFile {
 const STATE_FILES = [
     /* A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
      *
-     * Each entry's `config` carries that capability's credential (an mcp server's token, a Komodo key, an ssh
-     * key), so the manifest is a secret in full. It is also what composeEnvironment reads its Dockerfile
-     * fragments from, which makes this the entry where the owner's export choice has the most visible
-     * consequence: a bundle exported WITHOUT secrets rebuilds a stock overlay, and the import report has to
-     * name every capability the target needs re-added before its environment matches again. */
-    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels", "manifests"], portability: "secret" },
+     * SPLIT ALREADY — and this entry's classification had not caught up, which is the whole of what changed here.
+     * It read `secret` on a claim that had stopped being true: that each entry's `config` carries that
+     * capability's credential, so the manifest is a secret in full. It does not. capabilities-store.ts's
+     * withSecretVault keeps credential VALUES off /work entirely — the manifest holds `__intentic_vaulted__`
+     * where one used to be, reads rehydrate so no caller noticed, and main.ts sweeps a hand-written value out at
+     * boot. What is left is the SHAPE of a connection: a kind, a URL, a username, a purpose, which permissions a
+     * connected computer was granted.
+     *
+     * WHICH KEYS THOSE ARE IS DERIVED, not listed a second time: `echo` already answers "what of this config may
+     * a browser see", and the credential keys are exactly its complement (capabilities/secret-fields.ts). A kind
+     * that starts withholding a new field starts vaulting it on the same commit. That is what makes this
+     * classification a property of the code rather than a promise to re-audit it — the reason the entry can be
+     * reclassified at all, and the reason a hand-kept "these fields are safe" list could not have earned it.
+     *
+     * `carry`, and this is the entry where that earns the most. composeEnvironment reads its Dockerfile fragments
+     * from here, so a bundle that dropped it arrived on a stock overlay with an import report listing every
+     * connection to re-add by hand. It now arrives listing them itself, each visibly unconnected and waiting for
+     * one credential apiece — the shape personas.json has had all along, for the same reason.
+     *
+     * `versioned`, which is the point. Connecting this sandbox to a deployment orchestrator, or granting a
+     * connected computer shell and screen control, is the largest change anyone makes to what it can DO, and it
+     * left a diff nowhere. One consequence worth stating rather than discovering: an identifier that pairs with a
+     * credential — Komodo's api key beside its api secret, which its own connector card calls "like a database
+     * user" — is echoed, and therefore lands in the diff exactly as a database username would. */
+    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels", "manifests"], portability: "carry", versioned: true },
 
     /* Which workspace-derived recommendations the owner has said "not needed" to, and the evidence each was
      * declined against. It rides the `capabilities` key because the catalog is what changes when one lands, and
@@ -290,16 +309,33 @@ const STATE_FILES = [
         why: "Thread bookkeeping (an inbound thread — a Doorbell visitor, a Discord or Slack channel — → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message — the request storm this table's own note warns about — to refresh nothing it can see.",
         portability: "carry",
     },
-    /* Values are a primitive union an extension chooses the meaning of, and "an API key for the service I talk
-     * to" is squarely within it — so this is classed by what it CAN hold, not by what any particular extension
-     * happens to put there. The alternative reads the wrong way round: a bundle that leaked one extension's
-     * token would have been correct about all the others. */
+    /* SPLIT, so that "what an extension is configured to do" and "the token it does it with" stop being one file.
+     *
+     * This entry used to be `secret` and untracked, classed by what a value COULD hold: values are a primitive
+     * union an extension chooses the meaning of, and "an API key for the service I talk to" is squarely within
+     * it. That classification was honest about the risk and wrong about the file — it meant an extension's whole
+     * configuration was unreviewable because one of its keys might be a credential, AND the credential was in
+     * there anyway, in a file the workspace API does not lock. A turn could simply read it.
+     *
+     * A descriptor already says which keys those are (`contributes.settings[].secret`), so the values it names
+     * now live in the vault off /work and this file keeps the rest — the capability manifest's split, applied to
+     * the same problem one table over (extensions/extension-settings.ts holds it, and the reasoning). Reads
+     * rehydrate, so no caller changed.
+     *
+     * What the split earns: `carry`, because what is left is an extension's configuration and a bundle should
+     * arrive with it; and `versioned`, because turning an extension's behaviour on is a decision, and the file
+     * that records it can now be read without reading anybody's token. The boot sweep is what keeps that true of
+     * a file the agent can also edit — see vaultExtensionSettingSecrets.
+     *
+     * NO `note`, and the split is why: a note is printed by the import report beside a SKIPPED entry, so an entry
+     * that carries can never show one. "Re-enter the credentials" is now the vault's instruction to give, and the
+     * vault is under `.intentic/auth/` — which is skipped, and says so there. */
     {
         path: ".intentic/extension-settings.json",
         invalidates: [],
         why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out — it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
-        portability: "secret",
-        note: "Re-enter each extension's settings on the Extensions tab.",
+        portability: "carry",
+        versioned: true,
     },
     /* Unlike the settings file above it, the on/off switch IS observed by a query — the Extensions tab's list,
      * which carries each row's switch position — so a flip made elsewhere (another member, the agent writing the
@@ -346,6 +382,17 @@ const STATE_FILES = [
         why: "Which of the routes each extension DECLARED it has actually called — the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
         portability: "carry",
     },
+    /* THE ONE ENTRY WHERE "HOLDS NO CREDENTIAL" IS TRUE AND `versioned` IS STILL WRONG, which is worth stating
+     * because it looks like the two above it: an email and a role per row, nothing to vault, and "who may drive
+     * this sandbox" is as consequential a fact as any this table tracks.
+     *
+     * It stays out for two reasons that are not about secrecy. It is a MIRROR — the platform's invite records are
+     * the grant, this is the copy the enforcer keeps so a grant it never received is never honoured, and a change
+     * here is the two disagreeing rather than anyone deciding something. Review of the decision already exists,
+     * on the Access tab, against the record that is authoritative. And tracking it would mean reclassifying it
+     * `carry` to satisfy the guard, which is the one thing it must never be: an access list that travelled would
+     * let a source sandbox hand itself the target's ownership. Widening the guard for this single entry is the
+     * worse trade — it protects every `identity` entry, and most of those ARE credentials. */
     {
         path: ".intentic/members.json",
         invalidates: [],
@@ -358,13 +405,20 @@ const STATE_FILES = [
     /* Keep credentials and conversation state in disjoint top-level trees. Provider homes are intentionally
      * classified as a single secret unit: several CLIs mix OAuth, config, and provider-native thread metadata,
      * and no generic export can safely distinguish those files. The broad root also makes a newly-added provider
-     * secret by construction instead of relying on another hand-maintained provider-name list. */
+     * secret by construction instead of relying on another hand-maintained provider-name list.
+     *
+     * IT IS NO LONGER ONLY THE AI LOGINS. Both credential splits put their vault here — `capability-secrets.json`
+     * and `extension-secrets.json`, sited beside the provider homes precisely because this tree is already
+     * outside the file routes, the workspace walk and the search index (composition.ts sites them, and the two
+     * stores argue why). So this is now the ONE entry a secret-less bundle leaves behind, and its note is
+     * therefore the only place the owner is told what to re-enter: the manifests that name those connections
+     * travel, and would otherwise arrive looking complete. */
     {
         path: ".intentic/auth/",
         invalidates: [],
-        why: "AI-provider credentials and runtime homes; each account is rendered through owner-gated provider routes.",
+        why: "AI-provider credentials and runtime homes, plus the capability and extension-settings secret vaults; each account is rendered through owner-gated provider routes.",
         portability: "secret",
-        note: "Sign the agent's AI accounts in again on the Agent tab.",
+        note: "Sign the agent's AI accounts in again on the Agent tab, then re-enter each connection's credential on Capabilities and each extension's secret settings on Extensions — both arrived listed but unauthenticated.",
     },
     /* Agent session transcripts, rewritten on every streamed token.
      *
@@ -538,8 +592,13 @@ export const VERSIONED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.fi
  * ledger is forgotten from, and the forgetting is silent — it ranked loop iteration history and cloned
  * third-party extension source against the user's own code for months before this derivation existed.
  *
- * Note what falls out without a special case: `capabilities.json` is `secret` and unversioned, so the index
- * stops copying capability tokens into search text — the exact boundary the floor already drew for `auth/`. */
+ * WHAT THE CREDENTIAL SPLITS MOVED ACROSS THIS LINE, since the note that used to sit here said the opposite and
+ * was worth replacing rather than deleting. `capabilities.json` was `secret` and unversioned, and the sentence
+ * celebrated that the index therefore stopped copying capability tokens into search text. It is `versioned` now
+ * and searchable — and the guarantee is unchanged, because the tokens are not in the file any more. The floor
+ * moved from "keep the index away from the file that holds credentials" to "the file holds none", which is the
+ * stronger of the two: it also holds for the shell, which never consulted this list at all. `auth/` — where those
+ * values went, both vaults included — is still denied, and is the entry that was doing the real work all along. */
 export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.versioned || file.authored).map(
     (file) => file.path,
 );

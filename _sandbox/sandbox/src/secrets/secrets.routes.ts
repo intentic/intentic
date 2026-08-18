@@ -158,7 +158,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                     kind: "capability",
                     status: "connected",
                     requiredBy: [],
-                    storedAt: stateRelPath(".intentic/capabilities.json"),
+                    /* THE VAULT, not the manifest — this line used to name capabilities.json and had been wrong
+                     * since the credential values moved out of it. Harmless while that file was untracked and
+                     * unreadable-ish; actively misleading now that it is neither, because "where does this live"
+                     * would be pointing the owner at a file in their own Changes review. The value is beside the
+                     * provider logins below, in the one tree a secret-less export leaves behind. */
+                    storedAt: stateRelPath(".intentic/auth/", "capability-secrets.json"),
                     revealable: true,
                 }));
             // One entry per connected account.

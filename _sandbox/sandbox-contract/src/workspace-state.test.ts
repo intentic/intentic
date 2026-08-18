@@ -268,6 +268,12 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     it(`tracks exactly the configuration slice plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
             `.intentic/automations.json`,
+            /* The connections themselves, and the entry that took the longest to earn its place — it was classed
+             * `secret` on the strength of holding each capability's credential, which stopped being true when the
+             * vault took the values out and left the shape behind. Connecting a deployment orchestrator, or
+             * granting a connected computer shell and screen control, is the largest change made to what this
+             * sandbox can DO, and it used to leave no diff. */
+            `.intentic/capabilities.json`,
             `.intentic/capability-dismissals.json`,
             /* The two entries the AGENT authors on its own initiative, and the reason `versioned` is not read as
              * config-only. Both are the sandbox acting outward — a draft publishes words under the owner's name,
@@ -279,6 +285,10 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             `.intentic/environment.custom.Dockerfile`,
             `.intentic/environment.d/`,
             `.intentic/extension-enablement.json`,
+            /* Its twin, and the pair is the argument: the SWITCH was already tracked while the configuration
+             * behind it was not, so a commit could record turning an extension on and say nothing about what it
+             * was told to do. Tracked once its declared-secret values moved to the vault. */
+            `.intentic/extension-settings.json`,
             // The owner's per-extension update posture (notify / agent / auto) — a standing decision about
             // what may run unattended, which is exactly the kind of edit worth a line in `git log`.
             `.intentic/extension-update-policy.json`,

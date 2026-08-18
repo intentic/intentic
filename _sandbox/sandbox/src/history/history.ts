@@ -60,17 +60,29 @@ const defaultRunner: HistoryGitRunner = (args, options) =>
 // URI-encoded repo id (single-segment ids encode to themselves) so nested ids stay one filesystem entry.
 export const repoGitDir = (historyRoot: string, name: string): string => join(historyRoot, "gits", encodeURIComponent(name));
 
-// Junk + secret patterns every scope excludes (the worktree's own .gitignore files apply on top). Lives in
-// $GIT_DIR/info/exclude — outside /work — so the agent can't edit the rules. A self-contained list (the secret
-// files + workspace-ignore's IGNORED_DIRS): history snapshots keep excluding secrets even though the file tree
-// now lists them.
+/* Junk + secret patterns every scope excludes (the worktree's own .gitignore files apply on top). Lives in
+ * $GIT_DIR/info/exclude — outside /work — so the agent can't edit the rules. A self-contained list (the secret
+ * files + workspace-ignore's IGNORED_DIRS): history snapshots keep excluding secrets even though the file tree
+ * now lists them.
+ *
+ * WHAT IS LEFT HERE IS ONLY WHAT IS SECRET WHEREVER IT APPEARS. `capabilities.json` and `extension-settings.json`
+ * used to be on this list and are not any more, and both halves of that matter.
+ *
+ * These patterns are UNANCHORED, so they match at any depth and they are appended AFTER the carve-outs — which
+ * made them the last word. The contract classing those two files `versioned` produced a `!/.intentic/…` negation
+ * that this list then overrode, silently: the state table said "reviewable", the exclude file said no, and the
+ * carve-out was dead on arrival. A hand-kept list winning over a derived one is the exact inversion rootExcludes
+ * is built to avoid, and it can only be resolved by the list not naming them.
+ *
+ * It is safe now for the reason it was needed then: the credential VALUES left both files for the vault, so
+ * neither is a secret to exclude. And the unanchored match was always too wide — a `capabilities.json` inside
+ * somebody's own repo is their code, and it was being dropped from their history for sharing a name with a
+ * daemon manifest two directories up. */
 const COMMON_EXCLUDES = [
     ".env*",
     "!.env.example",
     ".secrets.json",
     "claude.json",
-    "capabilities.json",
-    "extension-settings.json",
     "node_modules/",
     ".tmp/",
     "dist/",

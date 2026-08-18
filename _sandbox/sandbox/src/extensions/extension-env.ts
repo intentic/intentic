@@ -11,7 +11,9 @@ import { enabledExtensions } from "./installed-extensions.js";
  * streamAgent, so every agent runtime's shell sees it. */
 export const extensionEnvOf = async (services: Services): Promise<Record<string, string>> => {
     const extensions = (await enabledExtensions(services)).toSorted((a, b) => a.id.localeCompare(b.id));
-    const stored = await readAllExtensionSettings(services.workspace.root);
+    // Rehydrated: a setting declared `secret` lives in the vault, and `env` exists precisely so such a value can
+    // reach the agent's shell — so this read has to see through the split (extension-settings.ts).
+    const stored = await readAllExtensionSettings(services.workspace.root, services.extensionSecretVault);
     const env: Record<string, string> = {};
     for (const extension of extensions) {
         const values = stored[extensionIdOf(extension.manifest)] ?? {};

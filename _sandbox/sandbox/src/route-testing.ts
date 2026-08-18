@@ -30,6 +30,7 @@ import type { AutomationRecord, AutomationsStore } from "./automations/automatio
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
 import type { PersonasStore } from "./personas/personas-store.js";
 import type { DismissalsStore, DismissedRecommendation } from "./capabilities/dismissals-store.js";
+import type { SecretVault } from "./capabilities/secret-vault.js";
 import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses } from "./processes/managed-processes.js";
@@ -98,6 +99,31 @@ export const memoryCapabilitiesStore = (initial: Capability[] = []): Capabilitie
             capabilities = next;
             return existed;
         },
+    };
+};
+
+/* An in-memory credential vault. In-memory rather than `unstubbed` for the reason the capability store above is:
+ * it sits on a path every TURN takes, not just the routes that are about it. An extension setting declared
+ * `secret` lives here now, `env` is how such a value reaches the agent's shell, and so composing a turn's
+ * environment reads the vault — a fake that threw its own name there failed the agent suites on a seam none of
+ * them are testing. */
+export const memorySecretVault = (initial: Record<string, Record<string, string>> = {}): SecretVault => {
+    const rows = new Map(Object.entries(initial));
+    return {
+        get: async (id) => rows.get(id) ?? {},
+        all: async () => Object.fromEntries(rows),
+        // An empty map drops the row, like the file vault: the store stays a list of what actually holds a secret.
+        set: async (id, values) => {
+            if (Object.keys(values).length === 0) {
+                rows.delete(id);
+            } else {
+                rows.set(id, values);
+            }
+        },
+        remove: async (id) => {
+            rows.delete(id);
+        },
+        values: async () => [...rows.values()].flatMap((row) => Object.values(row)),
     };
 };
 
@@ -377,6 +403,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         info: undefined,
         tools: [],
         capabilities: memoryCapabilitiesStore(),
+        // Read while composing EVERY turn's environment (extension settings declared `secret` live here), not
+        // only by the routes that write settings — so it is a fake, not an unstubbed member.
+        extensionSecretVault: memorySecretVault(),
         // Nothing stored and nothing spent — the state of a sandbox before its first secret. In-memory rather
         // than unstubbed because the inventory route reads both on every call.
         secretRegistry: async () => [],

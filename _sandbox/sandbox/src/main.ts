@@ -530,6 +530,17 @@ const main = async (): Promise<void> => {
         if (moved.length > 0) {
             logger.info({ capabilities: moved }, "capability credentials moved out of the workspace manifest into the private store");
         }
+        /* The same sweep for extension settings, in the same step because it is the same guarantee: a value an
+         * extension declared `secret` must not be sitting in a file a turn can Read. It matters more here, and
+         * that is why it runs before the gate rather than lazily — the settings file is TRACKED, so an unswept
+         * token would not merely be readable, it would be committed. */
+        const settings = await services.vaultExtensionSettingSecrets().catch((error: unknown) => {
+            logger.warn({ err: error }, "extension setting secrets: could not be moved out of the tracked file — they stay readable to the agent");
+            return [];
+        });
+        if (settings.length > 0) {
+            logger.info({ extensions: settings }, "extension setting secrets moved out of the tracked settings file into the private store");
+        }
     });
 
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge

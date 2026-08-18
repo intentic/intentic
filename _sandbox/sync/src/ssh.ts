@@ -40,7 +40,10 @@ export const IGNORES = [
     ".env",
     ".secrets.json",
     "claude.json",
-    "capabilities.json",
+    // No `capabilities.json` here. It was listed as a secret file, which it is not any more (its credentials are
+    // in the vault), and the daemon's own copy was never reached by this entry anyway — it sits under STATE_DIR,
+    // which the next line ignores whole. All the pattern could still match was a file of the USER's that happens
+    // to share the name, quietly kept off their own machine.
     STATE_DIR,
     ".git",
     ".pnpm-store",

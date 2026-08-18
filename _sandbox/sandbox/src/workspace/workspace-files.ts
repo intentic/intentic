@@ -73,10 +73,16 @@ export const isUnder = (realRoot: string, real: string): string | undefined =>
 // this function is the half that enforces it, and it is the only half that touches the disk.
 //
 // owner.json and members.json ARE the answer to "who may drive this sandbox" — re-read from disk on every
-// request — capabilities.json carries the capability manifest's secrets, ci.json the CI webhook secret, and
-// auth/ holds every agent-provider runtime home (AGENT_AUTH_DIR moves that tree out of /work entirely, and then
-// none of it is reachable to begin with). sessions/ holds provider-native conversation state, and browser/ holds
-// logged-in Chromium profiles. Protecting whole lifecycle roots keeps a new provider or session artifact from
+// request — ci.json carries the CI webhook secret, and auth/ holds every agent-provider runtime home plus the
+// capability and extension-settings credential vaults (AGENT_AUTH_DIR moves that tree out of /work entirely, and
+// then none of it is reachable to begin with). sessions/ holds provider-native conversation state, and browser/
+// holds logged-in Chromium profiles.
+//
+// capabilities.json is the one entry here that is NOT a secret and is locked anyway, so it is worth saying why
+// rather than leaving the next reader to assume the old reason: its credentials moved to the vault, and it is
+// tracked in the root repo now. What it still is, is the list of things this sandbox may reach — an ssh host, an
+// mcp server and the command it runs — so a member who could PUT one through the generic file API would be
+// granting themselves a capability the owner never approved. The lock is about that write, not about the read. Protecting whole lifecycle roots keeps a new provider or session artifact from
 // becoming readable merely because that list was not updated with its leaf name. Retired provider roots stay
 // denied even though no producer reads them: an abandoned credential must not become downloadable merely
 // because its active path moved.
