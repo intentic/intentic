@@ -4,7 +4,7 @@ import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
 import { poolEnabled } from "../pool/pool-membership.js";
 import { type StripeGateway, stripeGateway } from "../pool/pool-stripe.js";
-import { CLAIM_PATH, checkClaim, claimToken, type RegistryReader, registryReader } from "./creator-claim.js";
+import { CLAIM_PATH, checkClaim, claimFailureReason, claimToken, type RegistryReader, registryReader } from "./creator-claim.js";
 import { payoutState, startPayoutSetup } from "./creator-payouts.js";
 import {
     admissionRules,
@@ -118,6 +118,34 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
          * proof may be published in, and reports whether the name is already spoken for — so the screen can
          * show "already yours" or "held by someone else" instead of walking a creator through an instruction
          * that could never succeed. */
+        /* Which publisher names the caller's own repositories back. Names already claimed BY ANYONE are dropped:
+         * a settled name is not something to offer as a next step, and the caller's own already appear on the
+         * card above this step. A registry that cannot be read answers empty — the screen still has its text box,
+         * so a suggestion list that fails is a missing convenience, never a blocked claim. */
+        claimable: os.creator.claimable.handler(async ({ context, input }) => {
+            requirePool(context);
+            requireUser(context);
+            if (input.projects.length === 0) {
+                return { names: [] };
+            }
+            const found = await readerOf(context)
+                .publishersOf(input.projects)
+                .catch((error: unknown) => {
+                    context.logger.warn({ err: error }, `creator: registry read failed`);
+                    return [];
+                });
+            if (found.length === 0) {
+                return { names: [] };
+            }
+            const taken = await context.prisma.publisherClaim.findMany({
+                where: { publisher: { in: found.map((entry) => entry.publisher) } },
+                select: { publisher: true },
+            });
+            const settled = new Set(taken.map((claim) => claim.publisher));
+            const offer = found.filter((entry) => !settled.has(entry.publisher));
+            return { names: offer.map((entry) => ({ publisher: entry.publisher, repos: [...entry.repos] })) };
+        }),
+
         challenge: os.creator.challenge.handler(async ({ context, input }): Promise<ClaimChallenge> => {
             requirePool(context);
             const user = requireUser(context);
@@ -156,14 +184,17 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
                 }
                 return { publisher: existing.publisher, repo: existing.repo, claimedAt: existing.createdAt.toISOString() };
             }
-            const proof = await checkClaim(context.config, readerOf(context), user.id, input.publisher, fetchFn);
-            if (proof === undefined) {
-                throw new ORPCError(`FORBIDDEN`, {
-                    message: `No ${CLAIM_PATH} carrying your claim token was readable in any repository the registry lists under ${input.publisher}.`,
-                });
+            const report = await checkClaim(context.config, readerOf(context), user.id, input.publisher, fetchFn);
+            if (report.repo === undefined) {
+                // The report's own sentence, not a generic one: it names the repositories that were actually
+                // read and what they said, which is the difference between a creator who knows what to fix and
+                // one who presses the button again.
+                throw new ORPCError(`FORBIDDEN`, { message: claimFailureReason(input.publisher, report) });
             }
             try {
-                const claim = await context.prisma.publisherClaim.create({ data: { publisher: input.publisher, userId: user.id, repo: proof.repo } });
+                const claim = await context.prisma.publisherClaim.create({
+                    data: { publisher: input.publisher, userId: user.id, repo: report.repo },
+                });
                 return { publisher: claim.publisher, repo: claim.repo, claimedAt: claim.createdAt.toISOString() };
             } catch {
                 // Two tabs racing the same name: the unique key let exactly one in, and whoever lost is told the

@@ -948,6 +948,21 @@ export const ClaimChallengeSchema = z.object({
 });
 export type ClaimChallenge = z.infer<typeof ClaimChallengeSchema>;
 
+/* WHICH NAMES THIS CREATOR COULD CLAIM, worked out from repositories they already have rather than asked for.
+ *
+ * The claim screen used to open on an empty box, which is the wrong question: a creator does not necessarily
+ * know that the name to type is the publisher half of an extension id, and typing it wrong looks identical to
+ * having nothing to claim. So the screen sends the projects open in their workspace and the platform answers
+ * with the publisher names those projects back — a list to click, and the exact set of names the claim can
+ * actually succeed for.
+ *
+ * `repos` names WHICH of the caller's own projects back each name, so the screen can say why a name is being
+ * offered instead of producing it from nowhere. */
+export const ClaimableNameSchema = z.object({ publisher: z.string(), repos: z.array(z.string()) });
+export type ClaimableName = z.infer<typeof ClaimableNameSchema>;
+export const ClaimableNamesSchema = z.object({ names: z.array(ClaimableNameSchema) });
+export type ClaimableNames = z.infer<typeof ClaimableNamesSchema>;
+
 /* ── OPEN ADMISSION: a provider's own listings ─────────────────────────────────────────────────────────── */
 
 /* THE PUBLISHED RULES, read from the platform rather than written on a screen. Every number here is a

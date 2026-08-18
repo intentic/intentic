@@ -23,8 +23,11 @@ import {
     GitLogQuerySchema,
     GitLogSchema,
     GitOperationStateSchema,
+    GitPublishFileResultSchema,
+    GitPublishFileSchema,
     GitUndoSchema,
     GitUndoStateSchema,
+    GitRemoteReposSchema,
     GitRemoteStateSchema,
     GitReposSchema,
     GitResetSchema,
@@ -53,6 +56,9 @@ export const gitContract = {
     // one repo's commit log, and lazy per-commit detail (changed files, then a file's before/after AT the
     // commit). Read-only — commit/discard on the working tree stay the write path (above).
     repos: oc.route({ method: "GET", path: "/git/repos" }).output(GitReposSchema),
+    // The same repos with the host + project their remote names — how a caller recognises a workspace repo in a
+    // list of `owner/name` strings that came from somewhere else. Kept off `repos` (a `git remote -v` per repo).
+    remoteRepos: oc.route({ method: "GET", path: "/git/remote-repos" }).output(GitRemoteReposSchema),
     log: oc.route({ method: "GET", path: "/git/{repo}/log" }).input(GitLogQuerySchema).output(GitLogSchema),
     commitDiff: oc.route({ method: "GET", path: "/git/{repo}/commit-diff" }).input(GitCommitDiffQuerySchema).output(GitCommitDiffSchema),
     commitFileDiff: oc.route({ method: "GET", path: "/git/{repo}/commit-file-diff" }).input(GitCommitFileDiffQuerySchema).output(FileDiffSchema),
@@ -115,4 +121,8 @@ export const gitContract = {
     files: oc.route({ method: "GET", path: "/git/{repo}/files" }).input(RepoParamSchema).output(GitFilesSchema),
     readFile: oc.route({ method: "GET", path: "/git/{repo}/file" }).input(GitFileQuerySchema).output(GitFileSchema),
     writeFile: oc.route({ method: "PUT", path: "/git/{repo}/file" }).input(GitFileWriteSchema).output(OkSchema),
+    // Write + commit-that-path-only + push, as one step with one answer. Reports rather than throws for the
+    // same reason the remote trio above does: no remote, no credentials and "you are on a side branch" are
+    // ordinary outcomes a screen renders, not 500s.
+    publishFile: oc.route({ method: "POST", path: "/git/{repo}/publish-file" }).input(GitPublishFileSchema).output(GitPublishFileResultSchema),
 };

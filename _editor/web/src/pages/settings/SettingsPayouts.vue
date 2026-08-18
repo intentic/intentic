@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { ClaimChallenge, CreatorState } from "@intentic-app/api-contract";
-import { Card, ui, type NoticeModel, Notice, Row } from "@intentic/ui";
-import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import type { CreatorState } from "@intentic-app/api-contract";
+import { Card, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { apiClient } from "../../composables/useApi";
+import SettingsPublisherClaim from "./SettingsPublisherClaim.vue";
 
 /* Getting paid: the creator's side of the same pool the membership card buys into. Two things happen here and
  * nothing else — proving a publisher name is yours, and connecting somewhere the money can land. Both are
@@ -19,17 +20,6 @@ import { apiClient } from "../../composables/useApi";
 
 const state = ref<CreatorState | null>(null);
 const loadError = ref<NoticeModel | undefined>(undefined);
-
-const publisher = ref(``);
-const challenge = ref<ClaimChallenge | null>(null);
-const copied = ref(false);
-
-/* THREE ACTIONS, THREE BUSY FLAGS. One shared flag made every button on the card spin whenever any of them
- * was pressed — checking a publisher name lit up "Set up payouts" too — which reads as "the whole card is
- * doing something" when only one thing is. Each failure likewise belongs beside the button that caused it,
- * not in a single slot at the foot of the card where a payout problem appears under the claim step. */
-const { busy: checking, notice: checkNotice, run: runCheck } = useAsyncAction();
-const { busy: verifying, notice: verifyNotice, run: runVerify } = useAsyncAction();
 
 // Stripe returns the browser here after its hosted onboarding. `done` is informational — the status read below
 // refreshes through to Stripe while an account is unfinished, so the answer on screen is already the fresh one.
@@ -77,44 +67,6 @@ const payoutLine = computed(() => {
     }
     return `Started but not finished — Stripe still needs a few answers.`;
 });
-
-const askChallenge = async (): Promise<void> => {
-    const name = publisher.value.trim().toLowerCase();
-    if (name === ``) {
-        return;
-    }
-    await runCheck(async () => {
-        copied.value = false;
-        // A fresh look-up retires whatever the last verify attempt said — that answer was about a name and a
-        // push that are no longer the ones on screen.
-        verifyNotice.value = undefined;
-        challenge.value = await apiClient.creator.challenge({ publisher: name });
-    }, `Couldn't look that publisher up.`);
-};
-
-const copyToken = async (): Promise<void> => {
-    const token = challenge.value?.token;
-    if (token === undefined) {
-        return;
-    }
-    await navigator.clipboard?.writeText(token).catch(() => undefined);
-    copied.value = true;
-};
-
-const finishClaim = async (): Promise<void> => {
-    const name = challenge.value?.publisher;
-    if (name === undefined) {
-        return;
-    }
-    // The common failure is "the file isn't readable yet" — a push that hasn't landed, or the wrong branch.
-    // The platform's own message says which, and rides along under this sentence rather than replacing it.
-    await runVerify(async () => {
-        await apiClient.creator.claim({ publisher: name });
-        challenge.value = null;
-        publisher.value = ``;
-        await load();
-    }, `That claim couldn't be verified yet.`);
-};
 
 /* Connecting is hand-rolled rather than another useAsyncAction for one reason: on success the browser leaves
  * for Stripe, and the button must stay busy until it does. A flag cleared the moment the URL comes back would
@@ -191,47 +143,9 @@ const connect = async (): Promise<void> => {
                     </p>
                 </div>
 
-                <!-- The claim step. -->
-                <div class="flex flex-col gap-2">
-                    <h3 class="text-xs font-semibold">Claim a publisher name</h3>
-                    <p class="text-xs text-muted">
-                        Earnings add up against the publisher name in your manifest. Prove it's yours and they become payable to you.
-                    </p>
-                    <div class="flex gap-2">
-                        <input
-                            v-model="publisher"
-                            placeholder="your publisher name"
-                            :class="ui.input('min-w-0 flex-1')"
-                            @keyup.enter="askChallenge"
-                        />
-                        <Button label="Check" severity="secondary" size="small" :loading="checking" @click="askChallenge" />
-                    </div>
-                    <Notice v-if="checkNotice" :of="checkNotice" />
-
-                    <template v-if="challenge">
-                        <p v-if="challenge.claimedByYou" class="text-xs text-muted">You already hold this name.</p>
-                        <p v-else-if="challenge.claimedByOther" class="text-xs text-muted">
-                            Another account already holds this name. If that's wrong, get in touch — a name is settled by who proved it first.
-                        </p>
-                        <p v-else-if="challenge.repos.length === 0" class="text-xs text-muted">
-                            The registry lists no GitHub-backed extension under this name, so there's nothing to prove ownership against yet.
-                        </p>
-                        <template v-else>
-                            <p class="text-xs text-muted">
-                                Commit a file called <span class="font-mono">{{ challenge.path }}</span> containing this token to the default branch
-                                of <span class="font-mono">{{ challenge.repos.join(`, `) }}</span> — any one of them is enough.
-                            </p>
-                            <div class="flex items-center gap-2">
-                                <code class="flex-1 truncate rounded bg-overlay/50 px-2 py-1 text-2xs">{{ challenge.token }}</code>
-                                <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyToken" />
-                            </div>
-                            <div>
-                                <Button label="I've pushed it — verify" size="small" :loading="verifying" @click="finishClaim" />
-                            </div>
-                            <Notice v-if="verifyNotice" :of="verifyNotice" />
-                        </template>
-                    </template>
-                </div>
+                <!-- The claim step, which is a screen of its own (SettingsPublisherClaim) — it reads the
+                     workspace's repositories and pushes to one, which is far more than this card does. -->
+                <SettingsPublisherClaim @claimed="load" />
 
                 <!-- Where the money goes. -->
                 <div class="flex flex-col gap-2 border-t border-line pt-3">

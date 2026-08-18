@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import type { StripeGateway } from "../pool/pool-stripe.js";
-import { CLAIM_PATH, checkClaim, claimToken, registryReader, type RegistryReader } from "./creator-claim.js";
+import { CLAIM_PATH, checkClaim, claimFailureReason, claimToken, registryReader, type RegistryReader } from "./creator-claim.js";
 import { creatorRoutes } from "./creator.orpc.js";
 
 /* WHAT A CREATOR WOULD CALL THEFT IF IT DRIFTED. Phase one owns exactly two promises — a publisher name is
@@ -45,7 +45,10 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         ...overrides,
     }) as OrpcContext;
 
-const reader = (repos: readonly string[]): RegistryReader => ({ reposOf: vi.fn(async () => repos) });
+const reader = (repos: readonly string[], names: readonly { publisher: string; repos: readonly string[] }[] = []): RegistryReader => ({
+    reposOf: vi.fn(async () => repos),
+    publishersOf: vi.fn(async () => names),
+});
 
 const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
     const error = await promise.then(
@@ -72,22 +75,28 @@ describe(`publisher claims`, () => {
         const token = claimToken(baseConfig, user.id, `acme`);
         const fetchFn = servingFetch({ [rawUrl(`acme/second`)]: `${token}\n` });
 
-        const proof = await checkClaim(baseConfig, reader([`acme/first`, `acme/second`]), user.id, `acme`, fetchFn);
+        const report = await checkClaim(baseConfig, reader([`acme/first`, `acme/second`]), user.id, `acme`, fetchFn);
 
         // Found on the second repo: every listing is tried, so a creator never has to guess which one is read.
-        expect(proof).toEqual({ repo: `acme/second` });
+        expect(report.repo).toBe(`acme/second`);
+        // And the report says what EACH one said, which is what the refusal sentence is built from.
+        expect(report.attempts).toEqual([
+            { repo: `acme/first`, outcome: `absent` },
+            { repo: `acme/second`, outcome: `matched` },
+        ]);
     });
 
     it(`refuses a token minted for a different account or a different publisher`, async () => {
         const otherUsers = claimToken(baseConfig, `u2`, `acme`);
         const otherName = claimToken(baseConfig, user.id, `other`);
 
-        expect(
-            await checkClaim(baseConfig, reader([`acme/first`]), user.id, `acme`, servingFetch({ [rawUrl(`acme/first`)]: otherUsers })),
-        ).toBeUndefined();
-        expect(
-            await checkClaim(baseConfig, reader([`acme/first`]), user.id, `acme`, servingFetch({ [rawUrl(`acme/first`)]: otherName })),
-        ).toBeUndefined();
+        for (const wrong of [otherUsers, otherName]) {
+            const report = await checkClaim(baseConfig, reader([`acme/first`]), user.id, `acme`, servingFetch({ [rawUrl(`acme/first`)]: wrong }));
+            expect(report.repo).toBeUndefined();
+            // A file that is THERE but wrong is its own outcome: telling this creator "no file found" would send
+            // them to push the same wrong line again.
+            expect(report.attempts).toEqual([{ repo: `acme/first`, outcome: `mismatched` }]);
+        }
     });
 
     it(`survives a repository that errors, and refuses when the publisher has no listed repositories`, async () => {
@@ -99,8 +108,39 @@ describe(`publisher claims`, () => {
             return new Response(token, { status: 200 });
         }) as unknown as typeof fetch;
 
-        expect(await checkClaim(baseConfig, reader([`acme/dead`, `acme/live`]), user.id, `acme`, flaky)).toEqual({ repo: `acme/live` });
-        expect(await checkClaim(baseConfig, reader([]), user.id, `acme`, flaky)).toBeUndefined();
+        const report = await checkClaim(baseConfig, reader([`acme/dead`, `acme/live`]), user.id, `acme`, flaky);
+        expect(report.repo).toBe(`acme/live`);
+        expect(report.attempts).toEqual([
+            { repo: `acme/dead`, outcome: `unreadable` },
+            { repo: `acme/live`, outcome: `matched` },
+        ]);
+        expect(await checkClaim(baseConfig, reader([]), user.id, `acme`, flaky)).toEqual({ attempts: [] });
+    });
+
+    /* THE REFUSAL HAS TO SAY WHAT WAS READ. The old one said only that nothing carrying the token was readable,
+     * which from the creator's chair is indistinguishable from the platform never having looked — and it sent
+     * someone whose file was there-but-wrong to push the same wrong file again. */
+    it(`explains a failed claim in terms of what each repository actually said`, () => {
+        expect(claimFailureReason(`acme`, { attempts: [] })).toContain(`lists no GitHub-backed extension under acme`);
+
+        const mismatched = claimFailureReason(`acme`, {
+            attempts: [
+                { repo: `acme/one`, outcome: `mismatched` },
+                { repo: `acme/two`, outcome: `absent` },
+            ],
+        });
+        expect(mismatched).toContain(`acme/one already carries a ${CLAIM_PATH}`);
+        expect(mismatched).toContain(`not the line minted for your account`);
+
+        const outage = claimFailureReason(`acme`, { attempts: [{ repo: `acme/one`, outcome: `unreadable` }] });
+        expect(outage).toContain(`That is GitHub, not you`);
+
+        const nothingYet = claimFailureReason(`acme`, {
+            attempts: [`acme/one`, `acme/two`, `acme/three`].map((repo) => ({ repo, outcome: `absent` as const })),
+        });
+        expect(nothingYet).toContain(`Read all 3 repositories listed under acme`);
+        // The branch trap is the single most likely reason a creator who "did it" is still not verified.
+        expect(nothingYet).toContain(`landed on another branch`);
     });
 
     it(`reads the registry for github-sourced listings under the publisher, and caches the file`, async () => {
@@ -123,6 +163,14 @@ describe(`publisher claims`, () => {
         expect(await registry.reposOf(`other`)).toEqual([`other/one`]);
         // Second read inside the window is served from cache — a claim screen must not re-fetch per visit.
         expect(fetchFn).toHaveBeenCalledTimes(1);
+
+        /* THE SAME FILE READ BACKWARDS — repositories a creator already has, to the names they back. This is
+         * what lets the screen offer a name instead of asking for one, and it must survive the two things real
+         * remotes do: differ in case from the listing, and appear under a publisher more than once. */
+        expect(await registry.publishersOf([`ACME/One`, `acme/two`, `nobody/thing`])).toEqual([
+            { publisher: `acme`, repos: [`acme/one`, `acme/two`] },
+        ]);
+        expect(await registry.publishersOf([])).toEqual([]);
     });
 
     it(`does not cache a failed registry read`, async () => {
@@ -205,9 +253,46 @@ describe(`creator routes`, () => {
         });
     });
 
+    /* THE EMPTY BOX WAS THE WORST PART OF THIS SCREEN. A creator does not necessarily know that the name to type
+     * is the publisher half of an extension id, and typing it wrong looks exactly like having nothing to claim.
+     * So the screen sends what it has and the platform answers with names that can actually succeed. */
+    it(`claimable offers names the caller's own repositories back, minus ones already settled`, async () => {
+        const prisma = fakePrisma({ publisherClaim: { findMany: vi.fn().mockResolvedValue([{ publisher: `taken` }]) } });
+        const routes = creatorRoutes({
+            reader: reader(
+                [],
+                [
+                    { publisher: `acme`, repos: [`acme/one`] },
+                    { publisher: `taken`, repos: [`taken/one`] },
+                ],
+            ),
+        });
+
+        const result = await call(routes.claimable, { projects: [`acme/one`, `taken/one`] }, { context: context({ prisma }) });
+
+        // `taken` is gone: a settled name is not a next step, it is somebody's answer.
+        expect(result).toEqual({ names: [{ publisher: `acme`, repos: [`acme/one`] }] });
+    });
+
+    it(`claimable answers empty rather than failing when the registry is down`, async () => {
+        const prisma = fakePrisma({ publisherClaim: { findMany: vi.fn() } });
+        const broken: RegistryReader = {
+            reposOf: vi.fn(async () => []),
+            publishersOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
+        };
+
+        // A suggestion list that fails is a missing convenience; the text box below it still claims.
+        expect(await call(creatorRoutes({ reader: broken }).claimable, { projects: [`acme/one`] }, { context: context({ prisma }) })).toEqual({
+            names: [],
+        });
+    });
+
     it(`challenge still answers when the registry cannot be read`, async () => {
         const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null) } });
-        const broken: RegistryReader = { reposOf: vi.fn(async () => Promise.reject(new Error(`registry down`))) };
+        const broken: RegistryReader = {
+            reposOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
+            publishersOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
+        };
         const routes = creatorRoutes({ reader: broken });
 
         const result = await call(routes.challenge, { publisher: `acme` }, { context: context({ prisma }) });

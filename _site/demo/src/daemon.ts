@@ -60,6 +60,8 @@ import {
     landAgentDelta,
     landedPaths,
     readFile,
+    PUBLISH_REFUSAL,
+    REMOTE_REPOS,
     REPOS,
     searchWorkspace,
     sessions,
@@ -397,6 +399,13 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/git/{repo}/branches`, ({ param }) => json({ branches: [{ name: `main`, current: true }], repo: param(`repo`) })],
     [`POST`, `/git/{repo}/commit`, () => refuse(`This is the demo workspace — commits need a real repository.`)],
     [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace — there is no remote to push to.`)],
+    /* Where each repo lives online. This is what the publisher-claim step matches against the registry's list,
+     * so `web` being an `acme/…` project is what makes the demo show the one-click path rather than the
+     * paste-a-line fallback — the more interesting of the two, and the one worth having on screen. */
+    [`GET`, `/git/remote-repos`, () => json({ repos: REMOTE_REPOS })],
+    // The claim's one press. Refused for the same reason commit and push are: the demo has no remote, and a
+    // fixture that answered `ok` would be showing a success the product could not have produced.
+    [`POST`, `/git/{repo}/publish-file`, () => json(PUBLISH_REFUSAL)],
 
     /* The connected AI accounts and each provider's live model catalog. Without these the composer sits on
      * "Checking your AI accounts…" forever: the chat gates itself on knowing what it could run a turn WITH. One

@@ -337,6 +337,22 @@ export const createGitRoutes = (services: Services) => {
         // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; discoverRepos
         // returns only the nested repos (the same set the Changes panel and history scopes use).
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
+        /* The same repos with the host + project their remote names. The workspace repo ("root") is deliberately
+         * absent: it is the sandbox's own shadow repo over /work, not a project anybody publishes, and offering
+         * it as somewhere to push a file would be offering to push the whole workspace.
+         *
+         * A repo whose remote cannot be read at all is skipped rather than reported as remote-less — the caller's
+         * question is "which of these do I recognise", and a repo it cannot answer for does not belong in it. */
+        remoteRepos: i.remoteRepos.handler(async () => {
+            const ids = await discoverRepos(services.workspace.root);
+            const entries = await Promise.all(
+                ids.map(async (repo) => {
+                    const found = await services.git.remoteProjectOf(join(services.workspace.root, repo)).catch(() => undefined);
+                    return found === undefined ? undefined : { repo, host: found.host, project: found.project };
+                }),
+            );
+            return { repos: entries.filter((entry): entry is { repo: string; host: string; project: string } => entry !== undefined) };
+        }),
         log: i.log.handler(async ({ input }) => {
             // 300 is the page size a caller gets if it asks for none — big enough that a small repo arrives whole
             // on the first request, small enough that a large one does not pay for what nobody scrolls to.
@@ -645,6 +661,28 @@ export const createGitRoutes = (services: Services) => {
             invalidateScan();
             services.history.notifyUserWrite();
             return { ok: true } as const;
+        }),
+        /* Write + commit-that-path-only + push. Under the repo lock and the committing flag for the same reason
+         * the commit route is: it records a commit, and an agent landing a patch in the middle of one is the
+         * half-a-patch race the lock exists to close.
+         *
+         * The path is guarded BEFORE the lock is taken — an invalid path is a bad request, not a queue slot —
+         * and the write itself stays `services.files.write` so this surface resolves paths exactly once. */
+        publishFile: i.publishFile.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            const target = guardRepoPath(dir, input.path);
+            const result = await whileCommitting(input.repo, () =>
+                onRepo(input.repo, () =>
+                    services.git.publishFile(dir, { path: input.path, content: input.content, message: input.message }, (content) =>
+                        services.files.write(target, content),
+                    ),
+                ),
+            );
+            if (result.wrote) {
+                invalidateScan();
+                services.history.notifyUserWrite();
+            }
+            return result;
         }),
     };
 };

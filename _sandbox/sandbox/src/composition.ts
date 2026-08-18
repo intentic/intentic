@@ -7,6 +7,7 @@ import type {
     GitBranch,
     GitChange,
     GitCommit,
+    GitPublishFileResult,
     GitRemoteBranch,
     GitRemoteState,
     IntenticLine,
@@ -21,6 +22,7 @@ import {
     type GitCloneOptions,
     type GitStatus,
     type GitSyncResult,
+    defaultGit,
     gitCheckout,
     gitClone,
     gitCommitAll,
@@ -132,6 +134,8 @@ import { abortOperation, type GitOperation, operationInProgress } from "./git/op
 import { type UndoableAction, undoableAction, undoLastAction } from "./git/undo.js";
 import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/stash.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
+import { remoteProjectOf } from "./git/remote-urls.js";
+import { publishFile } from "./git/publish-file.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
 import { createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
@@ -505,6 +509,17 @@ export interface Services {
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
         readonly pullRemote: (dir: string) => Promise<ActionResult>;
         readonly pushBranch: (dir: string, options: { branch?: string }) => Promise<ActionResult>;
+        // Where the repo is online (host + `owner/name`), so a workspace repo can be recognised in a list of
+        // project ids that came from somewhere else — the publisher claim matches the registry's list this way.
+        readonly remoteProjectOf: (dir: string) => Promise<{ host: string; project: string } | undefined>;
+        /* One file onto the default branch and out to the remote, in a single step whose answer says how far it
+         * got. `write` is passed in by the router, which owns path resolution; everything else — the mid-sequence
+         * and wrong-branch refusals, committing that path ALONE so a staged index survives — is in publish-file.ts. */
+        readonly publishFile: (
+            dir: string,
+            file: { path: string; content: string; message: string },
+            write: (content: string) => Promise<void>,
+        ) => Promise<GitPublishFileResult>;
         // The working tree's two diffs, one per side the Changes panel lists — a partially staged file has two
         // of them, and HEAD↔worktree is neither. `fileDiff`'s `ref` is the before side for the AGENTS review,
         // whose worktree has no index to split (a conversation's recorded base sha); `refFileDiff` is that same
@@ -1107,6 +1122,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             fetchRemote,
             pullRemote,
             pushBranch,
+            remoteProjectOf: (dir) => remoteProjectOf(dir, defaultGit),
+            publishFile,
             stagedFileDiff,
             unstagedFileDiff,
             conflictedFileDiff,

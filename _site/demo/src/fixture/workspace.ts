@@ -27,6 +27,27 @@ import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
 export const REPOS = [`web`, `api`] as const;
 
+/* WHERE THOSE TWO REPOS LIVE ONLINE. Only the publisher claim reads this, and it reads it to recognise one of
+ * its own listed repositories in the workspace — so `web` is deliberately an `acme/…` project matching the
+ * registry fixture, and `api` deliberately is not. That pairing is what puts BOTH halves of the claim step on
+ * screen at once: a repository open here (one press) and one that is not (a line to paste). */
+export const REMOTE_REPOS = [
+    { repo: `web`, host: `github.com`, project: `acme/shop-web` },
+    { repo: `api`, host: `github.com`, project: `acme-internal/shop-api` },
+] as const;
+
+/* A push the demo cannot make. Reported rather than thrown, in the daemon's own shape: the claim screen reads
+ * `wrote`/`committed`/`pushed` to say which half happened, and "none of it" is the honest answer here. */
+export const PUBLISH_REFUSAL = {
+    ok: false,
+    wrote: false,
+    committed: false,
+    pushed: false,
+    branch: `main`,
+    defaultBranch: `main`,
+    reason: `this is the demo workspace — there is no remote to push to`,
+} as const;
+
 /* What is dirty in the main tree BEFORE anything lands: the checkout agent's first pass, already applied, plus
  * one file the owner is editing by hand.
  *

@@ -2507,6 +2507,52 @@ export const GitLogQuerySchema = RepoParamSchema.extend({
 // Every real git repo under /work as root-relative dir ids ("root" is implicit — the /work repo itself).
 export const GitReposSchema = z.object({ repos: z.array(z.string()) });
 export type GitRepos = z.infer<typeof GitReposSchema>;
+
+/* WHERE EACH WORKSPACE REPO LIVES ONLINE — one entry per repo that has a parseable remote, as the host and the
+ * `owner/name` project it names. Separate from `repos` above rather than folded into it because that route is
+ * on the file tree's hot path and this costs a `git remote -v` per repo; a caller that wants to recognise a
+ * workspace repo in somebody else's list (the publisher claim does exactly that) asks for it deliberately.
+ *
+ * A repo with no remote, or one naming a local path, is absent rather than present-and-empty: "this repo is
+ * nowhere online" and "this repo is at X" are different answers and only one of them can be matched against. */
+export const GitRemoteRepoSchema = z.object({ repo: z.string(), host: z.string(), project: z.string() });
+export type GitRemoteRepo = z.infer<typeof GitRemoteRepoSchema>;
+export const GitRemoteReposSchema = z.object({ repos: z.array(GitRemoteRepoSchema) });
+export type GitRemoteRepos = z.infer<typeof GitRemoteReposSchema>;
+
+/* PUT ONE FILE ON THE DEFAULT BRANCH AND PUBLISH IT — write, commit that path alone, push, in one call.
+ *
+ * One route rather than three because the interesting states are the ones BETWEEN the steps: a file written but
+ * not committed, or committed but not pushed, is a repo the user now has to clean up by hand, and a browser
+ * making three requests owns that mess without being able to describe it. Here the caller gets one answer that
+ * says how far it got.
+ *
+ * `message` is the caller's because the commit shows up in the user's own history and a generic subject there
+ * is litter. */
+export const GitPublishFileSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string(), message: z.string().min(1) });
+
+/* HOW FAR THE PUBLISH GOT, in the terms the screen has to explain it in. `ok` is "the file is on the default
+ * branch of the remote" and nothing less — the only state that makes a public read of it succeed.
+ *
+ * The three steps are reported SEPARATELY because every boundary between them is a state a user can be left
+ * in and would otherwise have to discover: a file written but not committed, a commit that exists locally but
+ * was refused by the remote for credentials. Each of those needs a different sentence and a different next
+ * move, and one `ok: false` cannot carry either. It is also what tells the daemon whether the worktree moved
+ * at all, which decides whether this counts as a user write on the timeline.
+ *
+ * `branch` and `defaultBranch` ride along so a refusal can name both sides of the mismatch rather than saying
+ * "wrong branch" at someone who cannot see which one they are on. */
+export const GitPublishFileResultSchema = z.object({
+    ok: z.boolean(),
+    wrote: z.boolean(),
+    committed: z.boolean(),
+    pushed: z.boolean(),
+    branch: z.string().optional(),
+    defaultBranch: z.string().optional(),
+    reason: z.string().optional(),
+});
+export type GitPublishFileResult = z.infer<typeof GitPublishFileResultSchema>;
+
 export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
 // A commit's changed files (vs its first parent; a root commit vs the empty tree) — the graph's detail tree
 // renders these (line stats included) and reuses the diff UI on click. Just GitChanges: the line stats live on

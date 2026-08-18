@@ -53,3 +53,16 @@ export const remoteUrlsOf = async (dir: string, git: GitRunner): Promise<string[
     const rest = [...fetchUrls].filter(([name]) => name !== "origin").map(([, url]) => url);
     return origin === undefined ? rest : [origin, ...rest];
 };
+
+// WHERE THIS REPO IS, as one answer: the first remote that names a host and a project, in the order above (so
+// `origin` wins, and a fork answers with its own fork rather than upstream). Undefined ⇒ no remote, or only
+// remotes nothing can stand behind — a repo that exists nowhere anyone else can read.
+export const remoteProjectOf = async (dir: string, git: GitRunner): Promise<{ host: string; project: string } | undefined> => {
+    for (const url of await remoteUrlsOf(dir, git)) {
+        const parsed = parseRemote(url);
+        if (parsed !== undefined) {
+            return parsed;
+        }
+    }
+    return undefined;
+};

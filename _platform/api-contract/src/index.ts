@@ -3,6 +3,7 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    ClaimableNamesSchema,
     ClaimChallengeSchema,
     CloudCredentialsSchema,
     CloudOptionsSchema,
@@ -248,6 +249,13 @@ export const serviceContract = {
 
 export const creatorContract = {
     status: oc.route({ method: "GET", path: "/creator/status" }).output(CreatorStateSchema),
+    /* Publisher names the caller's own repositories back — what the claim screen offers instead of an empty box.
+     * `projects` are `owner/name` slugs the caller says they have; nothing is trusted about them beyond being a
+     * filter, because the proof is still a file only somebody with push access can put there. */
+    claimable: oc
+        .route({ method: "POST", path: "/creator/claim/claimable" })
+        .input(z.object({ projects: z.array(z.string().min(1)).max(200) }))
+        .output(ClaimableNamesSchema),
     challenge: oc
         .route({ method: "POST", path: "/creator/claim/challenge" })
         .input(z.object({ publisher: PublisherSlugSchema }))
