@@ -17,7 +17,7 @@
   // src/environments/environment.local.ts
   window.env = {
     ...defaultEnv,
-    api: { url: "https://localhost:6480" },
+    api: { url: "https://api-dev-abc123def456.sbx.intentic.dev" },
     // Public web client id (authorize the dev origin, https://localhost:47145, as a JS origin on this client).
     // Reach the SPA at exactly that host — https://127.0.0.1:47145 is a different origin to both Google and the
     // API's CORS check, and the API answers its preflight 204 with no allow-origin header (sign-in then fails).

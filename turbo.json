@@ -94,10 +94,14 @@
             "dependsOn": ["^build"],
             "outputs": []
         },
+        // API_URL/WEB_ORIGIN: how `pnpm dev:public` points the api and the SPA at their tunnel origins — it
+        // spawns `pnpm dev:light` with both set, and strict envMode would otherwise delete them before the
+        // tasks start (the api then reads the root .env and builds invite links on localhost, silently).
+        // passThrough is right for them: dev is uncached, and the values are per-developer origins.
         "dev": {
             "cache": false,
             "persistent": true,
-            "passThroughEnv": ["WORKSPACE_ROOT", "PREVIEW_PORT"]
+            "passThroughEnv": ["WORKSPACE_ROOT", "PREVIEW_PORT", "API_URL", "WEB_ORIGIN"]
         },
         "docker:release": {
             "dependsOn": ["build"],
