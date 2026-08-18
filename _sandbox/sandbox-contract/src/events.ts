@@ -403,6 +403,29 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * route addresses it by; absent on a turn with no conversation behind it (the bench, a one-shot), where
      * the id still powers a plain restore but there is no message to rewind to. */
     z.object({ kind: z.literal("checkpoint"), id: z.string(), index: z.number().int().nonnegative().optional() }),
+    /* A MESSAGE THE USER SENT INTO THE TURN WHILE IT RAN — the mid-turn steer, at the point in the stream where
+     * the daemon accepted it (agent/agent-steering.ts).
+     *
+     * A frame rather than a client-local write, because all three things that were wrong about the steer are the
+     * same missing fact: nothing in the run's log said WHEN it arrived.
+     *   - POSITION. The harness injects a steer between tool calls and the model simply keeps writing, with no
+     *     `result` in between — so there is no `usage` boundary to retire the open bubble. The sending window
+     *     appended the user's words at the END of its transcript while the turn kept typing into the bubble
+     *     ABOVE them, and the answer to a question landed over the question.
+     *   - EVERY OTHER WINDOW. A run is rendered by any number of attached clients; only the one that posted the
+     *     steer knew about it, so the same conversation read differently in two places.
+     *   - THE RECORD. The settled turn is written down from this log (sessions/turn-transcript.ts), and one that
+     *     never held the steer wrote a transcript the message was missing from entirely — which also put the
+     *     client's row count one ahead of the daemon's for the rest of the conversation, and those counts are
+     *     what a fork copies a prefix of and a rewind addresses.
+     *
+     * `text` is what the user typed, never the composed prompt: the editor-context and attachment notes the
+     * route wraps around it are protocol, and redrawing them as the user's words is the same lie the stored
+     * prompt is unwrapped to avoid. `attachments` are workspace-relative, like the turn's own. `sentAt` is the
+     * instant the turn took the message, carried so the bubble wears the same clock live and after a reopen —
+     * a turn's own user row is stamped from the daemon's clock too, and a live bubble stamped from the
+     * browser's would visibly jump when the record replaced it. */
+    z.object({ kind: z.literal("steer"), text: z.string(), sentAt: z.number(), attachments: z.array(z.string()).optional() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     // The prose block the `delta` frames were writing is finished. A turn emits several: the model says what
     // it is about to do, runs tools, reports what it found, runs more, then summarizes — each a separate text

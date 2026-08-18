@@ -1,4 +1,5 @@
 import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
+import { basename } from "@intentic/ui/path";
 import {
     type BrowserHelpStatus,
     type CapabilityOfferStatus,
@@ -403,6 +404,27 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             }
             const opened = withBubble(state);
             return step(enqueueText(opened.state, opened.id, event.text));
+        }
+        /* THE USER SPOKE WHILE THE TURN RAN — their words, at the point in the stream the daemon took them.
+         *
+         * A bubble of their own AND a boundary, and the boundary is the whole bug this frame exists for. The
+         * harness absorbs a steer between tool calls and the model keeps writing with no `result` in between, so
+         * nothing else in the stream retires the open bubble: what the agent says NEXT is its answer to this
+         * message, and left in the bubble above it the answer printed over the question. Retiring here is the
+         * same move `text_end` and `usage` make, for the same reason — everything after these words belongs
+         * below them.
+         *
+         * NOT flushed, exactly like text_end: the typewriter keeps draining into the retired bubble by id, so
+         * prose the model had already written finishes typing where it was written rather than snapping into
+         * place the instant a message arrives. */
+        case `steer`: {
+            const spoken = appendMessage(state, {
+                role: `user`,
+                text: event.text,
+                sentAt: event.sentAt,
+                ...(event.attachments === undefined ? {} : { attachments: event.attachments.map((path) => ({ name: basename(path), path })) }),
+            });
+            return step({ ...spoken, bubbleId: null });
         }
         case `text_end`:
             // The agent finished a block of prose. Retire the bubble it was writing into so whatever comes next

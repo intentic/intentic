@@ -1184,11 +1184,16 @@ export class Conversation {
         };
     }
 
-    // Hand one queued message to the running turn (the daemon injects it between tool calls), moving it into
-    // the transcript once the daemon has it. False when no steerable turn is live — the message stays queued.
-    // The running turn keeps streaming into its current bubble (above this message — that output answers what
-    // came before); the `usage` frame closing the current turn retires the bubble, so the answer to this
-    // message opens a fresh one below it.
+    /* Hand one queued message to the running turn (the daemon injects it between tool calls). False when no
+     * steerable turn is live — the message stays queued for the settle.
+     *
+     * THE TRANSCRIPT WRITE IS NOT DONE HERE. The daemon answers a taken steer by pushing a `steer` frame into
+     * the run's own log, and that frame is what draws the bubble — in this window, in every other window
+     * rendering the same run, and in the record the settled turn is written down from. Writing it locally
+     * instead is what used to put the answer above the question: the bubble landed at the end of THIS window's
+     * transcript while the turn kept typing into the one it had open above, and a steer absorbed mid-turn emits
+     * no `usage` to retire that bubble (see the `steer` frame in events.ts). The frame is pushed before this
+     * request is answered, so there is no gap where the message is neither queued nor on screen. */
     private async deliverSteer(message: QueuedMessage): Promise<boolean> {
         const paths = message.attachments.map((file) => file.path);
         const delivered = await postTurnControl(`/agent/steer`, {
@@ -1201,11 +1206,6 @@ export class Conversation {
             return false;
         }
         this.removeQueued(message.id);
-        this.transcript.append({
-            role: `user`,
-            text: message.text,
-            ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
-        });
         return true;
     }
 

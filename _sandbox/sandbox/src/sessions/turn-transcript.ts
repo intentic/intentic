@@ -153,6 +153,21 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
         }
         if (event.kind === "delta") {
             open().text += event.text;
+        } else if (event.kind === "steer") {
+            /* THE USER SPOKE MID-TURN, and it goes down as a row of its own — a turn can hold several of these,
+             * so the record is not "one user row then the answer" and never really was. Before this frame
+             * existed a steered message was written down nowhere at all: it lived only in the window that sent
+             * it, so reopening the chat lost it, and the client's row count ran one ahead of the daemon's for
+             * the rest of the conversation — which is the count a fork copies a prefix of and a rewind
+             * addresses. Closes the open bubble first, exactly as the live client retires its own: what the
+             * agent says next is its answer to these words and belongs below them. */
+            flush();
+            out.push({
+                role: "user",
+                text: event.text,
+                sentAt: event.sentAt,
+                ...(event.attachments !== undefined ? { attachments: [...event.attachments] } : {}),
+            });
         } else if (event.kind === "error") {
             /* WHAT HAPPENED TO THE TURN, kept — and the frame whose absence made a refused session look broken
              * rather than refused. A provider that answers "your organization has disabled Claude subscription

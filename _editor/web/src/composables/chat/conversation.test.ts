@@ -660,7 +660,14 @@ describe(`Conversation`, () => {
         expect(second).toMatchObject({ role: `assistant`, text: `second answer`, thinking: `next`, usage: { costUsd: 0.2 } });
     });
 
-    it(`steers mid-turn: the running answer stays in its bubble above the steered message, the follow-up turn opens below`, async () => {
+    /* THE ANSWER GOES BELOW THE QUESTION — and the frame this turns on is the whole reason a steer is written
+     * down by the daemon rather than by the window that sent it.
+     *
+     * The absorbed-mid-turn case is the one that used to be wrong, and it is the common one: the harness injects
+     * the message between tool calls and the model simply keeps writing, so NO `usage` arrives to retire the
+     * open bubble. With the bubble written locally at the end of the list, the reply typed into the bubble above
+     * it and printed over the words it was answering. */
+    it(`steers mid-turn: the message lands where the turn took it and the answer opens below it`, async () => {
         const conversation = new Conversation(`c1`);
         let controller!: ReadableStreamDefaultController<Uint8Array>;
         const body = new ReadableStream<Uint8Array>({
@@ -679,17 +686,19 @@ describe(`Conversation`, () => {
         const emit = (event: AgentEvent): void => controller.enqueue(sseFrame({ kind: `frame`, seq: (seq += 1), event }));
 
         const turn = conversation.send(`2+3?`, settings);
-        await conversation.enqueue(`2+6?`);
-        // The daemon took it, so it left the queue and joined the transcript.
-        expect(conversation.queued.value).toHaveLength(0);
-
-        // The first answer streams AFTER the steer landed — still into the bubble ABOVE the steered message.
         emit({ kind: `delta`, text: `5` });
         await vi.waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`5`));
-        // Its end-of-turn usage retires that bubble; the queued message's own turn opens a fresh one below.
-        emit({ kind: `usage`, costUsd: 0.1 });
+
+        await conversation.enqueue(`2+6?`);
+        // The daemon took it, so it left the queue — and the run's own frame is what draws it.
+        expect(conversation.queued.value).toHaveLength(0);
+        emit({ kind: `steer`, text: `2+6?`, sentAt: 1_767_225_600_000 });
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(3));
+
+        // Absorbed mid-turn: no usage boundary, the model just carries on — and its words open a bubble BELOW.
         emit({ kind: `delta`, text: `8` });
         await vi.waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
+        emit({ kind: `usage`, costUsd: 0.1 });
         emit({ kind: `done` });
         controller.enqueue(sseFrame({ kind: `end` }));
         controller.close();
@@ -701,12 +710,45 @@ describe(`Conversation`, () => {
             { role: `user`, text: `2+6?` },
             { role: `assistant`, text: `8` },
         ]);
-        expect(conversation.messages.value[1]!.usage).toMatchObject({ costUsd: 0.1 });
+        // The daemon's stamp, not this window's clock: the bubble must not jump when the record replaces it.
+        expect(conversation.messages.value[2]!.sentAt).toBe(1_767_225_600_000);
+    });
+
+    // Every window rendering the run draws the steer, not only the one whose composer it was typed in.
+    it(`draws a steer that another window sent, off the run's own frames`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `delta`, text: `looking` },
+                { kind: `steer`, text: `check the tests too`, sentAt: 1_767_225_600_000 },
+                { kind: `delta`, text: `will do` },
+                { kind: `done` },
+            ]),
+        );
+
+        await conversation.send(`have a look`, settings);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `have a look` },
+            { role: `assistant`, text: `looking` },
+            { role: `user`, text: `check the tests too` },
+            { role: `assistant`, text: `will do` },
+        ]);
+        // Nothing was typed here, so nothing was queued here either.
+        expect(conversation.queued.value).toHaveLength(0);
     });
 
     it(`sends a steered message's attachments and editor context with it, so a mid-turn file isn't a lesser message`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `delta`, text: `working` },
+                    { kind: `steer`, text: `look at this`, sentAt: 1_767_225_600_000, attachments: [`.intentic/artifacts/attachments/u1/shot.png`] },
+                ],
+                { stayOpen: true },
+            ),
+        );
 
         const turn = conversation.send(`start`, settings);
         await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
@@ -720,8 +762,15 @@ describe(`Conversation`, () => {
             attachments: [`.intentic/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
-        // The bubble carries the files too — the transcript shows what was actually handed over.
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `user`, text: `look at this`, attachments: [{ name: `shot.png` }] });
+        // The bubble carries the files too — the transcript shows what was actually handed over. Its chip is
+        // named from the path the frame carries, the same way a restored one is.
+        await vi.waitFor(() =>
+            expect(conversation.messages.value.at(-1)).toMatchObject({
+                role: `user`,
+                text: `look at this`,
+                attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }],
+            }),
+        );
 
         conversation.stop();
         await turn;

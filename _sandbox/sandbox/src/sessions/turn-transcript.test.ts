@@ -95,6 +95,29 @@ describe("restoredTurn", () => {
         ]);
     });
 
+    /* THE USER SPOKE MID-TURN, and the record holds it — which it did not before the `steer` frame existed. The
+     * message lived only in the window that sent it, so reopening the chat lost it entirely and the client's row
+     * count ran one ahead of this one for the rest of the conversation (the count a fork copies a prefix of, and
+     * the index a rewind addresses). It closes the open bubble for the same reason the live client retires its
+     * own: what the agent says next is its answer to these words. */
+    it("writes a mid-turn steer down as a user row, with the answer to it beneath", () => {
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "on it" },
+            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000, attachments: [".intentic/artifacts/attachments/u1/spec.md"] },
+            { kind: "delta", text: "will do" },
+        ];
+        expect(restoredTurn({ prompt: "ship it" }, events, "/work", SENT_AT).slice(1)).toEqual([
+            { role: "assistant", text: "on it" },
+            {
+                role: "user",
+                text: "and the tests",
+                sentAt: SENT_AT + 1000,
+                attachments: [".intentic/artifacts/attachments/u1/spec.md"],
+            },
+            { role: "assistant", text: "will do" },
+        ]);
+    });
+
     // A text_end on a bubble holding only cards is not a boundary — retiring there would split a card away from
     // the prose that reports it, a shape the live stream never draws.
     it("does not retire a bubble that has written no prose", () => {

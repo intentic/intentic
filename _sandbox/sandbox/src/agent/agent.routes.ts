@@ -1340,6 +1340,19 @@ export const createAgentRoutes = (services: Services) => {
             if (!steerTurn(input.conversationId, paths.length > 0 ? withAttachmentNote(withEditor, paths) : withEditor)) {
                 throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
             }
+            /* THE MESSAGE INTO THE RUN'S OWN LOG, at the point in the stream where the turn took it — which is
+             * what puts it in front of every window rendering this run, in the right place, and in the record
+             * the settled turn is written down from. See the `steer` frame in events.ts for what each of those
+             * was doing wrong while this only existed in the sending window.
+             *
+             * Pushed AFTER the queue accepted it and synchronously, before this handler answers: the poster's
+             * 200 therefore cannot arrive ahead of the frame, and a steer the turn refused writes nothing. */
+            turnRunOf(input.conversationId)?.push({
+                kind: "steer",
+                text: input.text,
+                sentAt: Date.now(),
+                ...((input.attachments ?? []).length > 0 ? { attachments: [...(input.attachments ?? [])] } : {}),
+            });
             // A steered message is something the user SAID, so the fleet filter has to find it. Recorded here
             // rather than left to the transcript because the prompt index reads a session's file once and holds
             // it (transcript-search.ts) — a mid-turn message that only ever landed in the file would be invisible to

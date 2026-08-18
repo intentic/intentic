@@ -505,9 +505,9 @@ const contextRing = computed(() => {
     };
 });
 
-// True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not
-// simply the last message — a steered user message (and trailing notices) land below the bubble the turn
-// is still writing into.
+// True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not simply
+// the last message — a notice this window wrote (a control action, a provider switch) sits below the bubble the
+// turn is still writing into.
 const isStreaming = (message: ChatMessage): boolean =>
     streaming.value && message.role === `assistant` && messages.value.findLast((entry) => entry.role === `assistant`)?.id === message.id;
 

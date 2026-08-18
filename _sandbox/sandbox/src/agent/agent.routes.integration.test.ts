@@ -3,10 +3,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { createApp } from "../app.js";
 
+import type { RestoredMessage } from "@intentic/sandbox-contract";
 import type { AgentWorktrees } from "../agents/worktrees.js";
 import { clientFor, collect, errorCode, runAgentTurn, services } from "../route-testing.js";
 import { createRequest } from "./agent-requests.js";
@@ -218,4 +219,60 @@ test("a dismissed question settles the turn's books on the branch, and lands not
     expect(await sh(work, "show", "--name-only", "--format=%s", "agent/conv1")).toContain("app.ts");
     const { agents } = await client.agents.list();
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", diff: { files: 1, insertions: 1, deletions: 0 } });
+});
+
+/* A MID-TURN MESSAGE IS PART OF THE RUN, not a note the sending window keeps to itself.
+ *
+ * The steer used to reach the model and nothing else: the frame log never heard of it, so the settled record was
+ * written without it (reopening the chat lost the message outright), every other window rendering the run never
+ * drew it, and the one window that did drew it at the END of its own list — while the turn kept typing into the
+ * bubble above, printing the answer over the question. All three are the same missing fact, and the frame this
+ * asserts is that fact: WHERE in the stream the turn took the words. */
+test("a steer taken mid-turn lands in the run's frames, and in the record, between what came before and the answer", async () => {
+    let taken: (() => void) | undefined;
+    const delivered = new Promise<void>((resolve) => (taken = resolve));
+    let running: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => (running = resolve));
+    const recorded: RestoredMessage[] = [];
+    // Spread the harness's own transcripts fake rather than replacing it: the override is shallow, and a
+    // transcripts object missing the members the TURN path reads fails the run with a bare "Internal server
+    // error" before the agent below is ever called (see route-testing's note on that fake).
+    const { transcripts } = services({});
+    const client = clientFor(
+        createApp(
+            services({
+                transcripts: { ...transcripts, append: async (_agent, messages) => void recorded.push(...messages) },
+                agent: async function* () {
+                    yield { kind: "delta", text: "on it" };
+                    // Yielding has handed that frame to the pump, so the steer below cannot land ahead of it.
+                    running?.();
+                    await delivered;
+                    yield { kind: "delta", text: "will do" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    await client.agent.run({ prompt: "ship it", conversationId: "conv-steer", isolated: true });
+    await started;
+    expect(await client.agent.steer({ conversationId: "conv-steer", text: "and the tests" })).toEqual({ ok: true });
+    taken?.();
+
+    const frames = (await collect(await client.agent.attach({ conversationId: "conv-steer" }))).flatMap((frame) =>
+        frame.kind === "frame" ? [frame.event] : [],
+    );
+    expect(frames.filter((event) => event.kind === "delta" || event.kind === "steer")).toEqual([
+        { kind: "delta", text: "on it" },
+        { kind: "steer", text: "and the tests", sentAt: expect.any(Number) },
+        { kind: "delta", text: "will do" },
+    ]);
+    // And the copy a reopened chat is drawn from holds the same three speakers in the same order.
+    await vi.waitFor(() => expect(recorded).not.toHaveLength(0));
+    expect(recorded.map(({ role, text }) => ({ role, text }))).toEqual([
+        { role: "user", text: "ship it" },
+        { role: "assistant", text: "on it" },
+        { role: "user", text: "and the tests" },
+        { role: "assistant", text: "will do" },
+    ]);
 });

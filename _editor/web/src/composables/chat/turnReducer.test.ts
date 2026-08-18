@@ -330,6 +330,41 @@ describe(`turn boundaries`, () => {
         expect(state.bubbleId).toBeNull();
     });
 
+    /* A STEER IS A BOUNDARY. The harness absorbs it between tool calls and the model carries on in the SAME
+     * turn, so there is no `usage` to close the open bubble — and the words the agent writes next are its answer
+     * to this message. Left in the bubble above, the answer printed over the question. */
+    it(`retires the bubble on a steered message so the reply to it opens below`, () => {
+        const { state } = run(
+            started(),
+            { kind: `delta`, text: `on it` },
+            { kind: `steer`, text: `and the tests`, sentAt: 1_767_225_600_000 },
+            { kind: `delta`, text: `will do` },
+        );
+
+        expect(settled(state).messages.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `do it` },
+            { role: `assistant`, text: `on it` },
+            { role: `user`, text: `and the tests` },
+            { role: `assistant`, text: `will do` },
+        ]);
+    });
+
+    // Prose the model had already written finishes typing where it was written — the buffer is keyed by bubble,
+    // so a message arriving mid-type must not snap the rest of a sentence into place or drag it below.
+    it(`leaves the typewriter draining into the bubble a steer retired`, () => {
+        const { state } = run(started(), { kind: `delta`, text: `half a sentence` }, { kind: `steer`, text: `wait`, sentAt: 1 });
+        expect(state.pending).toMatchObject({ bubbleId: 2, text: `half a sentence` });
+        expect(textOf(state, 2)).toBe(`half a sentence`);
+    });
+
+    it(`carries a steered message's files onto its bubble, named from their paths`, () => {
+        const { state } = run(started(), { kind: `steer`, text: `look`, sentAt: 1, attachments: [`.intentic/artifacts/attachments/u1/shot.png`] });
+        expect(state.messages.at(-1)).toMatchObject({
+            role: `user`,
+            attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }],
+        });
+    });
+
     it(`flushes the typewriter at end-of-turn so nothing is left mid-type`, () => {
         const { state } = run(started(), { kind: `delta`, text: `finished` }, { kind: `usage` });
         expect(state.pending).toBeUndefined();
