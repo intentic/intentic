@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 //
-// The stale-window recovery: after a redeploy, every not-yet-visited lazy route in an already-open window
-// points at a content-hashed chunk that no longer exists. The dynamic import rejects, vue-router aborts the
-// navigation, and without a handler the URL just flickered back — a click that did nothing, on every route,
-// until a hard refresh. The handler answers a failed chunk load with the reload the user would perform by
-// hand, landed on the route they asked for; these tests drive the real router at real failing routes.
+// The stale-window recovery's ROUTER half: after a redeploy, a lazy route still loaded at route level (login,
+// the auth handoffs, the shell record itself) points at a content-hashed chunk that no longer exists. The
+// dynamic import rejects, vue-router aborts the navigation, and without a handler the URL just flickered back —
+// a click that did nothing until a hard refresh. The handler answers a failed chunk load with the reload the
+// user would perform by hand, landed on the route they asked for; these tests drive the real router at real
+// failing routes. The in-shell views load through asyncView now, whose failures no router hook sees — that
+// half of the recovery (same shared staleChunk module) is covered in components/asyncView.test.ts.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { router } from "./index";
 

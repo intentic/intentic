@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
-import { defineAsyncComponent, watch } from "vue";
+import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
+import { prefetchViewsAtIdle } from "../router/prefetch";
 
 /* The persistent post-login CHROME, split by form factor: ShellDesktop (rail + docked chat column + terminal
  * panel) under a pointer, ShellMobile (bottom tab bar + full-screen views) under 768px. Only the
@@ -22,6 +23,9 @@ const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
 useExtensionHost();
+// Pull every view's chunk in the background once the shell is up (idempotent; see router/prefetch.ts) — the
+// half of "navigation never waits" that makes the outlines a cold-network-only sight.
+onMounted(prefetchViewsAtIdle);
 const router = useRouter();
 const route = useRoute();
 

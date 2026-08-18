@@ -1,12 +1,16 @@
 import type { User } from "@intentic-app/api-contract";
 import { useDevice } from "@intentic/ui";
+import { type FunctionalComponent, h } from "vue";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
+import { asyncView } from "../components/asyncView";
+import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { firstRunDone } from "../pages/start/firstRun";
 import { setupRedirect } from "./setupGate";
+import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -78,6 +82,24 @@ const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ?
 // (an agent's conversation IS its chat surface there), so a mobile hit lands on the fleet those live behind.
 const desktopOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? `/agents` : true);
 
+/* NAVIGATION NEVER WAITS — the in-shell routes below register through asyncView rather than as bare lazy
+ * imports, because vue-router completes a navigation only once a route-level `() => import(…)` has resolved:
+ * the click froze for as long as the chunk download took, charged to whichever destination was heaviest.
+ * asyncView's wrapper is synchronous, so the view flips in the same tick; the code arrives behind an outline
+ * (components/asyncView.ts owns the mechanism and the failure path, router/prefetch.ts pulls the chunks at
+ * idle so the outline is a cold-network-only event).
+ *
+ * The entry-point routes — login, setup handoffs, the invite landing, the shell record itself — stay as bare
+ * lazy imports on purpose: they are first paints, not transitions away from a view the user is looking at, so
+ * there is nothing on screen for them to un-freeze.
+ *
+ * An index-and-body page gets the outline of its own shape, wearing its REAL title and description — static
+ * strings this table already knows. Full-bleed surfaces (workspace, chat, terminals, the fleets) get none:
+ * their honest placeholder is the shell's own background, and each draws its inner skeletons once mounted. */
+const hubOutline = (title: string, description: string, railRows: number): FunctionalComponent => {
+    return () => h(SplitViewOutline, { title, description, railRows });
+};
+
 const routes: RouteRecordRaw[] = [
     {
         path: `/login`,
@@ -118,7 +140,9 @@ const routes: RouteRecordRaw[] = [
         name: `setup`,
         meta: { title: `Setup` },
         beforeEnter: [requireAuth],
-        component: () => import(`../pages/Setup.vue`),
+        // Wrapped although it is outside the shell: "Add sandbox" reaches it FROM the shell, and that click
+        // deserves the same instant flip as any other. Full-screen wizard, so no outline to promise.
+        component: asyncView(() => import(`../pages/Setup.vue`)),
     },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in AND sandbox
@@ -152,48 +176,80 @@ const routes: RouteRecordRaw[] = [
                 path: `start`,
                 name: `start`,
                 meta: { title: `Start` },
-                component: () => import(`../pages/start/StartScreen.vue`),
+                component: asyncView(() => import(`../pages/start/StartScreen.vue`)),
             },
             // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
             // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter
             // and leave it.
-            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: () => import(`../pages/ChatArea.vue`) },
-            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
+            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: asyncView(() => import(`../pages/ChatArea.vue`)) },
+            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../pages/Agents.vue`)) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).
-            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: () => import(`../agents/AgentDetail.vue`) },
-            { path: `menu`, name: `menu`, meta: { title: `Menu` }, beforeEnter: [mobileOnly], component: () => import(`../pages/MobileMenu.vue`) },
+            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../agents/AgentDetail.vue`)) },
+            { path: `menu`, name: `menu`, meta: { title: `Menu` }, beforeEnter: [mobileOnly], component: asyncView(() => import(`../pages/MobileMenu.vue`)) },
             {
                 path: `terminal`,
                 name: `terminal`,
                 meta: { title: `Terminal` },
                 beforeEnter: [mobileOnly],
-                component: () => import(`../pages/MobileTerminal.vue`),
+                component: asyncView(() => import(`../pages/MobileTerminal.vue`)),
             },
             {
                 path: `capabilities/:card?`,
                 name: `capabilities`,
                 meta: { title: `Capabilities` },
-                component: () => import(`../pages/Capabilities.vue`),
+                // The title and description mirror the page's own (pages/Capabilities.vue, its catalog copy) —
+                // static strings, so the outline wears the real heading in the first frame.
+                component: asyncView(
+                    () => import(`../pages/Capabilities.vue`),
+                    hubOutline(
+                        `Capabilities`,
+                        `Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox.`,
+                        6,
+                    ),
+                ),
             },
-            { path: `sandbox/:tab?`, name: `sandbox`, meta: { title: `Sandbox` }, component: () => import(`../pages/SandboxHub.vue`) },
+            {
+                path: `sandbox/:tab?`,
+                name: `sandbox`,
+                meta: { title: `Sandbox` },
+                // The hub titles itself with the active sandbox's NAME once mounted; the outline says what the
+                // page is rather than guessing which box, and the description is the hub's own (SandboxHub.vue).
+                component: asyncView(
+                    () => import(`../pages/SandboxHub.vue`),
+                    hubOutline(
+                        `Sandbox`,
+                        `The workspace AI operates from. The platform keeps only its address; accounts and credentials stay inside it.`,
+                        7,
+                    ),
+                ),
+            },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`) so a reload or a
             // shared link reopens it. Optional/repeatable, so bare `/workspace` still matches (path === "").
             {
                 path: `workspace/:path(.*)*`,
                 name: `workspace`,
                 meta: { title: `Workspace` },
-                component: () => import(`../pages/workspace/Workspace.vue`),
+                component: asyncView(() => import(`../pages/workspace/Workspace.vue`)),
             },
             // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
             // links to the bare path and the view picks the most recently active one.
-            { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: () => import(`../pages/Browsers.vue`) },
+            { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: asyncView(() => import(`../pages/Browsers.vue`)) },
             // Same shape and same reason as the browsers above: the id is in the URL so a reload — or the chat
             // card's link — reopens the same agent, and the bare path shows whichever is most recently active.
-            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: () => import(`../pages/Subagents.vue`) },
-            { path: `ext/:ext/:key?`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },
-            { path: `settings/:tab?`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/SettingsHub.vue`) },
+            { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../pages/Subagents.vue`)) },
+            { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../pages/ExtensionHost.vue`)) },
+            {
+                path: `settings/:tab?`,
+                name: `settings`,
+                meta: { title: `Settings` },
+                // Mirrors the page's own heading (pages/SettingsHub.vue).
+                component: asyncView(
+                    () => import(`../pages/SettingsHub.vue`),
+                    hubOutline(`Settings`, `Your personal preferences on this platform.`, 5),
+                ),
+            },
         ],
     },
     {
@@ -224,46 +280,25 @@ export const router = createRouter({
     routes,
 });
 
-/* A redeploy replaces every content-hashed chunk, and every route above is a lazy import — so a window opened
- * before the deploy holds an index.html whose routes point at files that no longer exist. Clicking one made the
- * URL flicker and settle back where it was: the dynamic import rejects, vue-router aborts the navigation, and
- * nothing said why — the app just looked broken until the user happened to hard-refresh. A failed chunk load IS
- * "this window is stale", so answer it with the reload the user would eventually perform by hand, landed on the
- * route they asked for rather than the one they were leaving.
- *
- * Matched on the wording the runtimes actually produce (Chromium/Firefox/Safari phrase the import failure
- * differently, and Vite's own preload helper rethrows CSS failures with its own message) rather than on error
- * class — a TypeError is also what a coding bug inside a route component throws, and reloading on those would
- * turn any real regression into a reload loop. The per-target flag is the loop guard for a chunk that is
- * GENUINELY gone (a broken deploy): one reload per destination, then the old silent abort; cleared by any
- * navigation that lands, so the next redeploy gets its one reload again. */
-const CHUNK_RELOADED_KEY = `intentic.chunkReloaded`;
-const STALE_CHUNK_MESSAGE =
-    /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
+/* The stale-window recovery's ROUTER half (staleChunk.ts owns the shared detection and the one-reload guard;
+ * asyncView owns the other half, for the in-shell views whose failures no router hook can see). This backstop
+ * covers what still loads at route level — login, the auth handoffs, the invite landing, the workspace shell
+ * itself: a dead chunk there rejects the navigation, and the answer is the reload the user would eventually
+ * perform by hand, landed on the route they asked for rather than the one they were leaving. */
 router.onError((error, to) => {
-    if (!STALE_CHUNK_MESSAGE.test(String(error))) {
-        return;
+    if (isStaleChunkError(error)) {
+        recoverStaleChunk(to.fullPath);
     }
-    try {
-        if (sessionStorage.getItem(CHUNK_RELOADED_KEY) === to.fullPath) {
-            return;
-        }
-        sessionStorage.setItem(CHUNK_RELOADED_KEY, to.fullPath);
-    } catch {
-        return; // no storage, no loop guard — the silent abort is safer than a possible reload loop
-    }
-    location.assign(to.fullPath);
 });
+
+/* The reload guard is NOT cleared here anymore. It used to be — "a navigation landed" was proof the window's
+ * chunks exist, because a navigation could not land without its chunk. asyncView broke that implication on
+ * purpose: every in-shell navigation lands instantly, chunk or no chunk, so clearing on arrival would re-arm
+ * the guard between the reload and the retry and turn a genuinely broken deploy into a reload loop. The clear
+ * lives where the evidence is now: a chunk actually resolving (asyncView). */
 
 // Formats the browser tab as `<Page> / intentic` from each route's `title`, falling back to the bare brand
 // when a route declares none (replaces the route title strategy).
-router.afterEach((to, _from, failure) => {
-    if (failure === undefined) {
-        try {
-            sessionStorage.removeItem(CHUNK_RELOADED_KEY);
-        } catch {
-            // No storage to clean.
-        }
-    }
+router.afterEach((to) => {
     document.title = to.meta.title ? `${to.meta.title} / intentic` : `intentic`;
 });
