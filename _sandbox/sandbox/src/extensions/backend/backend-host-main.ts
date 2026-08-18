@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { extensionApiVersion } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { BACKEND_CONFIG_ENV, type BackendHostConfig } from "./backend-host-config.js";
 import { createBackendHostApp } from "./backend-host.js";
 

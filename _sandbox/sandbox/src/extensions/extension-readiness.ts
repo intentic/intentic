@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { extensionApiVersion } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionRead } from "../capabilities/extension-dirs.js";
 import type { InstalledExtension } from "./installed-extensions.js";

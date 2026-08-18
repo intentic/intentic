@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { extensionApiVersion } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api/protocol";
 
 /* THE FILES A NEW WORKSPACE EXTENSION IS BORN WITH — and the two decisions that shape all of them.
  *

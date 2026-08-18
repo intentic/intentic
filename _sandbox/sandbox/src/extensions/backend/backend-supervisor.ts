@@ -4,7 +4,7 @@ import { createInterface } from "node:readline";
 import { createRequire } from "node:module";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
-import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";

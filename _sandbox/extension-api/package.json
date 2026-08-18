@@ -28,6 +28,17 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./protocol": {
+            "types": "./dist/protocol.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol.ts",
+                "default": "./dist/protocol.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol.ts",
+                "default": "./dist/protocol.js"
+            }
         }
     },
     "scripts": {

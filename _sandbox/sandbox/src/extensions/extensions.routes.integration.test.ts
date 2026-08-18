@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { extensionApiVersion } from "@intentic/extension-api";
+import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";

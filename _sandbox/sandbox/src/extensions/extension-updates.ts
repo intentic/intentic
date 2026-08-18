@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import {
