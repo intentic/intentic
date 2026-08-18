@@ -18,10 +18,17 @@
      The same swap the rest of the app already makes — the extension list, the memory index, the log files — and
      it is what lets a name, what it is, a hostname and a state sit on one scannable line.
 
-     A ROW IS A WAY IN, not a control panel. It opens the card the connection belongs to, which is where its form,
-     its per-kind buttons (log in, connect, restart) and its removal already live. Duplicating any of those here
-     would be a second copy of a flow that is one click away — and a button inside a button, which is neither
-     valid nor reachable by keyboard. -->
+     A ROW IS A WAY IN, not a control panel. It opens THIS CONNECTION on the card it came from — its own settings
+     loaded, its own row highlighted in the list above them — which is where its form, its per-kind buttons (log
+     in, connect, restart) and its removal already live. Duplicating any of those here would be a second copy of
+     a flow that is one click away, and a button inside a button, which is neither valid nor reachable by
+     keyboard.
+
+     THE CONNECTION AND NOT MERELY ITS CARD, because the row is a connection: this list exists precisely because
+     three SSH boxes are three things and one card, and landing on the card would drop the half of the answer the
+     reader clicked on. It is also what makes "read back the hostname I set months ago" a click rather than an
+     archaeology — the sentence at the top of this comment, finally true. -->
+
 <script lang="ts">
 import type { IconName, StatusVariant } from "@intentic/ui";
 
@@ -60,7 +67,7 @@ export interface CapabilityConnectionGroup {
 import { BrandMark, Row, RowGroup, StatusBadge } from "@intentic/ui";
 
 defineProps<{ groups: readonly CapabilityConnectionGroup[] }>();
-const emit = defineEmits<{ open: [cardId: string] }>();
+const emit = defineEmits<{ open: [cardId: string, connectionId: string] }>();
 </script>
 
 <template>
@@ -68,7 +75,14 @@ const emit = defineEmits<{ open: [cardId: string] }>();
         <!-- Grouped by category and counted, so this reads as the same page the catalog does — the rail points at
              the same ten headings either way. -->
         <RowGroup v-for="group in groups" :key="group.label" :label="group.label" :count="group.rows.length">
-            <Row v-for="row in group.rows" :key="`${row.cardId}:${row.id}`" as="button" density="compact" chevron @click="emit(`open`, row.cardId)">
+            <Row
+                v-for="row in group.rows"
+                :key="`${row.cardId}:${row.id}`"
+                as="button"
+                density="compact"
+                chevron
+                @click="emit(`open`, row.cardId, row.id)"
+            >
                 <template #lead>
                     <BrandMark :size="24" :name="row.title" :logo="row.logo" :icon="row.icon" />
                 </template>

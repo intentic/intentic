@@ -54,6 +54,7 @@ import {
 } from "./capabilities/connections";
 import { rememberedSecrets, rememberSecrets } from "./capabilities/devSecrets";
 import {
+    type StoredSecrets,
     buildConfig,
     fieldConfig,
     fieldError,
@@ -61,6 +62,7 @@ import {
     formComplete,
     inlineField,
     isCommitSha,
+    keepsSecret,
     nameError,
     seedValues,
     shownFields,
@@ -134,6 +136,48 @@ const nameEdited = ref(false);
 const instancesFor = (entry: CapabilityCatalogEntry): CapabilitySummary[] => instancesOf(entry, capabilities.value);
 const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value === undefined ? [] : instancesFor(selected.value)));
 
+/* --- CHANGING A CONNECTION YOU ALREADY HAVE, on the card that made it ---
+ *
+ * The card's form was only ever an ADD form. Everything needed to edit was already here — the daemon's write is
+ * an upsert, and every non-credential answer comes back on the list — but the only way in was to notice a line
+ * of small print and re-type the connection's name exactly, so in practice a wrong gateway or a wrong routed
+ * network meant removing the connection and setting it up again. For the kinds people most want to change (a
+ * signed-in account, a paired machine, a tunnel) that is the one operation that throws away what makes them
+ * worth keeping.
+ *
+ * IN THE URL, next to the card, for the same reason the card itself is: a reload lands back on what was being
+ * edited, Back leaves the edit rather than the page, and the row that opened it is still on screen underneath.
+ * `replace`, not `push` — stepping between two connections of one card is not a place in history.
+ *
+ * A ONE-PER-SANDBOX CARD IS ALWAYS EDITING, without a query: its single connection IS the card, there is no list
+ * to pick from, and its form has updated in place since long before this existed. Both arms answer through
+ * `editing`, so nothing downstream has to know which kind of card it is standing on. */
+const editingId = computed<string>({
+    get: () => (typeof route.query[`edit`] === `string` ? route.query[`edit`] : ``),
+    set: (value) =>
+        void router.replace({ name: `capabilities`, params: route.params, query: { ...route.query, edit: value === `` ? undefined : value } }),
+});
+/* THE ONE-PER-SANDBOX CARD HAS NO LIST, because it never had one — it had a list of one, which is a different
+ * thing wearing a list's chrome. Docker is not an account you hold N of; it is a part of the sandbox that is
+ * either on or off, and rendering "docker · active" as a bordered card above the form that configures that very
+ * docker asked the reader to hold two objects where there is one. Its state belongs on the card's own heading,
+ * beside its name, which is where a state that describes the whole screen goes. */
+const soleInstance = computed<CapabilitySummary | undefined>(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
+// The connection the form is over, or undefined while it is adding one. An `edit` naming a connection this card
+// does not hold — a stale link, a connection removed in another tab — falls back to adding rather than to a form
+// over nothing.
+const editing = computed<CapabilitySummary | undefined>(
+    () => soleInstance.value ?? selectedInstances.value.find((instance) => instance.id === editingId.value),
+);
+
+/* THE CREDENTIALS THIS FORM IS KEEPING, which is a fact about the SESSION rather than about the connection.
+ *
+ * It starts as what the connection holds (the daemon names them without sending them) and is emptied by anything
+ * that means "these answers are for a different connection now" — importing a FortiClient profile over an open
+ * edit, above all, where keeping the old password would silently dial the new gateway with the wrong credential.
+ * Typing into a box takes it out of the set by itself: a non-empty value is not a kept one. */
+const keptSecrets = ref<StoredSecrets>(new Set<string>());
+
 // --- the connection's background process (a gateway's liveness, where the user forms the intent) ---
 // A connector that relays events (Discord, IMAP) only works while its extension's gateway runs, and "my bot
 // went quiet" sends people to the connector — not to a process list behind the terminal panel. So the same
@@ -162,8 +206,14 @@ const cardProcesses = computed<BackgroundProcessRow[]>(() => {
     return processRows.value.filter((row) => row.extensionId !== undefined && owners.has(row.extensionId));
 });
 
-// The typed name already exists → saving updates that connection rather than adding a new one.
-const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
+/* THE TYPED NAME IS ALREADY TAKEN, which is now a refusal rather than a quiet update.
+ *
+ * It used to mean "save over that connection", and that was the only way to change one at all — a line of small
+ * print under the box, and a submit button that changed its word. It was also a trap in the direction that
+ * costs: an add form is seeded with a card's DEFAULTS, so re-typing a live connection's name and saving wrote
+ * the defaults over its settings. Now that the row itself opens for editing, the honest answer to a name that
+ * exists is to say so and point at it. */
+const nameCollision = computed(() => editing.value === undefined && selectedInstances.value.some((instance) => instance.id === name.value.trim()));
 
 /* --- what the rail slices the catalog by, and what the grid then shows ---
  * Every card with the facts all three panes read off it. Computed once here rather than per tile per render: the
@@ -236,6 +286,12 @@ const categoryScopes = computed<CapabilityScope[]>(() =>
     }),
 );
 
+/* WHAT SURVIVES LEAVING THIS CARD: the slice and the filter, which describe where the reader is in the catalog,
+ * and the walk. Not the connection being edited — that names a connection of the card being left, and means
+ * nothing on the next one or on the grid. Carried along, it would open the next card straight into an edit of
+ * something it does not hold, or (worse) of something it does. */
+const elsewhere = () => ({ ...route.query, edit: undefined });
+
 /* THE SLICE AND THE SEARCH LIVE IN THE URL, replaced rather than pushed — Back should undo opening a card, not
  * each letter of a filter. Derived from the query rather than mirrored into refs, so there is one direction of
  * flow and no watcher pair to fight over what is shown. Writing either drops the `card` param: picking a category
@@ -243,7 +299,7 @@ const categoryScopes = computed<CapabilityScope[]>(() =>
 const queryParam = (key: string) =>
     computed<string>({
         get: () => (typeof route.query[key] === `string` ? route.query[key] : ``),
-        set: (value) => void router.replace({ name: `capabilities`, query: { ...route.query, [key]: value === `` ? undefined : value } }),
+        set: (value) => void router.replace({ name: `capabilities`, query: { ...elsewhere(), [key]: value === `` ? undefined : value } }),
     });
 const scope = queryParam(`category`);
 const search = queryParam(`q`);
@@ -296,7 +352,7 @@ const description = computed(
 );
 
 watch(capabilities, () => {
-    if (selected.value === undefined || nameEdited.value) {
+    if (selected.value === undefined || nameEdited.value || editing.value !== undefined) {
         return;
     }
     name.value = suggestName(selected.value, selectedInstances.value);
@@ -317,7 +373,20 @@ const markTouched = (key: string): void => {
 
 // The refusals, over the form as it stands right now. undefined means the field is fine.
 const nameProblem = computed<string | undefined>(() => nameError(name.value));
-const fieldProblem = (field: CapabilityField): string | undefined => fieldError(field, values[field.key]);
+const fieldProblem = (field: CapabilityField): string | undefined => fieldError(field, values[field.key], keptSecrets.value);
+// A credential box the reader may leave alone, because one is already stored behind it. It says so in its own
+// placeholder rather than in prose above the form: the question "do I have to find this again?" is asked of one
+// box at a time, and answered where the eye already is.
+const keptField = (field: CapabilityField): boolean => keepsSecret(field, values[field.key], keptSecrets.value);
+/* WHAT AN EMPTY CREDENTIAL BOX SAYS. On an add, whatever the card wrote. On an edit of a connection that
+ * already holds this one: that it is there, that it is not being shown, and that leaving the box alone keeps
+ * it — three facts in the space where "paste your token" would otherwise sit and imply the opposite.
+ *
+ * The dots are the whole point of the wording. A box that merely said "leave blank to keep" still LOOKS empty,
+ * and an empty required-looking box next to a Save button is what sends people off to find a credential they
+ * did not need. */
+const fieldPlaceholder = (field: CapabilityField): string | undefined =>
+    keptField(field) ? `•••••••••••• already set — leave blank to keep it` : field.placeholder;
 // The fields on screen for a card: const-valued ones are baked into the config, `when`-gated ones come and go
 // as the user toggles the mode they hang off.
 const formFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => shownFields(entry, values);
@@ -446,7 +515,13 @@ const removeHostAccess = async (id: string): Promise<void> => {
 onMounted(startHosts);
 onBeforeUnmount(stopHosts);
 
-const canSubmit = computed(() => selected.value !== undefined && requiresMet.value && formComplete(selected.value, values, name.value));
+const canSubmit = computed(
+    () =>
+        selected.value !== undefined &&
+        requiresMet.value &&
+        !nameCollision.value &&
+        formComplete(selected.value, values, name.value, keptSecrets.value),
+);
 
 /* The two numbers on the Extension card's signpost, read from whatever the registry cache already holds
  * (`read: false` — see useRegistry). This page must not clone a repository to put a figure in a sentence, so
@@ -477,12 +552,13 @@ const applyRegistryPick = (answers: { name: string; url: string; ref: string; pa
 const auditable = computed(() => selected.value?.kind === `extension` && isCommitSha(values[`ref`]) && (values[`url`] ?? ``) !== ``);
 /* When the form is about to REPLACE an installed commit rather than add a first one, the sharper read is the
  * diff: the installed sha was approved once already, and what an update asks the owner to judge is what sits
- * between the two. Known from the same collision that flips the submit button to "Update". */
+ * between the two. That is exactly an EDIT of an installed extension — the form is open over the entry whose
+ * sha is about to move. */
 const updateFrom = computed<string | undefined>(() => {
-    if (!auditable.value || !nameCollision.value) {
+    if (!auditable.value || editing.value === undefined) {
         return undefined;
     }
-    const installed = selectedInstances.value.find((instance) => instance.id === name.value.trim())?.config[`ref`];
+    const installed = editing.value.config[`ref`];
     if (typeof installed !== `string` || !isCommitSha(installed) || installed === values[`ref`]) {
         return undefined;
     }
@@ -597,13 +673,6 @@ const cardRowFacts = (instance: CapabilitySummary): string => {
 // The one step a row cannot offer itself — a rebuild, which happens on the Sandbox screen.
 const soleRebuildStep = (instance: CapabilitySummary): boolean => rebuildStep(selected.value?.kind, instance);
 
-/* THE ONE-PER-SANDBOX CARD HAS NO LIST, because it never had one — it had a list of one, which is a different
- * thing wearing a list's chrome. Docker is not an account you hold N of; it is a part of the sandbox that is
- * either on or off, and rendering "docker · active" as a bordered card above the form that configures that very
- * docker asked the reader to hold two objects where there is one. Its state belongs on the card's own heading,
- * beside its name, which is where a state that describes the whole screen goes. */
-const soleInstance = computed<CapabilitySummary | undefined>(() => (selected.value?.singleton === true ? selectedInstances.value[0] : undefined));
-
 // A file that misses the FortiClient import zone would otherwise navigate this tab to the file itself, taking a
 // half-filled form with it. Swallow file drags page-wide — the zone's own handler runs first and still gets its
 // file.
@@ -621,11 +690,18 @@ onBeforeUnmount(() => {
     window.removeEventListener(`drop`, swallowFileDrag);
 });
 
-// Fill the form from an imported FortiClient connection. Credentials are never among them (FortiClient encrypts
-// them), so the user still types the secret — `needs` is what tells them which fields are waiting.
+/* Fill the form from an imported FortiClient connection. Credentials are never among them (FortiClient encrypts
+ * them with a machine-bound key), so the user still types the secret — `needs` is what tells them which fields
+ * are waiting.
+ *
+ * AND IT DROPS THE KEPT SET, which matters only over an open edit and matters absolutely there: the passwords
+ * this form was keeping belong to the gateway that is being replaced. Left standing, a blank password box would
+ * still mean "keep", and the save would dial the imported gateway with the previous one's credential — the same
+ * wrong-credential trap the blanking below exists to close, one level up. */
 const pickForticlient = (connection: ForticlientConnection): void => {
     name.value = connection.id;
     nameEdited.value = true;
+    keptSecrets.value = new Set<string>();
     Object.assign(values, forticlientAnswers(selected.value?.fields ?? [], connection));
     // The fields still needed are the ones to land on, not the top of the form.
     touched.clear();
@@ -637,26 +713,39 @@ const clearForm = (): void => {
     for (const key of Object.keys(values)) {
         delete values[key];
     }
+    keptSecrets.value = new Set<string>();
     error.value = null;
     touched.clear();
     shaking.value = false;
 };
 
-// One init path for both a click and a deep link: (re)seed the form whenever the URL selects a card.
+/* One init path for a click, a deep link, and stepping from one connection of a card to another: (re)seed the
+ * form whenever the URL changes what it is over. Watching the CONNECTION as well as the card is what makes an
+ * edit reachable by link — /capabilities/vpn?edit=office lands on the same form the row's menu opens.
+ *
+ * Keyed by the two IDS rather than by the objects they name, and that is load-bearing: both are computed off the
+ * live capability list, so every refetch of it hands back fresh objects — and a watch on those would empty a
+ * half-filled form each time a pending connection was polled. What has to re-seed the form is the URL pointing
+ * somewhere else, which is exactly what a changed id is. */
 watch(
-    selected,
-    (entry) => {
+    [() => selected.value?.id, () => editing.value?.id],
+    () => {
+        const entry = selected.value;
+        const instance = editing.value;
         if (entry === undefined) {
             return;
         }
         clearForm();
-        // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so
-        // re-adding creates another connection by default instead of overwriting the first.
-        name.value = suggestName(entry, instancesFor(entry));
-        // A one-per-sandbox card opens as an EDIT of the live entry, so its echoed config is part of the seed;
-        // dev autofill (inert in prod) lands on top of it.
-        const live = entry.singleton === true ? instancesFor(entry)[0]?.config : undefined;
-        Object.assign(values, seedValues(entry, live, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
+        /* Editing keeps the connection's own name; adding pre-fills a free one — the provider id for the first
+         * connection, `<id>-2` etc. for the next — so re-adding creates another rather than overwriting the
+         * first. The name is not editable either way: renaming a connection moves state a form cannot (see
+         * askRename), so it is its own dialog and this field would be a second, lossy way to do it. */
+        name.value = instance?.id ?? suggestName(entry, instancesFor(entry));
+        // The connection's echoed config is the seed when there is one; dev autofill (inert in prod) lands on
+        // top. Its credentials are not in there and never will be — `keptSecrets` is how the form knows they
+        // exist, so the boxes for them can say "already set" instead of "fill me in".
+        Object.assign(values, seedValues(entry, instance?.config, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
+        keptSecrets.value = new Set(instance?.secrets ?? []);
     },
     { immediate: true },
 );
@@ -668,24 +757,38 @@ watch(
     [() => route.params[`card`], extensionsSettled],
     ([card]) => {
         if (typeof card === `string` && card.length > 0 && extensionsSettled.value && selected.value === undefined) {
-            void router.replace({ name: `capabilities`, query: route.query });
+            void router.replace({ name: `capabilities`, query: elsewhere() });
         }
     },
     { immediate: true },
 );
 
 // Picking a card / going back is a navigation now — the URL is the source of truth for what's shown. The query
-// rides along both ways, so going back lands on the slice the card was picked out of rather than on the whole
-// catalog with the filter thrown away.
+// rides along both ways (minus the edit — see `elsewhere`), so going back lands on the slice the card was picked
+// out of rather than on the whole catalog with the filter thrown away.
 const openCard = (card: string): void => {
-    void router.push({ name: `capabilities`, params: { card }, query: route.query });
+    void router.push({ name: `capabilities`, params: { card }, query: elsewhere() });
 };
 const pick = (entry: CapabilityCatalogEntry): void => {
     openCard(entry.id);
 };
 
 const back = (): void => {
-    void router.push({ name: `capabilities`, query: route.query });
+    void router.push({ name: `capabilities`, query: elsewhere() });
+};
+
+// Open a connection of the card already on screen, and close it again. `replace` (see editingId) — stepping
+// between two connections of one card is not a place in history, and Back should leave the card.
+const openEdit = (id: string): void => {
+    editingId.value = id;
+};
+// The same landing, from the Connected inventory, which is a click AWAY from this card rather than on it — so
+// it pushes, carrying which connection the row was, and Back returns to the list it was picked out of.
+const openConnection = (card: string, connection: string): void => {
+    void router.push({ name: `capabilities`, params: { card }, query: { ...elsewhere(), edit: connection } });
+};
+const stopEditing = (): void => {
+    editingId.value = ``;
 };
 
 /* --- THE GUIDED SETUP: the recommended cards, one at a time, in the order the daemon made them ---
@@ -712,14 +815,14 @@ const nextAfter = (entry: CapabilityCatalogEntry): string | undefined => {
 const goNext = (card: string | undefined): void => {
     void router.push(
         card === undefined
-            ? { name: `capabilities`, query: { ...route.query, setup: undefined } }
-            : { name: `capabilities`, params: { card }, query: route.query },
+            ? { name: `capabilities`, query: { ...elsewhere(), setup: undefined } }
+            : { name: `capabilities`, params: { card }, query: elsewhere() },
     );
 };
 const startSetup = (): void => {
     const first = walkQueue.value[0];
     if (first !== undefined) {
-        void router.push({ name: `capabilities`, params: { card: first.id }, query: { ...route.query, setup: SETUP } });
+        void router.push({ name: `capabilities`, params: { card: first.id }, query: { ...elsewhere(), setup: SETUP } });
     }
 };
 const skip = (): void => {
@@ -793,7 +896,13 @@ const submit = async (): Promise<void> => {
     }
     submitting.value = true;
     error.value = null;
-    const input: AddCapabilityInput = { id: name.value.trim(), kind: entry.kind, config: buildConfig(entry, values) };
+    /* One write for both, because the daemon's is one write: adding and editing are the same upsert over the
+     * same id. The only difference is what a blank credential box means, and `keptSecrets` is what carries that
+     * — a kept one goes down as the marker the daemon resolves back into the stored value. */
+    const input: AddCapabilityInput = { id: name.value.trim(), kind: entry.kind, config: buildConfig(entry, values, keptSecrets.value) };
+    // Read BEFORE the write, like `next` below: a one-per-sandbox card that is being connected for the first
+    // time becomes an edit the moment its entry lands, and asking afterwards would call every first add an edit.
+    const wasEditing = editing.value !== undefined;
     // Where the walk goes next, decided against the queue as it stands now — the add below takes this card out
     // of it, and asking afterwards would answer about a different list.
     const next = walking.value ? nextAfter(entry) : undefined;
@@ -813,9 +922,18 @@ const submit = async (): Promise<void> => {
             handOff(entry, added);
             return;
         }
+        /* A SAVED EDIT STAYS ON THE CARD, where an add leaves it. The two look alike and are opposite: an add
+         * is finished with this card — the catalog it lands back on is the proof of what got connected — while
+         * an edit was opened FROM the list of connections a few pixels up, and the reader's next act is to
+         * check the row now says what they just typed. Sent back to the grid they would have to find the card
+         * again to see whether the change took. */
+        if (wasEditing) {
+            stopEditing();
+            return;
+        }
         leaveCard(next);
     } catch (err) {
-        error.value = noticeFrom(err, `Could not add the capability.`);
+        error.value = noticeFrom(err, wasEditing ? `Could not save that connection.` : `Could not add the capability.`);
     } finally {
         submitting.value = false;
     }
@@ -881,14 +999,15 @@ const topError = computed<NoticeModel | undefined>(() => {
     return { tone: `danger`, title: `Couldn't list your capabilities.`, detail: listError.value };
 });
 
-// The submit's word, in the card's own vocabulary. DevOps is activated rather than added; a name that already
-// exists is updated in place; a service is provisioned as it is added.
+/* The submit's word, in the card's own vocabulary. Editing a connection leads, because it is the only one of
+ * these the reader can be wrong about in a costly way — a form pre-filled with somebody's live gateway must not
+ * offer to "Add" it. DevOps is activated rather than added; a service is provisioned as it is added. */
 const submitLabel = computed(() => {
+    if (editing.value !== undefined) {
+        return `Save changes`;
+    }
     if (selected.value?.kind === `devops`) {
         return `Activate`;
-    }
-    if (nameCollision.value) {
-        return `Update`;
     }
     if (selected.value?.kind === `service`) {
         return `Add & provision`;
@@ -1005,11 +1124,13 @@ const submitLabel = computed(() => {
                                     :host="hostFor(instance.id)"
                                     :state="rowState(selected, instance)"
                                     :facts="cardRowFacts(instance)"
+                                    :editing="editing?.id === instance.id"
                                     @connect="openConnect(instance)"
                                     @revoke="removeHostAccess(instance.id)"
                                     @browse="openBrowser(instance.id, instance.id, `browse`)"
                                     @login="openBrowser(instance.id, instance.id)"
                                     @agent-login="startAgentLogin(instance.id)"
+                                    @edit="openEdit(instance.id)"
                                     @rename="askRename(instance.id)"
                                     @remove="askRemove(instance.id)"
                                 />
@@ -1094,23 +1215,50 @@ const submitLabel = computed(() => {
                                 @notice="error = $event"
                             />
 
-                            <!-- WHAT THE FORM BELOW IS FOR, said out loud. The fields used to begin immediately
-                                 under the list of existing connections, which left "Name" — pre-filled with
-                                 `github-2` — as the only clue that this was a second connection rather than an
-                                 edit of the first. A card that holds one thing per sandbox is not adding
-                                 anything, so it says what it IS doing instead. -->
-                            <div v-if="selectedInstances.length > 0 || selected.singleton" :class="ui.sectionLabel(`mt-1`)">
-                                {{ selected.singleton ? "Settings" : "Add another" }}
+                            <!-- WHAT THE FORM BELOW IS FOR, said out loud, and the one line on this screen that
+                                 has to be unmissable: the same fields mean "make a new connection" and "change
+                                 the one you are looking at", and the difference is the reader's whole intent.
+                                 The name is IN the sentence when editing rather than in a box below it, because
+                                 there is nothing to type — it names the subject, the way a title does.
+
+                                 It used to say only "Add another", leaving "Name" — pre-filled with `github-2`
+                                 — as the only clue that this was a second connection rather than an edit of the
+                                 first. -->
+                            <div
+                                v-if="editing || selected.singleton || selectedInstances.length > 0"
+                                class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+                            >
+                                <div :class="ui.sectionLabel()">
+                                    <!-- A one-per-sandbox card says "Settings" whether or not it is connected
+                                         yet: it is never adding a second anything, so its form is its settings
+                                         either way, and it has no name to put in the sentence. -->
+                                    <template v-if="selected.singleton">Settings</template>
+                                    <template v-else-if="editing">
+                                        Editing <span class="font-mono normal-case">{{ editing.id }}</span>
+                                    </template>
+                                    <template v-else>Add another</template>
+                                </div>
+                                <!-- The way out of an edit, beside what it is an edit OF. Not down by the submit:
+                                     that button is stuck to the foot of the pane and reachable from anywhere, so
+                                     a Cancel next to it would be a second thing to read past on every card,
+                                     including the ones that are only ever adding. -->
+                                <button v-if="editing && !selected.singleton" type="button" :class="ui.linkButton(`text-2xs`)" @click="stopEditing">
+                                    Cancel — add another instead
+                                </button>
                             </div>
 
-                            <!-- One per sandbox → nothing to name, and a name box would be the field that invites a second
-                             one. The id stays the card's (suggestName), so the submit updates what's there. -->
-                            <label v-if="!selected.singleton" class="ui-field">
+                            <!-- NO NAME BOX WHILE EDITING, and none on a one-per-sandbox card. Renaming a
+                                 connection moves what the name keys — a signed-in browser profile, a paired
+                                 machine's enrollment, an extension's checkout — so it is its own migration
+                                 (askRename), and a second, lossy way to do it here would be a trap wearing a
+                                 text box. A one-per-sandbox card never had one for the other reason: a name
+                                 field is the thing that invites a second one. -->
+                            <label v-if="!selected.singleton && !editing" class="ui-field">
                                 <span class="ui-field-label">Name</span>
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
-                                    :class="[ui.input(), touched.has('name') && nameProblem ? 'ui-field-input-error' : '']"
+                                    :class="[ui.input(), touched.has('name') && (nameProblem || nameCollision) ? 'ui-field-input-error' : '']"
                                     @input="nameEdited = true"
                                     @blur="markTouched('name')"
                                 />
@@ -1118,12 +1266,15 @@ const submitLabel = computed(() => {
                                     <Icon name="exclamation-triangle" class="text-2xs" />
                                     {{ nameProblem }}
                                 </span>
-                                <span v-else-if="nameCollision" class="mt-1 inline-flex items-center gap-1 text-2xs text-warning">
-                                    <Icon name="exclamation-triangle" />
-                                    A connection named "{{ name.trim() }}" already exists — saving will update it.
+                                <!-- A taken name is refused rather than quietly saved over that connection: this
+                                     form holds the card's DEFAULTS, and writing those over somebody's live
+                                     settings is the accident this points away from. -->
+                                <span v-else-if="nameCollision" class="ui-field-error">
+                                    <Icon name="exclamation-triangle" class="text-2xs" />
+                                    "{{ name.trim() }}" already exists — open it above to change it, or pick another name.
                                 </span>
                                 <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
-                                    Give this one a new name to add another connection, or reuse a name to update it.
+                                    What your agent will call this connection.
                                 </span>
                             </label>
                             <!-- The narrow half of the card's reference material, above the fields it explains.
@@ -1189,7 +1340,7 @@ const submitLabel = computed(() => {
                                     <textarea
                                         v-else-if="field.multiline"
                                         v-model="values[field.key]"
-                                        :placeholder="field.placeholder"
+                                        :placeholder="fieldPlaceholder(field)"
                                         rows="6"
                                         spellcheck="false"
                                         :class="[
@@ -1203,7 +1354,7 @@ const submitLabel = computed(() => {
                                         v-model="values[field.key]"
                                         :type="field.secret ? 'password' : 'text'"
                                         :autocomplete="field.secret ? 'off' : undefined"
-                                        :placeholder="field.placeholder"
+                                        :placeholder="fieldPlaceholder(field)"
                                         :class="[ui.input(), touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '']"
                                         @blur="markTouched(field.key)"
                                     />
@@ -1333,7 +1484,7 @@ const submitLabel = computed(() => {
                          I add", and a grid of tiles answers it; here it is "what have I got", and the answer is
                          the connections themselves — named, with the host or account that tells them apart and
                          the state they are actually in. See <CapabilityConnections>. -->
-                    <CapabilityConnections v-if="showingConnections" :groups="connectionGroups" @open="openCard" />
+                    <CapabilityConnections v-if="showingConnections" :groups="connectionGroups" @open="openConnection" />
 
                     <!-- HEADINGS ONLY WHERE THE GRID SPANS MORE THAN ONE CATEGORY. Under a single category the
                          rail has already said which one and the page's own description carries its sentence, so a

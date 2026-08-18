@@ -1,20 +1,43 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import { type CapabilityField, fieldApplies } from "@intentic/extension-manifest";
-import { type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { type ForticlientConnection, isForticlientCiphertext, VAULTED } from "@intentic/sandbox-contract";
 
-/* THE ADD FORM: what it starts as, what it refuses, and what it sends.
+/* THE CARD'S FORM — adding a connection and editing one are the same form, and this is why they can be.
  *
  * A card declares fields; everything between that declaration and the daemon's input is decided here — which
  * fields are on screen right now, what a half-filled one says, what a fresh form is pre-filled with, and which
  * answers survive into the config. The form's own state (the values, what has been touched) stays on the page
  * because it is reactive; the rules over it are plain functions of that state, which is what lets each one be
- * read on its own and pinned in a test. */
+ * read on its own and pinned in a test.
+ *
+ * THE ONE THING AN EDIT CHANGES is what an empty box means, and it changes it for exactly one kind of box. A
+ * connection's credentials are never sent to a browser, so a form opened over a live connection starts with its
+ * password fields blank — and blank, on an add, means "you haven't filled this in yet". Reading it that way on
+ * an edit is what made every change to a connection cost a re-typed key: the field is required, so the submit
+ * is blocked until you find the credential again, and a dropped one silently erases what is stored.
+ *
+ * So every rule below that asks about a value takes `stored` — the credential keys this connection is actually
+ * holding, which the daemon names without ever sending (CapabilitySummary.secrets). Where it holds one, blank
+ * means KEEP: nothing to re-type, nothing required, and the config carries the marker the daemon resolves back
+ * into the credential (VAULTED). An add passes an empty set and every rule reads exactly as it did. */
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
 /** The form's values, keyed by field. A switch carries "on"/"off" — the form speaks strings throughout. */
 export type FormValues = Record<string, string>;
+
+/* The credential keys the connection being edited already holds — empty when adding, which is what makes every
+ * rule below read as it always did on an add. A named type rather than a bare Set so the argument says which
+ * question it answers at each call site: "is this one already stored?", never "is this one secret?". */
+export type StoredSecrets = ReadonlySet<string>;
+// What every rule below defaults to: nothing stored, which is an add — and which is why an add reads exactly
+// as it did before any of this existed.
+const NOTHING_STORED: StoredSecrets = new Set<string>();
+
+/** A blank box that means "keep what's there": this field holds a credential the browser was never shown. */
+export const keepsSecret = (field: CapabilityField, value: string | undefined, stored: StoredSecrets): boolean =>
+    field.secret === true && (value ?? ``).trim().length === 0 && stored.has(field.key);
 
 // undefined means valid, here and in every rule below.
 export const nameError = (name: string): string | undefined => {
@@ -54,7 +77,11 @@ const RULES: readonly FieldRule[] = [
     },
 ];
 
-export const fieldError = (field: CapabilityField, value: string | undefined): string | undefined => {
+export const fieldError = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined => {
+    // Left alone on an edit — there is nothing to refuse about a value the user is keeping.
+    if (keepsSecret(field, value, stored)) {
+        return undefined;
+    }
     const trimmed = (value ?? ``).trim();
     for (const rule of RULES) {
         const message = rule(field, trimmed);
@@ -93,8 +120,12 @@ export const inlineField = (field: CapabilityField): boolean => {
 };
 
 // Every visible field answered (a switch always holds one of its two positions) and a name the daemon will take.
-export const formComplete = (entry: CapabilityCatalogEntry, values: FormValues, name: string): boolean =>
-    NAME_RE.test(name.trim()) && shownFields(entry, values).every((field) => field.optional === true || (values[field.key] ?? ``).trim().length > 0);
+// A credential already stored counts as answered — see the header: on an edit, blank means keep.
+export const formComplete = (entry: CapabilityCatalogEntry, values: FormValues, name: string, stored: StoredSecrets = NOTHING_STORED): boolean =>
+    NAME_RE.test(name.trim()) &&
+    shownFields(entry, values).every(
+        (field) => field.optional === true || keepsSecret(field, values[field.key], stored) || (values[field.key] ?? ``).trim().length > 0,
+    );
 
 // A commit sha, which is the only `ref` an extension install may pin — a branch name would let the code move
 // under an approval that was given for what was read.
@@ -102,12 +133,15 @@ const SHA_RE = /^[0-9a-f]{40}$/u;
 
 export const isCommitSha = (value: string | undefined): boolean => SHA_RE.test(value ?? ``);
 
-/* WHAT A FRESH FORM HOLDS, in the order each source earns its place. Later sources win, and the sequence is the
- * argument: the card's own defaults are the floor; a one-per-sandbox card's live config is what the user
- * actually has (its form UPDATES in place, so resetting a switch to off every time the card is opened would turn
- * "come and look" into "turn it back off"); the workspace scan's prefill answers what a user would otherwise go
- * and look up. Dev autofill lands on top of all three, and lives in ./devSecrets so this stays a module of rules
+/* WHAT A FORM HOLDS WHEN IT OPENS, in the order each source earns its place. Later sources win, and the
+ * sequence is the argument: the card's own defaults are the floor; the LIVE config of the connection being
+ * edited is what the user actually has (resetting a switch to off every time a card is opened would turn "come
+ * and look" into "turn it back off"); the workspace scan's prefill answers what a user would otherwise go and
+ * look up. Dev autofill lands on top of all three, and lives in ./devSecrets so this stays a module of rules
  * rather than one that reads the browser.
+ *
+ * `live` is the connection being edited — the sole instance of a one-per-sandbox card, or whichever row the
+ * reader opened. It never carries a credential (the daemon strips them), which is what `stored` above is for.
  *
  * A switch seeds to "off" rather than empty: it always shows one of its two positions, so an unseeded one would
  * both render as off and count as an unfilled required field, blocking a submit over a control the user can see
@@ -183,10 +217,15 @@ export const forticlientAnswers = (fields: readonly CapabilityField[], connectio
  * user supplied — whose tier this browser has no way to know, and whose updates and advisories the daemon
  * rightly compares against the official registry when no origin was recorded. A listing installed from Discover
  * carries both from the row it was picked on. */
-export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues): Record<string, string> =>
+export const buildConfig = (entry: CapabilityCatalogEntry, values: FormValues, stored: StoredSecrets = NOTHING_STORED): Record<string, string> =>
     fieldConfig(entry, (field) => {
         if (!fieldApplies(field, values)) {
             return undefined;
+        }
+        // The marker, not the value and not a hole: an omitted key would be the daemon's "this connection no
+        // longer has one", which for a required credential fails the schema and for an optional one erases it.
+        if (keepsSecret(field, values[field.key], stored)) {
+            return VAULTED;
         }
         const value = (values[field.key] ?? ``).trim();
         return value.length > 0 ? value : undefined;

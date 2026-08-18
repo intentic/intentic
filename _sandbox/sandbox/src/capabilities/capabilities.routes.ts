@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { type Capability, capabilitiesContract, CapabilitySchema } from "@intentic/sandbox-contract";
+import { type Capability, capabilitiesContract, CapabilitySchema, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -13,6 +13,7 @@ import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensio
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { type CapabilityCtx, capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
+import { secretFieldsOf } from "./secret-fields.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./totp.js";
 import { browseMarketplace } from "./marketplace.js";
@@ -73,6 +74,41 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
     }
 };
 
+/* WHAT AN EDIT SENDS WHERE A CREDENTIAL WOULD GO, resolved back into the credential before anything runs.
+ *
+ * `add` is the upsert, so it is also how an existing connection is CHANGED — and the browser editing one has
+ * never been shown its secrets (the list route echoes the shape of a connection and drops every value in it).
+ * Left to send what it holds, a form could only send empty, which the schema either rejects or, worse, accepts
+ * as the new value: changing a tunnel's routed networks would erase its pre-shared key. So a field the user did
+ * not touch comes back as VAULTED, meaning "whatever is already stored", and that is resolved HERE — before the
+ * handler's apply, which writes the real conf files and dials the real gateway.
+ *
+ * The storage layer already refuses to write the marker over a real value, which covers a caller that reads
+ * without rehydrating and writes back. This is the other half: a caller that deliberately says "keep it", whose
+ * apply must still see the credential itself.
+ *
+ * A marker with nothing behind it is a REFUSAL rather than a pass-through. It means the form believed a
+ * credential was stored and none is — a fresh add that sent one, an entry removed mid-edit, an id reused for a
+ * different kind — and letting it through would write the literal marker into an ssh key file and fail later,
+ * somewhere that cannot say which box to go back and fill in. */
+const withKeptSecrets = async (services: Services, input: Capability): Promise<Capability> => {
+    const config = input.config as Record<string, unknown>;
+    const kept = Object.keys(config).filter((key) => isVaulted(config[key]));
+    if (kept.length === 0) {
+        return input;
+    }
+    const stored = await services.capabilities.get(input.id);
+    // A different kind under the same name is not this connection — its credentials are not the ones being kept.
+    const storedConfig = (stored?.kind === input.kind ? stored.config : {}) as Record<string, unknown>;
+    const missing = kept.filter((key) => typeof storedConfig[key] !== "string" || isVaulted(storedConfig[key]));
+    if (missing.length > 0) {
+        throw new ORPCError("BAD_REQUEST", {
+            message: `nothing stored for ${missing.join(", ")} on "${input.id}" — enter the value rather than keeping it`,
+        });
+    }
+    return CapabilitySchema.parse({ ...input, config: { ...config, ...Object.fromEntries(kept.map((key) => [key, storedConfig[key]])) } });
+};
+
 // The unified capability manifest routes. `add` streams its apply (mirroring /intentic): the handler yields
 // progress frames, then the manifest entry is recorded, then a terminal `result`. A `requires` precondition
 // (service/integration → devops) is checked before apply. `list` fans each handler's status() concurrently.
@@ -96,6 +132,10 @@ export const createCapabilitiesRoutes = (services: Services) => {
                         kind: capability.kind,
                         status: await registry[capability.kind].status(ctx, capability.id, capability.config),
                         config: echoConfig(capability, connectors),
+                        // The NAMES of the credentials this entry holds, so an edit form can show dots where it
+                        // may not show a value — the complement of the echo above, which is the same rule the
+                        // vault splits on (secret-fields.ts).
+                        secrets: [...secretFieldsOf(capability, connectors)],
                     })),
                 ),
                 capabilityRecommendations(services.workspace.root, capabilities, dismissed),
@@ -123,10 +163,14 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     throw new ORPCError("PRECONDITION_FAILED", { message: `activate ${required} first` });
                 }
             }
+            // An edit keeps the credentials it was never shown — resolved before apply, and before the id is
+            // claimed below, so a form that asked to keep something that isn't there gets a plain refusal
+            // rather than an error frame in the middle of a stream.
+            const entry = await withKeptSecrets(services, input);
             adding.add(input.id);
             try {
-                yield* handler.apply(ctx, input.id, input.config);
-                await services.capabilities.upsert(input);
+                yield* handler.apply(ctx, entry.id, entry.config);
+                await services.capabilities.upsert(entry);
                 // A fresh extension checkout brings its declared autoStart processes up (the same post-apply
                 // seam composeEnvironment uses — full Services, so the narrow handler ctx stays narrow).
                 if (input.kind === "extension") {
@@ -149,7 +193,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
                 const composedHash = await composeEnvironment(services);
                 if (
-                    (await capabilityFragments(services, input)).length > 0 &&
+                    (await capabilityFragments(services, entry)).length > 0 &&
                     composedHash !== undefined &&
                     composedHash !== services.config.sandbox.environmentHash
                 ) {

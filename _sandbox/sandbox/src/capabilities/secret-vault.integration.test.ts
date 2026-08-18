@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract";
+import { type Capability, VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type CapabilitiesStore, fileCapabilitiesStore, VAULTED, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
+import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
 import { fileSecretVault, type SecretVault } from "./secret-vault.js";
 
 /* THE POINT OF THE SPLIT, pinned: the file the agent can open holds the shape of a connection and never the

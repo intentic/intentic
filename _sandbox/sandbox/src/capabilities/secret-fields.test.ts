@@ -1,6 +1,5 @@
-import { type Capability, type CapabilityKind, CapabilitySchema } from "@intentic/sandbox-contract";
+import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { VAULTED } from "./capabilities-store.js";
 import { partitionSecretValues } from "./secret-fields.js";
 
 /* THE INVARIANT THAT TIES THE VAULT TO THE SCHEMA: an entry that has been through the vault must still be a

@@ -60,6 +60,9 @@ const capability = (id: string, provider: string): CapabilitySummary => ({
     kind: `cli`,
     status: { state: `active` },
     config: { provider },
+    // The credential keys this connection holds — none here, because activation turns on the provider alone and
+    // an edit form is not what these specs mount.
+    secrets: [],
 });
 
 export const FIXTURE_CAPABILITIES: CapabilitySummary[] = [

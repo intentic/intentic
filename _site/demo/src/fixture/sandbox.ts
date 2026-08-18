@@ -59,21 +59,36 @@ export const demoPanels = (): PanelSummary[] => [
     },
 ];
 
-// The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
-// the daemon returns — a token never leaves the sandbox, so it never appears in a list row either.
+/* The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
+ * the daemon returns — a token never leaves the sandbox, so it never appears in a list row either. `secrets`
+ * names the keys stripped out of each, which is what lets a card's form be opened over one of these and show
+ * dots where it may not show a value. */
 export const demoCapabilities = (): CapabilitySummary[] => [
-    { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github`, git: `on` } },
+    { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github`, git: `on` }, secrets: [`token`] },
     {
         id: `postgres`,
         kind: `cli`,
         status: { state: `active` },
         config: { provider: `postgres`, host: `db.acme.internal`, port: `5432`, user: `acme_app`, database: `acme_shop` },
+        secrets: [`password`],
     },
-    { id: `sentry`, kind: `cli`, status: { state: `active` }, config: { provider: `sentry`, url: `https://sentry.io`, org: `acme` } },
-    { id: `discord`, kind: `cli`, status: { state: `active` }, config: { provider: `discord`, guild: `acme` } },
-    { id: `stripe`, kind: `integration`, status: { state: `active` }, config: { provider: `stripe` } },
-    { id: `docker`, kind: `docker`, status: { state: `active` }, config: {} },
-    { id: `ops-box`, kind: `ssh`, status: { state: `active` }, config: { auth: `key`, host: `ops.acme.dev`, port: 22, user: `deploy` } },
+    {
+        id: `sentry`,
+        kind: `cli`,
+        status: { state: `active` },
+        config: { provider: `sentry`, url: `https://sentry.io`, org: `acme` },
+        secrets: [`token`],
+    },
+    { id: `discord`, kind: `cli`, status: { state: `active` }, config: { provider: `discord`, guild: `acme` }, secrets: [`token`] },
+    { id: `stripe`, kind: `integration`, status: { state: `active` }, config: { provider: `stripe` }, secrets: [] },
+    { id: `docker`, kind: `docker`, status: { state: `active` }, config: {}, secrets: [] },
+    {
+        id: `ops-box`,
+        kind: `ssh`,
+        status: { state: `active` },
+        config: { auth: `key`, host: `ops.acme.dev`, port: 22, user: `deploy` },
+        secrets: [`key`],
+    },
 ];
 
 /* The extensions those cli capabilities resolve through: without the contribution there is no card, which is

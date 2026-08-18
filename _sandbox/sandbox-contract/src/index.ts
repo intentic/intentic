@@ -97,6 +97,7 @@ export * from "./history-state.js";
 export * from "./agent-catalog.js";
 export * from "./agent-run-model.js";
 export * from "./capability-env.js";
+export * from "./capability-secrets.js";
 export * from "./conversation-ids.js";
 export * from "./host-protocol.js";
 export * from "./listener-protocol.js";

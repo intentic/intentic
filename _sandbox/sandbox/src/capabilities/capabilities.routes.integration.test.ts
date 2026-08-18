@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
 import { createApp } from "../app.js";
@@ -33,7 +34,8 @@ test("capabilities.list reports each capability with its status; devops can't be
     );
     // devops status is derived from the repos on disk — absent under test, so it reads inactive.
     expect(await client.capabilities.list()).toEqual({
-        capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {} }],
+        // `secrets` names the credential keys an edit form must not treat as empty — devops holds none.
+        capabilities: [{ id: "devops", kind: "devops", status: { state: "inactive" }, config: {}, secrets: [] }],
         recommendations: [],
     });
     // DevOps has no teardown (deleting the repos is data loss) → CONFLICT; an unknown id is NOT_FOUND.
@@ -157,4 +159,50 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
     // Removing the last fragment-bearing capability recomposes the overlay away (stock container, no custom).
     await client.capabilities.remove({ id: "office" });
     expect(disk.get("/work/.intentic/environment.approved.Dockerfile")).toBeUndefined();
+});
+
+/* CHANGING A CONNECTION WITHOUT RE-TYPING WHAT IT IS SIGNED IN WITH — the whole point of the marker.
+ *
+ * A tunnel's WireGuard conf is a credential, so it is never sent to the browser; every other answer is. Editing
+ * one therefore means posting back a config with a hole where the credential goes, and the two obvious spellings
+ * of that hole are both wrong: an empty string is a config that fails to dial, and an absent key fails the
+ * schema. VAULTED is the third, and this pins what it costs — the tunnel keeps dialling with the key it had,
+ * and the answer that WAS changed is the one that changed.
+ *
+ * The refusal is half the test. A marker with nothing behind it means the sender believed a credential was
+ * stored and none is, and a daemon that let it through would write the literal marker into a conf file and fail
+ * at dial time, somewhere with no way to say which box to go back and fill in. */
+test("capabilities.add keeps a credential the sender never saw, and refuses to keep one that isn't there", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-vpn-edit-home-"));
+    const disk = new Map<string, string>();
+    const memoryFiles = fakeFiles({
+        read: async (path) => disk.get(path),
+        write: async (path, content) => {
+            disk.set(path, content as string);
+        },
+        remove: async (path) => {
+            disk.delete(path);
+        },
+    });
+    const store = memoryCapabilitiesStore();
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store })));
+    const conf = "[Interface]\nPrivateKey = REAL\n";
+    // `add` streams, so its refusal arrives on the iteration rather than on the call — both are awaited here.
+    const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add(input)))());
+
+    await collect(await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: conf, autoConnect: "on" } }));
+    // What a browser is told it holds: the shape, and the NAMES of the credentials in it — never the values.
+    const [listed] = (await client.capabilities.list()).capabilities;
+    expect(listed?.config).toEqual({ provider: "wireguard", autoConnect: "on" });
+    expect(listed?.secrets).toEqual(["config"]);
+
+    // The edit: one answer changed, the credential kept.
+    await collect(
+        await client.capabilities.add({ id: "office", kind: "vpn", config: { provider: "wireguard", config: VAULTED, autoConnect: "off" } }),
+    );
+    expect((await store.get("office"))?.config).toEqual({ provider: "wireguard", config: conf, autoConnect: "off" });
+
+    // Nothing stored behind the marker: a fresh id has no credential to keep.
+    expect(await addFailure({ id: "fresh", kind: "vpn", config: { provider: "wireguard", config: VAULTED } })).toBe("BAD_REQUEST");
 });

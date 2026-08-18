@@ -39,9 +39,11 @@ const props = defineProps<{
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
     facts: string;
+    /** The card's form is open over THIS row — it wears the selected tint so the fields below have a subject. */
+    editing?: boolean;
 }>();
 
-const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; rename: []; remove: [] }>();
+const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: [] }>();
 
 // A computer is connected by running a command ON IT. One that has never checked in is waiting on that
 // one-liner; one that HAS is merely asleep, and a fresh pairing is not what wakes it — so the button says which.
@@ -98,10 +100,15 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
 const router = useRouter();
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 
-/* WHAT IS LEFT AFTER THE PRIMARY, in one order: the kind's own secondary verbs, then the two every connection
- * has. Rename leads them because it is the only one that is not destructive and the only one people look for
- * (the name is what the agent calls this connection, and until now the only way to change it was to remove the
- * thing and set it up again). */
+/* WHAT IS LEFT AFTER THE PRIMARY, in one order: the kind's own secondary verbs, then the three every connection
+ * has. Settings leads them, and it is the reason this menu was worth opening at all — every field this
+ * connection was set up with is behind it, on the card's own form, which until now could only ADD. Changing one
+ * setting meant removing the connection and building it again, which for a signed-in account or a paired
+ * machine throws away the very thing that makes it worth keeping.
+ *
+ * Rename is next, and stays separate from it for the same reason it always did: the name is the agent's handle
+ * for the thing — a skill file, an env var, an alias, a browser profile directory — so changing it is a
+ * migration the daemon performs, not a field on a form. */
 const items = computed<MenuItem[]>(() => {
     const kindActions: MenuItem[] = [];
     // Also the way to re-log-in once a session expires. An identity's window is the same thing pointed at its
@@ -122,6 +129,7 @@ const items = computed<MenuItem[]>(() => {
     return [
         ...kindActions,
         ...(kindActions.length > 0 ? [{ separator: true }] : []),
+        { label: `Settings…`, icon: `cog`, command: () => emit(`edit`) },
         { label: `Rename…`, icon: `pencil`, command: () => emit(`rename`) },
         ...(removable.value ? [{ label: `Remove`, icon: `trash`, danger: true, command: () => emit(`remove`) }] : []),
     ];
@@ -132,7 +140,10 @@ const items = computed<MenuItem[]>(() => {
     <!-- One divided cell of the group: the row, and — while something is outstanding on another device — the
          step it is waiting on, directly under it. -->
     <div>
-        <Row density="compact">
+        <!-- Tinted while the form below is over THIS connection: the fields are a long way down a narrow pane,
+             and without it a form pre-filled with somebody's live gateway is indistinguishable from one
+             pre-filled with the card's defaults. -->
+        <Row density="compact" :selected="editing">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
                     <!-- Mono because it is an identifier, not a label: it is what the agent's skill, its tools

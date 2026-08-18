@@ -1,7 +1,7 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
-import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { buildConfig, fieldError, forticlientAnswers, formComplete, inlineField, nameError, seedValues, shownFields } from "./form";
+import { buildConfig, fieldError, forticlientAnswers, formComplete, inlineField, keepsSecret, nameError, seedValues, shownFields } from "./form";
 
 /* What the form refuses, what it starts as, and what survives into the config. The interesting cases are the ones
  * that used to cost a round-trip to the daemon or a silently wrong credential. */
@@ -100,6 +100,39 @@ test(`seeds from the card, then from what is live, then from what the scan read`
     expect(scanned[`url`]).toBe(`https://gitlab.acme.dev`);
     expect(scanned[`token`]).toBe(``);
     expect(scanned[`nothing`]).toBeUndefined();
+});
+
+/* WHAT AN EMPTY CREDENTIAL BOX MEANS, which is the only thing an edit changes — and the reason changing one
+ * setting on a connection no longer costs a re-typed key.
+ *
+ * A connection's credentials never reach the browser, so a form opened over one starts with those boxes blank.
+ * Read as an add would read them, the field is unanswered: the submit is blocked until the user goes and finds
+ * a credential they already have, and a dropped value erases what is stored. Told which keys are actually held,
+ * every rule flips for exactly those boxes and nothing else. */
+test(`lets a stored credential be kept, and sends the marker rather than a hole`, () => {
+    const entry = card([
+        { key: `server`, label: `Gateway` },
+        { key: `password`, label: `Password`, secret: true },
+    ]);
+    const stored = new Set([`password`]);
+    const values = { server: `vpn.acme.dev`, password: `` };
+
+    expect(keepsSecret({ key: `password`, label: `Password`, secret: true }, ``, stored)).toBe(true);
+    // Adding is unchanged: nothing is stored, so an empty credential is an unanswered question.
+    expect(fieldError({ key: `password`, label: `Password`, secret: true }, ``)).toBe(`This field is required.`);
+    expect(formComplete(entry, values, `office`)).toBe(false);
+
+    // Editing: the box may be left alone, and the config carries the marker the daemon resolves.
+    expect(fieldError({ key: `password`, label: `Password`, secret: true }, ``, stored)).toBeUndefined();
+    expect(formComplete(entry, values, `office`, stored)).toBe(true);
+    expect(buildConfig(entry, values, stored)).toEqual({ server: `vpn.acme.dev`, password: VAULTED });
+
+    // Typing REPLACES it — a value present is a value meant, and it is still checked like any other.
+    expect(buildConfig(entry, { ...values, password: ` hunter2 ` }, stored)).toEqual({ server: `vpn.acme.dev`, password: `hunter2` });
+    expect(fieldError({ key: `password`, label: `Password`, secret: true }, `EncX 3D2A9F1B7C`, stored)).toContain(`FortiClient encrypted this`);
+
+    // A key the connection does NOT hold is not kept — an optional credential left blank stays absent.
+    expect(buildConfig(entry, { server: `vpn.acme.dev`, password: `` }, new Set())).toEqual({ server: `vpn.acme.dev` });
 });
 
 /* An imported connection fills the form, and BLANKS EVERY SECRET first. FortiClient encrypts credentials, so

@@ -91,7 +91,7 @@ let applied: CapabilityStatus = { state: `pending` };
 const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
     capabilities.value = [
         ...capabilities.value,
-        { id: input.id, kind: card === `linux` ? `host` : `browser`, status: applied, config: input.config },
+        { id: input.id, kind: card === `linux` ? `host` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
 vi.mock(`../composables/extensions/useCapabilities`, () => ({
@@ -267,7 +267,7 @@ it(`offers the connected browser to be used, not only signed into again`, async 
 it(`opens the account a row belongs to when one site is connected twice`, async () => {
     card = `reddit`;
     applied = { state: `active` };
-    capabilities.value = [{ id: `reddit`, kind: `browser`, status: { state: `active` }, config: { platform: `reddit` } }];
+    capabilities.value = [{ id: `reddit`, kind: `browser`, status: { state: `active` }, config: { platform: `reddit` }, secrets: [] }];
     add.mockClear();
     push.mockClear();
     const el = mount();

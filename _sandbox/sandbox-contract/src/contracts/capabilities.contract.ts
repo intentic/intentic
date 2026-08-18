@@ -16,11 +16,18 @@ import {
     OkSchema,
 } from "../schemas.js";
 
-// The sandbox's unified capability manifest. `list` returns each active capability with its live status. `add`
-// upserts a capability and STREAMS its apply (devops scaffolding / service provisioning emit ndjson progress;
-// mcp/integration emit a terminal frame), mirroring the /intentic runner. `remove` tears it down (devops refuses
-// — deleting the repos is data loss). `status` re-probes a single capability for a lazy UI refresh. `marketplace`
-// resolves a Claude Code plugin marketplace repo into installable plugin-capability configs.
+/* The sandbox's unified capability manifest. `list` returns each active capability with its live status, the
+ * non-secret echo of its config, and the NAMES of the credentials it holds. `add` upserts a capability and
+ * STREAMS its apply (devops scaffolding / service provisioning emit ndjson progress; mcp/integration emit a
+ * terminal frame), mirroring the /intentic runner. `remove` tears it down (devops refuses — deleting the repos
+ * is data loss). `status` re-probes a single capability for a lazy UI refresh. `marketplace` resolves a Claude
+ * Code plugin marketplace repo into installable plugin-capability configs.
+ *
+ * `add` IS ALSO THE EDIT, because the write is an upsert: the same id with a changed config changes that
+ * connection. A caller editing one has never been shown its credentials, so it sends VAULTED
+ * (capability-secrets.ts) for each it is leaving alone and the daemon resolves those from what is stored before
+ * anything runs — the only way to change one setting on a tunnel without re-typing its key. A marker with
+ * nothing behind it is refused rather than written. */
 export const capabilitiesContract = {
     list: oc.route({ method: "GET", path: "/capabilities" }).output(CapabilitiesListSchema),
     add: oc.route({ method: "POST", path: "/capabilities" }).input(CapabilitySchema).output(eventIterator(IntenticLineSchema)),

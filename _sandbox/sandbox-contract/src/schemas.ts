@@ -3917,12 +3917,25 @@ export const CapabilityStatusSchema = z.object({
     code: z.string().optional(),
 });
 export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
-// The list row: manifest entry + live status. Secrets are never returned (an mcp token becomes hasToken).
+/* The list row: manifest entry + live status. Secrets are never returned (an mcp token becomes hasToken).
+ *
+ * `secrets` NAMES them without carrying them — the config keys this connection is actually holding a credential
+ * under. It is what makes an edit form possible at all: `config` is everything the browser may see, so a form
+ * seeded from it alone cannot tell "this tunnel has a pre-shared key I'm not allowed to show you" from "this
+ * tunnel has no pre-shared key", and both render as an empty required box. Saving one then wipes the
+ * credential, which is why changing a routed network used to mean re-typing a key.
+ *
+ * Keys, never values, and never a boolean per known field: the set is derived from what the entry stores, so a
+ * field the user left blank is absent and a card that gained a credential since is present. The form reads it as
+ * "show dots, and let blank mean keep" (VAULTED — capability-secrets.ts). */
 export const CapabilitySummarySchema = z.object({
     id: z.string(),
     kind: CapabilityKindSchema,
     status: CapabilityStatusSchema,
     config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    // Defaulted for the daemon-older-than-browser seam, like `recommendations` below: a required field would
+    // fail the whole list parse against a sandbox predating this, taking the page down to hide some dots.
+    secrets: z.array(z.string()).default([]),
 });
 /* A capability the WORKSPACE asks for but the manifest doesn't carry — derived from what is checked out under
  * /work, not from anything the user configured. It exists because the failures it prevents are illegible: a

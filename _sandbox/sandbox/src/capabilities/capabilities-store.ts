@@ -1,4 +1,4 @@
-import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
 import { jsonFile } from "../store/json-file.js";
 import type { ResolvedContribution } from "./contributions.js";
 import { partitionSecretValues } from "./secret-fields.js";
@@ -92,12 +92,6 @@ export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, rea
         },
     };
 };
-
-/* What stands in the manifest where a credential used to be. Deliberately not an empty string and not a
- * dropped key: the entry still has to satisfy CapabilitySchema (a connector's required field, an ssh key), and
- * a reader that somehow bypasses the rehydration below must fail LOUDLY — a service refusing this string is a
- * clear auth error, where an empty value reads as "not configured yet" and a missing key as a shape change. */
-export const VAULTED = "__intentic_vaulted__";
 
 /* THE SPLIT: credential values live in the vault, the manifest keeps the shape of the connection.
  *

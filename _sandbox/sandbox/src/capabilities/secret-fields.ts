@@ -14,8 +14,12 @@ import { registry } from "./registry.js";
  * question. A two-credential connector (Slack's app token beside its bot token), an ssh entry carrying both a
  * key and a passphrase, or a vpn conf beside its pre-shared key would each leave a credential behind if this
  * followed the rotatable one.
+ *
+ * Exported because the LIST route answers the same question for a second reader: the edit form has to know
+ * which of its boxes are holding a credential it will never be shown, and this is already the definition of
+ * that set (CapabilitySummary.secrets).
  */
-const secretFieldsOf = (capability: Capability, connectors: Map<string, ResolvedContribution>): readonly string[] => {
+export const secretFieldsOf = (capability: Capability, connectors: Map<string, ResolvedContribution>): readonly string[] => {
     const config = capability.config as Record<string, unknown>;
     const echoed = new Set(Object.keys(registry[capability.kind].echo(config, connectors)));
     return Object.keys(config).filter((key) => !echoed.has(key));
