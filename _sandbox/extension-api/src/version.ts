@@ -45,4 +45,12 @@
 // each, and six of the seven had the sandbox-switch one wrong — and three had hand-written the same tolerant
 // reader and careful write over the same shape of file. Additive: nothing is removed, and an extension that
 // keeps polling by hand still runs.
-export const extensionApiVersion = "2.7.0";
+// 2.8.0 splits sandbox-scoped module state by AUDIENCE: `sandboxValue` is `sandboxRef`'s lifetime without its
+// reactivity, for what a background poll remembers for itself (which connections to ask about next round, the
+// cursor a fetch resumes from) rather than what a tile shows. `detect()` and `badge()` both run inside the
+// host's render computed, so a `Ref` written from either is a computed mutating its own dependency — Vue
+// re-runs it, it writes again, and the rail recurses until the flush is abandoned mid-frame, dropping every
+// unrelated update queued behind it. The symptom is a window that stops answering, blamed on whichever
+// component the loop was noticed in, so the fix has to be a box nothing observes rather than a rule to
+// remember. Additive: `sandboxRef` is unchanged, and both are emptied on a switch by the same door.
+export const extensionApiVersion = "2.8.0";

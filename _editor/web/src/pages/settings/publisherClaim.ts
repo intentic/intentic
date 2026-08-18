@@ -1,5 +1,6 @@
 import type { ClaimChallenge } from "@intentic-app/api-contract";
 import type { GitPublishFileResult, GitRemoteRepo } from "@intentic/sandbox-contract";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { NoticeModel } from "@intentic/ui";
 
 /* THE CLAIM STEP'S DECISIONS, kept out of the component so they can be argued with in a test.
@@ -61,10 +62,17 @@ export const publishFailureNotice = (project: string, result: GitPublishFileResu
  * to get it subtly wrong. One line that does all of it removes every one of those.
  *
  * `cd` is deliberately part of it: the creator is being told to do this in a repository that may not be the one
- * their terminal is in, and a line that silently writes the file into the wrong directory is worse than no line. */
-export const claimCommand = (challenge: ClaimChallenge, project: string): string =>
-    [
+ * their terminal is in, and a line that silently writes the file into the wrong directory is worse than no line.
+ *
+ * Every value crosses into a shell the creator is about to run, so every one goes through `shellQuote` rather
+ * than a bare `'…'` — the token, the path and the publisher name are all server-supplied, and "a token never
+ * contains an apostrophe" is exactly the assumption the quoters exist to stop anyone making again. A plain
+ * value quotes to itself, so the line a creator actually sees is byte-identical to the one written by hand. */
+export const claimCommand = (challenge: ClaimChallenge, project: string): string => {
+    const path = shellQuote(challenge.path);
+    return [
         `# in your clone of ${project}, on its default branch`,
-        `printf '%s\\n' '${challenge.token}' > ${challenge.path}`,
-        `git add ${challenge.path} && git commit -m 'Claim the ${challenge.publisher} publisher name' && git push`,
+        `printf '%s\\n' ${shellQuote(challenge.token)} > ${path}`,
+        `git add ${path} && git commit -m ${shellQuote(`Claim the ${challenge.publisher} publisher name`)} && git push`,
     ].join(`\n`);
+};

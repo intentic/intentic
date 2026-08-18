@@ -11,4 +11,5 @@ export const sandboxLedger = m["sandboxLedger"];
 export const sandboxPoll = m["sandboxPoll"];
 export const sandboxRef = m["sandboxRef"];
 export const sandboxScopeGuard = m["sandboxScopeGuard"];
+export const sandboxValue = m["sandboxValue"];
 export const satisfiesEngines = m["satisfiesEngines"];
