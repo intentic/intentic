@@ -95,3 +95,25 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
 
 export const changeEpochOf = (path: string): number => epochs.get(path) ?? 0;
 export const isRecentlyChanged = (path: string): boolean => recentlyChanged.has(path);
+
+/* WHAT MOVED IN /work, FORGOTTEN — one workspace's file history, dropped when the browser is pointed at another.
+ * Called from resetWorkspaceScopedState.
+ *
+ * Everything here is keyed by workspace-relative path, and that is exactly what makes carrying it over wrong
+ * rather than merely wasteful: two sandboxes of the same project have the same paths. The new tree would open
+ * with rows flashing "just changed" for edits made in the box the reader left, and the file viewer's read
+ * trigger would carry epochs from that box's writes — a file it then declines to re-read because it believes it
+ * already has that version.
+ *
+ * `lastWorkspaceChangeAt` goes too: it is what tells systemEvents whether a ref move also swapped the working
+ * tree, and a stale reading of "yes, seconds ago" would drop the editor's buffers on the new sandbox's first
+ * ordinary commit. */
+export const resetWorkspaceLive = (): void => {
+    for (const timer of clearTimers.values()) {
+        clearTimeout(timer);
+    }
+    clearTimers.clear();
+    epochs.clear();
+    recentlyChanged.clear();
+    lastWorkspaceChangeAt = 0;
+};

@@ -56,6 +56,9 @@ packages, which is exactly the case a per-repo `detect()` cannot express. An off
 directory rather than an affordance every directory of its kind has says so (`evidence: true`), and the tree
 keeps its icon on the row instead of revealing it on hover — the difference between a reader seeing which
 packages have a page and a reader having to go looking for one.
+- **[scope.ts](src/scope.ts)** — `sandboxRef` and `sandboxScopeGuard`: how an extension keeps state that
+  belongs to ONE sandbox. See "Where state lives" below; this is the rule most easily got wrong, because
+  getting it wrong looks fine until somebody switches sandbox.
 - **[stream.ts](src/stream.ts)**, **[version.ts](src/version.ts)** — SSE/ndjson helpers and the host API
   version (`engines.intentic` is checked against it before activation).
 
@@ -73,6 +76,33 @@ are `sandbox-contract` schemas, parsed at the call site (`Schema.parse(await api
 in-repo, compiled-together design means a wire change is a compiler error fixed atomically, so there is no
 separate "stable data API" to promote. `facts.ts` stays the stable surface only for *detection*.
 
+## Where state lives
+
+Three tiers, and the tier decides what happens when the user points the browser at a **different sandbox**.
+Everything an extension holds is about one workspace, so a switch has to leave nothing of the last one behind.
+
+- **Cached reads** — `useQuery` in a view, or `api.sandbox.fetch(query)` from outside one. Key them with
+  `api.sandbox.key(...)` and the switch is handled by construction: the key carries the active sandbox id, so
+  the next box is a different cache entry. Use the *same* key for a view's query and for the badge poll that
+  warms it, and the poll's answer becomes the view's first paint.
+- **State inside a mounted component** — an ordinary `ref` in a `.vue` file. Nothing to do; it dies with the
+  component.
+- **Module state owned by `activate()`** — the badge counts, presence maps and poll results that must survive
+  the view being unmounted, because a badge you only see after opening the view is pointless. Declare it with
+  `sandboxRef(() => initial)` and the host empties it on every switch. There is no subscription to remember
+  and no teardown to write; `dispose` is there for state that owns an object URL or anything else the garbage
+  collector will not take back.
+
+For anything asynchronous in that third tier, take a `sandboxScopeGuard()` **before** the await and ask it
+**after** — a poll issued against the last sandbox otherwise resolves a moment later and writes its answer
+into the new one, which is the same wrong badge with a harder repro. It matters twice over for a call that
+WRITES: acknowledging what a badge has shown, in the wrong workspace's tree, is bookkeeping no later poll
+corrects.
+
+This is not advice. `sandboxScope.guard.test.ts` in the app refuses module-level `ref`/`shallowRef`/`reactive`
+and any reassignable module binding in an extension's browser-side source, because the failure it prevents was
+found in six extensions at once — a rail tile reading `21` under a workspace that had two.
+
 ## Authoring an extension
 
 `activate(api, context)` registers contributions and returns; `deactivate` is optional. A UI extension also
@@ -86,6 +116,8 @@ The five UI extensions under [`_extensions/`](../../_extensions) are the working
 - [src/engines.ts](src/engines.ts) — how `engines.intentic` is matched against the version below, for the host
   and the daemon alike.
 - [src/route.ts](src/route.ts) — the query rules a view with internal navigation uses.
+- [src/scope.ts](src/scope.ts) — module state that belongs to one sandbox, and the guard for work in flight
+  across a switch.
 - [src/version.ts](src/version.ts) and [src/surface.json](src/surface.json) — the protocol version, and what
   each version of it promised.
 

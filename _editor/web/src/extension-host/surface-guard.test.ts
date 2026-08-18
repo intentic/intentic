@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
+import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
 import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
@@ -35,6 +36,15 @@ interface RecordedSurface {
     // api.sandbox's own members, recorded from 2.3.0 on — the sub-surface where drift actually happened (rpc
     // arrived unrecorded; role() is why this exists). Optional because earlier entries predate it.
     readonly sandboxApi?: readonly string[];
+    /* What the PACKAGE exports, recorded from 2.6.0 on — the third grain, and the last one that was still
+     * unrecorded.
+     *
+     * `IntenticApi` is what an extension is HANDED, and everything above tracks it. But some of the contract
+     * cannot be handed over, because it is needed before `activate(api)` has run: `hostSlot` binds the handle
+     * itself, and `sandboxRef` declares module state at import time. Those are imported from the package, they
+     * are every bit as breakable as a member of the api object, and nothing here could see them — `hostSlot`
+     * arrived, and later so did the whole scope primitive, with no record either way. */
+    readonly moduleExports?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -84,6 +94,11 @@ const liveSurface = (): RecordedSurface => ({
     api: apiMembers(),
     listener: Object.keys(ListenerContributionSchema.shape).toSorted(),
     sandboxApi: nestedMembers(`sandbox`),
+    // The runtime exports only. Types are the api object's business (recorded above) and a package that
+    // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived.
+    moduleExports: Object.keys(sdkModule)
+        .filter((name) => typeof (sdkModule as Record<string, unknown>)[name] === `function` || name === `extensionApiVersion`)
+        .toSorted(),
 });
 
 test(`the surface this version promises is the surface it has`, () => {

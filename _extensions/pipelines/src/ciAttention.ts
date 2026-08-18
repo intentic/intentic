@@ -1,6 +1,6 @@
 import { type CiRunsResponse, CiSeenResponseSchema } from "@intentic/sandbox-contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { failureStreaks, streakTooltip, unseenStreaks } from "./ciStreaks";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
@@ -17,7 +17,9 @@ import { host } from "./host";
 // and the view's own polling is what serves someone actually watching.
 const POLL_MS = 60_000;
 
-const runs = ref<CiRunsResponse>({ repos: [], runs: [] });
+// Scoped to the sandbox these runs came from: CI belongs to one workspace's repositories, and a red streak
+// carried over a switch badges this box for a break in another one.
+const runs = sandboxRef<CiRunsResponse>(() => ({ repos: [], runs: [] }));
 
 // Nothing in here may reject: it runs detached on a timer, where a throw becomes an unhandled rejection with
 // no one to catch it. That includes reading the host handle — an api shape without a sandbox transport (a test
@@ -28,7 +30,14 @@ const refresh = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        runs.value = await api.sandbox.fetch(ciRunsQuery());
+        // Taken before the read, asked after it: an answer for the box the user has just left must not become
+        // this box's badge.
+        const current = sandboxScopeGuard();
+        const next = await api.sandbox.fetch(ciRunsQuery());
+        if (!current()) {
+            return;
+        }
+        runs.value = next;
     } catch {
         // A refused or unreachable daemon leaves the last known state standing rather than blanking the badge:
         // "we can't reach CI" is not "CI is fine", and a flapping tile is worse than a slightly stale one.

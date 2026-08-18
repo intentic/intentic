@@ -1,6 +1,6 @@
 import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { host } from "./host";
 import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH } from "./runs";
 
@@ -22,7 +22,10 @@ export interface AcceptanceFinding {
     readonly verdict: "fail" | "blocked";
 }
 
-const unseen = ref<AcceptanceFinding[]>([]);
+// Scoped to the sandbox it was read from. It has to outlive the view being unmounted — a badge you only see
+// once you have already opened Acceptance tells you nothing — but a run that failed in another workspace is not
+// news about this one, and until the scope existed the tile said it was.
+const unseen = sandboxRef<AcceptanceFinding[]>(() => []);
 
 // Acknowledges an actual completed finding, never the moment its run happened to start. Including the verdict
 // means a corrected result file becomes new information rather than inheriting the acknowledgement of its draft.
@@ -79,7 +82,14 @@ const refresh = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        unseen.value = unseenFindings(await findings(), seenResultKeys(await api.workspace.file(SEEN_PATH)));
+        // Taken before the walk, asked after it: this reads a directory of runs and two files per story, so the
+        // window in which a switch can land mid-poll is the widest of any badge in the workspace.
+        const current = sandboxScopeGuard();
+        const next = unseenFindings(await findings(), seenResultKeys(await api.workspace.file(SEEN_PATH)));
+        if (!current()) {
+            return;
+        }
+        unseen.value = next;
     } catch {
         // A refused or unreachable daemon leaves the last known state standing rather than blanking the badge:
         // "we can't reach the workspace" is not "everything passed", and a flapping tile is worse than a stale one.
@@ -115,8 +125,14 @@ export const markAcceptanceSeen = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
-        const current = await findings();
-        await api.workspace.write(SEEN_PATH, JSON.stringify({ results: current.map(findingKey) }));
+        // A switch between the walk and the write would record THIS workspace's runs as seen in the workspace the
+        // user moved to — bookkeeping filed in the wrong tree, which no later poll corrects.
+        const scoped = sandboxScopeGuard();
+        const found = await findings();
+        if (!scoped()) {
+            return;
+        }
+        await api.workspace.write(SEEN_PATH, JSON.stringify({ results: found.map(findingKey) }));
         unseen.value = [];
     } catch {
         // See above.

@@ -1,5 +1,5 @@
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { host } from "./host.js";
 import { SEEN_PATH, stagingKey } from "./paths.js";
 import { listStagedTails } from "./stagedTree.js";
@@ -24,8 +24,10 @@ import { listStagedTails } from "./stagedTree.js";
 // Slow on purpose. This drives a glance; the view's own reads serve anyone actually watching a run.
 const POLL_MS = 60_000;
 
-// Repos whose staged set is present and unacknowledged.
-const pending = ref<readonly string[]>([]);
+// Repos whose staged set is present and unacknowledged. Scoped to the sandbox they were read from: repo names
+// repeat across workspaces, so carrying this over a switch does not merely show a stale number — it names
+// repositories that may exist in the new box too, and says something untrue about them.
+const pending = sandboxRef<readonly string[]>(() => []);
 
 // No file yet is the ordinary first state: nothing has been reviewed because nothing has been generated — which
 // is what api.workspace.readJson answers undefined for.
@@ -41,6 +43,9 @@ const scan = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
+        // Taken before the reads, asked after them: one staged-tree listing per repo, so a switch has plenty of
+        // room to land mid-poll on a workspace with several repositories.
+        const current = sandboxScopeGuard();
         const seen = await readSeen();
         const repos = api.workspace.repos().map((repo) => repo.repo);
         const staged = await Promise.all(
@@ -52,6 +57,9 @@ const scan = async (): Promise<void> => {
                 return tails.includes(`repo.json`) && seen[stagingKey(repo)] === undefined ? repo : undefined;
             }),
         );
+        if (!current()) {
+            return;
+        }
         pending.value = staged.filter((repo): repo is string => repo !== undefined);
     } catch {
         // Leave the previous verdict standing: a transient read failure is not evidence that nothing is waiting.

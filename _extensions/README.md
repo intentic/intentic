@@ -51,6 +51,17 @@ list — the automations form had four rows of chips that could not offer a mode
 installed ACP agent, and happily pinned an account with no headroom left. `permissions.conformance.test.ts`
 fails any extension that reaches `/{provider}/models` or `/{provider}/accounts` on its own.
 
+**Everything an extension holds belongs to ONE sandbox.** Cached reads are keyed with `api.sandbox.key(...)`
+and are handled by that alone. State inside a mounted component dies with the component. What is left is the
+module state a badge needs — a count filled by a timer has to outlive the view being unmounted, or it could
+only ever tell you what you had already gone and looked at — and that tier is declared with `sandboxRef(() =>
+initial)`, which the host empties whenever the browser is pointed at another sandbox. Anything asynchronous
+takes a `sandboxScopeGuard()` before its await and asks it after, so a poll that left under the last sandbox
+cannot write its answer into the next one. This is not a convention: `sandboxScope.guard.test.ts` in the web
+app refuses module-level `ref`/`shallowRef`/`reactive` and any reassignable module binding in browser-side
+extension source. Six packs here had the same omission at once, which is how a Maintenance tile came to read
+`21` over a workspace that had two.
+
 ## The extensions
 
 | Extension | Kind | What it contributes |

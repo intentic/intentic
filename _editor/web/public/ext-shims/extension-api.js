@@ -6,4 +6,7 @@ export const flattenQuery = m["flattenQuery"];
 export const hostSlot = m["hostSlot"];
 export const mergeQuery = m["mergeQuery"];
 export const readDaemonStream = m["readDaemonStream"];
+export const resetSandboxScope = m["resetSandboxScope"];
+export const sandboxRef = m["sandboxRef"];
+export const sandboxScopeGuard = m["sandboxScopeGuard"];
 export const satisfiesEngines = m["satisfiesEngines"];

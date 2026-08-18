@@ -208,6 +208,29 @@ const send = async (push: PendingPush): Promise<void> => {
     };
 };
 
+/* EVERYTHING THIS FLOW IS HOLDING ABOUT ONE WORKSPACE'S OUTGOING WORK, dropped when the browser is pointed at
+ * another one. Called from sandboxScope.
+ *
+ * All of it names repositories, commits and a check suite in a single /work: a staged push, the stage it
+ * reached, the question waiting on an answer, the fix session composed for a failure. Carried across a switch,
+ * the panel offers to send the previous sandbox's commits, and answering the question would run a check in a
+ * workspace the reader is no longer in.
+ *
+ * `git` and `sandboxId` are deliberately NOT dropped. They are captures of module-level composables — one per
+ * app, not one per sandbox — and re-capturing them needs a mounted surface, which a switch does not guarantee
+ * there is one of. `typicalMs` is not dropped either: its own watch on the sandbox id already re-reads it. */
+export const resetPushFlow = (): void => {
+    clearTimeout(pushedTimer);
+    pushedTimer = undefined;
+    pending.value = undefined;
+    stage.value = undefined;
+    since.value = 0;
+    question.value = undefined;
+    proposedFix.value = undefined;
+    pushed.value = undefined;
+    fixWith = {};
+};
+
 export function usePushFlow() {
     git ??= useChanges();
     const { settings } = useSandboxSettings();

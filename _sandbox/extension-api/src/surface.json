@@ -276,5 +276,67 @@
         ],
         "listener": ["automation", "events", "provider"],
         "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"]
+    },
+    "2.6.0": {
+        "manifest": [
+            "$schema",
+            "art",
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "chat",
+            "commands",
+            "documents",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": ["automation", "events", "provider"],
+        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "moduleExports": [
+            "extensionApiVersion",
+            "flattenQuery",
+            "hostSlot",
+            "mergeQuery",
+            "readDaemonStream",
+            "resetSandboxScope",
+            "sandboxRef",
+            "sandboxScopeGuard",
+            "satisfiesEngines"
+        ]
     }
 }

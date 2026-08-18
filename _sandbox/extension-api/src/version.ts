@@ -33,4 +33,10 @@
 // rather than a URL because the row is drawn before any code is cloned: a link would put a stranger's server in
 // the render path, track who is browsing, and rot after approval. Additive — a manifest that ships no drawing
 // falls to exactly the mark it had before.
-export const extensionApiVersion = "2.5.0";
+// 2.6.0 gives module state an owner across a sandbox switch: `sandboxRef` declares state that belongs to ONE
+// sandbox and `sandboxScopeGuard` protects the write of a read that was already in flight when the switch
+// happened (scope.ts). The tier existed and nothing cleared it — every extension that badges a rail tile from a
+// timer kept the previous sandbox's count under the new sandbox's name, which is the one thing a badge must
+// never do. Additive: an extension that keeps no module state is unchanged, and the host resets the scope
+// whether or not anything registered.
+export const extensionApiVersion = "2.6.0";

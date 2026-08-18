@@ -89,6 +89,21 @@ export const deactivateExtension = (extensionId: string): void => {
     activations.delete(extensionId);
 };
 
+/* Retire ALL of them, for the one event that invalidates every activation at once: the active sandbox changing.
+ *
+ * Not the same thing as the loader's reconcile, which retires whatever is no longer `active` AFTER a load pass
+ * has decided what runs. This runs BEFORE one, and it has to: the extensions a sandbox has installed, and which
+ * of them its owner left switched on, are that sandbox's answer. Until the new box has been asked, every tile on
+ * screen is the previous box's claim — and every timer still running is polling on its behalf. */
+export const deactivateAllExtensions = (): void => {
+    // Iterating the live keys while `deactivateExtension` deletes from underneath is safe by specification —
+    // a Map iterator visits in insertion order and dropping the entry it is ON skips nothing after it — so
+    // there is no snapshot to take, and each id goes out through the one door that unwinds it.
+    for (const extensionId of activations.keys()) {
+        deactivateExtension(extensionId);
+    }
+};
+
 export const createExtensionApi = (
     summary: ExtensionSummary,
     host: HostBindings,

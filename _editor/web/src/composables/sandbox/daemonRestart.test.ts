@@ -88,18 +88,27 @@ it(`takes the roster of a daemon that started counting again`, () => {
 
 it(`ignores a roster read answering for the daemon it has already left`, async () => {
     setAgents([summary(`a1`, 1_000)], 800);
-    let answer: (() => void) | undefined;
+    /* Two reads are in play, and they answer for two different daemons. The first is the stale one this test
+     * is about; the second is the hello's own held-wakes pull (systemEvents), issued on the line the hello just
+     * opened — so it answers with the NEW daemon's numbering, which starts low. Both are held open and both are
+     * released, because a single resolver slot would be overwritten by the second read and leave the first
+     * awaiting forever. */
+    const answers: (() => void)[] = [];
     vi.mocked(sandboxJson).mockImplementation(
         async () =>
             new Promise((resolve) => {
-                answer = () => resolve({ agents: [summary(`a1`, 1_000)], rev: 900 });
+                const rev = answers.length === 0 ? 900 : 1;
+                answers.push(() => resolve({ agents: [summary(`a1`, 1_000)], rev }));
             }),
     );
 
     const inFlight = useAgents().refresh(); // issued to the daemon that is about to go away
     hello(); // …which it does, and the connection that replaces it starts a new line
-    answer?.();
+    for (const answer of answers) {
+        answer();
+    }
     await inFlight;
+    await Promise.resolve();
 
     // The stale answer's revision 900 must not have become the mark the new daemon has to beat.
     roster([summary(`a1`, 2_000), summary(`a2`, 2_000)], 2);

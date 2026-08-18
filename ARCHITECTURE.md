@@ -555,6 +555,19 @@ up iterates, so it contributes no agent plugin dir, PATH entry, listener provide
 autoStart process; the web loader retires its activation in place. `agent` and `bin` are composed per turn and
 `environment` only at image rebuild, so those three apply later — the tab states which per extension.
 
+**Extensions are loaded per sandbox, not per page load.** Which extensions exist, which the owner left on and
+everything each has read are one sandbox's answers, so switching the active sandbox retires every activation,
+empties the extensions' own module state and loads again against the new box's list
+([useExtensionHost.ts](_editor/web/src/extension-host/useExtensionHost.ts)). That module state is the third
+tier of client state and the one with no natural owner: a rail badge has to be filled from state that outlives
+its view being unmounted, so every extension that badges keeps a module-level ref and a timer — and until this
+existed, none of them let go of it. The primitive is `sandboxRef`
+([scope.ts](_sandbox/extension-api/src/scope.ts)), the host empties it, and `sandboxScope.guard.test.ts`
+refuses any other way of keeping module state in an extension's browser-side source. The shell's own
+singletons are re-scoped from one place beside it
+([sandboxScope.ts](_editor/web/src/composables/sandbox/sandboxScope.ts)); cached reads need neither, since
+every key carries the active sandbox id.
+
 **The backend half.** An extension is no longer only where its Vue lives: a manifest `server` entry names a
 prebuilt, self-contained node ESM bundle exporting `activateServer(api, context)`
 ([server.ts](_sandbox/extension-api/src/server.ts)), and the daemon runs every enabled one inside a single

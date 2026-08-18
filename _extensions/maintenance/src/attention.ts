@@ -1,7 +1,7 @@
 import { assessReport, type ChoreVerdict, ledgerKey, unseenVerdicts } from "@intentic/sandbox-contract/chores";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/sandbox-contract";
-import { ref } from "vue";
 import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
 
@@ -43,7 +43,10 @@ const POLL_MS = 10 * 60_000;
 // survives a reload and is shared across the owner's browsers without adding a setting no user would ever type.
 const SEEN_PATH = `${STATE_DIR}/chores/seen.json`;
 
-const unseen = ref<readonly ChoreVerdict[]>([]);
+// Scoped to the sandbox it was read from: this outlives the view being unmounted (that is the whole point of a
+// badge) but must not outlive the workspace it describes — a count from the box you just left, under the name of
+// the box you just opened, is the one thing a rail badge must never say.
+const unseen = sandboxRef<readonly ChoreVerdict[]>(() => []);
 
 // No file yet — and a hand-mangled one — read as "nothing acknowledged", which api.workspace.readJson already
 // answers with undefined. Non-string values are dropped: a digest is a string, and anything else is not one.
@@ -69,8 +72,15 @@ const scan = async (): Promise<void> => {
          * It was fetching precisely what the panel renders, six times an hour, and handing it to nobody else;
          * the panel then opened on a skeleton and asked again. Filed under the panel's key, the most recent
          * poll IS what the panel paints from the moment it is opened. */
+        // Taken before the reads, asked after them: a poll issued against the previous sandbox can still be in
+        // flight when the switch lands, and its answer must not be written into the new scope.
+        const current = sandboxScopeGuard();
         const report = await api.sandbox.fetch(choresReportQuery());
-        unseen.value = unseenVerdicts(assessReport(report, Date.now()), await readSeen());
+        const verdicts = unseenVerdicts(assessReport(report, Date.now()), await readSeen());
+        if (!current()) {
+            return;
+        }
+        unseen.value = verdicts;
     } catch {
         // Leave the previous verdict standing: a transient read failure is not evidence that nothing is waiting.
     }
@@ -112,11 +122,17 @@ export const acknowledge = async (verdicts: readonly ChoreVerdict[]): Promise<vo
         return;
     }
     const api = host();
+    // A switch between the read and the write would file one workspace's acknowledgements in ANOTHER workspace's
+    // tree — the one case here that damages state on disk rather than merely painting a stale number.
+    const current = sandboxScopeGuard();
     const seen = await readSeen();
     const next = { ...seen, ...Object.fromEntries(due.map((verdict) => [ledgerKey(verdict.repo, verdict.chore.id), verdict.digest])) };
     // Unchanged means nothing new was on screen — and a write here would cost every connected browser a refetch
     // through the file push for a file whose content did not move.
     if (Object.entries(next).every(([key, digest]) => seen[key] === digest) && Object.keys(next).length === Object.keys(seen).length) {
+        return;
+    }
+    if (!current()) {
         return;
     }
     await api.workspace.write(SEEN_PATH, `${JSON.stringify(next, undefined, 2)}\n`);

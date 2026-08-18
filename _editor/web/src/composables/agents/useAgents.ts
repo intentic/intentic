@@ -38,6 +38,17 @@ const registry = shallowRef<AgentSummary[]>([]);
 const archived = shallowRef<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 
+/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
+ * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
+ * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
+ * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
+ * below — a hold appearing while the board sits open lands on the next pull.
+ *
+ * Declared up here rather than beside those actions for two reasons: `attention` counts it — the rail's badge
+ * is the only thing that can tell an owner a wake is waiting while they are anywhere else in the app — and
+ * `desync` drops it, which is what keeps one sandbox's held wakes out of another sandbox's count. */
+const heldWakes = shallowRef<AutomationApproval[]>([]);
+
 /* --- Roster ordering ----------------------------------------------------------------------------------------
  * The fleet is published as full snapshots, and THREE sources produce them: the /events stream, an explicit
  * refresh() (GET /agents), and this browser's own optimistic archive/restore. A plain full-replace lets whichever
@@ -223,10 +234,17 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
  *
  * The roster itself is the split. A sandbox SWITCH clears it (another sandbox's agents must never paint), but
  * a mere disconnect KEEPS it: the chat list blanking for the length of a reconnect turned every stall into a
- * visible outage, and the reconnect's immediate snapshot overwrites whatever staleness survived. */
+ * visible outage, and the reconnect's immediate snapshot overwrites whatever staleness survived.
+ *
+ * Held wakes take the roster's side of that split, not the unconditional side, and for the roster's own reason:
+ * they are PAINTED (the rail's Agents badge counts them, which is the only way an owner learns a wake is waiting
+ * while they are elsewhere), so blanking them for the length of a reconnect would be the same visible outage. On
+ * a switch they must go — they name run ids in a workspace the reader has left, and leaving them in made the
+ * tile claim work waiting in the box they had just closed. */
 const desync = (keepRoster: boolean): void => {
     if (!keepRoster) {
         registry.value = [];
+        heldWakes.value = [];
     }
     pending.clear();
     appliedRev = -1;
@@ -448,16 +466,6 @@ const fleet = computed<FleetAgent[]>(() => {
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
-/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
- * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
- * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
- * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
- * below — a hold appearing while the board sits open lands on the next pull.
- *
- * Declared up here rather than beside those actions because `attention` counts it: the rail's badge is the only
- * thing that can tell an owner a wake is waiting while they are anywhere else in the app. */
-const heldWakes = shallowRef<AutomationApproval[]>([]);
-
 // The board's two headline counts, kept apart on purpose (the header renders both): agents BLOCKED on the
 // user, and agents merely unread.
 const blocking = computed(() => fleet.value.filter(blocked).length);
@@ -616,7 +624,15 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     return grouped;
 });
 
-// Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
+/* Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
+ *
+ * Exported as `refreshAgents` for sandboxScope, which calls it on the seam where a switch lands. The roster
+ * itself needs no such help — the new daemon's stream frames one on connect — but HELD WAKES do, for the
+ * reason they are separate state at all: the stream knows nothing of holds, so this read is the only thing
+ * that ever fills them. A switch drops them (desync) and without this they would stay dropped until someone
+ * opened the board, which is exactly the surface the rail's badge exists to save them from having to open. */
+export const refreshAgents = async (): Promise<void> => refresh();
+
 const refresh = async (): Promise<void> => {
     const issuedAt = epoch;
     try {

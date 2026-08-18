@@ -1,10 +1,13 @@
 import { watch } from "vue";
 import { loadArchived, resetAgents, resetArchive } from "../agents/useAgents";
 import { loadAccountStatus, resetChat } from "../chat/useChat";
+import { resetCodeStats } from "../workspace/useCodeStats";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPresence } from "../usePresence";
+import { resetPushFlow } from "../workspace/usePushFlow";
 import { useSandbox } from "./useSandbox";
 import { resetTerminalOpen } from "../useLayout";
+import { resetWorkspaceLive } from "../workspace/useWorkspaceLive";
 import { resetWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
 
@@ -12,6 +15,14 @@ import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
  * state is already scoped by sandboxKey (its keys carry the active id), but the module-level singletons —
  * chat, editor buffers, the shared file-action feedback — live outside the component tree and would otherwise
  * carry one sandbox's data onto the next. Reachable + the liveness stream are re-scoped in useSandboxLiveness.
+ *
+ * TWO SUBSYSTEMS RE-SCOPE THEMSELVES rather than being reset from here, and both are named so a reader looking
+ * for the whole picture finds it: the liveness stream (useSandboxLiveness, above) and the EXTENSION HOST
+ * (extension-host/useExtensionHost). The second is not a tidiness call — an extension's state is not this
+ * app's to reset. What runs, what each one has read and what its rail tile is claiming are answers belonging
+ * to the sandbox that was asked, so the host retires every activation and empties the extensions' own scope
+ * (extension-api/scope.ts) before loading the new box's list. Importing that chain from here would also close
+ * a cycle: the host reaches apiImpl, which reaches most of these composables.
  *
  * This watch is registered at module scope (imported once from main.ts) rather than inside the shell on
  * purpose: the "add sandbox" flow changes the active sandbox while the shell is UNMOUNTED (on /setup), so a
@@ -33,6 +44,15 @@ export const resetWorkspaceScopedState = (): void => {
     // has its own snapshot to come back to.
     resetWorkspaceTabs();
     resetTerminalOpen();
+    // What moved in /work and how recently — path-keyed, and two sandboxes of the same project share every path,
+    // so this is stale rather than merely surplus: rows flashing for another box's edits, and a file viewer that
+    // believes it already holds a version it has never read.
+    resetWorkspaceLive();
+    // Outgoing work: a staged push names commits in ONE workspace, and offering to send them from another is the
+    // most consequential thing on this list.
+    resetPushFlow();
+    // Content-keyed, so never wrong — just unbounded. A switch is where it is worth letting go.
+    resetCodeStats();
 };
 
 watch(activeSandboxId, (id, previous) => {
@@ -68,3 +88,14 @@ watch([reachable, activeSandboxId], ([isReachable]) => {
         void loadArchived();
     }
 });
+
+/* HELD WAKES ARE PULL-ONLY TOO, but they are NOT read here, and the reason is worth writing down because this
+ * is where they were tried first and it does not work.
+ *
+ * A roster read carries its epoch (useAgents) — the revision line it was issued on — and drops its own answer
+ * if that line has moved. On a switch the line moves TWICE: once for the reset above, and again for the new
+ * stream's hello, which opens the new daemon's line. A read fired from this watch sits between the two, so its
+ * answer arrives on a line nobody is on and is discarded by design. The badge then undercounted for the rest
+ * of the session, which is a quieter version of the bug this whole file exists to prevent.
+ *
+ * So the read belongs after the hello, where the line is settled, and that is where it is: systemEvents. */

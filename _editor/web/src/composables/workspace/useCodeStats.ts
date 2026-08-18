@@ -100,6 +100,20 @@ const noCode = (key: string): void => {
     settle(key, {});
 };
 
+/* One workspace's readings, dropped when the browser is pointed at another. Called from
+ * resetWorkspaceScopedState.
+ *
+ * Milder than the other resets and included for a different reason. The keys carry a content fingerprint, so a
+ * kept entry is not WRONG — the same bytes count the same in any workspace. What it is, is unbounded: a cache
+ * that only ever grows, keyed by every change the browser has looked at in every sandbox it has visited this
+ * session. A switch is the natural moment to let it go, and the cost of doing so is one re-count of whatever
+ * the reader opens next. */
+export const resetCodeStats = (): void => {
+    stats.value = new Map();
+    running.clear();
+    queued.clear();
+};
+
 export function useCodeStats() {
     return {
         record,

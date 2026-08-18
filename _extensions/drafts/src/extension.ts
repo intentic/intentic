@@ -1,5 +1,5 @@
 import type { ExtensionContext, IntenticApi, ViewBadge } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { bindHost } from "./host";
 import { draftsQuery, owedOf } from "./useDrafts";
 
@@ -16,14 +16,22 @@ import { draftsQuery, owedOf } from "./useDrafts";
 
 const POLL_MS = 60_000;
 
-const badge = ref<ViewBadge | undefined>(undefined);
+// Scoped to the sandbox the queue was read from: a proposal waiting in one workspace is not a claim on the
+// reader's attention in another, and "3 waiting on you" pointing at an empty queue is the badge lying.
+const badge = sandboxRef<ViewBadge | undefined>(() => undefined);
 
 const scan = async (api: IntenticApi): Promise<void> => {
     try {
         if (!api.sandbox.reachable()) {
             return;
         }
+        // Taken before the read, asked after it: a queue answered for the box the user has just left must not
+        // become this box's count.
+        const current = sandboxScopeGuard();
         const { owed, broken } = owedOf(await api.sandbox.fetch(draftsQuery()));
+        if (!current()) {
+            return;
+        }
         badge.value =
             owed === 0
                 ? undefined

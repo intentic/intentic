@@ -1,5 +1,5 @@
 import type { Disposable } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { parseDocIndex } from "./docModel.js";
 import { host } from "./host.js";
 import { INDEX_TAIL, publishedPath, REPO_DOC_TAIL, underRepo } from "./paths.js";
@@ -32,7 +32,11 @@ export interface DocumentPresence {
     readonly draft: boolean;
 }
 
-const documents = ref<ReadonlyMap<string, DocumentPresence>>(new Map());
+/* Scoped to the sandbox these paths were read from, and this is the one where carrying over is most visibly
+ * wrong: the keys are workspace paths, the Workspace tree draws an icon on every row it has an entry for, and
+ * two sandboxes of the same monorepo share nearly every path. A switch would leave the tree offering documents
+ * that were generated in the box the reader just left. */
+const documents = sandboxRef<ReadonlyMap<string, DocumentPresence>>(() => new Map());
 
 /* The published set, as package dir → its one-liner. ONE read per repository serves every package it documents,
  * because the derived index (`intentic-docs check` writes it; nothing authors it) already holds both the list and
@@ -79,6 +83,9 @@ const scan = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
+        // Taken before the reads, asked after them: this is up to three reads per repository, so the poll is
+        // still in flight long after a switch that happens while it runs.
+        const current = sandboxScopeGuard();
         const next = new Map<string, DocumentPresence>();
         await Promise.all(
             /* THE `docs` FACT DECIDES WHETHER THE PUBLISHED SIDE IS READ AT ALL. The daemon already knows which
@@ -108,6 +115,9 @@ const scan = async (): Promise<void> => {
                 }
             }),
         );
+        if (!current()) {
+            return;
+        }
         documents.value = next;
     } catch {
         // Leave the previous map standing: a transient read failure is not evidence the documents are gone.

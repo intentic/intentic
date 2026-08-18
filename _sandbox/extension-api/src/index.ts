@@ -4,6 +4,7 @@ export * from "./engines.js";
 export * from "./facts.js";
 export * from "./host.js";
 export * from "./route.js";
+export * from "./scope.js";
 export * from "./server.js";
 export * from "./stream.js";
 export * from "./version.js";

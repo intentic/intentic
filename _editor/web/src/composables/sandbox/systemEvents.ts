@@ -2,7 +2,7 @@ import { fileBoundQueryKeys, runtimeBoundQueryKeys, staleQueryKeys, staleRuntime
 import { contributedFileBindings } from "../../extension-host/fileBindings";
 import { emitRefsChanged } from "../../extension-host/refEvents";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
-import { desyncAgents, setAgents } from "../agents/useAgents";
+import { desyncAgents, refreshAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
@@ -54,6 +54,17 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
              * the tunnel and reconnects, and that branch stands down without a word to the roster. Resetting
              * here instead of in each branch is what stops the next branch from forgetting. */
             desyncAgents();
+            /* And the one piece of board state the stream will never send: the WAKES HELD for approval. The
+             * roster arrives in frames, so it repaints itself; holds are read from GET /agents and from
+             * nowhere else, so every moment that invalidates them has to pull them back itself.
+             *
+             * Here, and deliberately not on the reachable seam beside the archive's read (sandboxScope says
+             * why): a read issued before this frame is issued on the OLD revision line and drops its own
+             * answer when this line opens. After a sandbox switch — which clears the holds, because they name
+             * one daemon's automations — that left the rail's Agents badge undercounting until somebody opened
+             * the board, which is the trip the badge exists to save. A daemon restart is the same story with
+             * the same fix. */
+            void refreshAgents();
             // The advertised route surface first: it gates features for the rest of this connection. Shapes
             // ride with it — same frame, same lifetime, and read by the same store.
             setDaemonRoutes(event.routes, event.shapes);

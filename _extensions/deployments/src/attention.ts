@@ -1,6 +1,6 @@
 import { type DeployOverviewResponse, DeployOverviewResponseSchema, DeploySeenResponseSchema, DEPLOYMENTS_BASE } from "./contract";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { ref } from "vue";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { incidents, incidentTooltip, topTier, unseenIncidents } from "./incidents";
 import { host } from "./host";
 
@@ -16,10 +16,14 @@ import { host } from "./host";
 // the minute is timely, and the view's own faster polling is what serves someone actually watching.
 const POLL_MS = 60_000;
 
-const boards = ref(new Map<string, DeployOverviewResponse>());
+// Both scoped to the sandbox they describe. A Komodo capability belongs to the box it is configured in, so
+// after a switch the previous box's boards are not merely stale — they are keyed by capability ids this box may
+// not have, and the tile they badge is one this box may not show.
+const boards = sandboxRef(() => new Map<string, DeployOverviewResponse>());
 // Which capabilities to poll. Written by detect() on every facts poll, so a connection added or removed in
-// /capabilities starts or stops being watched without a reload.
-let watched: readonly string[] = [];
+// /capabilities starts or stops being watched without a reload — and emptied on a switch, so the first poll
+// after one asks about this box's connections rather than the last box's.
+const watched = sandboxRef<readonly string[]>(() => []);
 
 // Nothing in here may reject: it runs detached on a timer, where a throw becomes an unhandled rejection with
 // no one to catch it. That includes reading the host handle — an api shape without a sandbox transport (a test
@@ -30,8 +34,11 @@ const refresh = async (): Promise<void> => {
         if (!api.sandbox.reachable()) {
             return;
         }
+        // Taken before the reads, asked after them: one round trip per connected Komodo, so a switch has room to
+        // land between the first and the last.
+        const current = sandboxScopeGuard();
         const next = new Map(boards.value);
-        for (const capability of watched) {
+        for (const capability of watched.value) {
             try {
                 next.set(capability, DeployOverviewResponseSchema.parse(await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability}/overview`)));
             } catch {
@@ -39,6 +46,9 @@ const refresh = async (): Promise<void> => {
                 // known board standing too, rather than blanking it. A flapping tile is worse than a slightly
                 // stale one, and "we could not ask" is not "nothing is wrong".
             }
+        }
+        if (!current()) {
+            return;
         }
         boards.value = next;
     } catch {
@@ -49,8 +59,8 @@ const refresh = async (): Promise<void> => {
 // Called from detect() — the host's own per-facts-poll callback, which is the only place that knows which
 // Komodo capabilities are currently connected.
 export const watchConnections = (capabilities: readonly string[]): void => {
-    const added = capabilities.filter((capability) => !watched.includes(capability));
-    watched = capabilities;
+    const added = capabilities.filter((capability) => !watched.value.includes(capability));
+    watched.value = capabilities;
     // A newly connected Komodo should badge on its first render, not a minute later.
     if (added.length > 0) {
         void refresh();

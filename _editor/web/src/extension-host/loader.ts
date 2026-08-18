@@ -4,10 +4,11 @@ import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
-import { createExtensionApi, deactivateExtension, type HostBindings } from "./apiImpl";
+import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
 
 /* Loads and activates the installed extensions from ONE list — GET /extensions, which enumerates the
@@ -50,6 +51,16 @@ export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
 // nothing should hold a seat open for the tile the owner just switched off.
 export const extensionsLoaded = shallowRef(false);
 
+/* WHICH SANDBOX THE LOADER IS WORKING FOR, counted rather than named — the count is all any check here needs,
+ * and naming it would make this module a second place that decides what the active sandbox is.
+ *
+ * A load pass is several awaits long: the list, then a settings read, a bundle fetch and an activate() per
+ * extension. The user can switch in the middle of any of them, and `retireExtensions` bumps this when they do.
+ * Every step that would put something on screen, or declare the result final, is conditional on the count not
+ * having moved since the pass began — otherwise a switch merely interleaves two sandboxes' extensions instead
+ * of replacing one with the other. */
+let scope = 0;
+
 // Whether an extension has anything to register in the shell. A manifest with UI contributions and no code to
 // run is a real defect; one without is simply daemon-side.
 const hasUi = (manifest: ExtensionManifest): boolean =>
@@ -59,10 +70,19 @@ const hasUi = (manifest: ExtensionManifest): boolean =>
 
 /* Run one extension's activate() against the manifest-gated api. Settings load FIRST so api.settings.get is
  * synchronous from the first activate() line — but only when the manifest declares any, so the nine
- * compiled-in extensions (none of which declare settings) don't cost a daemon round-trip each at every boot. */
-const runActivate = async (summary: ExtensionSummary, host: HostBindings, module: ExtensionModule): Promise<void> => {
+ * compiled-in extensions (none of which declare settings) don't cost a daemon round-trip each at every boot.
+ *
+ * `startedIn` is the pass's scope (see `scope` below). Registration is the last thing checked before it
+ * happens, because it is the step that puts something on screen: a pass overtaken by a sandbox switch has
+ * already had every earlier activation retired, and one more registering here would be a tile from the old box
+ * appearing on the new box's rail seconds after the switch. Silent rather than a throw — the caller discards
+ * this whole pass's report anyway, so an `error` status would be a lie nobody reads. */
+const runActivate = async (summary: ExtensionSummary, host: HostBindings, module: ExtensionModule, startedIn: number): Promise<void> => {
     if ((summary.manifest.contributes?.settings ?? []).length > 0) {
         await extensionSettingsStore(summary.id).load();
+    }
+    if (startedIn !== scope) {
+        return;
     }
     const { api, context } = createExtensionApi(summary, host);
     await module.activate(api, context);
@@ -89,7 +109,7 @@ const importBundle = async (summary: ExtensionSummary): Promise<ExtensionModule>
     }
 };
 
-const loadOne = async (summary: ExtensionSummary, host: HostBindings): Promise<ExtensionHostStatus> => {
+const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn: number): Promise<ExtensionHostStatus> => {
     const extensionId = extensionIdOf(summary.manifest);
     const status = { id: summary.id, extensionId };
     // The owner's switch is checked before anything else — it is the one state they can act on from the tab,
@@ -118,7 +138,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings): Promise<E
             : { ...status, state: `agent-only` };
     }
     try {
-        await runActivate(summary, host, compiled ?? (await importBundle(summary)));
+        await runActivate(summary, host, compiled ?? (await importBundle(summary)), startedIn);
         return { ...status, state: `active` };
     } catch (error) {
         return { ...status, state: `error`, detail: errorMessage(error, String(error)) };
@@ -130,14 +150,14 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings): Promise<E
  * rebuilt app against an older daemon) or when GET /extensions failed outright, and the answer is the same
  * either way: activate them from this build so the shell still has its rail, and report that their switch and
  * settings have nowhere to live. */
-const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, detail: string): Promise<ExtensionHostStatus[]> =>
+const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, detail: string, startedIn: number): Promise<ExtensionHostStatus[]> =>
     Promise.all(
         [...builtinModules]
             .filter(([extensionId]) => !listed.has(extensionId))
             .map(async ([extensionId, module]): Promise<ExtensionHostStatus> => {
                 const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, source: `builtin`, enabled: true };
                 try {
-                    await runActivate(summary, host, module);
+                    await runActivate(summary, host, module, startedIn);
                     return { id: extensionId, extensionId, state: `unlisted`, detail };
                 } catch (error) {
                     return { id: extensionId, extensionId, state: `error`, detail: errorMessage(error, String(error)) };
@@ -145,7 +165,30 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
             }),
     );
 
+/* EVERYTHING THIS HOST HOLDS ON BEHALF OF ONE SANDBOX, dropped in a single synchronous step — the switch's
+ * first half, before the new box has been asked anything.
+ *
+ * Synchronous is the requirement, not a detail. Converging by simply re-running the loader would leave the
+ * previous sandbox's tiles on the rail for the length of a round trip, each one still badged with its own
+ * numbers, and would leave an extension the new sandbox does not have running until a load pass got around to
+ * retiring it. The user reads the rail in that window; a tile that is still there is a tile they will click.
+ *
+ * The three things dropped are the three things that are per-sandbox: the activations (tiles, viewers,
+ * documents, commands, and the timers behind every badge), the extensions' own module state (scope.ts — the
+ * refs a badge is computed from, which outlive an unmounted view precisely so that they can), and this
+ * module's record of what ran. `extensionsLoaded` going false is what tells the rail its composition is
+ * provisional again, so railMemory holds the seats open instead of letting the column collapse and re-grow. */
+export const retireExtensions = (): void => {
+    scope += 1;
+    deactivateAllExtensions();
+    resetSandboxScope();
+    extensionStatuses.value = [];
+    loadedCommits.value = new Map();
+    extensionsLoaded.value = false;
+};
+
 export const loadExtensions = async (host: HostBindings): Promise<void> => {
+    const startedIn = scope;
     // The one fetch whose failure is caught rather than propagated: it decides what runs, so losing it must
     // degrade to "run what this build has" instead of leaving the shell with no extensions and no explanation.
     // The reason rides the statuses below, so the tab shows it.
@@ -156,15 +199,21 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
     } catch (error) {
         listFailure = errorMessage(error, String(error));
     }
+    // The list came from a sandbox that is no longer the active one — activating anything off it would put that
+    // box's tiles back on the rail the switch just cleared.
+    if (startedIn !== scope) {
+        return;
+    }
     const listed = new Set(summaries.map((summary) => extensionIdOf(summary.manifest)));
     const [listedStatuses, unlistedStatuses] = await Promise.all([
-        Promise.all(summaries.map((summary) => loadOne(summary, host))),
+        Promise.all(summaries.map((summary) => loadOne(summary, host, startedIn))),
         loadUnlisted(
             listed,
             host,
             listFailure === undefined
                 ? `this sandbox image doesn't list it — the image and the app are on different versions, so it can't be switched off here`
                 : `the extension list couldn't be loaded (${listFailure}) — activated from this app build alone`,
+            startedIn,
         ),
     ]);
     /* Reconcile, which is what makes this re-runnable after a toggle instead of "reload to apply": anything not
@@ -175,6 +224,13 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
         if (status.state !== `active`) {
             deactivateExtension(status.extensionId);
         }
+    }
+    /* A switch that landed while the activations above were running has already retired every one of them, and
+     * this pass's report is about a sandbox nobody is looking at. Publishing it would put the old box's rows in
+     * the Extensions tab and — through `extensionsLoaded` — tell the rail that a composition it has not even
+     * started assembling is final. */
+    if (startedIn !== scope) {
+        return;
     }
     extensionStatuses.value = [...listedStatuses, ...unlistedStatuses];
     loadedCommits.value = new Map(summaries.map((summary) => [summary.id, summary.commit]));
