@@ -2,10 +2,11 @@
 /* Both gates, made runnable everywhere the code is written.
  *
  * `pnpm typecheck` runs this and then `turbo run typecheck`; `pnpm test` runs this and then `turbo run test
- * --only`. Nine invariants live here, and all of them exist because the checks that catch drift used to run in
- * exactly one place — CI, on main, after the merge. (5 through 9 — the release-heading contract, the
+ * --only`. Eleven invariants live here, and all of them exist because the checks that catch drift used to run
+ * in exactly one place — CI, on main, after the merge. (5 through 11 — the release-heading contract, the
  * undeclared-shrink gate on the wire contract, the armed-hooks check, the reusable-workflow permission
- * ceiling, and the runner npm will attest a publish from — are documented at their own blocks below.)
+ * ceiling, the runner npm will attest a publish from, the tag pushes GitHub never delivers, and the packages a
+ * lockfile keeps after nothing depends on them — are documented at their own blocks below.)
  *
  * All but invariant 2 need no node_modules and no network, which is what lets `--checks-only` run them from a
  * `pre-push` hook and from a CI job that has not installed anything yet (ci.yml, the `preflight` job).
@@ -251,8 +252,8 @@ for (const { name, dir, pkg } of packages) {
  *
  * A line scanner rather than a YAML parser because this has to run before `pnpm install` — see the header. The
  * indentation IS the grammar here (2/4/6/8), and each level's anchor makes the levels mutually exclusive, so a
- * line is read as exactly one of importer, block, entry or specifier. Everything outside `importers:` — the
- * `packages:` and `snapshots:` regions, which are far larger and far less regular — is never looked at. */
+ * line is read as exactly one of importer, block, entry, specifier or version. The `packages:` and `snapshots:`
+ * regions below — far larger and far less regular — are read by invariant 11 alone, and by their own scanner. */
 const unquote = (value) => (/^'.*'$/s.test(value) ? value.slice(1, -1).replaceAll("''", "'") : /^".*"$/s.test(value) ? value.slice(1, -1) : value);
 
 const LEVELS = [
@@ -261,11 +262,15 @@ const LEVELS = [
     { depth: 6, of: "entry" },
 ];
 const SPECIFIER = /^ {8}specifier:[ \t]*(.*?)[ \t]*$/;
+// The line under it: what that specifier RESOLVED to, which is where invariant 11 starts walking.
+const VERSION = /^ {8}version:[ \t]*(.*?)[ \t]*$/;
 
+const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n");
 const recorded = new Map();
+const installed = [];
 let inImporters = false;
 let at, block, entry;
-for (const line of readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n")) {
+for (const line of lockfile) {
     // A column-0 key ends the region as surely as it starts it; blank lines are neither and are left alone.
     if (/^\S/.test(line)) {
         inImporters = line.startsWith("importers:");
@@ -294,6 +299,10 @@ for (const line of readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n"
     const specifier = SPECIFIER.exec(line);
     if (specifier) {
         recorded.get(at)?.get(block)?.set(entry, unquote(specifier[1]));
+    }
+    const version = VERSION.exec(line);
+    if (version) {
+        installed.push([entry, unquote(version[1])]);
     }
 }
 
@@ -823,6 +832,86 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
     }
 }
 
+/* Invariant 11. EVERY PACKAGE THE LOCKFILE CARRIES IS REACHABLE FROM AN IMPORTER.
+ *
+ * pnpm rewrites `importers:` on every install and prunes the two regions below it only when it RESOLVES. A
+ * `--frozen-lockfile` install compares importers against the manifests and touches nothing else; so does
+ * `--lockfile-only`, and so does `--force`. Delete a package from the workspace, commit the lockfile the
+ * shortcut hands back, and its whole subtree stays in the file — installed, and still owed a decision in
+ * `allowBuilds` for any build script inside it.
+ *
+ * That is what took five jobs down at once. Removing the VSCode extension dropped `@vscode/vsce-sign` from
+ * `allowBuilds` while `ovsx -> @vscode/vsce -> @vscode/vsce-sign` stayed in the lockfile, and every job died on
+ * ERR_PNPM_IGNORED_BUILDS in `pnpm install` — the first step of all of them — before it ran a single check. The
+ * author's own tree was green: the package was gone from every manifest, so nothing local ever said otherwise.
+ * `pnpm install` (a real resolution, no flags) is what prunes, and this is what says it was skipped.
+ *
+ * Reachability, not a name match, because the subtree is the point: 169 entries went dead behind those three,
+ * and only the graph knows which. Roots are the `version:` lines invariant 3's scanner collects; edges are the
+ * `dependencies:`/`optionalDependencies:` of `snapshots:`, whose values are versions of the key beside them —
+ * except when they name a package outright, which is how pnpm writes an alias (`'@openai/codex-linux-x64':
+ * '@openai/codex@0.147.0-linux-x64'`). A leading digit is the whole difference, and `file:` (an injected
+ * workspace package, which does get an entry) parts company with `link:` (a symlinked one, which does not). */
+const idOf = (name, value) => (value.startsWith("link:") ? undefined : value.startsWith("file:") || /^\d/.test(value) ? `${name}@${value}` : value);
+
+const edges = new Map();
+let inSnapshots = false;
+let snapshot, group;
+for (const line of lockfile) {
+    if (/^\S/.test(line)) {
+        inSnapshots = line.startsWith("snapshots:");
+        continue;
+    }
+    if (!inSnapshots || !line.trim()) {
+        continue;
+    }
+    // 2 spaces is a package id, 4 a dependency group, 6 an edge — the same grammar, one region down.
+    const id = /^ {2}(\S.*?):(?: \{\})?[ \t]*$/.exec(line);
+    if (id) {
+        snapshot = unquote(id[1]);
+        edges.set(snapshot, []);
+        continue;
+    }
+    if (/^ {4}\S/.test(line)) {
+        group = line.trim().replace(/:$/, "");
+        continue;
+    }
+    const edge = group === "dependencies" || group === "optionalDependencies" ? /^ {6}(\S.*?):[ \t]*(.*?)[ \t]*$/.exec(line) : null;
+    const to = edge && idOf(unquote(edge[1]), unquote(edge[2]));
+    if (to) {
+        edges.get(snapshot)?.push(to);
+    }
+}
+
+const reached = new Set();
+for (const pending = installed.map(([name, version]) => idOf(name, version)).filter(Boolean); pending.length > 0;) {
+    const id = pending.pop();
+    if (reached.has(id)) {
+        continue;
+    }
+    reached.add(id);
+    pending.push(...(edges.get(id) ?? []).filter((to) => !reached.has(to)));
+}
+
+const stranded = [];
+if (edges.size === 0) {
+    stranded.push(`pnpm-lock.yaml has no readable "snapshots:" region — the lockfile format moved and this check needs rewriting`);
+}
+// An id reached but absent from `snapshots:` means the walk read an edge it should not have, and every orphan
+// this run reports is then suspect. Said as its own line rather than folded in, because the fix is different.
+for (const id of reached) {
+    if (!edges.has(id)) {
+        stranded.push(`${id} is depended on by something in "snapshots:" but has no entry of its own — this check misread the lockfile`);
+    }
+}
+if (stranded.length === 0) {
+    for (const id of edges.keys()) {
+        if (!reached.has(id)) {
+            stranded.push(id);
+        }
+    }
+}
+
 // Every report before any exit, so one run says everything that is wrong rather than the first thing.
 const reports = [
     ["Test files outside the program or the budget they belong in", problems],
@@ -834,6 +923,12 @@ const reports = [
     ["A called workflow asks for more than its caller grants — Actions fails this before any job starts", overreach],
     ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
     ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],
+    [
+        "pnpm-lock.yaml still carries packages nothing depends on — run `pnpm install` (a real resolution prunes them) and " +
+            "commit it. They are installed on every runner, and each build script inside them is one CI demands a decision " +
+            "for in `allowBuilds`",
+        stranded,
+    ],
 ];
 if (reports.some(([, lines]) => lines.length > 0)) {
     for (const [heading, lines] of reports.filter(([, some]) => some.length > 0)) {
@@ -852,6 +947,7 @@ console.log(`git hooks: every .githooks file is executable, so the pre-push gate
 console.log(`workflow permissions: every reusable-workflow call grants what the workflow it calls asks for`);
 console.log(`npm provenance: no job publishes an attested tarball from the self-hosted fleet`);
 console.log(`publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver`);
+console.log(`lockfile reachability: all ${edges.size} packages in the lockfile are depended on by something`);
 
 /* Everything below needs node_modules and writes to the tree; everything above reads the checkout and nothing
  * else. `--checks-only` is that line — it is what the pre-push hook and the CI preflight job run. */
