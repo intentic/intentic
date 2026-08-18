@@ -1,5 +1,6 @@
 use tauri::{
-    AppHandle, Manager, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, LogicalSize, Manager, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -20,11 +21,10 @@ use crate::state::CloseAction;
  * Before this, a first-time install ended with an unasked-for window called "Sandbox Manager" in front of the
  * one the user was reading, which is where they stopped.
  *
- * THE ONE EXCEPTION IS THE SETUP OVERLAY, and it is the rule rather than a hole in it. An install is not
- * somewhere the user went, it is something happening to the app they are in, so the launcher covers the
- * workspace instead of replacing it: same rectangle, no decorations, the workspace still on screen and dimmed
- * by the card drawn over it (`set_setup_frame`). Two mapped windows, one thing on screen — which is what the
- * rule was always about. */
+ * THE ONE EXCEPTION IS THE SETUP WINDOW, and it is the rule rather than a hole in it. An install is not
+ * somewhere the user went, it is something happening to the app they are in, so the launcher comes up IN FRONT
+ * of the workspace instead of replacing it — but as an ordinary small window over it, not as a sheet across
+ * the screen (`set_setup_frame`). Two mapped windows, one thing being asked of the user. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
@@ -36,6 +36,25 @@ pub const CONFIRM_CLOSE: &str = "confirm-close";
 /// The frame both faces share when neither has one to inherit — a cold start, on either face.
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (900.0, 600.0);
+
+/* THE SETUP WINDOW'S OWN FRAME — a dialog, sized to the card in it rather than to the screen.
+ *
+ * This used to be the workspace's whole rectangle, undecorated and topmost, with the card floating in a dim
+ * that filled it. On the path that matters most — a first install, started from a link in the browser, with no
+ * workspace window open yet — there was nothing to take a rectangle from, so it opened at DEFAULT_SIZE
+ * instead: 1440×900 logical, which on a 150% display is 2160×1350 physical and covers a laptop screen whole.
+ * Undecorated meant no title bar to drag it by and no button to minimise it, and topmost put it over every
+ * other application, so an install that legitimately takes minutes took the machine with it.
+ *
+ * So the setup face is a window a person can deal with: its own small frame, decorations on, movable,
+ * minimisable, resizable, and never topmost. It still comes up centred on the workspace when there is one, so
+ * it still reads as something happening to the app you are in rather than a second app arriving.
+ *
+ * Measured against what App.vue draws in it — the card at its `max-w-xl`, plus the ten-step progress list and
+ * the requirements list a stopped Windows install adds under it. The minimum is small enough to leave the
+ * window useful when it is shrunk, since the card scrolls inside it. */
+const SETUP_SIZE: (f64, f64) = (620.0, 640.0);
+const SETUP_MIN: (f64, f64) = (420.0, 380.0);
 
 /// The dialog's frame. Fixed, because everything in it is: two choices and a line of small print — measured
 /// against the rendered content rather than guessed, with slack for a wider font. Taller on Windows, the one
@@ -51,11 +70,13 @@ const CONFIRM_SIZE: (f64, f64) = if cfg!(target_os = "windows") {
 /// is the same rectangle for two windows wearing the same decorations.
 fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
     if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
-        if let Ok(position) = other.outer_position() {
-            let _ = window.set_position(position);
-        }
-        if let Ok(size) = other.inner_size() {
-            let _ = window.set_size(size);
+        if frame_is_inheritable(&other) {
+            if let Ok(position) = other.outer_position() {
+                let _ = window.set_position(position);
+            }
+            if let Ok(size) = other.inner_size() {
+                let _ = window.set_size(size);
+            }
         }
         let _ = window.show();
         let _ = window.set_focus();
@@ -64,6 +85,17 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
     }
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+/// Whether `window`'s frame is one to hand on. The SETUP frame is not: it is a dialog sized to its card, and a
+/// workspace that inherited it would come back from an install shrunk to the size of the installer that ran.
+/// It still steps aside — it just leaves nothing behind.
+fn frame_is_inheritable(window: &WebviewWindow) -> bool {
+    window.label() != LAUNCHER
+        || !window
+            .app_handle()
+            .state::<crate::state::AppState>()
+            .in_setup_frame()
 }
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
@@ -233,7 +265,11 @@ fn ask_before_closing(app: &AppHandle) {
     }
     match builder.build() {
         Ok(window) => {
-            center_over(&window, parent.as_ref());
+            center_over(
+                &window,
+                parent.as_ref(),
+                LogicalSize::new(CONFIRM_SIZE.0, CONFIRM_SIZE.1),
+            );
             let _ = window.show();
             let _ = window.set_focus();
         }
@@ -244,16 +280,21 @@ fn ask_before_closing(app: &AppHandle) {
     }
 }
 
-/// The middle of the window being asked about, not the middle of the screen — a dialog that opens away from
-/// the thing it is about reads as belonging to something else.
-fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>) {
+/// The middle of the window being asked about, not the middle of the screen — a window that opens away from
+/// the thing it is about reads as belonging to something else. Falls back to the middle of the screen when
+/// there is nothing to be about, which is an ordinary state for both callers: a confirmation with no workspace
+/// behind it, and a setup started from a link that opened this app cold.
+///
+/// `size` is what the window will be WEARING when it is shown, passed in rather than read back off it. A
+/// window that has just been asked to resize does not answer with its new size on every platform — GTK
+/// resizes on its own clock — and a setup placed against the size it is leaving lands half a window off.
+fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>, size: LogicalSize<f64>) {
+    let own: PhysicalSize<u32> = size.to_physical(window.scale_factor().unwrap_or(1.0));
     let placed = over.and_then(|over| {
-        let position = over.outer_position().ok()?;
-        let frame = over.outer_size().ok()?;
-        let own = window.outer_size().ok()?;
-        Some(tauri::PhysicalPosition::new(
-            position.x + (frame.width as i32 - own.width as i32) / 2,
-            position.y + (frame.height as i32 - own.height as i32) / 2,
+        Some(centered(
+            over.outer_position().ok()?,
+            over.outer_size().ok()?,
+            own,
         ))
     });
     match placed {
@@ -264,6 +305,20 @@ fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>) {
             let _ = window.center();
         }
     }
+}
+
+/// Where a window of `own` goes to sit in the middle of the rectangle at `position` of size `frame`. Signed
+/// throughout: a window wider than the one it is centred on gets a negative offset, which is the correct
+/// answer — the two stay concentric — where clamping it to zero would hang it off to one side.
+fn centered(
+    position: tauri::PhysicalPosition<i32>,
+    frame: PhysicalSize<u32>,
+    own: PhysicalSize<u32>,
+) -> tauri::PhysicalPosition<i32> {
+    tauri::PhysicalPosition::new(
+        position.x + (frame.width as i32 - own.width as i32) / 2,
+        position.y + (frame.height as i32 - own.height as i32) / 2,
+    )
 }
 
 /// The dialog's answer, arriving from the one command it can call (commands.rs). Cancelling is not an answer
@@ -281,8 +336,9 @@ pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
 }
 
 /// The app's own face, built once and shown by whichever of its two screens is asking (`show_launcher` for
-/// the manager, `set_setup_frame` for the setup overlay). Never shown from here: the two want the window in
-/// two different places, and a window that appears before it has been put somewhere flashes in the old one.
+/// the manager, `set_setup_frame` for the setup window). Never shown from here: the two want the window in
+/// two different places and at two different sizes, and one that appears before it has been put somewhere
+/// flashes in the old one.
 fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
         return Some(window);
@@ -291,12 +347,14 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         .title("Intentic")
         .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
         .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
-        /* TRANSPARENT FROM BIRTH, because there is no making it transparent afterwards — it is a window
-         * flag, not a property. The setup face needs it: it is a dim OVER the workspace rather than a screen
-         * instead of it, and the workspace showing through is the whole of what makes it read as one thing
-         * happening to the app rather than a second app arriving. The manager face paints an opaque surface
-         * across the whole window, so it neither notices nor pays for this. */
-        .transparent(true)
+        /* The frame between "window mapped" and "webview painted", which is white by default and reads as a
+         * flash on a dark screen. Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css),
+         * which index.html pins — the same colour the confirmation dialog paints for the same reason.
+         *
+         * This window used to be built `transparent` instead, for a setup face that was a dim across the
+         * workspace. Nothing is drawn through it now: both faces paint an opaque surface, and the setup one is
+         * a window of its own rather than a sheet over another. */
+        .background_color(tauri::window::Color(15, 13, 10, 255))
         .visible(false)
         .build();
     match result {
@@ -327,111 +385,68 @@ pub fn show_launcher(app: &AppHandle) {
     }
 }
 
-/* THE SETUP SCREEN IS AN OVERLAY, NOT A SCREEN — the correction this window most needed.
+/* THE SETUP SCREEN IS A WINDOW IN FRONT, NOT A SHEET ACROSS THE SCREEN.
  *
  * It used to arrive the way the manager does: the launcher took the workspace's frame and the workspace
  * stepped aside. That is right for a manager, which is somewhere you GO, and wrong for an install, which is
- * something that HAPPENS to the app you are already in. Wearing a title bar, a taskbar entry and a full
- * window's worth of chrome, it read as a second application that had opened itself on top of the first —
- * with the one thing every installer has, a way out in the corner, nowhere to be found.
+ * something that HAPPENS to the app you are already in — it read as a second application that had opened
+ * itself on top of the first.
  *
- * So the setup face keeps the workspace on screen and covers it: same rectangle, no decorations, and
- * App.vue draws the dim and the card with its × (the window is transparent from birth for exactly this).
- * Nothing is hidden, so there is nothing to bring back — closing the card is the overlay stepping off the
- * window it was over.
+ * The first correction went too far the other way. The setup face became an undecorated, topmost window on
+ * the workspace's exact rectangle, with App.vue drawing a dim across it, and on the path that matters most it
+ * was unusable: a first install starts from a link in the BROWSER, so there is no workspace window to take a
+ * rectangle from, and the window opened at its default 1440×900 — the better part of a laptop screen at any
+ * display scale above 100%, over every other application, with no title bar to move it by and no way to
+ * minimise it. An install takes minutes; that took the machine for all of them.
+ *
+ * So this is a window a person can deal with: its own dialog-sized frame (`SETUP_SIZE`), decorations on,
+ * movable, minimisable, resizable, never topmost — centred on the workspace when one is up, which is what
+ * keeps it reading as something happening to the app you are in. It has a taskbar entry, because a window
+ * that can be minimised has to have somewhere to be minimised TO.
  *
  * Driven from App.vue rather than fixed at open, because which face is up is that screen's own state: a
  * setup can arrive at a manager window, and a finished one hands the window back.
  */
-pub fn set_setup_frame(app: &AppHandle, overlay: bool) {
+pub fn set_setup_frame(app: &AppHandle, setup: bool) {
     let Some(window) = app.get_webview_window(LAUNCHER) else {
         return;
     };
-    let _ = window.set_decorations(!overlay);
-    let _ = window.set_resizable(!overlay);
-    if !overlay {
-        let _ = window.set_always_on_top(false);
+    let state = app.state::<crate::state::AppState>();
+    let was_setup = state.in_setup_frame();
+    // Before the frame moves, so anything reading it while this runs already sees which one it is wearing.
+    state.mark_setup_frame(setup);
+    if !setup {
+        let _ = window.set_min_size(Some(LogicalSize::new(MIN_SIZE.0, MIN_SIZE.1)));
+        /* And a full window's SIZE back, when this is a setup frame being taken off. `show_launcher` swaps in
+         * the workspace's frame straight after and would make this redundant — but only when there is a
+         * workspace on screen to take one from, and the tray's Manager item reaches here with no promise of
+         * that. Without it the manager face draws in a 620-wide window, under its own 900 minimum. */
+        if was_setup {
+            let _ = window.set_size(LogicalSize::new(DEFAULT_SIZE.0, DEFAULT_SIZE.1));
+        }
         return;
     }
-    // Over the workspace exactly, so the dim lands on the window it is dimming. With none on screen (a link
-    // that opened this app cold) the overlay is simply the window, and its own dim is its background.
-    if let Some(behind) = app
+    // The minimum comes down FIRST: it is the floor the size below has to clear, and the manager's floor is
+    // wider than this whole window.
+    let _ = window.set_min_size(Some(LogicalSize::new(SETUP_MIN.0, SETUP_MIN.1)));
+    let size = LogicalSize::new(SETUP_SIZE.0, SETUP_SIZE.1);
+    let _ = window.set_size(size);
+    /* Centred on the workspace, or on the screen when there is none — computed from the size just ASKED for
+     * rather than read back off the window. GTK resizes on its own clock, so a read-back here answers with
+     * the frame this window had a moment ago, and the setup that opened cold would be placed as if it were
+     * still 1440 wide. The title bar's height is not accounted for and does not need to be: it is a handful
+     * of pixels on a placement whose only job is "in the middle of what it is about". */
+    let behind = app
         .get_webview_window(WORKSPACE)
-        .filter(|behind| behind.is_visible().unwrap_or(false))
-    {
-        if let Ok(position) = behind.outer_position() {
-            let _ = window.set_position(position);
-        }
-        /* The workspace's OUTER rectangle is what has to be covered, where `swap_in` matches inner sizes — the
-         * difference is the whole reason this is not that function. Two windows wearing the same decorations
-         * cover each other when their inner sizes match; this one has just taken its decorations off, so
-         * asking for the workspace's inner size would leave the height of a title bar of it showing below.
-         *
-         * Asking for the outer size directly is not the answer either, on the one platform where taking the
-         * decorations off does not take the whole frame off — see `undecorated_frame`. */
-        if let (Ok(target), Ok(outer), Ok(inner)) = (
-            behind.outer_size(),
-            window.outer_size(),
-            window.inner_size(),
-        ) {
-            let _ = window.set_size(inner_size_for_outer(
-                target,
-                undecorated_frame(outer, inner),
-            ));
-        }
-    }
-    // On top of the window it is about, the way a modal is — and only for as long as it is one.
-    let _ = window.set_always_on_top(true);
+        .filter(|behind| behind.is_visible().unwrap_or(false));
+    center_over(&window, behind.as_ref(), size);
     let _ = window.show();
     let _ = window.set_focus();
 }
 
-/* THE FRAME AN UNDECORATED WINDOW IS STILL WEARING — a number on exactly one of the two platforms this app
- * ships to, and a number this window can only be ASKED for on that same one.
- *
- * WINDOWS. Taking the decorations off does not take the frame off. The window keeps the invisible resize band
- * its shadow is drawn in — 8px a side at 96 dpi, a pixel more at the top on Windows 11, and more again at any
- * display scale above 100% — and that band sits OUTSIDE the client area. The size a window is asked for is
- * its INNER one, with whatever frame it wears added back outside it, so an overlay handed the workspace's
- * outer rectangle comes up exactly one band too large: 16×9 pixels on the release runner, which is the
- * "an overlay, not a second window" assertion failing there while every Linux run of it passed. The band is
- * measured rather than assumed because it is a function of the display's scale, and it can be measured here
- * because this platform answers both questions on the thread that has already taken the decorations off — so
- * what comes back is the frame the overlay is about to WEAR.
- *
- * LINUX, NOTHING — and asking would be worse than not asking. An undecorated GTK window has no frame left to
- * account for, so there is nothing to take off; and the two numbers it would answer with are read from a
- * cache the window manager refreshes when the window is next configured, which the decorations coming off has
- * not reached yet. On a cold overlay that cache has never been written at all. On the path where a setup
- * arrives at a manager window it holds the title bar the window is about to LOSE, and taking that off would
- * leave the overlay short by exactly a title bar — the same failure this whole function exists to prevent,
- * one platform over.
- */
-fn undecorated_frame(outer: PhysicalSize<u32>, inner: PhysicalSize<u32>) -> PhysicalSize<u32> {
-    if !cfg!(target_os = "windows") {
-        return PhysicalSize::new(0, 0);
-    }
-    PhysicalSize::new(
-        outer.width.saturating_sub(inner.width),
-        outer.height.saturating_sub(inner.height),
-    )
-}
-
-/// THE SIZE TO ASK FOR, so that this window's OUTER rectangle comes out as `target`: the rectangle to cover,
-/// less the frame that will be added back outside whatever is asked for (`undecorated_frame`).
-///
-/// Saturating, because a frame wider than the rectangle it has to fit inside is not a size to ask for in u32
-/// arithmetic — it is a wrap to four billion pixels, and a window that never comes back. Nothing asks for one,
-/// and that is exactly the kind of thing a desktop hands you when a monitor is unplugged mid-setup.
-fn inner_size_for_outer(target: PhysicalSize<u32>, frame: PhysicalSize<u32>) -> PhysicalSize<u32> {
-    PhysicalSize::new(
-        target.width.saturating_sub(frame.width),
-        target.height.saturating_sub(frame.height),
-    )
-}
-
-/// Bring the setup overlay up over the workspace. The parked request is already in state; this is the frame.
-pub fn show_overlay(app: &AppHandle) {
+/// Bring the setup window up in front of the workspace. The parked request is already in state; this is the
+/// frame.
+pub fn show_setup(app: &AppHandle) {
     if launcher(app).is_some() {
         set_setup_frame(app, true);
     }
@@ -476,7 +491,7 @@ fn park_setup(app: &AppHandle, args: SetupArgs) {
         .pending
         .lock()
         .unwrap() = Some(args);
-    show_overlay(app);
+    show_setup(app);
     let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
 }
 
@@ -526,44 +541,34 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use tauri::PhysicalPosition;
 
-    /// What a window does with the size it is asked for: an INNER size, with the frame added back outside it.
-    fn outer_of(inner: PhysicalSize<u32>, frame: (u32, u32)) -> PhysicalSize<u32> {
-        PhysicalSize::new(inner.width + frame.0, inner.height + frame.1)
-    }
-
+    /// The setup window opens in the MIDDLE of the workspace, not on its corner — which is what says it is
+    /// about that window. Asserted on the arithmetic because the windows themselves exist only in a running
+    /// desktop session; the smoke tiers assert the same property against real ones.
     #[test]
-    fn the_overlay_ends_up_on_the_workspaces_rectangle() {
+    fn the_setup_window_lands_in_the_middle_of_the_workspace() {
         let workspace = PhysicalSize::new(1440u32, 900u32);
-        // No frame at all (GTK, and a Windows window with the shadow off) and the frame an undecorated
-        // Windows window with its shadow wears: 8px a side at 96 dpi plus the pixel Windows 11 keeps at the
-        // top, then the same again at 150%, where every one of those numbers is bigger.
-        for frame in [(0, 0), (16, 9), (24, 13)] {
-            let asked = inner_size_for_outer(workspace, PhysicalSize::new(frame.0, frame.1));
-            assert_eq!(outer_of(asked, frame), workspace, "frame {frame:?}");
-        }
+        let setup = PhysicalSize::new(620u32, 640u32);
+        let at = centered(PhysicalPosition::new(100, 50), workspace, setup);
+        assert_eq!(at, PhysicalPosition::new(100 + 410, 50 + 130));
+        // Concentric: the gap left on one side is the gap left on the other.
+        assert_eq!(
+            at.x - 100,
+            (workspace.width as i32 - setup.width as i32) - (at.x - 100)
+        );
     }
 
-    /// A frame wider than the rectangle it has to fit inside is not a size to ask for in u32 arithmetic — it
-    /// is a wrap to four billion pixels, and a window that never comes back. Nothing asks for one, and that
-    /// is exactly the kind of thing a desktop hands you when a monitor is unplugged mid-setup.
+    /// A window CENTRED on a smaller one hangs off it on both sides — the two stay concentric, where clamping
+    /// the offset to zero would shove it into a corner. The workspace can be dragged smaller than the setup
+    /// window's minimum, so this is a state a user can reach, not a hypothetical.
     #[test]
-    fn a_target_smaller_than_the_frame_asks_for_nothing_rather_than_wrapping() {
-        let asked = inner_size_for_outer(PhysicalSize::new(10, 4), PhysicalSize::new(16, 9));
-        assert_eq!(asked, PhysicalSize::new(0, 0));
-    }
-
-    /// THE BAND IS WINDOWS' ALONE, and this is the assertion that says so on the runner that cannot see it.
-    /// The same two rectangles mean "a shadow's resize band, 16 by 9" there and "a cache still describing the
-    /// title bar this window is losing" on Linux, so only one of them is a frame to take off a target.
-    #[test]
-    fn only_windows_has_a_frame_left_to_take_off() {
-        let frame = undecorated_frame(PhysicalSize::new(1016, 709), PhysicalSize::new(1000, 700));
-        let expected = if cfg!(target_os = "windows") {
-            PhysicalSize::new(16, 9)
-        } else {
-            PhysicalSize::new(0, 0)
-        };
-        assert_eq!(frame, expected);
+    fn a_window_larger_than_the_one_it_is_about_stays_concentric() {
+        let at = centered(
+            PhysicalPosition::new(0, 0),
+            PhysicalSize::new(400, 300),
+            PhysicalSize::new(620, 640),
+        );
+        assert_eq!(at, PhysicalPosition::new(-110, -170));
     }
 }

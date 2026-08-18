@@ -6,11 +6,11 @@ A Windows and Linux desktop app that installs the sandbox, and the thing that up
 sign in, click **Run on this computer**.
 
 ```
-   ONE WINDOW — the manager takes the workspace's frame; an install covers it
+   ONE WINDOW — the manager takes the workspace's frame; an install stands in front of it
 
 ┌─ Intentic ────────────────────────────┐   ┌─ Intentic — This computer ───────────┐
 │  app.intentic.dev — the hosted SPA    │   │  ● work     ▶ ■  update  logs        │
-│  ┌─ Setting up work ───────────× ┐    │ ⇄ │  folders · ports · image · agent     │
+│  ┌─ Setting up work ────── ─ □ × ┐    │ ⇄ │  folders · ports · image · agent     │
 │  │ Step 5 of 10   ~3 min   31%   │    │   └──────────────────────────────────────┘
 │  │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░ │    │
 │  │ ✓ Check Docker                │    │
@@ -70,28 +70,34 @@ not, and clicking a handoff reads as the window changing screens.
 
 **An install is the one thing that does not swap, and that is the same rule rather than a hole in it.** Setting
 up a sandbox is not somewhere the user went, it is something happening to the app they are already in — so the
-launcher face *covers* the workspace instead of replacing it: same rectangle, decorations off, the workspace
-still on screen and dimmed by the card drawn over it (`set_setup_frame`, and the window is built
-`transparent` from birth because that cannot be turned on later). Two mapped windows, one thing on screen,
-which is what the rule was always about. It wore a full window once — title bar, taskbar entry, no way out in
-the corner — and read as a second application that had opened itself on top of the first. The card carries the
-**×** every installer has; it closes the overlay and nothing else, because the script is a process on this
-machine rather than something the window is holding up.
+launcher face comes up *in front of* the workspace instead of replacing it: its own small frame
+(`SETUP_SIZE`), centred on the workspace, with that window left on screen behind it (`set_setup_frame`). Two
+mapped windows, one thing being asked of the user, which is what the rule was always about. It wore a full
+window once — title bar, taskbar entry, no way out in the corner — and read as a second application that had
+opened itself on top of the first. The card carries the **×** every installer has; it steps back to the
+workspace and nothing else, because the script is a process on this machine rather than something the window
+is holding up.
 
-Both smoke tiers assert the geometry rather than a window count, since "same rectangle" is the only part of
-this a test outside the process can see. *Same rectangle* is measured on the OUTER one, and the size a window
-is asked for is its INNER one — so on Windows the overlay takes a frame off the target before it asks
-(`undecorated_frame`, `inner_size_for_outer`). Taking the decorations off there does not take the frame off:
-the window keeps the invisible resize band its shadow is drawn in, and sized without allowing for it the
-overlay came up 16 by 9 pixels larger than the window it was covering, which is where the Windows tier caught
-it. Nothing comes off anywhere else, and deliberately so — an undecorated GTK window has no frame left to
-account for, and the size it would report before the decorations land describes the title bar it is about to
-lose rather than the frame it will wear.
+**It is an ordinary window, and that is the correction after the correction.** The first fix made the setup
+face undecorated, topmost and exactly the workspace's rectangle, with a dim drawn across it. On the path that
+matters most that was unusable: a first install starts from a link in the *browser*, so there is no workspace
+window to take a rectangle from and the sheet opened at the app's default 1440×900 — which at Windows' usual
+150% scaling is 2160×1350 physical, over every other application, with no title bar to move it by and no
+button to minimise it. An install runs for minutes and it took the machine for all of them. So the setup
+window is movable, minimisable, resizable and never topmost, and its card scrolls inside it — the requirements
+list a stopped Windows install draws is taller than the window it arrives in.
+
+Both smoke tiers assert the geometry rather than a window count, since size and position are the only part of
+this a test outside the process can see: the setup window is much smaller than the workspace and centred on
+it. Asserting *equal* rectangles is what the sheet made sense of, and the tiers said so right up until the
+sheet went — worth remembering when reading their history, because a test that agrees with the code is not the
+same as a test that agrees with the user.
 
 Three more consequences worth knowing:
 
 - **A cold start with the SPA's own link opens no workspace first.** `intentic://setup` in argv means the setup
-  screen is what appears — otherwise the app would load the SPA only to cover it a frame later.
+  window is what appears — otherwise the app would load the SPA only to stand in front of it a frame later.
+  With nothing behind it the window centres on the screen instead, and it is the same small frame either way.
 - **A parked setup runs on arrival — when the SPA's own window asked for it.** That button is the consent;
   asking again on a screen the user did not open is what made the handoff feel like a second, unrelated
   installer. It is also the *only* direction that consent covers, which is what [the link's
@@ -121,7 +127,7 @@ own window is not decoration: it is the only way to draw the thing silently, and
 than one button. Three things follow from it:
 
 - **It is a dialog, not a third face.** Off the taskbar, owned by the frame it is about, centred over it, and
-  destroyed on answer — so it is one thing on screen for the same reason the install overlay is. It is titled
+  destroyed on answer — so it is one thing on screen for the same reason the setup window is. It is titled
   `Close Intentic?`, which deliberately does not start with the workspace title those assertions match on.
 - **Two answers, and remembering one retires the question.** *Keep it in the tray* and *Quit Intentic*, with
   **always do this** storing the choice in `close-action.json` — outside `Settings`, which the launcher UI
@@ -321,12 +327,12 @@ report anything.
 
 ## Layout
 
-- `src/` — the app's own UI (Vue + `@intentic/ui`): the setup overlay and the sandbox manager, switched on
+- `src/` — the app's own UI (Vue + `@intentic/ui`): the setup window and the sandbox manager, switched on
   whether a setup is in hand. One component of its own (`SetupProgress.vue`, the install's plan and bar) over
   one pure model (`setupPlan.ts`), one bridge module (`desktop.ts`) and one reporter (`analytics.ts`); the
   sandbox rows, their verbs and their output pane all come from the kit, so this app has no second opinion
   about them. The archived three-persona wizard is not here.
-- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the frame swap, the install overlay and link
+- `src-tauri/src/` — the Tauri 2 shell. `windows.rs` (the frame swap, the install window and link
   interception), `scripts.rs`
   (the script runner), `commands.rs` (the UI's backend), `auth.rs` (the sign-in handoff), `state.rs`,
   `setup_link.rs`.

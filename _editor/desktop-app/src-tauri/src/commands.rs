@@ -512,12 +512,12 @@ pub fn workspace_open(app: AppHandle) {
     crate::windows::show_workspace(&app);
 }
 
-/// Which face this window is wearing: the setup overlay, or the ordinary manager window. App.vue calls it
+/// Which face this window is wearing: the setup window, or the ordinary manager one. App.vue calls it
 /// alongside the title for the same reason the title is set there — the screen that is up is that file's
 /// state, and the frame has to follow it rather than be guessed at when the window opens (windows.rs).
 #[tauri::command]
-pub fn setup_frame(app: AppHandle, overlay: bool) {
-    crate::windows::set_setup_frame(&app, overlay);
+pub fn setup_frame(app: AppHandle, setup: bool) {
+    crate::windows::set_setup_frame(&app, setup);
 }
 
 /// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing

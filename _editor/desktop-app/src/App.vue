@@ -60,9 +60,9 @@ import {
  *
  * They are two SCREENS rather than two sections, and they are not the same KIND of thing. The manager is
  * somewhere you go: an ordinary window, in the frame the workspace was filling. A setup is something that
- * happens to the app you are already in, so it is an OVERLAY — a dim and a card over the workspace, which
- * stays on screen behind it (windows.rs). It wore a full window once, title bar and taskbar entry and all,
- * and read as a second application that had opened itself on top of the first.
+ * happens to the app you are already in, so it is a small window in FRONT of the workspace, which stays on
+ * screen behind it (windows.rs) — movable and minimisable like any other, because an install runs for
+ * minutes and nothing here is worth taking someone's screen for.
  *
  * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
  * button would be a set of decisions to make about a machine whose sandbox is still being built.
@@ -138,9 +138,9 @@ const setupMode = computed(() => pending.value !== undefined || activeRun.value 
  * say which screen is up — which is what the desktop smoke tier asserts against, having deliberately no test
  * hook to read instead.
  *
- * The FRAME follows it too, and for the same reason it is decided here: setup is an overlay over the
- * workspace and the manager is an ordinary window, and which of the two is up is this file's state — a setup
- * can arrive at a manager window, and a finished one hands the window back. */
+ * The FRAME follows it too, and for the same reason it is decided here: setup is a dialog-sized window in
+ * front of the workspace and the manager fills the frame the workspace was in, and which of the two is up is
+ * this file's state — a setup can arrive at a manager window, and a finished one hands the window back. */
 watchEffect(() => {
     void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — This computer`);
     void setupFrame(setupMode.value);
@@ -550,13 +550,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- SETUP — an OVERLAY over the workspace, not a screen instead of it (windows.rs). The window is
-         chromeless and transparent over the frame the workspace is still filling, so this dim and this card
-         are the whole of what the user sees change: the app they were in, with an installer over it. Which
-         is also why the card carries its own × — a window with no title bar that cannot be dismissed from
-         inside is the one shape worse than the one this replaced. -->
-    <div v-if="setupMode" class="flex h-dvh items-center justify-center overflow-auto bg-black/55 p-6 text-content">
-        <Card class="flex w-full max-w-lg flex-col gap-3 shadow-2xl">
+    <!-- SETUP — a small window of its own, in front of the workspace rather than instead of it (windows.rs).
+         It used to be a dim across the workspace's whole rectangle, which on the path that matters most — an
+         install started from the browser, with no workspace open yet — was a chromeless sheet over the entire
+         screen that could not be moved or minimised. So the card fills an ordinary movable window now, and
+         the dim is gone with the sheet that needed it.
+         `m-auto` rather than `items-center`: it centres the card the same way, and keeps the TOP of it
+         reachable when the content is taller than the window, where centring in a scroll container cuts it. -->
+    <div v-if="setupMode" class="flex h-dvh flex-col overflow-auto bg-canvas p-4 text-content">
+        <Card class="m-auto flex w-full max-w-xl flex-col gap-3">
             <div class="flex items-start gap-2.5">
                 <Icon name="bolt" class="mt-0.5 text-primary-400" />
                 <div class="min-w-0 flex-1">
@@ -566,8 +568,9 @@ onUnmounted(() => {
                         once it answers.
                     </p>
                 </div>
-                <!-- Where every installer keeps it. It closes the overlay and nothing else: the script is a
-                     process on this machine, not something this window is holding up. -->
+                <!-- Where every installer keeps it, next to the window's own close for people who look here
+                     first. Either one steps back to the workspace and nothing else: the script is a process
+                     on this machine, not something this window is holding up. -->
                 <button
                     type="button"
                     aria-label="Close"
@@ -590,7 +593,9 @@ onUnmounted(() => {
             </p>
             <p v-if="info && !info.dockerReady && !expired" class="flex items-start gap-2 text-2xs text-warning">
                 <Icon name="box" class="mt-0.5 shrink-0" />
-                <span v-if="info.os === `windows`">Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span>
+                <span v-if="info.os === `windows`"
+                    >Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span
+                >
                 <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
             </p>
             <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />

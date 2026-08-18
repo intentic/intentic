@@ -99,10 +99,10 @@ export const machineReport = async (): Promise<MachineReport | undefined> => {
     return raw === null ? undefined : (JSON.parse(raw) as MachineReport);
 };
 export const workspaceOpen = (): Promise<void> => invoke(`workspace_open`);
-/* Which face this window is wearing. The setup screen is an OVERLAY over the workspace — chromeless, over
- * the frame it was started from, with the workspace left on screen behind it — and the manager is an
- * ordinary window; windows.rs does the moving, this says which is up. */
-export const setupFrame = (overlay: boolean): Promise<void> => invoke(`setup_frame`, { overlay });
+/* Which face this window is wearing. The setup screen is a small window of its own, centred on the workspace
+ * and movable like any other; the manager fills the frame the workspace was in. windows.rs does the moving,
+ * this says which is up. */
+export const setupFrame = (setup: boolean): Promise<void> => invoke(`setup_frame`, { setup });
 // `remember` is the dialog's "always do this": it makes this answer the × from now on, and takes the question
 // away for good. Without it the answer applies to this close only.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });

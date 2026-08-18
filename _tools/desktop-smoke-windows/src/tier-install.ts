@@ -73,6 +73,13 @@ const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 /** One window's rectangle as a string, so two of them can be compared (and printed) as one value. */
 const box = (window: WindowInfo): string => `${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
 
+/** Its centre — what "this window is about that one" is asserted on, two windows of different sizes having no
+ * corner in common. */
+const middle = (window: WindowInfo): { x: number; y: number } => ({
+    x: window.bounds.x + window.bounds.width / 2,
+    y: window.bounds.y + window.bounds.height / 2,
+});
+
 const describeWindows = async (): Promise<string> => {
     const titles = await windowTitles();
     return titles.length === 0 ? `(no windows)` : titles.map((title) => `- ${title}`).join(`\n`);
@@ -241,34 +248,52 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.detail(await describeWindows());
         }
 
-        /* …OVER the workspace, covering it exactly. The whole window model as one assertion, and worth one
-         * because the failure it guards is invisible to every other assertion here: a setup screen that opens
-         * as a second window somewhere else on screen satisfies the search above perfectly well, and what the
-         * user gets is an unasked-for window beside the one they were reading.
+        /* …IN FRONT OF the workspace, and much smaller than it. The whole window model as one assertion, and
+         * worth one because the failure it guards is invisible to every other assertion here: a setup screen
+         * that opens as a second full-size window somewhere else satisfies the search above perfectly well,
+         * and what the user gets is an unasked-for window beside the one they were reading.
          *
-         * Setup is an OVERLAY — the workspace stays up and this sits on its frame — so "same rectangle" is the
-         * property, and comparing bounds is the only thing that can tell the two apart from outside the
-         * process. Taken after the search, so the move has landed. */
-        const rectangles = async (): Promise<{ setup?: string; workspace?: string }> => {
+         * This was asserted as "the same rectangle" while setup was a chromeless sheet on the workspace's own
+         * frame. That is the shape it replaced, and this platform is where it was worst: a first install comes
+         * from a link in the browser with no workspace open, so the sheet came up at the app's default
+         * 1440×900 — which at Windows' usual 150% scaling is 2160×1350 physical, over every other window, with
+         * no title bar to move it by and no button to minimise it. What is asserted now is what makes it
+         * usable: a dialog-sized window, centred on the app it is about. Taken after the search, so the move
+         * has landed. */
+        const faces = async (): Promise<{ setup?: WindowInfo; workspace?: WindowInfo }> => {
             const own = (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
             const setup = own.find((window) => window.title.includes(SETUP_TITLE));
             // Everything that is not the setup screen is the workspace: this app has exactly two faces, and
             // the manager's is not up while a setup is.
             const workspace = own.find((window) => !window.title.includes(SETUP_TITLE));
-            return { ...(setup && { setup: box(setup) }), ...(workspace && { workspace: box(workspace) }) };
+            return { ...(setup && { setup }), ...(workspace && { workspace }) };
         };
-        const overlaid = async (): Promise<boolean> => {
-            const { setup, workspace } = await rectangles();
-            return setup !== undefined && setup === workspace;
+        const dialogOverWorkspace = async (): Promise<boolean> => {
+            const { setup, workspace } = await faces();
+            if (setup === undefined || workspace === undefined) {
+                return false;
+            }
+            // Smaller in both directions by a real margin — the workspace opens at 1440×900 and this at
+            // 620×640, so anything near the workspace's own width is the sheet coming back. And centred on it,
+            // which is what says the window is ABOUT the app rather than merely near it; a whole setup
+            // window's slack each way, so the desktop's own placement nudge is not a failure.
+            const smaller = setup.bounds.width < workspace.bounds.width * 0.75 && setup.bounds.height < workspace.bounds.height;
+            const [own, behind] = [middle(setup), middle(workspace)];
+            return smaller && Math.abs(own.x - behind.x) <= setup.bounds.width && Math.abs(own.y - behind.y) <= setup.bounds.height;
         };
-        if (!(await harness.untilTrue(15, `the setup screen covers the workspace — an overlay, not a second window`, overlaid))) {
+        if (
+            !(await harness.untilTrue(
+                15,
+                `the setup screen is a dialog-sized window centred on the workspace, not a sheet over the screen`,
+                dialogOverWorkspace,
+            ))
+        ) {
             /* The two rectangles FIRST, because they are the whole of what this assertion compared and a list
              * of titles cannot say which way it went wrong. A missing one reads as a window that never came;
-             * two that differ by a frame's worth of pixels reads as an overlay sized against the wrong
-             * rectangle — the failure this assertion was written for, and the one the Linux tier prints
-             * geometry for. */
-            const { setup, workspace } = await rectangles();
-            harness.detail(`setup:     ${setup ?? `(no such window)`}\nworkspace: ${workspace ?? `(no such window)`}`);
+             * a setup one the size of the workspace reads as the sheet, which is the failure this assertion
+             * exists for and the one the Linux tier prints geometry for. */
+            const { setup, workspace } = await faces();
+            harness.detail(`setup:     ${setup ? box(setup) : `(no such window)`}\nworkspace: ${workspace ? box(workspace) : `(no such window)`}`);
             harness.detail(await describeWindows());
         }
 
