@@ -36,6 +36,19 @@ const MAP_COMPARISON = [
             Switching it on loads a small plugin that teaches the assistant iq's commands and nudges it to reach for them. The Search box in your
             workspace uses iq either way — this only changes what the assistant does.
         </p>
+        <!-- Why this setting carries a measurement control, and the one rule that makes its arms honest. It used
+             to be said on the row itself, in three lines of 11px text wedged between the switch and its own
+             result — which is the densest possible place to explain a method, and the reason the row was
+             unreadable. A dialog has room for it; a settings row does not. -->
+        <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
+            <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+            <p class="text-2xs text-muted">
+                <span class="font-medium text-content">Measure it</span> runs a slice of conversations without the teaching, as a control. There's no
+                other way to know what it's worth — the same conversation can't be replayed to see how it would have searched otherwise. The arm is
+                picked once and held for the whole conversation, so a session that already learned iq can never later be counted as a cold one. Both
+                groups need about 30 conversations before a figure appears, and it appears under the switch itself.
+            </p>
+        </div>
 
         <!-- ② Project map — one question earlier than ①. Worth being precise about two things: that it is read
              fresh rather than stored (that is the whole reason it isn't a note you'd write yourself), and that

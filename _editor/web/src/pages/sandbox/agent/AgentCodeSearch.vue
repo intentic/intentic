@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ui, Row, RowGroup } from "@intentic/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
-import { asPercent, commitPercent } from "./numberInputs";
-import { readingVerdict } from "../savingsChart";
+import { asPercent } from "./numberInputs";
+import { verdictsOf } from "../savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
+import MeasurementPanel, { type PanelReading } from "./MeasurementPanel.vue";
 
 /* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Two settings that compose and are easy to confuse, which is
  * exactly why they share a group: the first teaches the assistant to search with iq instead of grep, the second
@@ -21,20 +22,22 @@ const { savings } = useSavings({});
 // Search teaching is session state, so this holdout flips whole conversations and never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 
-/* WHAT THE EXPERIMENT SAYS SO FAR, one line per reading, worded exactly as the Savings card words it — the two
- * screens read the same report and a settings row that paraphrased it would be a second opinion. */
-const searchReadings = computed(() => {
+/* WHAT THE EXPERIMENT SAYS SO FAR, worded exactly as the Savings card words it — the two screens read the same
+ * report and a settings row that paraphrased it would be a second opinion.
+ *
+ * Through `verdictsOf` rather than mapping every metric as a peer: this experiment reports TWO readings of one
+ * subject (searches per turn, and searches before the first file), and drawn at equal weight they read as two
+ * findings. <MeasurementPanel> gives the first the headline and the second a line under it. */
+const searchReadings = computed<PanelReading[]>(() => {
     const experiment = savings.value?.search;
     if (experiment === undefined) {
         return [];
     }
-    // The arms travel alongside the verdict because this row has no chart to carry them, and a figure with no
-    // account of how much data is behind it is one a reader cannot weigh. On the Savings card the bars say it.
-    return experiment.metrics.map((reading) => ({
-        verdict: readingVerdict(reading, experiment.minTurns, experiment.sampleUnit),
-        on: reading.on.turns,
-        off: reading.off.turns,
-    }));
+    const { headline, also } = verdictsOf(experiment);
+    return [headline, ...also].flatMap((verdict, index) => {
+        const reading = experiment.metrics[index];
+        return reading === undefined ? [] : [{ verdict, on: reading.on.turns, off: reading.off.turns }];
+    });
 });
 </script>
 
@@ -52,43 +55,19 @@ const searchReadings = computed(() => {
                     @update:model-value="(value: boolean) => patch({ iqSearch: value })"
                 />
             </template>
-            <template #below>
-                <template v-if="settings?.iqSearch === true">
-                    <label class="flex items-center justify-between gap-3">
-                        <span class="flex min-w-0 flex-col">
-                            <span class="text-xs text-content">Measure it</span>
-                            <span class="text-2xs text-muted">
-                                Run this % of conversations without the iq teaching. The arm stays fixed for the conversation so a session that
-                                already learned it cannot later count as cold; both arms need ~30 conversations.
-                            </span>
-                        </span>
-                        <span class="flex shrink-0 items-center gap-1">
-                            <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                :value="iqSearchHoldoutPercent"
-                                :class="ui.input('w-16 text-right text-xs')"
-                                @change="
-                                    (event: Event) =>
-                                        commitPercent(event, iqSearchHoldoutPercent, (iqSearchHoldout: number) => patch({ iqSearchHoldout }))
-                                "
-                            />
-                            <span class="text-xs text-muted">%</span>
-                        </span>
-                    </label>
-                    <div v-if="searchReadings.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2 text-2xs">
-                        <!-- The verdict is the only span, and the rest of the sentence is the paragraph's own
-                             text: two adjacent elements separated by a line break have that break COMPILED AWAY,
-                             which ran "Measuring" into "searches per turn". Same shape the Savings card uses. -->
-                        <p v-for="row in searchReadings" :key="row.verdict.unit" class="text-muted">
-                            <span class="tabular-nums" :class="row.verdict.tone === `success` ? `text-success` : `text-muted`">{{
-                                row.verdict.value
-                            }}</span>
-                            {{ row.verdict.unit }} — {{ row.verdict.detail }}, over {{ row.on }} taught vs {{ row.off }} cold conversations.
-                        </p>
-                    </div>
-                </template>
+            <!-- The same measurement block the terse steer carries, and the same one line about it. Why the arm
+                 has to stay pinned for a whole conversation is a paragraph, and it now lives in the (i) where a
+                 paragraph can be read — on the row it was three lines of 11px text between a switch and its
+                 own result. -->
+            <template v-if="settings?.iqSearch === true" #below>
+                <MeasurementPanel
+                    :percent="iqSearchHoldoutPercent"
+                    :readings="searchReadings"
+                    note="Runs this share of conversations without it, as a control."
+                    on-label="taught"
+                    off-label="cold"
+                    @commit="(iqSearchHoldout: number) => patch({ iqSearchHoldout })"
+                />
             </template>
         </Row>
 
@@ -112,10 +91,15 @@ const searchReadings = computed(() => {
             <template #below>
                 <!-- No holdout here, unlike its neighbour. What the map removes is the opening look around, and
                      that is one or two calls on the first message of a conversation — too small a slice of too
-                     few turns for a split to say anything before the layout it describes has changed. -->
+                     few turns for a split to say anything before the layout it describes has changed.
+
+                     ONE LINE, AND IT IS THE ONE A SWITCH OWES: where to go and look at what it just turned on.
+                     The other half of what stood here — that the map follows the project the conversation was
+                     opened in — is a fact about the feature rather than about the click, and the (i) already
+                     gives it a paragraph of its own. Two sentences at one size, one after the other, were read
+                     as a single wrapped paragraph anyway, which is how the second one went unread. -->
                 <p v-if="settings?.workspaceMap === true" class="text-2xs text-muted">
-                    Sent once per conversation, above your first message, where you can read exactly what it said. Follows where the conversation was
-                    opened: the project you are in gets mapped, the rest of the workspace is named on one line.
+                    Sent once per conversation, above your first message — you can read exactly what it said.
                 </p>
             </template>
         </Row>

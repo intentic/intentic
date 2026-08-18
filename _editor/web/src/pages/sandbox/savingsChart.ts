@@ -188,12 +188,12 @@ export const readingVerdict = (
             reading.controlTurnsNeeded === undefined
                 ? `keep collecting`
                 : `~${formatCompact(reading.controlTurnsNeeded)} more control ${sampleUnit} would settle it`;
-        return {
-            value: `No effect`,
-            unit: `measurable in ${unit}`,
-            tone: `muted`,
-            detail: `anything real is inside ±${reading.marginPct}pp (95%) — ${wait}`,
-        };
+        /* SAME GRAMMAR AS THE MEASURED VERDICT'S DETAIL below — margin first, then the one thing that qualifies
+         * it, joined by a middot. It used to read "anything real is inside ±35.1pp (95%) — ~5.8K more control
+         * turns would settle it": a clause, a figure and a second clause in one breath, which is exactly the
+         * run-on the settings rows could not lay out. The framing it drops is carried by the headline this
+         * detail sits under ("No effect measurable in prose written per turn"), so nothing is lost. */
+        return { value: `No effect`, unit: `measurable in ${unit}`, tone: `muted`, detail: `±${reading.marginPct}pp (95%) · ${wait}` };
     }
 
     return {

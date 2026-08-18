@@ -137,7 +137,7 @@ describe(`verdictsOf`, () => {
     it(`says so when the arms are big enough and the effect still isn't resolvable`, () => {
         const verdict = headlineOf([reading({ off: { turns: 31, mean: 28_100 }, marginPct: 35.1 })]);
         expect(verdict).toMatchObject({ value: `No effect`, unit: `measurable in prose written per turn`, tone: `muted` });
-        expect(verdict.detail).toBe(`anything real is inside ±35.1pp (95%) — keep collecting`);
+        expect(verdict.detail).toBe(`±35.1pp (95%) · keep collecting`);
     });
 
     /* "Keep collecting" is not advice a reader can act on — three more days and three more years look the same
@@ -146,7 +146,7 @@ describe(`verdictsOf`, () => {
     it(`says how much more control data a withheld delta would need`, () => {
         const verdict = headlineOf([reading({ off: { turns: 31, mean: 28_100 }, marginPct: 35.1, controlTurnsNeeded: 5_800 })]);
         expect(verdict).toMatchObject({ value: `No effect`, tone: `muted` });
-        expect(verdict.detail).toBe(`anything real is inside ±35.1pp (95%) — ~5.8K more control turns would settle it`);
+        expect(verdict.detail).toBe(`±35.1pp (95%) · ~5.8K more control turns would settle it`);
     });
 
     it(`treats an experiment that isn't running as a verdict of its own, not a missing card`, () => {
