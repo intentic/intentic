@@ -977,6 +977,16 @@ jobs:
       KOMODO_URL: ${{ secrets.KOMODO_URL }}
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
       KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+      # WHERE THE SMOKE TEST'S BROWSER LANDS, and the answer must not be $HOME. `playwright install` defaults to
+      # `$HOME/.cache/ms-playwright`, which in a job container is `/github/home` — a directory the runner process
+      # KEEPS BETWEEN JOBS. So this job left a Chromium sitting where every later job on that runner would find
+      # it, and ci-base ships none of Chromium's shared libraries. The sandbox's browser suites stand down when
+      # `chromium.executablePath()` does not exist; here it existed, so they launched it and died on
+      # `libglib-2.0.so.0: cannot open shared object file`. Two suites that are correct in git failed an hour
+      # after this job ran, in a pipeline that never asked for a browser.
+      # The shared cache instead: warm across runs (this download is ~200 MB), and invisible to every job that
+      # does not name this variable. pnpm-setup clears the strays the old default already wrote.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -28,6 +28,23 @@ runs:
         pnpm --version
         find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + 2>/dev/null || true
 
+    - name: Drop a stray Playwright browser cache
+      shell: bash
+      run: |
+        # A BROWSER UNDER $HOME IS ALWAYS A TRAP HERE, because ci-base ships none of Chromium's shared
+        # libraries — a binary that exists and cannot start is strictly worse than no binary at all. The
+        # sandbox's browser suites gate on `existsSync(chromium.executablePath())` and stand down where the
+        # image has no Chromium; a leftover download turns that gate into a false positive and the launch then
+        # dies on `libglib-2.0.so.0: cannot open shared object file`, reporting a browser bug that is really a
+        # poisoned cache.
+        #
+        # It got poisoned the same way the corepack cache above does: $HOME is /github/home, which the runner
+        # process keeps between jobs, so `images-platform` installing a browser for the sign-in smoke handed one
+        # to every job that landed on that runner afterwards. That job now installs into
+        # PLAYWRIGHT_BROWSERS_PATH; this line is what clears the strays already on the fleet, which nobody is
+        # otherwise going to remove by hand.
+        rm -rf "$HOME/.cache/ms-playwright"
+
     - name: Install
       shell: bash
       run: |

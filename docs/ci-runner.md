@@ -347,8 +347,18 @@ Tauri toolchains — is baked into `ci-base` and `ci-desktop`.
   and the next job repays it once.
 - **xwin** — `/ci-cache/xwin` holds the MSVC CRT + Windows SDK that cargo-xwin splats for the release's Windows
   cross-build (~1.1 GB). Downloaded once, read by every run, never modified. It is here rather than at its
-  default under `$HOME/.cache` because that dies with the container, which cost every release a 2m40s
-  re-download.
+  default under `$HOME/.cache` because that is cleared out from under a job often enough to cost every release
+  a 2m40s re-download. It is not cleared *reliably* — see the entry below, where the same directory keeping
+  its contents across two pipelines is what broke a job that never asked for a browser.
+- **playwright** — `/ci-cache/ms-playwright` holds the Chromium that `images-platform`'s sign-in smoke drives
+  (~200 MB with its headless shell and ffmpeg), named by that job's `PLAYWRIGHT_BROWSERS_PATH`. Keeping the
+  download warm is the smaller half of the reason. The larger half is that **the default is not private to the
+  job**: `$HOME` in a container job is `/github/home`, a host directory the runner process reuses, so a browser
+  installed here outlived the job and was still on disk for the next pipeline's `verify` — which runs in
+  ci-base, ships none of Chromium's shared libraries, and whose browser suites decide whether to run by asking
+  whether `chromium.executablePath()` exists. They found one, launched it, and died on `libglib-2.0.so.0`. Two
+  suites that were correct in git failed on a host they never touched. pnpm-setup now clears
+  `$HOME/.cache/ms-playwright` on every job, which is what heals a runner that already carries one.
 
 Concurrent access itself is fine: the pnpm store is built for many projects sharing one store, turbo's entries
 are content-addressed files written via atomic rename, and cargo's registry is designed for many builds
