@@ -48,16 +48,29 @@ const report = ref<MigrationReport | undefined>(undefined);
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 
-/* Probed once on mount rather than polled: enrolling a computer is not something that happens while this card
- * is open, and a live probe costs a round trip to every machine the owner owns. Failure is silence — the
- * manual path below is complete on its own, and a card that shouted about an unreachable laptop would be
- * pushing people away from the flow that works. */
-onMounted(async () => {
-    if (!isOwner.value) {
+/* Probed on mount, and again whenever the owner asks — not polled: enrolling a computer is not something that
+ * happens while this card is open, but WAKING one is. A laptop is asleep more often than not, so the row for
+ * an offline machine carries its own re-check rather than making the owner reload the page to use the very
+ * shortcut the card just told them about.
+ *
+ * `probed` gates the no-computers sentence: before the first answer, "you have no computers connected" would
+ * be a claim about a request that has not come back yet. */
+const probed = ref(false);
+const probing = ref(false);
+const probe = async (): Promise<void> => {
+    if (!isOwner.value || probing.value) {
         return;
     }
-    hosts.value = MigrationHostsSchema.parse(await sandboxJson(`/migrations/hosts`).catch(() => ({ hosts: [] }))).hosts;
-});
+    probing.value = true;
+    try {
+        hosts.value = MigrationHostsSchema.parse(await sandboxJson(`/migrations/hosts`).catch(() => ({ hosts: [] }))).hosts;
+        probed.value = true;
+    } finally {
+        probing.value = false;
+    }
+};
+const recheck = (): Promise<void> => probe();
+onMounted(probe);
 
 const ready = computed(() => hosts.value.filter((host) => host.found !== undefined));
 const guide = computed(() => (picked.value === undefined ? undefined : SOURCE_GUIDES[picked.value]));
@@ -144,21 +157,56 @@ const cancel = (): Promise<void> =>
             <template v-if="plan === undefined">
                 <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected computer needs no archive, no
                      transfer and no file dialog, so it goes above everything and reads as the answer rather
-                     than as a shortcut. Only machines that actually hold a setup appear: an offer that leads
-                     to "nothing here" is worse than no offer. -->
-                <RowGroup v-if="ready.length > 0">
-                    <Row v-for="host in ready" :key="host.id" density="compact" icon="check">
+                     than as a shortcut.
+                     EVERY CONNECTED MACHINE GETS A ROW, not only the ones holding a setup, and that is a
+                     correction: the first cut rendered nothing unless a setup was found, so an owner whose
+                     laptop was simply ASLEEP — the ordinary state of a laptop — saw a card that had never
+                     heard of their computers and no reason to think reading one was possible at all. A row
+                     saying "asleep, wake it and check again" is not a dead-end offer; it is the difference
+                     between a feature that is missing and one that is waiting. -->
+                <RowGroup v-if="hosts.length > 0">
+                    <Row
+                        v-for="host in hosts"
+                        :key="host.id"
+                        density="compact"
+                        :icon="host.found === undefined ? `desktop` : `check`"
+                        :tone="host.found === undefined ? `default` : `success`"
+                    >
                         <template #title
-                            ><span class="text-xs"
-                                >Found a {{ host.found === `hermes` ? `Hermes` : `OpenClaw` }} setup on {{ host.id }}</span
-                            ></template
+                            ><span class="text-xs">{{
+                                host.found === undefined ? host.id : `Found a ${host.found === `hermes` ? `Hermes` : `OpenClaw`} setup on ${host.id}`
+                            }}</span></template
                         >
-                        <template #description>Nothing to pack — it can be read straight off that computer.</template>
+                        <template #description>{{
+                            host.found === undefined ? host.detail : `Nothing to pack — it can be read straight off that computer.`
+                        }}</template>
                         <template #control>
-                            <Button label="Bring it in" size="small" :loading="planning" @click="readFromHost(host)" />
+                            <Button
+                                v-if="host.found !== undefined"
+                                label="Bring it in"
+                                size="small"
+                                :loading="planning"
+                                @click="readFromHost(host)"
+                            />
+                            <button
+                                v-else
+                                type="button"
+                                :class="ui.iconButton()"
+                                aria-label="Check this computer again"
+                                v-tooltip.top="'Check again'"
+                                @click="recheck"
+                            >
+                                <Icon name="refresh" class="text-sm" :class="probing ? `animate-spin` : ``" />
+                            </button>
                         </template>
                     </Row>
                 </RowGroup>
+                <!-- Said to the owner who has connected no computer at all: the shortcut exists, and knowing
+                     it exists is what makes them reach for it next time rather than packing again. -->
+                <p v-else-if="probed" class="text-2xs text-subtle">
+                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it — no packing at
+                    all.
+                </p>
 
                 <!-- Step 1, and it is a question rather than a form: which tool you run is the one thing you
                      never have to look up, and answering it halves everything below. -->

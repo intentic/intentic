@@ -97,13 +97,17 @@ watch(
 <template>
     <div
         class="ui-code"
-        :class="{ 'ui-code-wrap': wrap, 'ui-code-clamp': clamped }"
+        :class="{ 'ui-code-wrap': wrap, 'ui-code-clamp': clamped, 'ui-code-copyable': copyable }"
         :style="clampLines === undefined ? undefined : { '--ui-code-clamp-lines': clampLines }"
     >
         <div class="flex flex-col gap-1.5">
-            <div v-if="label || copyable" class="flex items-center justify-between">
+            <!-- Only a LABEL earns a row of its own now. The copy button used to share one, which cost a
+                 block with no label an empty line of chrome above it — on a card whose whole content is one
+                 command, that row was taller than the gap it created between the sentence and the command it
+                 belongs to. It sits on the block instead (below), where every code block anyone has used puts
+                 it, and the block reserves room so it can never land on a glyph. -->
+            <div v-if="label" class="flex items-center justify-between">
                 <span class="text-2xs font-medium text-muted">{{ label }}</span>
-                <CopyButton v-if="copyable" :text="code" label="Copy" @copied="emit(`copied`)" />
             </div>
             <div ref="block" class="relative">
                 <div v-if="html" v-html="html"></div>
@@ -112,6 +116,10 @@ watch(
                     class="scrollbar-thin overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
                     :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
                     >{{ code }}</pre>
+                <!-- `bg-canvas` rather than a transparent chip: it sits over the code's own surface, and the
+                     block's right padding (code.css, keyed off ui-code-copyable) keeps text from running
+                     under it — but a wrapped line's descender still passes behind the border without it. -->
+                <CopyButton v-if="copyable" :text="code" label="Copy" class="absolute top-1.5 right-1.5 bg-canvas" @copied="emit(`copied`)" />
                 <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering bug. -->
                 <div
                     v-if="clamped && overflowing"

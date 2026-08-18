@@ -19,6 +19,20 @@
         line-height: 1rem;
     }
 
+    /* ROOM FOR THE COPY BUTTON, which sits ON the block rather than in a row above it (see Code.vue). Without
+     * this the chip lands on the first line's own text — which for a one-line command is the whole command,
+     * and for a scrolling block is whatever happens to be under it. Reserved in the padding rather than by
+     * hiding the button until hover: an affordance nobody can see is one nobody uses, and this is a surface
+     * whose entire purpose is getting the text onto a clipboard.
+     *
+     * `pre` as well as `.shiki` because the fallback block (highlighting still in flight, or a language we
+     * ship no grammar for) is the one a reader meets first and would otherwise reflow the instant Shiki
+     * answers. */
+    .ui-code.ui-code-copyable .shiki,
+    .ui-code.ui-code-copyable pre {
+        padding-right: calc(var(--spacing) * 18);
+    }
+
     /* Long single-line commands (e.g. the /setup one-liners) read better wrapped than scrolled. */
     .ui-code.ui-code-wrap .shiki,
     .ui-code.ui-code-wrap .shiki code {
