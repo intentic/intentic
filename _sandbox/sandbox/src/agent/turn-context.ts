@@ -1,5 +1,4 @@
 import type { ResidentEngine } from "@intentic/iq-engine";
-import type { IqContextOutcome } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 
 /* RETRIEVE FOR THE MESSAGE BEFORE THE TURN STARTS — the daemon runs the user's own words through the resident
@@ -157,7 +156,7 @@ export interface TurnContextDeps {
  * treatment turn that injected nothing is indistinguishable in the ledger from one that injected 1.2k tokens.
  *
  * `ineligible` is the prompt failing a gate above; the rest are retrieval itself declining. */
-export type TurnContextSkip = Exclude<IqContextOutcome, "note">;
+export type TurnContextSkip = "ineligible" | "deadline" | "indexing" | "no-hits" | "failed";
 
 // The note, or the reason there isn't one. A union rather than an optional pair: exactly one of the two is
 // always the answer, and the ledger's delivery rate is only honest if a caller cannot read both as absent.

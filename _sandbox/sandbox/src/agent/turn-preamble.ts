@@ -4,6 +4,7 @@ import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace
 import { PERSONA_NOTE_HEADER } from "../personas/personas.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
+import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
 // Turn preambles: notes the daemon prepends to a user message before it reaches the model — the delegation
@@ -99,6 +100,7 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // Computed off the filesystem when the conversation opened, so the reader can check what the agent was told
     // the project looks like against what it actually looks like — the one disclosure a generated map needs.
     { header: WORKSPACE_MAP_NOTE_HEADER, title: "Map of this project" },
+    { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
