@@ -142,6 +142,11 @@ export const PersistedAgentSchema = z.object({
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit — see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
+    // Per-agent override of the sandbox-wide resumeAfterOutage setting, absent ⇒ inherit — see
+    // AgentSummarySchema. Persisted for a sharper reason than autoLand's: the whole point of arming a
+    // conversation is that the resume happens with nobody watching, and an outage regularly outlives the
+    // browser tab that answered the offer.
+    resumeAfterOutage: z.boolean().optional(),
     // A collaborator's standing ask for this work to be landed (see AgentSummarySchema.landRequested).
     // Persisted so the ask survives a daemon restart — the maintainer it waits for may arrive tomorrow.
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),

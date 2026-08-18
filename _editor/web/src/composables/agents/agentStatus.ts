@@ -414,6 +414,17 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
 export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.autoLand ?? sandboxDefault ?? false;
 
+/* Does a turn the MODEL PROVIDER killed come back by itself, for THIS conversation? Same two-level fold as
+ * effectiveAutoLand above and here for the same reason: the offer in the chat, the row in the session menu and
+ * the notice's opt-out all state the posture, and three surfaces disagreeing about it is how a user ends up
+ * pressing a button that says the opposite of what it does.
+ *
+ * The one thing worth saying twice: the agent's override wins, and the sandbox setting is only the answer for
+ * a conversation that never expressed one. That asymmetry IS the feature — a press inside one chat speaks for
+ * that chat, and Sandbox ▸ Agent speaks for everything else. */
+export const effectiveOutageResume = (agent: { readonly resumeAfterOutage?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
+    agent?.resumeAfterOutage ?? sandboxDefault ?? false;
+
 // The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
 // provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are
 // extension-declared), so an unknown one degrades to its own name rather than disappearing.

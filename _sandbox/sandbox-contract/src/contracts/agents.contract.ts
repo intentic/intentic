@@ -10,6 +10,7 @@ import {
     AgentLandSchema,
     AgentPlaceSchema,
     AgentRenameSchema,
+    AgentResumeAfterOutageSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
     AgentsListSchema,
@@ -67,6 +68,17 @@ export const agentsContract = {
     // clears it back to "inherit". Legal mid-turn on purpose: the setting is read at turn COMPLETION, so
     // flipping it while the agent works is exactly "hold THIS turn's work for review", the press that matters.
     autoLand: oc.route({ method: "POST", path: "/agents/{id}/auto-land" }).input(AgentAutoLandSchema).output(AgentSummarySchema),
+    /* THIS conversation's answer to a provider outage — an override of the sandbox-wide `resumeAfterOutage`
+     * setting; null clears it back to "inherit". The chat's offer at the moment a turn dies writes this and
+     * never the global: the press happens inside one conversation and means "finish this piece of work", so
+     * its honest blast radius is that conversation. Sandbox ▸ Agent owns the default for everything else.
+     *
+     * Legal mid-turn, and unlike autoLand it is legal for a WORKSPACE conversation too — an outage kills a
+     * main-tree chat exactly as readily as an isolated one, and there is no branch involved either way. */
+    resumeAfterOutage: oc
+        .route({ method: "POST", path: "/agents/{id}/resume-after-outage" })
+        .input(AgentResumeAfterOutageSchema)
+        .output(AgentSummarySchema),
     seen: oc.route({ method: "POST", path: "/agents/{id}/seen" }).input(AgentIdSchema).output(AgentSummarySchema),
     seenAll: oc.route({ method: "POST", path: "/agents/seen" }).output(AgentsListSchema),
     diff: oc.route({ method: "GET", path: "/agents/{id}/diff" }).input(AgentIdSchema).output(AgentChangesSchema),

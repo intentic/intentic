@@ -10,7 +10,7 @@ import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
-import { effectiveAutoLand, formatElapsed } from "../composables/agents/agentStatus";
+import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../composables/agents/agentStatus";
 import { formatCredits } from "../composables/membership/creditMeter";
 import { useAgents } from "../composables/agents/useAgents";
 import { errandOf } from "../composables/chat/errands";
@@ -93,8 +93,8 @@ const { mobile } = useDevice();
  * that agent — Sandbox ▸ Agent owns the global. Gated on the CURRENT effective posture rather than on the
  * message, so pressing it once retires the offer from every landed notice at once, and a transcript replayed
  * into an already-holding agent never shows a stale one. */
-const { agentById, setAutoLand } = useAgents();
-const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+const { agentById, setAutoLand, setResumeAfterOutage } = useAgents();
+const { settings: sandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
     () =>
         props.message.noticeAction === `landHold` &&
@@ -105,17 +105,21 @@ const holdFutureLands = (): void => {
     void setAutoLand(conversation.value.conversationId, false).catch(() => undefined);
 };
 
-/* The outage notice's opt-out, on exactly the same reasoning one line up — with one difference: this one is the
- * SANDBOX default rather than per-agent, because the setting it turns off is sandbox-wide and there is no
- * per-agent override to point it at. Gated on the live setting, so pressing it retires the offer from every
- * outage notice at once and a replayed transcript never shows a stale one. */
-const outageOptOutOffer = computed(() => props.message.noticeAction === `outageOptOut` && sandboxSettings.value?.resumeAfterOutage === true);
+/* The outage notice's opt-out, on exactly the same reasoning one line up — and now with the same reach, which
+ * is the whole repair. It used to switch the SANDBOX-wide setting off, because there was no per-agent override
+ * to point it at; that made the pair lopsided in the worst direction, since a person regretting one automatic
+ * retry would silently disarm every other agent that was mid-outage.
+ *
+ * `false` rather than null, and the difference matters: null would hand this chat back to a default that may
+ * well say "resume", which is not what somebody pressing Stop means. Gated on the EFFECTIVE posture, so the
+ * offer retires itself the moment this conversation stops resuming — whichever level answered. */
+const outageOptOutOffer = computed(
+    () =>
+        props.message.noticeAction === `outageOptOut` &&
+        effectiveOutageResume(agentById(conversation.value.conversationId), sandboxSettings.value?.resumeAfterOutage),
+);
 const stopResumingOutages = (): void => {
-    const current = sandboxSettings.value;
-    if (current === undefined) {
-        return;
-    }
-    void saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: false }).catch(() => undefined);
+    void setResumeAfterOutage(conversation.value.conversationId, false).catch(() => undefined);
 };
 
 /* The dependency reconcile's one press — a REVEAL, not a setting. The daemon started an install because the
@@ -900,7 +904,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <span class="shrink-0">— it waits as “Ready to land” until you land it.</span>
             </template>
             <template v-if="outageOptOutOffer">
-                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">Don't auto-resume</button>
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="stopResumingOutages">
+                    Stop resuming this chat
+                </button>
                 <span class="shrink-0">— a turn the provider kills stops and waits for you.</span>
             </template>
             <template v-if="depsInstallOffer">

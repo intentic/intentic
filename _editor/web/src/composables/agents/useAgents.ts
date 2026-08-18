@@ -1015,6 +1015,32 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
     }
 };
 
+/* Set or clear (null ⇒ inherit the sandbox setting) THIS conversation's outage-resume override — whether a
+ * turn the model provider killed is picked back up by itself. Identical optimistic grammar to setAutoLand
+ * above, and deliberately a sibling of it rather than a call into settings: the press this serves is made
+ * inside one chat about one dead turn, and writing the sandbox-wide toggle for it — which is what used to
+ * happen — armed every other agent on the board without ever saying so. */
+const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | null): Promise<void> => {
+    const previous = registry.value.find((agent) => agent.id === id);
+    const revert = previous?.resumeAfterOutage;
+    if (previous !== undefined) {
+        previous.resumeAfterOutage = resumeAfterOutage ?? undefined;
+    }
+    try {
+        const summary = await sandboxJson<AgentSummary>(
+            `/agents/${encodeURIComponent(id)}/resume-after-outage`,
+            jsonBody(`POST`, { resumeAfterOutage }),
+        );
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } catch (error) {
+        const target = registry.value.find((agent) => agent.id === id);
+        if (target !== undefined) {
+            target.resumeAfterOutage = revert;
+        }
+        throw error;
+    }
+};
+
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
 // A card, as the seed every window can rebuild its tab from (useChat.agentTabOf takes it from here).
@@ -1072,6 +1098,7 @@ export function useAgents() {
         markAllSeen,
         rename,
         setAutoLand,
+        setResumeAfterOutage,
         agentById,
         archived,
         archiveLoading,

@@ -1736,10 +1736,18 @@ describe(`Conversation`, () => {
         // Nothing is armed, so no opt-out is offered — there is nothing to opt out of yet.
         expect(conversation.messages.value.at(-1)!.noticeAction).toBeUndefined();
 
-        // Enabling the setting arms the very turn that bounced, daemon-side; this reflects it.
+        // Arming THIS conversation arms the very turn that bounced, daemon-side; this reflects it. The notice
+        // says the scope out loud, because a press that starts something automatic owes its reader the blast
+        // radius — this one is one chat, and the sandbox-wide default is named as the separate thing it is.
         conversation.failures.armOutageResume();
         expect(conversation.failures.outageResume.value?.scheduled).toBe(true);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Only this chat`);
+
+        // …and the way back out, in the same surface: the countdown stops, the offer comes back (the turn is
+        // still stranded and still re-armable), and the probe hunting the resume stands down with it.
+        conversation.failures.disarmOutageResume();
+        expect(conversation.failures.outageResume.value?.scheduled).toBe(false);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`no longer picks itself back up`);
         conversation.abort();
     });
 

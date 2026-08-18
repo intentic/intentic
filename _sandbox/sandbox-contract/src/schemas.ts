@@ -832,6 +832,19 @@ export const AgentSummarySchema = z.object({
     // the global toggle meaningful: an agent that never expressed an opinion follows the sandbox wherever it
     // is pointed next. Written by `agents.autoLand`; the UI shows the EFFECTIVE value (this ?? the setting).
     autoLand: z.boolean().optional(),
+    /* This agent's own answer to "re-run my turn when the model provider was what failed?" — the same
+     * two-level shape as `autoLand` above, and here for a sharper reason than symmetry.
+     *
+     * The press that writes this is offered INSIDE one conversation, at the moment that conversation's turn
+     * died, and what a person means by it is "finish THIS piece of work". It used to write the sandbox-wide
+     * setting, so one impatient click at 2 a.m. quietly armed every agent on the board — a blast radius
+     * nothing on screen had asked about. So the chat's offer writes this, the settings toggle writes the
+     * default, and the two stay honestly different things.
+     *
+     * ABSENT ⇒ inherit the sandbox setting, which is what keeps that default meaningful: a conversation that
+     * never expressed an opinion follows the sandbox wherever it is pointed next. Written by
+     * `agents.resumeAfterOutage`; every surface shows the EFFECTIVE value (this ?? the setting). */
+    resumeAfterOutage: z.boolean().optional(),
     // A collaborator asked for this agent's work to be landed (agents.requestLand) — collaborators may drive
     // agents but not merge into the main tree, so the ask rides the summary where every maintainer's board
     // sees it. Cleared by the land or discard that answers it. Absent ⇒ nobody is waiting.
@@ -1048,6 +1061,11 @@ export const AgentPlaceSchema = z.object({ id: z.string().min(1), text: z.string
 // the sandbox setting" — the browser sends it whenever the user toggles back to what the global already says,
 // so agents don't accumulate frozen overrides that quietly stop following the global toggle.
 export const AgentAutoLandSchema = z.object({ id: z.string().min(1), autoLand: z.boolean().nullable() });
+// resumeAfterOutage's input: this ONE conversation's answer to a provider outage. `null` clears the override
+// back to "inherit the sandbox setting" — sent whenever the user toggles back to what the global already says,
+// on the same reasoning as autoLand's null: an agent holding a frozen copy of a default has quietly stopped
+// following it, and nothing on screen would say so.
+export const AgentResumeAfterOutageSchema = z.object({ id: z.string().min(1), resumeAfterOutage: z.boolean().nullable() });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
 /* WHY a path would not land. The distinction is the whole difference between an actionable report and a dead
  * end, because the three have nothing in common but their symptom:
@@ -1852,15 +1870,23 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
-    /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
-     * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
+    /* THE SANDBOX-WIDE DEFAULT for "when a turn dies because the MODEL PROVIDER was failing (500/502/503, a
+     * 529 at capacity, a dropped socket), re-run it on an escalating backoff until it goes through or the
+     * attempts are spent".
+     *
+     * A DEFAULT, not the whole answer: any one conversation may override it (AgentSummarySchema
+     * .resumeAfterOutage), and the chat's own offer at the moment of failure writes THAT rather than this.
+     * This toggle is the standing policy for every agent that has not said otherwise, which is why it lives in
+     * settings and is not reachable by a single press from inside one chat — flipping how the whole board
+     * behaves should be a thing somebody went to do.
      *
      * OFF by default, on the same reasoning that keeps a spent usage limit out of this pair entirely: a resume
      * re-runs a turn the user sent once, on their own allowance, and only they can say whether the turn was
      * worth paying for twice. Starting off costs nothing, because the failed turn is remembered whatever the
      * toggle says (recordOutageFailure) — the failure frame reports an "available" resume and the chat's offer
-     * arms that very turn the moment it is turned on. Worth turning on for a sandbox whose turns mostly have
-     * nobody in the room (automation wakes, Discord, webhooks), which is the case no browser could rescue. */
+     * arms that very turn the moment it is armed for that conversation. Worth turning ON for a sandbox whose
+     * turns mostly have nobody in the room (automation wakes, Discord, webhooks), which is the case no browser
+     * could rescue and the case a per-conversation press cannot reach. */
     resumeAfterOutage: z.boolean().default(false),
     /* When the daemon dies under a running turn, re-run that turn once it is back (agent/turn-journal.ts records
      * every in-flight turn; the boot pass in agent/turn-resume.ts re-runs what survived). OFF by default, like

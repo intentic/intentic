@@ -34,7 +34,6 @@ import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
-import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useVoiceInput } from "../composables/chat/useVoiceInput";
 import { useStickToBottom } from "../composables/chat/useStickToBottom";
@@ -291,21 +290,49 @@ const retryTrial = async (): Promise<void> => {
 /* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
  * instant and nothing anyone can do before it, so the transcript notice naming that instant says everything
  * there is to say. An outage has no known end, which is why it needs a live banner — its whole job is to answer
- * "is anything still happening?", which during an outage is the only question anyone has. When auto-resume is
- * off it is instead the offer to turn it on, which arms the very turn that bounced (the daemon remembered it
- * either way). */
-const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+ * "is anything still happening?", which during an outage is the only question anyone has. When the resume is
+ * off it is instead the offer to arm it, which arms the very turn that bounced (the daemon remembered it
+ * either way).
+ *
+ * THE PRESS ARMS THIS CHAT AND NOTHING ELSE. It used to write the sandbox-wide setting, and the gap between
+ * what the button looked like — one line in one conversation, under one dead turn — and what it did was the
+ * whole bug: a person finishing one piece of work at midnight silently signed every agent on the board up to
+ * re-run its turns on their allowance. So it writes this conversation's own override (agents.resumeAfterOutage)
+ * and the sandbox default stays where a standing policy belongs, in Sandbox ▸ Agent. */
 const outageResume = computed(() => props.conversation.failures.outageResume.value);
+const armingOutageResume = ref(false);
 const enableOutageResume = async (): Promise<void> => {
-    if (!reachable.value) {
+    if (!reachable.value || armingOutageResume.value) {
         return;
     }
-    const current = sandboxSettings.value;
-    if (current === undefined) {
+    armingOutageResume.value = true;
+    try {
+        await setResumeAfterOutage(props.conversation.conversationId, true);
+        props.conversation.failures.armOutageResume();
+    } catch {
+        // The offer stays up to press again — the daemon still holds the stranded turn either way, and a
+        // banner that vanished on a failed write would claim a resume nobody armed.
+    } finally {
+        armingOutageResume.value = false;
+    }
+};
+/* …and the same press pointing the other way. `false`, not null: somebody stopping a retry they can watch
+ * counting down means THIS chat, now — handing it back to a default that may well say "resume" would restart
+ * the very thing they just stopped. The daemon keeps the stranded turn either way; it simply stops offering
+ * it to the breaker, and the hour-long staleness sweep retires it. */
+const stopOutageResume = async (): Promise<void> => {
+    if (!reachable.value || armingOutageResume.value) {
         return;
     }
-    await saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: true });
-    props.conversation.failures.armOutageResume();
+    armingOutageResume.value = true;
+    try {
+        await setResumeAfterOutage(props.conversation.conversationId, false);
+        props.conversation.failures.disarmOutageResume();
+    } catch {
+        // Left as it stands — the countdown is honest until the daemon has actually been told otherwise.
+    } finally {
+        armingOutageResume.value = false;
+    }
 };
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
@@ -319,7 +346,7 @@ const enableOutageResume = async (): Promise<void> => {
  * seam, not at setup: this pane mounts with the shell, long before the daemon is answering, and a read fired
  * then simply fails — leaving every archived tab in the app looking live until the user happened to open the
  * board. Only while the list is empty, so the one request is not repeated per reconnect once it has landed. */
-const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
+const { agentById, archived, loadArchived, restore, busyIds, setResumeAfterOutage } = useAgents();
 watch(
     reachable,
     (live) => {
@@ -1861,24 +1888,42 @@ watch(
                         >
                             <Icon name="clock" class="mt-0.5 shrink-0" />
                             <span v-if="outageResume.scheduled" class="min-w-0 flex-1"
-                                >The model provider failed this turn — retrying by itself in {{ formatWait(outageResume.retryAt) }} (attempt
-                                {{ outageResume.attempt }} of {{ outageResume.maxAttempts }}). Sending again yourself works too.</span
+                                >This chat is picking the turn back up by itself in {{ formatWait(outageResume.retryAt) }} — attempt
+                                {{ outageResume.attempt }} of {{ outageResume.maxAttempts }} since the provider failed it. Sending again yourself
+                                works too.</span
                             >
-                            <!-- The button turns on a SANDBOX-WIDE setting, not just this chat's, which is the
-                                 one thing about it worth saying — so it is said in the sentence the card is
-                                 already made of rather than in a box only a pointer can open. -->
+                            <!-- THE WAY BACK OUT, in the surface that armed it. Symmetry is the point: a press
+                                 that starts something automatic and can only be undone from a settings page is
+                                 how people learn not to press it. The button that turns this on is two lines
+                                 down, and this is the same button pointing the other way. -->
+                            <button
+                                v-if="outageResume.scheduled"
+                                type="button"
+                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                                :disabled="!reachable || armingOutageResume"
+                                @click="stopOutageResume"
+                            >
+                                Stop
+                            </button>
+                            <!-- The button arms THIS CHAT and nothing else, which is the one thing about it
+                                 worth saying — so the sentence says it, in the words the press is made of
+                                 ("this chat", "keep going") rather than in the name of a setting. The old copy
+                                 admitted the sandbox-wide blast radius in a parenthesis, which is exactly the
+                                 place nobody reads before pressing; the honest fix was to make the press
+                                 smaller, not the warning louder. Where the standing default lives is a
+                                 different question, and it is answered on the notice the press writes. -->
                             <span v-else class="min-w-0 flex-1"
-                                >The model provider failed this turn. Auto-resume is off — turn it on (a standing setting for the whole sandbox) and
-                                this chat continues from here by itself.</span
+                                >The model provider failed this turn and nothing is retrying it. Keep this chat going and it picks the turn back up by
+                                itself as soon as the provider answers.</span
                             >
                             <button
                                 v-if="!outageResume.scheduled"
                                 type="button"
                                 class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="!reachable || sandboxSettings === undefined || saveSandboxSettings.isPending.value"
+                                :disabled="!reachable || armingOutageResume"
                                 @click="enableOutageResume"
                             >
-                                Enable auto-resume
+                                Keep this chat going
                             </button>
                         </div>
                         <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on. Under the outage

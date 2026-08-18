@@ -27,10 +27,16 @@ const setAutomationFailureLimit = (event: Event): void => {
 
 <template>
     <RowGroup label="When a turn breaks">
-        <!-- The outage row is also offered from the chat at the moment it would have helped. -->
+        <!-- THE DEFAULT, and the row says so in its own title. A single chat can answer this for itself from
+             the banner under the turn that died, and that press deliberately does NOT reach this switch: what
+             a person means inside one conversation is "finish this", and what they mean here is "this is how
+             the board behaves". Conflating the two is how one midnight click used to sign every agent up.
+
+             So the row states the two things a default owes its reader: what it governs (everything that has
+             not answered for itself), and that some chats may have. -->
         <Row
             icon="refresh"
-            title="Auto-resume after provider outages"
+            title="Resume after provider outages, by default"
             description="Retry a turn the provider failed (500, at capacity, a dropped connection), backing off between attempts and trying one agent at a time."
         >
             <template #control>
@@ -39,6 +45,12 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ resumeAfterOutage: value })"
                 />
+            </template>
+            <template #below>
+                <p class="text-2xs text-muted">
+                    The starting answer for every agent. One chat can be kept going on its own from the banner under the turn an outage killed, and a
+                    chat that has answered for itself keeps its own answer whatever this switch says.
+                </p>
             </template>
         </Row>
 

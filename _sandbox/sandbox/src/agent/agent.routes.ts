@@ -44,7 +44,14 @@ import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-cal
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
-import { authResumable, clearPendingResume, recordAuthFailure, recordOutageFailure, startConversationTurn } from "./turn-resume.js";
+import {
+    authResumable,
+    clearPendingResume,
+    outageResumeArmed,
+    recordAuthFailure,
+    recordOutageFailure,
+    startConversationTurn,
+} from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { nameAgentTitle } from "./title-namer.js";
@@ -1106,10 +1113,14 @@ async function* runTurn(
                     const outage = recordProviderFailure(provider);
                     if (outage.attempt < OUTAGE_MAX_ATTEMPTS) {
                         outageHit = true;
-                        const { resumeAfterOutage } = await services.sandboxSettings.get();
+                        // THIS conversation's posture, not the sandbox's alone — the same question the resume
+                        // pass asks a few seconds later, asked through the same reader so the two can never
+                        // disagree. A chat armed on its own says "scheduled" while the board around it, still
+                        // on an off default, is honestly told a resume is merely "available".
+                        const armed = await outageResumeArmed(services, input.conversationId);
                         yield {
                             ...event,
-                            autoResume: resumeAfterOutage ? "scheduled" : "available",
+                            autoResume: armed ? "scheduled" : "available",
                             outage: {
                                 retryAt: Math.round(outage.retryAt / 1000),
                                 attempt: outage.attempt + 1,

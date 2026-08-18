@@ -73,7 +73,7 @@ vi.mock("../composables/chat/attachmentPreviews", () => ({ attachmentPreview: ()
 // formatElapsed is the real one — the loader's readout IS that format, so mocking it would test nothing.
 vi.mock("../composables/agents/agentStatus", async () => {
     const { formatElapsed } = await vi.importActual<typeof import("../composables/agents/agentStatus")>("../composables/agents/agentStatus");
-    return { effectiveAutoLand: () => false, formatElapsed };
+    return { effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed };
 });
 vi.mock("../composables/chat/transcript", async () => {
     const { errandOf } = await vi.importActual<typeof import("../composables/chat/errands")>("../composables/chat/errands");
@@ -119,7 +119,11 @@ vi.mock("../composables/chat/useChat", async () => {
 
 // The roster's count of this conversation's live children — what the loader says it is waiting on.
 vi.mock("../composables/agents/useAgents", () => ({
-    useAgents: () => ({ agentById: () => ({ subagents: { running: roster.running, total: roster.running } }), setAutoLand: vi.fn() }),
+    useAgents: () => ({
+        agentById: () => ({ subagents: { running: roster.running, total: roster.running } }),
+        setAutoLand: vi.fn(),
+        setResumeAfterOutage: vi.fn(),
+    }),
 }));
 
 vi.mock("../composables/sandbox/useSandboxSettings", async () => {

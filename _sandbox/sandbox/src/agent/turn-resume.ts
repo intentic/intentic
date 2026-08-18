@@ -154,15 +154,35 @@ const pendingOutage = new Map<string, OutageFailure & { readonly recordedAt: num
  * means the credential is dead and retrying is hopeless, whereas a provider that is still down means the outage
  * is simply longer than one attempt, which is the normal case and the reason a backoff exists at all.
  *
- * Recorded whatever the resumeAfterOutage setting says: the failure
- * frame tells the client an "available" resume exists, and turning the toggle on right afterwards has to arm
- * exactly the turn that just bounced. What bounds the retrying is the breaker's attempt budget and the staleness
- * sweep below, never this call. */
+ * Recorded whatever the posture says — the setting's, this conversation's, either: the failure frame tells the
+ * client an "available" resume exists, and arming it right afterwards has to arm exactly the turn that just
+ * bounced. What bounds the retrying is the breaker's attempt budget and the staleness sweep below, never this
+ * call. */
 export const recordOutageFailure = (failure: OutageFailure, now: number = Date.now()): void => {
     pendingOutage.set(failure.input.conversationId, { ...failure, recordedAt: now });
 };
 
 export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
+
+/* WHOSE ANSWER IT IS THAT A STRANDED TURN COMES BACK — asked in one place, because two callers ask it about
+ * the same turn seconds apart and a disagreement between them is the worst possible outcome: the failure frame
+ * promises the chat a retry, and the pass that would perform it declines.
+ *
+ * TWO LEVELS, conversation first. The sandbox setting is a standing policy about a board nobody is watching —
+ * automation wakes, Discord, webhooks — and it belongs in settings because that is where you go to decide how
+ * the whole thing behaves. The per-conversation override is a different sentence entirely: it is a person
+ * inside one chat, looking at one dead turn, saying finish THAT. Folding the second into the first is what made
+ * a single press at the moment of failure quietly rearm every agent on the board.
+ *
+ * Absent override ⇒ the setting answers, which is what keeps the default worth having. */
+export const outageResumeArmed = async (services: Services, conversationId: string): Promise<boolean> => {
+    const override = services.agents.entry(conversationId)?.resumeAfterOutage;
+    if (override !== undefined) {
+        return override;
+    }
+    const { resumeAfterOutage } = await services.sandboxSettings.get();
+    return resumeAfterOutage;
+};
 
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
  * the CLI persisted the unprocessed user message before the refusal is its own implementation detail, and a
@@ -367,14 +387,15 @@ const runAuthPass = async (services: Services, wake: WakeFn, now: number): Promi
  * whichever one it is, its SUCCESS clears the breaker for everybody, so the rest follow on the next few passes
  * rather than waiting out a fresh backoff each.
  *
- * The toggle is read per pass, not snapshotted at failure time — flipping resumeAfterOutage on while a stranded
- * turn sits here arms that turn, which is what the chat's offer promises. */
+ * The posture is read per pass and PER CONVERSATION, not snapshotted at failure time — arming a stranded turn
+ * while it sits here arms that turn, which is what the chat's offer promises. Per conversation because that is
+ * what the offer writes (outageResumeArmed): one chat saying "finish this" must not speak for the other
+ * nineteen stranded on the same provider. */
 const runOutagePass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
     const stranded = [...pendingOutage.values()];
     if (stranded.length === 0) {
         return;
     }
-    const { resumeAfterOutage } = await services.sandboxSettings.get();
     for (const failure of stranded) {
         const conversationId = failure.input.conversationId;
         // A turn nobody resumed within the hour is not worth resuming at all: the attempts are spent, or the
@@ -394,7 +415,11 @@ const runOutagePass = async (services: Services, wake: WakeFn, now: number): Pro
             }
             continue;
         }
-        if (!resumeAfterOutage || !outageRetryDue(failure.provider, now)) {
+        // The breaker's cheap synchronous answer first, the posture's read second — most passes during an
+        // outage are inside a wait, and there is no reason to touch the registry or the settings file to
+        // establish that. Neither gate spends anything: the window moves at DISPATCH (outageRetryFired below),
+        // so a stranded chat that is simply not armed costs the armed ones behind it nothing.
+        if (!outageRetryDue(failure.provider, now) || !(await outageResumeArmed(services, conversationId))) {
             continue;
         }
         // Counted at dispatch, before the turn starts: it is what closes the window against the next stranded

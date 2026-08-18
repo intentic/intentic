@@ -137,7 +137,7 @@ const driveReach: ScopeReach = (method, path) => {
     }
     return (
         oneOf(path, "/agent", "/agent/reply", "/agent/steer", "/agent/stop", "/agents/seen") ||
-        /^\/agents\/[^/]+\/(seen|rename|auto-land)$/.test(path)
+        /^\/agents\/[^/]+\/(seen|rename|auto-land|resume-after-outage)$/.test(path)
     );
 };
 

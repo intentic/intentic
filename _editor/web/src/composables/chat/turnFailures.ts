@@ -274,7 +274,7 @@ export class TurnFailures {
         this.host.transcript.notice(
             scheduled
                 ? `${message} Retrying by itself in ${formatWait(outage.retryAt)} — attempt ${outage.attempt} of ${outage.maxAttempts}.`
-                : `${message} Auto-resume is off, so this turn is waiting: turn it on and it continues from here.`,
+                : `${message} Nothing is retrying it, so the turn is waiting: keep this chat going and it continues from here.`,
             scheduled ? { noticeAction: `outageOptOut` } : undefined,
         );
         if (scheduled) {
@@ -327,17 +327,41 @@ export class TurnFailures {
         this.scheduleReattach(Date.now(), RENEWAL_PROBE, () => this.giveUpOnRenewal());
     }
 
-    // The user has just enabled resuming for an outage that stranded this turn: the daemon remembered the turn
-    // whatever the setting said, so the save alone arms it and this window only has to reflect that and be there
-    // when it lands.
+    /* The user has just armed THIS CHAT for the outage that stranded its turn: the daemon remembered the turn
+     * whatever the posture said, so the write alone arms it and this window only has to reflect that and be
+     * there when it lands.
+     *
+     * The notice says the scope out loud — "this chat" — and names where the standing default lives, because
+     * this is the one moment where both are worth knowing and neither fits on the button. It is deliberately
+     * said AFTER the press rather than before it: the press is one dead turn's business and must stay cheap,
+     * while "make every agent do this" is a decision someone should go and make on purpose. */
     armOutageResume(): void {
         const pending = this.outageResume.value;
         if (pending === undefined) {
             return;
         }
         this.outageResume.value = { ...pending, scheduled: true };
-        this.host.transcript.notice(`Auto-resume enabled — this chat retries by itself in ${formatWait(pending.retryAt)}.`);
+        this.host.transcript.notice(
+            `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat — Sandbox ▸ Agent sets the default for the rest.`,
+        );
         this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
+        this.host.persist();
+    }
+
+    /* The user has just stopped this chat resuming itself, mid-countdown. The banner goes back to being the
+     * OFFER — the turn is still stranded and still re-armable, which is the truth: the daemon holds it for the
+     * hour either way, so a stop that read as "this turn is gone" would be a lie the next press disproves.
+     *
+     * The probe stands down with it. Nothing is coming, and a hunt left running would spend twenty minutes
+     * looking for a run nobody armed. */
+    disarmOutageResume(): void {
+        const pending = this.outageResume.value;
+        if (pending === undefined) {
+            return;
+        }
+        this.cancelProbe();
+        this.outageResume.value = { ...pending, scheduled: false };
+        this.host.transcript.notice(`Stopped — this chat no longer picks itself back up. The turn is still here to resume by hand.`);
         this.host.persist();
     }
 

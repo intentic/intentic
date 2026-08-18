@@ -240,6 +240,11 @@ export interface AgentsRegistry {
     // it leaves updatedAt alone (configuring is not activity) and needs no running guard — the value is read
     // at turn COMPLETION, so flipping it mid-turn is exactly "hold THIS turn's work". Undefined ⇒ unknown id.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
+    // Set/clear THIS conversation's outage-resume override (null ⇒ back to "inherit the sandbox setting").
+    // Same grammar as setAutoLand and legal at the same moments — the value is read by the resume pass AFTER
+    // the turn has already died, so arming a conversation whose turn is still unwinding is the ordinary case
+    // rather than an edge one. Undefined ⇒ unknown id.
+    readonly setResumeAfterOutage: (id: string, resumeAfterOutage: boolean | null) => Promise<AgentSummary | undefined>;
     // Stamp a collaborator's ask for this work to be landed (AgentSummarySchema.landRequested). Like setTitle
     // it leaves updatedAt alone (asking is not the agent's activity) and needs no running guard — the ask is
     // about whatever the branch holds when a maintainer answers it. Re-asking re-stamps (latest asker wins;
@@ -441,6 +446,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
+            ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
             ...(entry.landRequested !== undefined ? { landRequested: entry.landRequested } : {}),
             ...(base !== undefined ? { base } : {}),
             ...(costUsd > 0 ? { costUsd } : {}),
@@ -700,6 +706,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // The land posture survives the rebuild too: "hold this agent's work" is a standing choice
                 // about the conversation, and the next turn is exactly when it matters.
                 ...(existing?.autoLand !== undefined ? { autoLand: existing.autoLand } : {}),
+                // And so does the outage posture, for the reason the land posture survives: "keep finishing
+                // THIS work when the provider drops it" is a standing choice about the conversation, and the
+                // next turn — which is exactly what this rebuild is — is when it matters.
+                ...(existing?.resumeAfterOutage !== undefined ? { resumeAfterOutage: existing.resumeAfterOutage } : {}),
                 /* WHAT THE LANDED WORK IS CALLED SURVIVES THE REBUILD, because it describes a CLAIM on the main
                  * tree and not the turn that made it. The claim is what `repos` above carries across, and it
                  * outlives any number of follow-up turns — a commit is what retires it.
@@ -831,6 +841,20 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // what keeps the agent following the sandbox-wide toggle wherever it is pointed next.
             const { autoLand: _cleared, ...carried } = entry;
             const next = { ...carried, ...(autoLand !== null ? { autoLand } : {}) };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
+        setResumeAfterOutage: async (id, resumeAfterOutage) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            // null strips the key, exactly as setAutoLand does: absent IS "inherit", and it is the only state
+            // that keeps this conversation following the sandbox default wherever it is pointed next.
+            const { resumeAfterOutage: _cleared, ...carried } = entry;
+            const next = { ...carried, ...(resumeAfterOutage !== null ? { resumeAfterOutage } : {}) };
             replace(next);
             await persist();
             broadcast();

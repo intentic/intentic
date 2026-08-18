@@ -11,6 +11,7 @@ import {
     SandboxSettingsSchema,
 } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
+import type { PersistedAgent } from "../agents/agents-store.js";
 import { fileApprovalsStore } from "../automations/approvals-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -45,7 +46,16 @@ import {
 // `takes` is the registry's answer to each attempt: false means a turn was still unwinding and the abandon was
 // not applied, which the pass has to come back from rather than treat as done (see abandonResume). Read per
 // call so a test can flip it between passes, which is the whole shape of that race.
-const fakeServices = (root: string, abandoned: string[] = [], takes: () => boolean = () => true): Services => {
+//
+// `armed` is each conversation's OWN answer about outage resumes — the override the chat's offer writes. An id
+// missing from the map is the ordinary state (no opinion, follow the sandbox setting), which is why the default
+// is an empty one.
+const fakeServices = (
+    root: string,
+    abandoned: string[] = [],
+    takes: () => boolean = () => true,
+    armed: ReadonlyMap<string, boolean> = new Map(),
+): Services => {
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return unstubbed<Services>("services", {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
@@ -54,6 +64,7 @@ const fakeServices = (root: string, abandoned: string[] = [], takes: () => boole
                 abandoned.push(id);
                 return takes();
             },
+            entry: (id: string) => (armed.has(id) ? ({ id, resumeAfterOutage: armed.get(id) } as PersistedAgent) : undefined),
         }),
         // No device subscribed, which is what a workspace that has never granted push reports.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
@@ -393,8 +404,15 @@ const outage = (conversationId: string, provider: string, extra: Record<string, 
     ...extra,
 });
 
-const outageServices = async (root: string, resumeAfterOutage = true, abandoned: string[] = []): Promise<Services> => {
-    const services = fakeServices(root, abandoned);
+// `resumeAfterOutage` here is the SANDBOX DEFAULT — the standing policy in settings. `armed` is what individual
+// conversations said for themselves, which is what the chat's own offer writes and what overrides the default.
+const outageServices = async (
+    root: string,
+    resumeAfterOutage = true,
+    abandoned: string[] = [],
+    armed: ReadonlyMap<string, boolean> = new Map(),
+): Promise<Services> => {
+    const services = fakeServices(root, abandoned, () => true, armed);
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterOutage });
     return services;
@@ -479,6 +497,46 @@ test("with the toggle off the turn is remembered, not resumed — turning it on 
     await scheduler.tick(retryAt);
     await settle("toggle-1");
     expect(prompts).toHaveLength(1);
+});
+
+/* THE TWO LEVELS, and the property the whole split exists for: a press inside ONE chat speaks for that chat.
+ * The sandbox default is off — as it is for a fresh sandbox — and one conversation has answered for itself, so
+ * exactly one of the two stranded turns comes back. Before the override existed the only way to get this turn
+ * back was to switch the default on, which armed the other one too. */
+test("a conversation armed on its own resumes while the sandbox default leaves the rest alone", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false, [], new Map([["own-armed", true]]));
+    const { retryAt } = recordProviderFailure("out-own", OUT_NOW);
+    recordOutageFailure(outage("own-armed", "out-own"), OUT_NOW);
+    recordOutageFailure(outage("own-quiet", "out-own"), OUT_NOW + 1);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+
+    await scheduler.tick(retryAt);
+    await settle("own-armed");
+    expect(prompts).toHaveLength(1);
+    // The unarmed conversation is still remembered — its own offer still arms it — but nothing fired for it,
+    // and, just as importantly, it never spent the breaker's window on its way to not firing.
+    expect(pendingOutageFailure("own-quiet")).toBeDefined();
+    // The pending map is process-wide, so a turn left stranded here would be picked up by the next test's pass.
+    clearPendingResume("own-quiet");
+});
+
+/* …and the same asymmetry pointing the other way, which is the half the notice's opt-out relies on. The
+ * sandbox says resume; this one conversation said no. `false` rather than a cleared override is the whole
+ * point: somebody stopping a countdown they can see means THIS chat, not "put me back on a default that says
+ * the opposite". */
+test("a conversation that opted out stays stopped even though the sandbox default resumes", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, [], new Map([["own-off", false]]));
+    const { retryAt } = recordProviderFailure("out-opt", OUT_NOW);
+    recordOutageFailure(outage("own-off", "out-opt"), OUT_NOW);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+
+    await scheduler.tick(retryAt);
+    await settle("own-off");
+    expect(prompts).toEqual([]);
+    expect(pendingOutageFailure("own-off")).toBeDefined();
+    clearPendingResume("own-off");
 });
 
 test("a stranded turn nobody resumed within the hour is dropped rather than sprung back to life", async () => {

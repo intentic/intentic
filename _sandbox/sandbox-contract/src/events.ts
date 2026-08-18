@@ -699,9 +699,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         resetsAt: z.number().optional(),
         // Where the daemon's resume of THIS turn stands, for the two codes that have one (provider-outage,
         // claude-token-refused). "scheduled" = the resume is armed and this turn comes back by itself;
-        // "available" = the daemon remembered the failed turn and turning resumeAfterOutage on arms that same
-        // resume, which is what the chat's offer banner hangs off — outage only, since a renewal is never gated
-        // on a setting. Absent means there is nothing automatic to resume: a spent usage limit never has one,
+        // "available" = the daemon remembered the failed turn and arming THIS conversation
+        // (AgentSummarySchema.resumeAfterOutage) picks up that same resume, which is what the chat's offer
+        // banner hangs off — outage only, since a renewal is never gated on a posture at all. The two words
+        // are read against the effective posture (the conversation's override, else the sandbox default), so a
+        // chat armed on its own says "scheduled" while the unarmed board around it says "available".
+        // Absent means there is nothing automatic to resume: a spent usage limit never has one,
         // and a refused credential has none once re-minting it has already been tried and failed.
         autoResume: z.enum(["scheduled", "available"]).optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is

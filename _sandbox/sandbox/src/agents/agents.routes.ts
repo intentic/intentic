@@ -245,6 +245,22 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        /* THIS conversation's outage posture. `entryOf`, not `isolatedEntryOf` — the one place this route
+         * deliberately differs from the one above it: a provider outage kills a workspace chat as readily as a
+         * branch-backed one, and nothing about picking the turn back up touches a worktree.
+         *
+         * Legal mid-turn, and the press that matters most arrives just AFTER one: the offer is raised by the
+         * failure frame of the turn that died, so the ordinary caller is a chat whose turn is still unwinding.
+         * The resume pass re-reads the posture every few seconds, which is what makes arming it then arm the
+         * very turn that bounced. */
+        resumeAfterOutage: i.resumeAfterOutage.handler(async ({ input }) => {
+            entryOf(input.id);
+            const summary = await services.agents.setResumeAfterOutage(input.id, input.resumeAfterOutage);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         /* A collaborator's ask for a land they may not perform (role floors put land/discard at maintainer).
          * Isolated agents only — a workspace conversation has no land for anyone to perform. Legal mid-turn
          * (no notRunning): the ask is about whatever the branch holds when a maintainer answers it, exactly

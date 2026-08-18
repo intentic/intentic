@@ -201,6 +201,29 @@ describe("agents registry", () => {
         expect(await registry.setAutoLand("nope", true)).toBeUndefined();
     });
 
+    /* The outage posture is the same two-level shape, and it survives a turn for a sharper reason than the land
+     * posture does: the whole point of arming one conversation is that its resume happens with nobody watching,
+     * and an outage regularly outlives the tab that answered the offer. */
+    it("holds the resumeAfterOutage override across turns and clears it on null", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        // Set mid-turn on purpose: the ordinary caller is a chat whose turn has just died on the provider and
+        // is still unwinding, which is exactly when the offer under it gets pressed.
+        expect((await registry.setResumeAfterOutage("c1", true))?.resumeAfterOutage).toBe(true);
+        await registry.finish("c1", 2_000);
+        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        expect(registry.get("c1")?.resumeAfterOutage).toBe(true);
+        await registry.finish("c1", 4_000);
+        // false is a REAL answer, not an absent one — "stop resuming this chat" must not read as "go back to
+        // whatever the sandbox default says", which may well be resume.
+        expect((await registry.setResumeAfterOutage("c1", false))?.resumeAfterOutage).toBe(false);
+        // …and null is the only thing that hands the conversation back to the default.
+        expect((await registry.setResumeAfterOutage("c1", null))?.resumeAfterOutage).toBeUndefined();
+        expect(registry.entry("c1")?.resumeAfterOutage).toBeUndefined();
+        expect(await registry.setResumeAfterOutage("nope", true)).toBeUndefined();
+    });
+
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
