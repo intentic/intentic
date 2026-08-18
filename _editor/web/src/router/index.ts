@@ -5,6 +5,7 @@ import { createRouter, createWebHistory, type RouteLocationNormalized, type Rout
 import { asyncView } from "../components/asyncView";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../composables/queryPersistence";
+import { isGuest } from "../composables/sandbox/guestAccess";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -38,6 +39,14 @@ const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
 // Signed in, with a user in hand — and hydrate the query cache from IndexedDB (per-user buster) before any
 // route mounts, so a reload paints the last-known workspace instead of blocking on the daemon.
 const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
+    /* A GUEST IS NOT SIGNED OUT — they are signed in somewhere else. Someone who came through a join link
+     * (composables/sandbox/guestAccess.ts) proved their identity to the BOX, which is the only party that ever
+     * enforced anything; they have no platform account by design, so resolving one here would bounce them to a
+     * sign-in page for a service they are deliberately not using. The persisted query cache is skipped with
+     * it: it is keyed by platform user id, and a guest has none to key by. */
+    if (isGuest()) {
+        return true;
+    }
     const resolved = await resolveUser(to);
     if (!(`user` in resolved)) {
         return resolved.redirect;
@@ -182,12 +191,24 @@ const routes: RouteRecordRaw[] = [
             // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter
             // and leave it.
-            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: asyncView(() => import(`../pages/ChatArea.vue`)) },
+            {
+                path: `chat`,
+                name: `chat`,
+                meta: { title: `Chat` },
+                beforeEnter: [desktopOnly],
+                component: asyncView(() => import(`../pages/ChatArea.vue`)),
+            },
             { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../pages/Agents.vue`)) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).
             { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../agents/AgentDetail.vue`)) },
-            { path: `menu`, name: `menu`, meta: { title: `Menu` }, beforeEnter: [mobileOnly], component: asyncView(() => import(`../pages/MobileMenu.vue`)) },
+            {
+                path: `menu`,
+                name: `menu`,
+                meta: { title: `Menu` },
+                beforeEnter: [mobileOnly],
+                component: asyncView(() => import(`../pages/MobileMenu.vue`)),
+            },
             {
                 path: `terminal`,
                 name: `terminal`,
@@ -235,7 +256,12 @@ const routes: RouteRecordRaw[] = [
             },
             // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
             // links to the bare path and the view picks the most recently active one.
-            { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: asyncView(() => import(`../pages/Browsers.vue`)) },
+            {
+                path: `browsers/:session?`,
+                name: `browsers`,
+                meta: { title: `Browsers` },
+                component: asyncView(() => import(`../pages/Browsers.vue`)),
+            },
             // Same shape and same reason as the browsers above: the id is in the URL so a reload — or the chat
             // card's link — reopens the same agent, and the bare path shows whichever is most recently active.
             { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../pages/Subagents.vue`)) },
@@ -259,6 +285,20 @@ const routes: RouteRecordRaw[] = [
         name: `invite`,
         meta: { title: `Accept invite` },
         component: () => import(`../pages/AcceptInvite.vue`),
+    },
+    {
+        /* Public join landing — the link an owner sends by hand, which the platform never sees. Unguarded for
+         * a stronger reason than the invite page above: the visitor has no platform account and is not
+         * expected to make one, so this page's whole job is to sign them in with Google, hand the link's
+         * secret to the BOX, and enter the workspace the box just admitted them to.
+         *
+         * The secret rides the URL FRAGMENT, never the query: a fragment is not sent to any server, does not
+         * reach this app's own access logs, and is left out of the Referer header on every link the page
+         * later loads. */
+        path: `/join`,
+        name: `join`,
+        meta: { title: `Join sandbox` },
+        component: () => import(`../pages/JoinSandbox.vue`),
     },
     /* THE KIT, ON ONE PAGE — dev only, and unguarded on purpose: it needs no session, no sandbox and no
      * repository, so it opens in any state the app can be in. `import.meta.env.DEV` is a compile-time constant,

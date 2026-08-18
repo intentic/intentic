@@ -7,6 +7,7 @@ import { queryClient } from "../queryPersistence";
 import { apiClient } from "../useApi";
 import { withConcurrency } from "../concurrency";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "./connection";
+import { guestSandboxes, isGuest } from "./guestAccess";
 import { daemonReady } from "./useDaemonBoot";
 
 /* The browser's view of the user's sandboxes, as a module-level singleton. A user can own several sandboxes and
@@ -27,7 +28,12 @@ const removing = new Set<string>();
 
 const sandboxListQuery = {
     queryKey: SANDBOX_LIST_KEY,
-    queryFn: async (): Promise<SandboxSummary[]> => (await apiClient.sandbox.list()).sandboxes.filter((sandbox) => !removing.has(sandbox.id)),
+    /* A GUEST HAS NO REGISTRY, and that is the only difference guest mode makes here. Someone who arrived
+     * through a join link (guestAccess.ts) holds one box's address and no platform account, so asking the
+     * platform for their list would be a 401 where the answer is already in hand. Served locally instead —
+     * same shape, same cache entry, so every reader downstream is unaware there was a fork at all. */
+    queryFn: async (): Promise<SandboxSummary[]> =>
+        isGuest() ? guestSandboxes() : (await apiClient.sandbox.list()).sandboxes.filter((sandbox) => !removing.has(sandbox.id)),
     // The list only changes via local mutations (which write the cache directly) or a daemon's lastSeenAt/
     // daemonUrl update (onboarding only, where refresh() forces fresh) — 30s dedups the shell's per-navigation
     // refetch with no staleness that matters.

@@ -15,6 +15,7 @@ import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
+import { z } from "zod";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
 import { CONTROL_SCOPES } from "./auth/control-tokens.js";
 import { routeFloor } from "./auth/role-floor.js";
@@ -173,6 +174,18 @@ const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRo
     }
     return { email: body.email.toLowerCase(), role: role.data };
 };
+
+/* A join link's mint request. The role is required for the same reason a member grant's is — a link IS a role
+ * decision — while expiry and seat count are optional because "a link that just works until I revoke it" is a
+ * legitimate thing to want and picking a default lifetime here would be a policy nobody chose. Both bounds are
+ * capped: a link is a credential in a chat message, and neither a decade nor a thousand seats is something an
+ * owner means to create by typing a number into a field. */
+const MintJoinLinkSchema = z.object({
+    label: z.string().min(1).max(100),
+    role: GrantedRoleSchema,
+    expiresInDays: z.number().int().positive().max(365).optional(),
+    maxUses: z.number().int().positive().max(100).optional(),
+});
 
 /* The routes that answer BEFORE the boot chain converges (services.boot, driven by main.ts).
  *
@@ -372,6 +385,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // route: its own ticket, minted by an owner-gated POST and scoped to the one bundle it names.
                 c.req.path === "/bundles/download" ||
                 c.req.path === "/enroll" ||
+                // Redeeming a join link is how someone who is NOT yet a member gets on the list, so requiring a
+                // bearer here would be requiring the thing the route exists to grant. It authenticates the
+                // Google ID token in its own body instead, and can do nothing but add an email (see the route).
+                c.req.path === "/join" ||
                 c.req.path === "/system/authorized-key" ||
                 // Account deletion must be repeatable after a partial attempt already disabled this daemon.
                 // Its handler performs the one owner check allowed through the permanent retirement marker.
@@ -825,6 +842,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Whether the caller is the owner (vs a member). Loopback/test mode (no auth) counts as owner. Used to gate
     // what a pairing may grant: the owner can mint a full "sync" pairing, a member only "mirror".
     const isOwner = async (c: Context): Promise<boolean> => (await ownerDenied(c)) === undefined;
+
     app.get("/members", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
@@ -861,6 +879,104 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         services.auth?.connections.revoke(email);
         services.wsTickets.revoke(email);
         return c.json({ members: await services.members.list() });
+    });
+    /* JOIN LINKS — the same shared access as the /members routes above, granted by a link instead of by the
+     * platform's invite mail. The owner mints one here (choosing the role it carries), sends it however they
+     * like, and whoever opens it signs in with Google and lands on the very list those routes manage.
+     *
+     * Redemption is the only public one, and all it can do is ADD AN EMAIL: a joined guest then takes the
+     * ordinary bearer path like every other member, with the same role floors. See auth/join-links.ts. */
+    /* REDEEMING ONE — the only public route of the three, and the whole outsider path.
+     *
+     * Two secrets meet here and neither is sufficient alone: the link says which role, Google says who. The
+     * ID token is verified against this sandbox's own client id, exactly as every browser bearer is, so a
+     * forged or borrowed one gets nowhere; the link is looked up by digest.
+     *
+     * REFUSED BEFORE AN OWNER IS BOUND, which is not a formality. Ownership is trust-on-first-use: the first
+     * authenticated caller BECOMES the owner. A guest let onto the members list of an unbound sandbox would
+     * make the very next call as that first caller — so joining an unowned box would hand it away. The owner
+     * binds by opening their own sandbox once, which every real one has already done long before a link exists.
+     *
+     * A refusal says which of the three it was (unknown / expired / full), because "ask for a new link" and
+     * "that is not a link" are different actions for the person holding it, and a 32-byte secret is not
+     * something an outsider probes their way toward. */
+    app.post("/join", async (c) => {
+        if (services.auth === undefined || services.verifyVisitor === undefined) {
+            return c.json({ error: "this sandbox does not accept join links" }, 404);
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { secret?: unknown; idToken?: unknown } | undefined;
+        if (typeof body?.secret !== "string" || typeof body.idToken !== "string") {
+            return c.json({ error: "secret and idToken required" }, 400);
+        }
+        // Asked per redemption, not at boot: a box whose owner opens it a minute after start would otherwise
+        // answer with a stale "nobody owns this" for the rest of its life.
+        if (!(await services.auth.ownerBound())) {
+            return c.json({ error: "this sandbox has no owner yet — its owner must open it once before inviting anyone" }, 409);
+        }
+        const identity = await services.verifyVisitor(body.idToken).catch(() => undefined);
+        if (identity === undefined) {
+            return c.json({ error: "sign-in could not be verified" }, 401);
+        }
+        const email = identity.email.toLowerCase();
+        const outcome = await services.joinLinks.redeem(body.secret, email, Date.now());
+        if (!outcome.ok) {
+            return c.json({ error: outcome.reason }, outcome.reason === "unknown" ? 404 : 410);
+        }
+        /* Never DOWNGRADE somebody who is already here. A maintainer who happens to open a viewer link would
+         * otherwise lose access they hold for other reasons — the link is a floor for its guests, not a
+         * re-grading of the members list, which is the owner's own screen. */
+        const existing = (await services.members.list()).find((member) => member.email === email);
+        const effective = existing === undefined || roleAtLeast(outcome.role, existing.role) ? outcome.role : existing.role;
+        if (existing === undefined || effective !== existing.role) {
+            await services.members.add(email, effective);
+            // A role frozen into an open socket/ticket is stale the moment this widens it — same reason the
+            // /members grant closes both.
+            services.auth.connections.revoke(email);
+            services.wsTickets.revoke(email);
+        }
+        return c.json({ email, role: effective });
+    });
+    app.get("/join-links", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ links: await services.joinLinks.list() });
+    });
+    app.post("/join-links", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = await c.req.json().catch(() => undefined);
+        const parsed = MintJoinLinkSchema.safeParse(body);
+        if (!parsed.success) {
+            return c.json({ error: "label and role required" }, 400);
+        }
+        const { label, role, expiresInDays, maxUses } = parsed.data;
+        const minted = await services.joinLinks.mint({
+            label,
+            role,
+            ...(expiresInDays === undefined ? {} : { expiresAt: Date.now() + expiresInDays * 86_400_000 }),
+            ...(maxUses === undefined ? {} : { maxUses }),
+        });
+        // The raw secret exists in this response and nowhere else — only its digest is stored.
+        return c.json({ ...minted, links: await services.joinLinks.list() });
+    });
+    app.delete("/join-links", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = await c.req.json().catch(() => undefined);
+        const id = typeof (body as { id?: unknown })?.id === "string" ? (body as { id: string }).id : undefined;
+        if (id === undefined) {
+            return c.json({ error: "id required" }, 400);
+        }
+        await services.joinLinks.revoke(id);
+        // Revoking a link does NOT evict the people who already came in through it — they are members now, and
+        // removing a member is the /members route above. Said here because "revoke" could be read either way.
+        return c.json({ links: await services.joinLinks.list() });
     });
     app.delete("/members/self", async (c) => {
         const identity = c.get("identity");

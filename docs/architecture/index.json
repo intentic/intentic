@@ -2165,16 +2165,16 @@
           "what": "the full route table."
         }
       ],
-      "behind": 14,
+      "behind": 15,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 910,
+      "files": 915,
       "hasTests": true,
-      "loc": 151492,
+      "loc": 152163,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
       "readmeRev": "14616fc05dde9c74623ffc60b3db682bf98d6595",
-      "reason": "14 commits have touched this package since its README was written",
+      "reason": "15 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787044262000
     },
@@ -3162,16 +3162,16 @@
           "what": "@puristic/env config; src/prisma.ts — client factory; src/types.ts — the shared Prisma type."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "platform",
       "dir": "_platform/api",
       "files": 90,
       "hasTests": true,
-      "loc": 15232,
+      "loc": 15231,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
       "readmeRev": "9e7598f9ba06f0e5aa327d4787ef2645f03db7b5",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787034498000
     },
@@ -3599,6 +3599,10 @@
           "what": "the minimum trust tier per route, in one table. src/auth/auth.ts resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches."
         },
         {
+          "path": "_sandbox/sandbox/src/auth/join-links.ts",
+          "what": "owner-minted links that put an outsider on the members list without the platform: the link carries a role, the visitor's Google sign-in carries their name, and redeeming (POST /join, the one route exempt from the bearer middleware) can do nothing but add that verified email. Hashed at rest, revocable, bounded by expiry and by PEOPLE rather than openings; refused outright while no owner is bound, since ownership is trust-on-first-use."
+        },
+        {
           "path": "_sandbox/sandbox/src/workflows",
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
@@ -3606,9 +3610,9 @@
       "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 842,
+      "files": 845,
       "hasTests": true,
-      "loc": 146623,
+      "loc": 147264,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "0551141d556182838c62f098f9bf1233ac28e6cc",
@@ -3664,7 +3668,7 @@
       "dir": "_sandbox/sandbox-contract",
       "files": 104,
       "hasTests": true,
-      "loc": 19458,
+      "loc": 19465,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "996ce7771d24ec5c5c4739773133a87496844584",
@@ -4698,7 +4702,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787067273279,
+  "generatedAt": 1787070048881,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [
