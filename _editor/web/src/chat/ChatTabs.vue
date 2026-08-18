@@ -7,7 +7,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { turnInFlight } from "../composables/agents/agentStatus";
-import { localPosture } from "../environments/posture";
 import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
@@ -65,8 +64,6 @@ const popoutHint = computed(() => withShortcut(`Move chat into new window`, `cha
 // The ways back live on the tile itself (its right-click menu, ShellDesktop) and on this bar's own menu, so
 // the rail form carries no window-management chrome of its own.
 const railHint = computed(() => withShortcut(`Dock chat to rail — full window, behind a rail tile`, `chat.toggleHome`));
-// Only where the /chat area exists to navigate to: the workspace shell, not a local-posture host window.
-const canFill = localPosture() === undefined;
 
 /* On a WIDE surface (the pop-out window, or the /chat area filling the main one) the bar stands up the LEFT
  * EDGE as a resizable rail with the chat list always open in it (ChatPanel says why that side).
@@ -261,17 +258,12 @@ const barMenuItems = computed<MenuItem[]>(() => [
     { separator: true },
     // The chat's other two homes, in the header buttons' order (move within this window, then leave it). The
     // dock row is the shell command's move (toggleChatHome — from a pop-out window it docks AND navigates,
-    // which is exactly what those words ask for there) and is absent where the /chat area doesn't exist (a
-    // local-posture host window).
-    ...(canFill
-        ? [
-              {
-                  label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
-                  shortcut: commandShortcut(`chat.toggleHome`),
-                  command: (): void => toggleChatHome(router),
-              },
-          ]
-        : []),
+    // which is exactly what those words ask for there).
+    {
+        label: chatOnRail.value ? `Dock chat back to the side` : `Dock chat to rail`,
+        shortcut: commandShortcut(`chat.toggleHome`),
+        command: (): void => toggleChatHome(router),
+    },
     {
         label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
         shortcut: commandShortcut(`chat.togglePopout`),
@@ -593,7 +585,6 @@ const openHistory = (event: Event): void => {
                 <Icon name="history" class="text-sm" />
             </button>
             <button
-                v-if="canFill"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatHome(router)"

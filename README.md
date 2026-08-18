@@ -233,7 +233,7 @@ capabilities and known limits are documented separately in **[docs/deploy-engine
 ## Releases
 
 **One repository — [github.com/intentic/intentic](https://github.com/intentic/intentic) — and nothing is
-exported anywhere else.** A release is a tag on the commit CI already built, and three things hang off it:
+exported anywhere else.** A release is a tag on the commit CI already built, and two things hang off it:
 
 - **[GitHub Releases](https://github.com/intentic/intentic/releases)** — `_tools/scripts/publish-github.sh`,
   semantic-release's `publishCmd`, runs once the `v<version>` tag is on the remote and attaches the desktop
@@ -242,12 +242,9 @@ exported anywhere else.** A release is a tag on the commit CI already built, and
 - **[npm `@intentic/*`](https://www.npmjs.com/org/intentic)** — `.github/workflows/npm-publish.yml`, dispatched
   at that tag, builds the closure and publishes all 23 packages **with provenance** over npm's OIDC trusted
   publishing. There is no npm token in this repo's CI at all.
-- **[The VSCode extension](https://marketplace.visualstudio.com/publishers/intentic)** —
-  `.github/workflows/vscode-publish.yml`, dispatched the same way, assembles the extension around a
-  smoke-booted engine and publishes it to the Visual Studio Marketplace and Open VSX.
 
-The latter two are *dispatched* at the tag rather than triggered by it: GitHub deliberately starts no workflow
-from an event the built-in token created, so `_tools/scripts/dispatch-publish.sh` asks for them by name once
+The latter is *dispatched* at the tag rather than triggered by it: GitHub deliberately starts no workflow
+from an event the built-in token created, so `_tools/scripts/dispatch-publish.sh` asks for it by name once
 the tag exists. A new publishing target joins a release by being listed there.
 
 ## Contributing

@@ -3,6 +3,10 @@
 > An outside read of `.github/` as it stands at `0e5505c17` (2026-08-16). Sibling of
 > [`ci-runner.md`](ci-runner.md), which documents the runners this criticises.
 >
+> **Since this review:** the VSCode extension and its `vscode-publish.yml` were removed from the
+> repository. Quotes below are left as they stood — this is a snapshot, not a living page — so
+> anywhere the text names that workflow, read it as one of the two publish workflows of the day.
+>
 > Scope: 10 workflows + 1 composite action in `intentic/intentic` (~2,200 lines of YAML), the
 > `_tools/scripts/` layer they drive, and `registry`'s single workflow. Durations quoted as
 > "budget" are `timeout-minutes`, not measurements — where a real measurement exists it is

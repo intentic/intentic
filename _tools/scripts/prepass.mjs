@@ -782,20 +782,20 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
  * it is dead code that reads exactly like a pipeline with nothing to do. Every release goes green and the
  * artifact is simply never published.
  *
- * THREE FILES HAVE MADE THIS MISTAKE, and the third is why this check exists. npm-publish.yml fell ~30
- * versions behind the tags; vscode-publish.yml went 200 releases without either marketplace seeing a build;
- * action-publish.yml was written AFTER both were fixed, copied their shape, claimed their trigger in its own
- * header — "the same trigger and shape as npm-publish.yml" — and kept the broken one, so the Marketplace
- * action was built by a workflow that could not run and was never published once. Reading the diff caught none
- * of the three, because the wrong line looks exactly like the right one and the comment above it agreed.
+ * MORE THAN ONE FILE HAS MADE THIS MISTAKE, and the last one is why this check exists. npm-publish.yml fell
+ * ~30 versions behind the tags; action-publish.yml was written AFTER it was fixed, copied its shape, claimed
+ * its trigger in its own header — "the same trigger and shape as npm-publish.yml" — and kept the broken one,
+ * so the Marketplace action was built by a workflow that could not run and was never published once. Reading
+ * the diff caught neither, because the wrong line looks exactly like the right one and the comment above it
+ * agreed.
  *
  * workflow_dispatch is the documented exception to the loop guard, so the remedy is always the same and this
  * check names it: dispatch the workflow from dispatch-publish.sh, at the tag.
  *
  * WHEN THIS INVARIANT SHOULD BE DELETED: if the release ever pushes its tag with a GitHub App installation
  * token or a PAT instead of GITHUB_TOKEN, the loop guard stops applying and `on: push: tags` becomes the
- * simpler correct answer for all three files. Delete this block together with that change — leaving it would
- * forbid the very thing that fixed it.
+ * simpler correct answer for every publish workflow. Delete this block together with that change — leaving it
+ * would forbid the very thing that fixed it.
  *
  * Line-scanned like invariants 4, 8 and 9, and for the same reason: `on:` sits at column 0, its events at 2,
  * an event's own keys at 4. */

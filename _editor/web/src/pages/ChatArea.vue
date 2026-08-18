@@ -8,8 +8,7 @@
      survives popping out.
 
      The grid exists because the panel's own classes were written against the shell grid: it styles itself with
-     `grid-area: chat`, so the slot's parent must BE a grid with that area or the panel gets no box (the local
-     posture's LocalChat.vue makes the same accommodation, for the same reason).
+     `grid-area: chat`, so the slot's parent must BE a grid with that area or the panel gets no box.
 
      WHILE THE CHAT FLOATS IN ITS OWN WINDOW this area does not steal it: the pop-out outranks this slot, so the
      grid stands empty and the notice below says where the chat is, with the one explicit way to recall it. An

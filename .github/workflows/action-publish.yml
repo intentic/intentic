@@ -5,13 +5,13 @@
 # DISPATCHED, NOT TAG-TRIGGERED, and this file spent its whole life on the wrong side of that. It said
 # `on: push: tags: ["v*"]` and read as if the tag started it. It never did, not once: semantic-release pushes
 # its tag with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created — the
-# loop guard. npm-publish.yml and vscode-publish.yml were moved off that trigger for exactly this reason and
-# this file was written afterwards, in their shape, claiming their trigger, and keeping the broken one — so the
-# action was built by a workflow that could not run, and the Marketplace listing never saw a version. Third
-# occurrence of one bug; prepass invariant 10 is what makes it the last.
+# loop guard. npm-publish.yml was moved off that trigger for exactly this reason and this file was written
+# afterwards, in its shape, claiming its trigger, and keeping the broken one — so the action was built by a
+# workflow that could not run, and the Marketplace listing never saw a version. Repeat occurrence of one bug;
+# prepass invariant 10 is what makes it the last.
 #
 # workflow_dispatch is the ONE exception the loop guard makes, so it is the only trigger the release job's own
-# token can pull (dispatch-publish.sh, which names this file alongside the other two). The dispatch names THE
+# token can pull (dispatch-publish.sh, which names this file alongside the other one). The dispatch names THE
 # TAG as its ref, so the checkout is the released commit and `GITHUB_REF_NAME` is the version — exactly what a
 # tag push would have given it, which is why nothing below had to change.
 #

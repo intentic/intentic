@@ -1,7 +1,6 @@
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
-import { localPosture } from "../../environments/posture";
 import { removeStoredValue, storeValue } from "../browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "./activeSandbox";
 import { queryClient } from "../queryPersistence";
@@ -53,42 +52,6 @@ queryClient.getQueryCache().subscribe((event) => {
     }
 });
 
-/* LOCAL POSTURE (environments/posture.ts): there is no platform registry to read — the one sandbox is the
- * engine the host launched, and it is seeded here so every downstream reader (endpoint, target, liveness,
- * scope) works off the same list it always has. Everything that would ASK the platform short-circuits to
- * this seed instead (list/refresh below); the mutations (create/attach/remove) are unreachable — the local
- * router mounts no surface that offers them. */
-const LOCAL_SANDBOX_ID = `local`;
-const localSeed = (): SandboxSummary[] | undefined => {
-    const local = localPosture();
-    if (local === undefined) {
-        return undefined;
-    }
-    return [
-        {
-            id: LOCAL_SANDBOX_ID,
-            name: local.label,
-            image: null,
-            daemonUrl: local.engineUrl,
-            lastSeenAt: null,
-            setupCodeClaimedAt: null,
-            setupReport: null,
-            bootReport: null,
-            announceRefusal: null,
-            token: ``,
-            role: `owner`,
-            providedTunnel: false,
-            cloud: null,
-            hosted: null,
-        },
-    ];
-};
-const seeded = localSeed();
-if (seeded !== undefined) {
-    queryClient.setQueryData(SANDBOX_LIST_KEY, seeded);
-    activeSandboxId.value = LOCAL_SANDBOX_ID;
-}
-
 // The ACTIVE daemon's connection, as one state machine value (see connection.ts) rather than a set of
 // booleans. Browser-owned: the platform's registry knows a sandbox exists and when it last announced itself,
 // but only this browser can answer "can *I* reach it right now", and only the stream can say why not.
@@ -138,8 +101,7 @@ const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
 
 // Load the user's sandboxes through the shared cache: concurrent callers (requireSetup + the liveness loop +
 // the switcher) coalesce to ONE request, and a call within staleTime serves cache with no round-trip.
-const list = async (): Promise<SandboxSummary[]> =>
-    seeded !== undefined ? reconcileActive(seeded) : reconcileActive(await queryClient.fetchQuery(sandboxListQuery));
+const list = async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery(sandboxListQuery));
 
 // Force a fresh list regardless of staleTime — for callers that must observe just-changed server state:
 // onboarding polling (Setup), a just-accepted invite (AcceptInvite), and liveness recovery picking up a
@@ -147,10 +109,7 @@ const list = async (): Promise<SandboxSummary[]> =>
 // storm during onboarding is three of them at once) and `staleTime: 0` is precisely the instruction NOT to
 // let the cache dedupe them — so without a policy each one is its own platform round-trip.
 const refresh = withConcurrency<void, SandboxSummary[]>(
-    async (): Promise<SandboxSummary[]> =>
-        // The local seed IS the fresh truth — its engine URL is static for the host's whole session, so the
-        // recovery paths that force a refetch (liveness picking up a moved daemonUrl) have nothing to learn.
-        seeded !== undefined ? reconcileActive(seeded) : reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
+    async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
     { mode: `singleFlight`, key: () => `sandbox.list` },
 );
 

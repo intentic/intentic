@@ -16,21 +16,17 @@ import { watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "./composables/useAuth";
 import { useSandbox } from "./composables/sandbox/useSandbox";
-import { isLocalPosture } from "./environments/posture";
 import GoogleSigninGate from "./sandbox-gates/GoogleSigninGate.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
 const { user } = useAuth();
 const { activeSandboxId } = useSandbox();
 const router = useRouter();
-// The local posture has no signed-out state: the runtime's condition — an account with a sandbox selected —
-// is met by construction (the host launched the engine; the person at the keyboard is the owner).
-const local = isLocalPosture();
 
 // A confirmed platform 401, server-side expiry, or another tab signing out clears the shared user ref. The
 // runtime above the route unmounts immediately; move the stale shell itself to login as the same global event.
 watch(user, (current, previous) => {
-    if (!local && current === null && previous !== null) {
+    if (current === null && previous !== null) {
         void router.replace(`/login`);
     }
 });
@@ -38,7 +34,7 @@ watch(user, (current, previous) => {
 
 <template>
     <RouterView />
-    <WorkspaceRuntime v-if="local || (user && activeSandboxId)" />
+    <WorkspaceRuntime v-if="user && activeSandboxId" />
     <GoogleSigninGate />
     <HostModelPicker />
 </template>

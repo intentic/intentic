@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Start the publish workflows that hang off a release, at the tag semantic-release just pushed.
 #
-# WHY THIS FILE EXISTS AT ALL. npm-publish.yml and vscode-publish.yml used to say `on: push: tags` and read as
-# if the tag started them. It never did, not once in 200 releases: semantic-release pushes its tag with the
-# built-in GITHUB_TOKEN, and GitHub deliberately starts no workflow from an event that token created — the loop
-# guard that stops a workflow from triggering itself forever. The failure was silent in the worst way, because
-# a trigger that never fires looks exactly like a pipeline with nothing to do: every release went green, npm
-# stopped at 1.176.3 while the tags ran on to 1.206.1, and the VSCode extension was never published anywhere.
+# WHY THIS FILE EXISTS AT ALL. npm-publish.yml used to say `on: push: tags` and read as if the tag started it.
+# It never did, not once in 200 releases: semantic-release pushes its tag with the built-in GITHUB_TOKEN, and
+# GitHub deliberately starts no workflow from an event that token created — the loop guard that stops a
+# workflow from triggering itself forever. The failure was silent in the worst way, because a trigger that
+# never fires looks exactly like a pipeline with nothing to do: every release went green while npm stopped at
+# 1.176.3 and the tags ran on to 1.206.1.
 #
 # workflow_dispatch is the ONE exception the loop guard makes (with repository_dispatch), so it is the only
 # trigger the release job's own token can pull — hence an explicit dispatch rather than an implicit trigger.
@@ -32,11 +32,11 @@ TAG="v${VERSION}"
 # Every workflow whose artifacts belong to a release. A new publishing target joins the release by being added
 # here and nowhere else.
 #
-# action-publish.yml was written after the two above were moved off `on: push: tags`, in their shape, and kept
-# the trigger they had just been rescued from — so it was a publish workflow nothing could start, and the
+# action-publish.yml was written after npm-publish.yml was moved off `on: push: tags`, in its shape, and kept
+# the trigger it had just been rescued from — so it was a publish workflow nothing could start, and the
 # Marketplace action was never published at all. Being in THIS LIST is what makes a publish workflow reachable;
 # prepass invariant 10 refuses any workflow that tries to reach itself with a tag push instead.
-WORKFLOWS=(npm-publish.yml vscode-publish.yml action-publish.yml)
+WORKFLOWS=(npm-publish.yml action-publish.yml)
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   if [ -n "${CI:-}" ]; then

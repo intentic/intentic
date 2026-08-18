@@ -1,5 +1,4 @@
 import { computed, ref } from "vue";
-import { isLocalPosture } from "../../environments/posture";
 import { couldBeOnThisMachine, type Endpoint, selectEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { setStreamCapacity, streamCapacity } from "./streamBudget";
@@ -64,11 +63,6 @@ setStreamCapacity(() => {
 /* Qualify the active sandbox's fastest working address. Safe to call on every reconnect: it returns
  * immediately once the sandbox has a resolved endpoint, and coalesces concurrent callers. */
 const resolve = async (): Promise<void> => {
-    // The local posture's engine URL already IS loopback — there is no faster address to qualify, and the
-    // probe would derive candidates from a connect token the local engine doesn't have.
-    if (isLocalPosture()) {
-        return;
-    }
     const id = activeSandboxId.value;
     const url = daemonUrl.value;
     const sandbox = active.value;

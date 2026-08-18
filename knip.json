@@ -31,10 +31,6 @@
         "_editor/desktop-app": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
         },
-        "_editor/vscode": {
-            "entry": ["src/extension.ts", "scripts/*.mjs"],
-            "ignoreDependencies": ["@vscode/vsce", "ovsx"]
-        },
         "_platform/api": {
             "entry": ["src/**/*.test.ts"]
         },

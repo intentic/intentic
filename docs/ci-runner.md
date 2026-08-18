@@ -207,7 +207,7 @@ the pipeline.
 
 | `runs-on` | Jobs |
 | --- | --- |
-| `[self-hosted, intentic]` (17) | ci: changes, preflight, migrations, ci-base, ci-desktop, e2e-hermetic, images, images-merge, images-platform · verify ×3 · release: plan, images-amd64 · nightly: e2e, images-public · action-publish, vscode-publish, rollback |
+| `[self-hosted, intentic]` (16) | ci: changes, preflight, migrations, ci-base, ci-desktop, e2e-hermetic, images, images-merge, images-platform · verify ×3 · release: plan, images-amd64 · nightly: e2e, images-public · action-publish, rollback |
 | `[self-hosted, intentic, desktop]` (10) | ci: desktop-check, ic-check, desktop-verify, desktop-windows-build · release: windows-build, linux-build, publish · nightly: desktop-setup, desktop-windows-build, update-survival |
 | `[self-hosted, windows-desktop]` (1 definition, 3 callers) | `windows-smoke.yml`, called by ci (`desktop-verify-windows`), release (`windows-verify`) and nightly (`desktop-windows`) |
 

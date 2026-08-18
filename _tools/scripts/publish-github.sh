@@ -4,7 +4,7 @@
 # it hangs off is already on the remote — pushed by semantic-release itself the moment prepare returned.
 #
 # That tag does NOT start the registry publishes, however much it looks like it should. GitHub starts no
-# workflow off an event the built-in token created, so npm-publish.yml and vscode-publish.yml are dispatched
+# workflow off an event the built-in token created, so npm-publish.yml and action-publish.yml are dispatched
 # explicitly at this tag once semantic-release returns (dispatch-publish.sh, release.yml).
 #
 # There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
