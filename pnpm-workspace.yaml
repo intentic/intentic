@@ -93,6 +93,7 @@ allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
   "@resvg/resvg-js": true
+  '@vscode/vsce-sign': true
   baileys: true
   bun: true
   core-js: false
