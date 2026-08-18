@@ -109,7 +109,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Updates: what we promise never breaks · intentic docs",
                                 description:
-                                    "What an intentic update can never touch: your files survive every update and rollback, updates are offered rather than forced, breaking changes are flagged before you take them, and a release reaches you as soon as it passes.",
+                                    "What an intentic update can never touch. Your files survive every update and rollback, updates are offered not forced, and breaking changes are flagged.",
                                 datePublished: "2026-08-10",
                             },
                         },

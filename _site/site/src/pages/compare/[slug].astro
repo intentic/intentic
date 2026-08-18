@@ -1,5 +1,5 @@
 ---
-import { compareFamilies, compareHref, comparePages, type ComparePage } from "@intentic-dev/site-content/compare";
+import { compareFamilies, compareHref, comparePages, compareVerifiedOn, type ComparePage } from "@intentic-dev/site-content/compare";
 import { APP_URL, githubIssuesUrl, ORG_NAME } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
@@ -28,6 +28,17 @@ const next = comparePages[(index + 1) % comparePages.length];
 
 const theirRows = page.table.filter((row) => row.theirs).length;
 const host = new URL(page.url).host;
+
+// Written out rather than left as an ISO string: the note is read as a sentence, and "18 August 2026" is a
+// date a reader dates the page by, where "2026-08-18" is a field they skim past. `datetime` keeps the machine
+// -readable form on the <time> element for anything parsing the page.
+const verifiedOn = compareVerifiedOn;
+const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+});
 ---
 
 <BaseLayout breadcrumbs={[{ name: "Compare", path: compareHref("") }, { name: page.navLabel, path: compareHref(page.slug) }]}>
@@ -139,13 +150,46 @@ const host = new URL(page.url).host;
             <section class="fade-in py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Pick {page.name} when</h2>
                 <p class="mt-4 max-w-copy text-lg leading-relaxed text-content">{page.pickThem}</p>
-                <p class="mt-6 max-w-copy text-sm leading-relaxed text-subtle">
-                    Checked against{" "}
-                    <a href={page.url} target="_blank" rel="noopener nofollow" class="transition-colors hover:text-link">{host}</a>{" "}
-                    the week this shipped. These products move fast. Spot something out of date?{" "}
+            </section>
+
+            <!-- THE EVIDENCE, NAMED AND DATED. The old note said the page was checked "the week this shipped",
+                 which is not a date and ages into a claim nobody can test. This states the day the vendor's own
+                 documents were last opened and links each one, so a reader can check any row here against the
+                 source it came from, and can see for themselves how old that check is. -->
+            <section class="border-t border-line py-10">
+                <h2 class="text-sm font-semibold tracking-tight text-content">How this was checked</h2>
+                <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
+                    Every claim about {page.name} on this page is drawn from its own documentation, last read on{" "}
+                    <time datetime={verifiedOn}>{verifiedLabel}</time>. These products move fast. Spot something out of date?{" "}
                     <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Open an issue</a>{" "}
                     and it is fixed in the next build.
                 </p>
+                <ul class="mt-4 flex flex-wrap gap-2">
+                    <li>
+                        <a
+                            href={page.url}
+                            target="_blank"
+                            rel="noopener nofollow"
+                            class="rounded-lg border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                        >
+                            {page.name} · {host}
+                        </a>
+                    </li>
+                    {
+                        page.sources.map((source) => (
+                            <li>
+                                <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noopener nofollow"
+                                    class="rounded-lg border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                >
+                                    {source.label} · {new URL(source.url).host}
+                                </a>
+                            </li>
+                        ))
+                    }
+                </ul>
             </section>
         </div>
 

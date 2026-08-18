@@ -96,7 +96,7 @@ export const guidesIndex = {
     meta: {
         title: "Guides · Running AI coding agents",
         description:
-            "Practical answers about running AI coding agents: working several at once, keeping them running unattended, giving them credentials safely, reviewing what they changed, and where your code goes.",
+            "Practical answers about running AI coding agents: several at once, unattended, with credentials scoped safely and every change reviewed before it lands.",
         datePublished: PUBLISHED,
     },
 };
@@ -223,12 +223,13 @@ export const guidePages: GuidePage[] = [
         related: [
             { label: "Parallel agents, in the docs", href: docsHref("parallel-agents") },
             { label: "Run a fleet", href: productHref("run") },
-            { label: "How intentic compares", href: compareHref("") },
+            { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs Superset", href: compareHref("superset") },
         ],
         meta: {
             title: "How to run multiple AI coding agents in parallel",
             description:
-                "Give each agent its own checkout so two can never edit the same file. When worktrees are enough, when a container per agent is worth it, and how many agents is realistic.",
+                "Give each agent its own checkout so two can never edit the same file. When worktrees are enough, when a container per agent pays off, and how many to run.",
             datePublished: PUBLISHED,
         },
     },
@@ -334,6 +335,8 @@ export const guidePages: GuidePage[] = [
             { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Automations", href: docsHref("automations") },
+            { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs Conductor", href: compareHref("conductor") },
         ],
         meta: {
             title: "How to keep a coding agent running after you close your laptop",
@@ -454,11 +457,13 @@ export const guidePages: GuidePage[] = [
             { label: "Connect agents to your systems", href: productHref("connect") },
             { label: "Capabilities, in the docs", href: docsHref("capabilities") },
             { label: "Access and permissions", href: docsHref("access") },
+            { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
         ],
         meta: {
             title: "How to give an AI agent database and API access safely",
             description:
-                "Keep the credential out of the model's context and scope it to the task. Environment variables, secret managers, tools that hold the key, and what each one actually protects.",
+                "Keep the credential out of the model's context and scope it to the task. Env vars, secret managers, tools that hold the key, and what each one protects.",
             datePublished: PUBLISHED,
         },
     },
@@ -568,11 +573,12 @@ export const guidePages: GuidePage[] = [
             { label: "Review agent work", href: productHref("review") },
             { label: "Capabilities and permissions", href: docsHref("access") },
             { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs Cursor", href: compareHref("cursor") },
         ],
         meta: {
             title: "How to review code an AI agent wrote before it lands",
             description:
-                "Read the diff rather than the summary, approve the plan before the work, and keep changes small. What to check first in an agent's diff and where automation helps.",
+                "Read the diff rather than the summary, approve the plan before the work, and keep changes small. What to check first, and where automation helps.",
             datePublished: PUBLISHED,
         },
     },
@@ -671,6 +677,8 @@ export const guidePages: GuidePage[] = [
             { label: "Host agent work", href: productHref("host") },
             { label: "Your own machine, in the docs", href: docsHref("your-machine") },
             { label: "Which models it uses", href: docsHref("models") },
+            { label: "Quickstart", href: docsHref("quickstart") },
+            { label: "intentic vs cloud agents", href: compareHref("cloud-agents") },
         ],
         meta: {
             title: "Where does your code go when you use a cloud coding agent?",

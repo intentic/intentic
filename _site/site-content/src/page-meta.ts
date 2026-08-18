@@ -44,13 +44,23 @@ export const pageMeta: Record<string, PageMeta> = {
         description: "Every provider we use to run the intentic platform, what each one does, where it processes data and under what safeguard.",
         datePublished: "2026-08-13",
     },
+    /* The attribution page. It had no entry here, so it inherited the fallback in BaseLayout: the brand line as
+     * its title and ORG_DESCRIPTION as its description, which at 285 characters is both truncated in a result
+     * and about a different page entirely. Every route in the sitemap needs a line in this table for exactly
+     * that reason. */
+    "/credits/": {
+        title: "Credits · intentic",
+        description:
+            "The open-source works intentic uses that ask to be credited, with each licence and what was changed. DiceBear avatars and the Adventurer illustration set.",
+        datePublished: "2026-08-15",
+    },
     "/about/": aboutMeta,
     // The desktop app's download page. It is the answer to the objection the quickstart raises, so its
     // description leads with what the app removes rather than what it is built with.
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:
-            "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox, handles updates and opens your workspace.",
+            "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox and handles updates.",
         datePublished: "2026-08-02",
     },
     /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
@@ -60,7 +70,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/changelog/": {
         title: "Changelog · intentic",
         description:
-            "What's new in intentic: every release that changed something you'd notice, in plain language, newest first. Written as the work shipped and published straight from the release.",
+            "What's new in intentic: every release that changed something you'd notice, in plain language, newest first. Published straight from the release.",
         datePublished: "2026-08-10",
     },
     // The gallery's ROWS come from the registry repo at build time; only its framing is authored here.
@@ -75,7 +85,7 @@ export const pageMeta: Record<string, PageMeta> = {
     "/earn/": {
         title: "Earn · intentic",
         description:
-            "Membership fees fund a monthly creator pool. Members spend credits on premium extension installs and paid service runs, with every payment shown on a public ledger.",
+            "Membership fees fund a monthly creator pool. Members spend credits on premium installs and paid service runs, with every payment on a public ledger.",
         datePublished: "2026-08-11",
     },
     /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the
@@ -84,14 +94,14 @@ export const pageMeta: Record<string, PageMeta> = {
     "/earn/ledger/": {
         title: "The ledger · Earn · intentic",
         description:
-            "Every month of the creator pool, live from the platform: what came in, what payment processing cost, what the pool was, what reached creators, and what is still owed.",
+            "Every month of the creator pool, live from the platform: what came in, what processing cost, what reached creators, and what is still owed.",
         datePublished: "2026-08-12",
     },
     // The argued version of every promise /earn makes. Its own page so the short one stays scannable.
     "/earn/fine-print/": {
         title: "The fine print · Earn · intentic",
         description:
-            "Every promise the Earn page makes, argued in full: the credit arithmetic, why there is no telemetry, why farming loses money, the service rules, the public ledger, and what exists today.",
+            "Every promise the Earn page makes, argued in full: the credit arithmetic, why farming loses money, the service rules, and what exists today.",
         datePublished: "2026-08-11",
     },
     [compareHref("")]: compareIndex.meta,

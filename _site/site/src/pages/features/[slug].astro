@@ -1,4 +1,5 @@
 ---
+import { guidesHref } from "@intentic-dev/site-content/guides";
 import { productHref, productPages, type ProductPage } from "@intentic-dev/site-content/product";
 import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -134,6 +135,21 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                         );
                     })
                 }
+            </div>
+        </section>
+
+        <!-- The question underneath the surface. It sits ABOVE the next-surface rail on purpose: the rail
+             walks the shelf, and this steps off it, to the page written for somebody who has the problem but
+             not yet the vocabulary this page is written in. -->
+        <section class="border-t border-line">
+            <div class="mx-auto max-w-7xl px-6 py-12">
+                <a href={guidesHref(page.guide.slug)} class="group card block max-w-3xl p-6 transition-colors hover:border-primary-600/40">
+                    <div class="eyebrow">Guide</div>
+                    <div class="mt-2 text-lg font-medium tracking-tight text-content group-hover:text-link">{page.guide.question}</div>
+                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">
+                        A straight answer, the approaches that are not this product included.
+                    </p>
+                </a>
             </div>
         </section>
 

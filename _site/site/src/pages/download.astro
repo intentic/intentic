@@ -23,10 +23,6 @@ import { desktopPlatforms } from "../lib/desktop-downloads";
 
 const release = await latestRelease();
 
-const title = "Download Intentic for Windows and Linux";
-const description =
-    "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox, handles updates and opens your workspace.";
-
 /* Name, link and glyph come from the shared table, so this page and the hero's button can never drift into
  * pointing at different files. The wording below is this page's own: here there is room to say what the file
  * is and what running it costs. */
@@ -67,11 +63,7 @@ const does = [
 ];
 ---
 
-<BaseLayout
-    title={title}
-    description={description}
-    breadcrumbs={[{ name: "Download", path: "/download/" }]}
->
+<BaseLayout breadcrumbs={[{ name: "Download", path: "/download/" }]}>
     <Nav />
     <main class="flex-1">
         <section class="mx-auto max-w-5xl px-6 pt-32 pb-16 max-sm:pt-28">

@@ -171,6 +171,6 @@ export const whyIntentic = [
 export const aboutMeta = {
     title: `About · ${CREATOR_NAME}, the creator of intentic`,
     description:
-        "Who builds intentic: Artur Kurowski, a full-stack engineer with 15+ years in production systems. Verifiable background, MIT source on GitHub, and a commit log the agents wrote.",
+        "Who builds intentic: Artur Kurowski, a full-stack engineer with 15+ years in production systems. Verifiable background and MIT source on GitHub.",
     datePublished: "2026-08-02",
 };

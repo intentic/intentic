@@ -17,12 +17,20 @@
  * - Every fact was re-verified against the vendor's own live site on the datePublished below.
  * - No invented numbers; where a vendor does not state something (a licence, a price), the page does not either.
  * - Every table carries rows that go the other way (`theirs`). A table with no losing rows is one nobody believes.
+ * - `sources` names the vendor's OWN documentation, and every entry was opened rather than guessed at from a
+ *   naming pattern. A row describing their isolation, automation or review behaviour has to be readable in one
+ *   of them, or the row does not exist: a comparison page is the easiest page on any site to quietly fabricate.
  */
 
 export const compareHref = (slug: string): string => (slug ? `/compare/${slug}/` : `/compare/`);
 
 // Re-verified against every vendor's live site on this date. These products ship fast; this is a snapshot.
 const PUBLISHED = "2026-08-09";
+
+/* When the cited documentation was last opened and read. Separate from PUBLISHED because the two decay at
+ * different rates and a reader deserves both: PUBLISHED is when the argument was written, this is when the
+ * evidence under it was last checked. Bump it only after actually re-reading every `sources` entry. */
+const VERIFIED = "2026-08-18";
 
 /** One kind of tool people confuse this product with: the unit the hub is organised in. */
 export interface CompareFamily {
@@ -75,6 +83,11 @@ export interface ComparePage {
     together?: CompareSection;
     /** The case for them. A real recommendation, not a strawman. */
     pickThem: string;
+    /* THE VENDOR'S OWN PAGES, NAMED. `url` is their front door, which is marketing; these are the documents a
+     * reader checks a claim against, and every one of them was opened rather than guessed at. A comparison
+     * that cites nothing is asking to be taken on faith, which is the one thing this shelf refuses to do
+     * anywhere else. It is also what stops the page going quietly stale: a dead link is a visible failure. */
+    sources: { label: string; url: string }[];
     meta: { title: string; description: string; datePublished: string };
 }
 
@@ -183,9 +196,18 @@ export const comparePages: ComparePage[] = [
                 theirs: true,
             },
             { label: "Source you can read", intentic: "all of it, MIT on GitHub with the platform included", them: "not published" },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "review the diff, open a pull request, merge, archive the workspace",
+            },
         ],
         pickThem:
             "You work on one Mac, want a native app over a browser, your agents only need what is already installed, and you would rather click Conductor Cloud than provide a machine.",
+        sources: [
+            { label: "Docs", url: "https://www.conductor.build/docs" },
+            { label: "Pricing", url: "https://www.conductor.build/pricing" },
+        ],
         meta: {
             title: "intentic vs Conductor · parallel agents, compared",
             description:
@@ -248,9 +270,19 @@ export const comparePages: ComparePage[] = [
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "source-available (Elastic License 2.0)" },
             { label: "Price", intentic: "free, everything included", them: "free tier; Pro from $15–20/user, remote on Pro", theirs: true },
+            { label: "Isolation", intentic: "a container and a git worktree per agent", them: "an isolated branch per parallel session" },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "a built-in diff viewer: stage, commit, push, open a PR",
+            },
         ],
         pickThem:
             "You are on a Mac, want parallel agents in the triple digits today, need only the toolchain that Mac carries, and prefer a low per-seat Pro tier to a container you configure.",
+        sources: [
+            { label: "Docs", url: "https://docs.superset.sh/" },
+            { label: "Pricing", url: "https://superset.sh/pricing" },
+        ],
         meta: {
             title: "intentic vs Superset · parallel agents, and the machine under them",
             description:
@@ -318,10 +350,11 @@ export const comparePages: ComparePage[] = [
         ],
         pickThem:
             "Your computer already has every tool and login your agents need, and native iOS and Android apps matter more than a browser tab. It is one MIT app with nothing to configure.",
+        sources: [{ label: "Source and README", url: "https://github.com/pingdotgg/t3code" }],
         meta: {
             title: "intentic vs T3 Code · a control plane, or the machine under it",
             description:
-                "T3 Code drives the harnesses on your computer from desktop, web and native mobile, MIT and free. intentic gives each agent a container you approve, with events that wake it.",
+                "T3 Code drives harnesses on your computer from desktop, web and mobile, MIT and free. intentic gives each agent a container you approve, woken by events.",
             datePublished: PUBLISHED,
         },
     },
@@ -382,13 +415,29 @@ export const comparePages: ComparePage[] = [
             { label: "Sharing with a teammate", intentic: "invite by email; grants enforced by the daemon", them: "single-user, local-first" },
             { label: "Account required", intentic: "a Google sign-in for the hosted workspace", them: "none at all", theirs: true },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
+            {
+                label: "Isolation",
+                intentic: "a container and a git worktree per agent",
+                them: "the local checkout, or linked git worktrees per task",
+            },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "automations in the desktop app",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "inspect the diff, verify, commit, push, open a pull request",
+            },
         ],
         pickThem:
             "You want the widest runtime choice in one window, your machine already has what the agents need, and you want no account, container runtime or platform in the path.",
+        sources: [{ label: "Docs", url: "https://www.trysynara.com/docs" }],
         meta: {
             title: "intentic vs Synara · nine runtimes, or a machine each",
             description:
-                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs each agent in a container you configure, wired to your systems and started by events you pick.",
+                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs each agent in a container you configure and wire to your systems.",
             datePublished: PUBLISHED,
         },
     },
@@ -453,13 +502,22 @@ export const comparePages: ComparePage[] = [
                 them: "Teams: real-time multiplayer on shared docs (in waitlist)",
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT desktop and iOS apps" },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "every AI edit surfaced as a diff to approve before it lands",
+            },
         ],
         pickThem:
             "Documents, mockups and diagrams matter as much as code, and visual review suits you better than a unified diff. Its team canvas lets everyone's local agents edit the same documents.",
+        sources: [
+            { label: "Docs", url: "https://nimbalyst.com/docs" },
+            { label: "Pricing", url: "https://nimbalyst.com/pricing/" },
+        ],
         meta: {
             title: "intentic vs Nimbalyst · two open-source agent workspaces",
             description:
-                "Both are local, open source and free, with parallel worktree sessions and team collaboration. Nimbalyst builds out the artefacts; intentic builds out the machine.",
+                "Both are local, open source and free, with parallel worktree sessions and team collaboration. Nimbalyst builds the artefacts; intentic builds the machine.",
             datePublished: PUBLISHED,
         },
     },
@@ -528,6 +586,16 @@ export const comparePages: ComparePage[] = [
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "proprietary" },
             { label: "Price", intentic: "free, on your own model subscription", them: "free tier; Pro from $20/user, cloud agents on paid plans" },
+            {
+                label: "Isolation",
+                intentic: "a container and a git worktree per agent, on your machine",
+                them: "a Cursor-managed VM per cloud agent; the local agent edits your tree",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "checkpoints you can restore, and pull requests from cloud agents",
+            },
         ],
         together: {
             title: "Keep Cursor as your editor",
@@ -535,10 +603,14 @@ export const comparePages: ComparePage[] = [
         },
         pickThem:
             "You want the best AI editor under your own hands, model choice across every frontier provider matters more than the machine, and running cloud agents on Cursor's infrastructure is a trade you are happy to make.",
+        sources: [
+            { label: "Cloud agents", url: "https://cursor.com/docs/cloud-agent" },
+            { label: "Pricing", url: "https://cursor.com/pricing" },
+        ],
         meta: {
             title: "intentic vs Cursor · cloud agents, on whose machine",
             description:
-                "Cursor runs parallel cloud agents on its own infrastructure, on paid plans. intentic runs the same fleet on your machine, free and MIT, and you can keep Cursor as your editor.",
+                "Cursor runs parallel cloud agents on its own paid infrastructure. intentic runs the same fleet on your machine, free and MIT. Keep Cursor as your editor.",
             datePublished: PUBLISHED,
         },
     },
@@ -610,6 +682,16 @@ export const comparePages: ComparePage[] = [
                 intentic: "MIT for the sandbox, platform and CLI",
                 them: "proprietary product; a Claude subscription or API account",
             },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "recurring tasks scheduled from the desktop app",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "diffs in the IDE extensions; commits and pull requests from the CLI",
+            },
         ],
         together: {
             title: "Run Claude Code inside intentic",
@@ -617,10 +699,14 @@ export const comparePages: ComparePage[] = [
         },
         pickThem:
             "You want Anthropic's terminal, IDE, desktop, web and mobile surfaces, its cloud sessions and Routines fit your work, and you prefer one vendor to running your own container.",
+        sources: [
+            { label: "Docs", url: "https://code.claude.com/docs/en/overview" },
+            { label: "Pricing", url: "https://claude.com/pricing" },
+        ],
         meta: {
             title: "intentic vs Claude Code · a harness intentic runs, and its own cloud",
             description:
-                "Claude Code is one of intentic's five built-in harnesses. Its web version runs on Anthropic-managed VMs; intentic runs every harness on your own machine, MIT and free.",
+                "Claude Code is one of intentic's five built-in harnesses. Its web version runs on Anthropic-managed VMs; intentic runs every harness on your machine.",
             datePublished: PUBLISHED,
         },
     },
@@ -687,6 +773,11 @@ export const comparePages: ComparePage[] = [
                 them: "you start each session",
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "opencode run, in your own scripts and CI",
+            },
         ],
         together: {
             title: "Add OpenCode as a capability",
@@ -694,10 +785,14 @@ export const comparePages: ComparePage[] = [
         },
         pickThem:
             "You want a lean, fully open terminal agent that stores nothing, you are happy launching it yourself, and you need no container, fleet board or events to start it.",
+        sources: [
+            { label: "Docs", url: "https://opencode.ai/docs/" },
+            { label: "Source", url: "https://github.com/anomalyco/opencode" },
+        ],
         meta: {
             title: "intentic vs OpenCode · an open harness, and the machine around it",
             description:
-                "OpenCode is an MIT, provider-agnostic terminal agent that stores no code. intentic runs harnesses like it in a container you own, adding capabilities, a board and automations.",
+                "OpenCode is an MIT, provider-agnostic terminal agent storing no code. intentic runs harnesses like it in a container you own, with a board and automations.",
             datePublished: PUBLISHED,
         },
     },
@@ -767,6 +862,7 @@ export const comparePages: ComparePage[] = [
                 theirs: true,
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
+            { label: "Isolation", intentic: "a container and a git worktree per agent", them: "isolated sessions per agent, workspace or sender" },
         ],
         together: {
             title: "Hand the repository work over",
@@ -774,10 +870,14 @@ export const comparePages: ComparePage[] = [
         },
         pickThem:
             "Your work is across your life rather than a codebase: mail, meetings, notes and home systems, inside the chat app you already use, with no account or container runtime.",
+        sources: [
+            { label: "Docs", url: "https://docs.openclaw.ai/" },
+            { label: "Source", url: "https://github.com/openclaw/openclaw" },
+        ],
         meta: {
             title: "intentic vs OpenClaw · a personal assistant, and a workplace for agents",
             description:
-                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives each coding agent a container, worktree and reviewable diff. The two can work together.",
+                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives each coding agent a container, a worktree and a reviewable diff.",
             datePublished: PUBLISHED,
         },
     },
@@ -851,6 +951,12 @@ export const comparePages: ComparePage[] = [
                 them: "a natural-language cron scheduler",
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your own machine or server, self-hosted" },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "built-in cron, with delivery to any platform",
+            },
         ],
         together: {
             title: "One machine, two jobs",
@@ -858,10 +964,14 @@ export const comparePages: ComparePage[] = [
         },
         pickThem:
             "You want one agent that writes its own skills, remembers past solutions and works from whichever chat app you use, on work reaching far beyond repositories.",
+        sources: [
+            { label: "Docs", url: "https://hermes-agent.nousresearch.com/docs" },
+            { label: "Source", url: "https://github.com/NousResearch/hermes-agent" },
+        ],
         meta: {
             title: "intentic vs Hermes · a self-improving assistant, and a sandbox per agent",
             description:
-                "Hermes is Nous Research's self-improving agent: MIT, self-hosted, with generated skills and memory. intentic runs coding agents in a container and worktree each, with a diff before anything lands.",
+                "Hermes is Nous Research's self-improving assistant, MIT and self-hosted. intentic gives each coding agent a container, a worktree and a diff you approve.",
             datePublished: PUBLISHED,
         },
     },
@@ -919,19 +1029,36 @@ export const comparePages: ComparePage[] = [
                 them: "established vendors with SOC 2, SSO and the certifications",
                 theirs: true,
             },
+            {
+                label: "Isolation",
+                intentic: "a container and a git worktree per agent, on your machine",
+                them: "a vendor-run VM per task, with your repo cloned into it",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "a draft pull request to review after the run",
+            },
         ],
         pickThem:
             "You would rather not provide a machine, the repository is not sensitive, procurement needs a vendor with certifications in hand, and you want fifty parallel agents on a Tuesday without owning fifty cores.",
+        sources: [
+            { label: "Devin docs", url: "https://docs.devin.ai/get-started/devin-intro" },
+            { label: "Jules docs", url: "https://jules.google/docs" },
+        ],
         meta: {
             title: "intentic vs Devin, Jules and cloud agents · whose machine runs it",
             description:
-                "Devin, Jules, Codex cloud, Claude Code on the web and Replit clone your repo into the vendor's VM. intentic keeps the browser experience with the sandbox on your machine, free and MIT.",
+                "Devin, Jules, Codex cloud and Replit clone your repo into the vendor's VM. intentic keeps the browser, with the sandbox on your own machine. Free and MIT.",
             datePublished: PUBLISHED,
         },
     },
 ];
 
 export const comparePage = (slug: string): ComparePage | undefined => comparePages.find((page) => page.slug === slug);
+
+/** The day every page's cited sources were last opened. Rendered on each comparison, so the age is the reader's to judge. */
+export const compareVerifiedOn = VERIFIED;
 
 export const familyPages = (id: string): ComparePage[] => comparePages.filter((page) => page.family === id);
 

@@ -73,6 +73,8 @@ export interface LandingContent {
     hero: {
         headlineLines: string[];
         subhead: string;
+        /** The plain, literal restatement under the subhead. Named concepts, not persuasion. */
+        summary: string;
         chips: string[];
         shot: HeroShot;
         demo: HeroDemo;
@@ -119,7 +121,7 @@ export const landingContent: LandingContent = {
         // the cut with the claim and the price still in it.
         title: "intentic · A workspace for coding agents",
         description:
-            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free.",
+            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
@@ -141,6 +143,15 @@ export const landingContent: LandingContent = {
         // the bands, because framing it as the reader walking away argued against the co-piloted
         // stance the headline just set.
         subhead: "A workspace for coding agents. Nothing happens out of sight.",
+        /* THE LITERAL SENTENCE, under the two persuasive ones. The headline is a stance and the subhead is a
+         * category noun plus a claim; neither ever says the mechanism, because saying it costs the opener its
+         * edge. So it is said here instead, one step down the page, in the words somebody types into a search
+         * box when they do not yet know this product exists: parallel, container, worktree, review.
+         *
+         * It is not a fourth persuasive beat and must not become one. It names what the product does and stops.
+         * Ownership stays out by the standing rule and is carried by the chip below, which is crawlable text on
+         * the same screen — the concept is present without the opener paying for it. */
+        summary: "Run coding agents in parallel, each in its own container and git worktree, and review every change before it lands.",
         // "Works with Claude, Codex and Grok" replaces "Bring your own agent": the old chip asked the
         // reader to already know what an agent is and that they have one, which is the assumption the
         // whole first screen was making. Three names they recognise do the same job with no decoding.

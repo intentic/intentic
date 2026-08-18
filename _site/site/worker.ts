@@ -66,6 +66,20 @@ function movedPath(pathname: string): string | undefined {
     return /\.[a-z0-9]+$/iu.test(moved) || moved.endsWith("/") ? moved : `${moved}/`;
 }
 
+/* HSTS, on every https response. It is the half of protocol canonicalization the redirect below cannot do:
+ * a 301 fixes the request that already went out in the clear, this stops the next one being made at all, so
+ * a returning visitor never issues the plaintext hop a redirect has to answer.
+ *
+ * includeSubDomains is safe here and checked: app. and api. both terminate TLS. `preload` is deliberately
+ * NOT set — that submits the domain to a list baked into browser binaries, and getting off it takes months.
+ * A year of max-age is the value the preload list would want anyway if we ever chose to. */
+const HSTS = "max-age=31536000; includeSubDomains";
+
+/* Where a sitemap lives, and where naive tools look for it. robots.txt names /sitemap-index.xml and that is
+ * the real document; /sitemap.xml is the filename half the tooling in the world guesses at without asking.
+ * A 301 costs nothing and turns a 404 in somebody's crawler into the file they were after. */
+const SITEMAP_ALIAS = "/sitemap.xml";
+
 // The Markdown mirror of /docs/quickstart/ lives at /docs/quickstart.md and is word-for-word the same
 // page, so it needs to say which of the two is the real one. A .md file can't carry <link rel=canonical>,
 // so the header does it — otherwise the pair reads as duplicate content.
@@ -133,64 +147,97 @@ async function resolveDownload(asset: (version: string) => string, key: string):
     return resolved;
 }
 
+/* THE PROTOCOL, DECIDED ONCE. Cloudflare serves this site on both schemes, so until this existed every page
+ * had a plaintext twin that answered 200 and carried the same self-referencing canonical — two crawlable
+ * copies of one site, splitting the links and the crawl signals between them. Google had already indexed the
+ * http:// homepage under a title we retired.
+ *
+ * ONE 301, NEVER TWO. The scheme is swapped on the parsed URL, so host, query and port survive untouched, and
+ * a path that also MOVED is resolved in the same response rather than in a second one: http://…/api/host/ goes
+ * straight to https://…/developers/host/, not to its own plaintext twin first. Two redirects for one request
+ * is the chain the audit warned about, and legacy paths are exactly the URLs old enough to still be written
+ * down as http:// somewhere. */
+function httpsRedirect(url: URL): Response | undefined {
+    if (url.protocol !== "http:") return undefined;
+    const secure = new URL(url.href);
+    secure.protocol = "https:";
+    secure.pathname = movedPath(url.pathname) ?? url.pathname;
+    return Response.redirect(secure.href, 301);
+}
+
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
 
-        // Before anything else: a request for a path that moved never reaches the asset layer, which would
-        // answer it with the 404 page. The query string rides along; the fragment never left the browser.
-        const moved = movedPath(url.pathname);
-        if (moved !== undefined) {
-            return Response.redirect(new URL(`${moved}${url.search}`, url).href, 301);
-        }
+        const secure = httpsRedirect(url);
+        if (secure !== undefined) return secure;
 
-        const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];
-        if (download !== undefined) {
-            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
-            if (staged.ok) {
-                const headers = new Headers(staged.headers);
-                headers.set("content-disposition", `attachment; filename="${download.staged}"`);
-                return new Response(staged.body, { status: staged.status, headers });
-            }
-            // Keyed on the staged name rather than the route, so /desktop and /desktop/windows — the same
-            // installer under two paths — share one resolution instead of probing for it twice.
-            return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
-        }
-
-        const canonical = canonicalForMarkdown(url.pathname);
-        if (canonical !== undefined) {
-            const asset = await env.ASSETS.fetch(request);
-            if (asset.status !== 200) return asset;
-            return new Response(asset.body, {
-                status: asset.status,
-                headers: {
-                    "content-type": "text/markdown; charset=utf-8",
-                    link: `<${new URL(canonical, url).href}>; rel="canonical"`,
-                },
-            });
-        }
-
-        // Match vanity paths slash-insensitively: /connect and /connect/ both serve the script. The site's Astro
-        // pages use trailingSlash: "always", so a browser visit can arrive with a slash — but these worker routes
-        // aren't Astro pages, so without this a trailing slash would fall through to the 404 page. Non-vanity
-        // requests still fall through with the ORIGINAL request, keeping Astro's own slash canonicalization intact.
-        const vanity = url.pathname !== "/" && url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
-
-        /* The interactive demo (@intentic-dev/demo, built into public/demo/) is a history-mode SPA sharing this
-         * origin, so its routes — /demo/agents, /demo/workspace/api/src/stripe.ts — are paths no asset answers.
-         * Serve its document for any navigation under /demo/ that isn't a real file, which is the same rule its
-         * dev server runs. Keyed on the request wanting html: a workspace route legitimately ends in `.ts`, and
-         * the demo's own chunks never ask for a document. */
-        if (url.pathname.startsWith("/demo") && request.headers.get("accept")?.includes("text/html") === true) {
-            const asset = await env.ASSETS.fetch(request);
-            return asset.status === 404 ? env.ASSETS.fetch(new Request(new URL("/demo/index.html", url), request)) : asset;
-        }
-
-        const file = SCRIPTS[vanity];
-        if (file === undefined) {
-            return env.ASSETS.fetch(request);
-        }
-        const asset = await env.ASSETS.fetch(new Request(new URL(`/scripts/${file}`, url), request));
-        return new Response(asset.body, { status: asset.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+        const response = await route(request, url, env);
+        // Header sets are immutable on a response that came from fetch(), so this is a copy either way.
+        const headers = new Headers(response.headers);
+        headers.set("strict-transport-security", HSTS);
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     },
 };
+
+async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+    if (url.pathname === SITEMAP_ALIAS) {
+        return Response.redirect(new URL("/sitemap-index.xml", url).href, 301);
+    }
+
+    // Before anything else: a request for a path that moved never reaches the asset layer, which would
+    // answer it with the 404 page. The query string rides along; the fragment never left the browser.
+    const moved = movedPath(url.pathname);
+    if (moved !== undefined) {
+        return Response.redirect(new URL(`${moved}${url.search}`, url).href, 301);
+    }
+
+    const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];
+    if (download !== undefined) {
+        const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download.staged}`, url), request));
+        if (staged.ok) {
+            const headers = new Headers(staged.headers);
+            headers.set("content-disposition", `attachment; filename="${download.staged}"`);
+            return new Response(staged.body, { status: staged.status, headers });
+        }
+        // Keyed on the staged name rather than the route, so /desktop and /desktop/windows — the same
+        // installer under two paths — share one resolution instead of probing for it twice.
+        return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
+    }
+
+    const canonical = canonicalForMarkdown(url.pathname);
+    if (canonical !== undefined) {
+        const asset = await env.ASSETS.fetch(request);
+        if (asset.status !== 200) return asset;
+        return new Response(asset.body, {
+            status: asset.status,
+            headers: {
+                "content-type": "text/markdown; charset=utf-8",
+                link: `<${new URL(canonical, url).href}>; rel="canonical"`,
+            },
+        });
+    }
+
+    // Match vanity paths slash-insensitively: /connect and /connect/ both serve the script. The site's Astro
+    // pages use trailingSlash: "always", so a browser visit can arrive with a slash — but these worker routes
+    // aren't Astro pages, so without this a trailing slash would fall through to the 404 page. Non-vanity
+    // requests still fall through with the ORIGINAL request, keeping Astro's own slash canonicalization intact.
+    const vanity = url.pathname !== "/" && url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
+
+    /* The interactive demo (@intentic-dev/demo, built into public/demo/) is a history-mode SPA sharing this
+     * origin, so its routes — /demo/agents, /demo/workspace/api/src/stripe.ts — are paths no asset answers.
+     * Serve its document for any navigation under /demo/ that isn't a real file, which is the same rule its
+     * dev server runs. Keyed on the request wanting html: a workspace route legitimately ends in `.ts`, and
+     * the demo's own chunks never ask for a document. */
+    if (url.pathname.startsWith("/demo") && request.headers.get("accept")?.includes("text/html") === true) {
+        const asset = await env.ASSETS.fetch(request);
+        return asset.status === 404 ? env.ASSETS.fetch(new Request(new URL("/demo/index.html", url), request)) : asset;
+    }
+
+    const file = SCRIPTS[vanity];
+    if (file === undefined) {
+        return env.ASSETS.fetch(request);
+    }
+    const asset = await env.ASSETS.fetch(new Request(new URL(`/scripts/${file}`, url), request));
+    return new Response(asset.body, { status: asset.status, headers: { "content-type": "text/plain; charset=utf-8" } });
+}

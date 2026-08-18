@@ -99,6 +99,14 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                     <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
                         {content.hero.subhead}
                     </p>
+                    {/* The literal restatement. Quieter than the subhead on purpose: a reader who is already
+                        sold skims past it, and a reader who is not gets the mechanism in one sentence. It is
+                        ordinary crawlable prose in the first screen rather than a chip, because the concepts
+                        it carries (parallel agents, a container each, reviewing the diff) are phrases, and a
+                        phrase split across three bullets is not the phrase any more. */}
+                    <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
+                        {content.hero.summary}
+                    </p>
 
                     {/* Three doors, one primary: the app, the repository, and an installer for the computer
                         this is being read on. The download stays secondary because the invitation to begin is

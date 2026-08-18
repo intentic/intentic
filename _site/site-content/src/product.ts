@@ -72,6 +72,12 @@ export interface ProductPage {
     heroFigure?: ProductFigure;
     facts: ProductFact[];
     blocks: ProductBlock[];
+    /* THE GUIDE THIS SURFACE ANSWERS. A feature page presupposes intentic: it says what this product's
+     * Review screen does, to somebody who already knows there is one. The guide shelf answers the question
+     * underneath it ("how do I check what an agent changed"), asked by somebody who does not. The two were
+     * linked in one direction only, so a reader who arrived on the question could reach the product and a
+     * reader who arrived on the product could never get back to the question. */
+    guide: { slug: string; question: string };
     meta: { title: string; description: string; datePublished: string };
 }
 
@@ -121,6 +127,7 @@ export const productPages: ProductPage[] = [
                 figure: "worktrees",
             },
         ],
+        guide: { slug: "run-multiple-coding-agents-in-parallel", question: "How do you run multiple AI coding agents in parallel?" },
         meta: {
             title: "Run a fleet · intentic",
             description:
@@ -186,6 +193,7 @@ export const productPages: ProductPage[] = [
                 },
             },
         ],
+        guide: { slug: "give-an-ai-agent-database-and-api-access-safely", question: "How do you give an AI agent database and API access safely?" },
         meta: {
             title: "Connect agents · intentic",
             description:
@@ -231,10 +239,14 @@ export const productPages: ProductPage[] = [
                 body: "Work hands down a chain: triage wakes the fixer, the fixer wakes the reviewer.",
             },
         ],
+        guide: {
+            slug: "keep-a-coding-agent-running-after-you-close-your-laptop",
+            question: "How do you keep a coding agent running after you close your laptop?",
+        },
         meta: {
             title: "Automate · intentic",
             description:
-                "Start an agent from a push, alert, payment, email, chat or schedule. You set its permissions and optional check command, and every run opens a session you can watch.",
+                "Start an agent from a push, alert, payment, email, chat or schedule. You set its permissions, and every run opens a session you can watch.",
             datePublished: PUBLISHED,
         },
     },
@@ -294,6 +306,7 @@ export const productPages: ProductPage[] = [
                 figure: "shared-surfaces",
             },
         ],
+        guide: { slug: "review-ai-generated-code-changes", question: "How do you review code an AI agent wrote before it lands?" },
         meta: {
             title: "Review agent work · intentic",
             description:
@@ -360,6 +373,7 @@ export const productPages: ProductPage[] = [
                 figure: "sharing",
             },
         ],
+        guide: { slug: "where-your-code-goes-with-cloud-coding-agents", question: "Where does your code go when you use a cloud coding agent?" },
         meta: {
             title: "Host agent work · intentic",
             description:

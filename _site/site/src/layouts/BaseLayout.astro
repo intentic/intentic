@@ -23,6 +23,22 @@ interface Props {
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
 const meta = getPageMeta(path);
 
+/* NO PAGE MAY FALL BACK SILENTLY. /credits/ shipped with no entry in page-meta.ts, so it inherited the two
+ * lines below: the brand line as its <title>, and ORG_DESCRIPTION — 285 characters about a different page —
+ * as its description, on a URL the sitemap was handing to crawlers the whole time. Nothing failed, because a
+ * fallback is indistinguishable from an answer, which is exactly why this is a build error now.
+ *
+ * A page that genuinely owns its own copy passes it as a prop and never reaches this. The 404 is the one page
+ * with neither, and it says so with `noindex`: it is not in the sitemap and no search result should carry it. */
+const authored = Astro.props.title !== undefined && Astro.props.description !== undefined;
+if (!authored && meta === undefined && Astro.props.noindex !== true) {
+    throw new Error(
+        `No page meta for ${path}. Add an entry to site-content/src/page-meta.ts, or pass title and description ` +
+            `to BaseLayout. Every indexable route needs its own title and description; without one it silently ` +
+            `inherits the brand line and ORG_DESCRIPTION.`,
+    );
+}
+
 const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} · ${ORG_TAGLINE}`;
 const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
 const datePublished = meta?.datePublished;
@@ -70,6 +86,10 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             content={Astro.props.noindex ? "noindex,follow" : "max-snippet:-1, max-image-preview:large, max-video-preview:-1"}
         />
 
+        <!-- The .ico is first and unsized so it stays the fallback: it is the file crawlers and feed readers
+             request at /favicon.ico by convention rather than by reading this tag. The PNG is what a modern
+             browser actually paints, being the larger and the sharper of the two. -->
+        <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
         <link rel="apple-touch-icon" href="/assets/intentic-logo-sized.png" />
         <link rel="manifest" href="/manifest.json" />

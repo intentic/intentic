@@ -79,7 +79,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Extension host API reference · intentic API",
                                 description:
-                                    "Every member of the IntenticApi object, including the typed daemon client, views, documents, commands, models and routing, plus the backend's activateServer surface.",
+                                    "Every member of the IntenticApi object: the typed daemon client, views, documents, commands, models and routing, plus the backend's activateServer surface.",
                                 datePublished: "2026-08-07",
                             },
                         },
@@ -137,7 +137,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Verification & trust · intentic API",
                                 description:
-                                    "What listed, verified and blocked each mean, the nightly check behind them, and precisely what sha pinning, the manifest gate and registry review do and do not guarantee.",
+                                    "What listed, verified and blocked each mean, the nightly check behind them, and what sha pinning and registry review do and do not guarantee.",
                                 datePublished: "2026-08-11",
                             },
                         },
@@ -152,7 +152,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Maintain & grow an extension · intentic API",
                                 description:
-                                    "Ship an update with one pull request, know when it re-asks for approval, stay ranked in discovery, and how the monthly donation cadence turns maintenance into sustained revenue.",
+                                    "Ship an extension update with one pull request, know when it re-asks for approval, stay ranked in discovery, and how maintenance turns into revenue.",
                                 datePublished: "2026-08-11",
                             },
                         },
@@ -173,7 +173,7 @@ export const apiBook: Book = {
                             meta: {
                                 title: "Offer a paid service · intentic API",
                                 description:
-                                    "Wire a service into intentic: one JSON endpoint, the Stripe-style signature to verify, what is paid versus refunded, pricing in credits, and how onboarding works today.",
+                                    "Wire a paid service into intentic: one JSON endpoint, the signature to verify, what is paid versus refunded, and how pricing in credits works.",
                                 datePublished: "2026-08-12",
                             },
                         },
