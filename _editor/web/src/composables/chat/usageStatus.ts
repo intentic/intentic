@@ -580,8 +580,22 @@ export interface PlanLimitSummary {
     readonly accounts: number;
     readonly counts: PlanLimitCounts;
     readonly nextResetAt: number | undefined;
-    // Only what a person has to act on: an account that can't serve a turn, or one that can't be authenticated.
-    // Never the healthy ones — a list of everything is what this section is trying to stop being.
+    /* Only what STAYS BROKEN until a person does something — a credential that can no longer be refreshed.
+     *
+     * A SPENT POOL IS NOT ON THIS LIST, and used to be. It is the plan working exactly as sold: the pool refills
+     * on a schedule the account already knows, nobody can hurry it, and the one useful thing to do about it is
+     * wait or route elsewhere — which the translator does by itself. Calling that "needs attention" spends the
+     * loudest section of the screen on the most ordinary event on it.
+     *
+     * The cost was structural, not just tonal. Spend is the STEADY STATE of a fleet: this sandbox holds 36
+     * connections, 31 of them one provider's, and at the end of a week nearly all of them are spent at once — so
+     * the section grew to 32 near-identical lines that said, one account at a time, precisely what the capacity
+     * bar three inches above says in one: how many have room, and when the next pool reopens. A section that is
+     * longest when everything is most normal has inverted its own meaning, and a reader who scrolls past it every
+     * day is a reader who will scroll past the dead credential in it too.
+     *
+     * So spend is counted (the `spent` band), summarised (`nextResetAt`) and reconcilable per account (the
+     * roster) — and this list holds the one state none of those can resolve on its own. */
     readonly attention: readonly PlanLimitRow[];
 }
 
@@ -589,5 +603,5 @@ export const planLimitSummary = (rows: readonly PlanLimitRow[], now: number = Da
     accounts: rows.length,
     counts: countBands(rows),
     nextResetAt: nextReset(rows, now),
-    attention: rows.filter((row) => row.needsReauth || planLimitBand(row) === `spent`),
+    attention: rows.filter((row) => row.needsReauth),
 });

@@ -13,7 +13,6 @@ import {
     PLAN_LIMIT_BAND_LABEL,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
-    planLimitBand,
     planLimitBandTone,
     planLimitGroups,
     type PlanLimitRow,
@@ -35,8 +34,10 @@ import {
  *      balances turns across a provider's accounts, so "which of my 31 Google accounts" is not a decision a
  *      person makes. Small providers keep their meters inline (three of anything is not worth folding); large
  *      ones show the distribution as bars and hand the detail to the roster.
- *   3. ATTENTION — what is broken? Spent or unauthenticated accounts only. A list of everything is what this
- *      section is trying to stop being.
+ *   3. ATTENTION — what is BROKEN, which is narrower than what is unavailable: a credential that can no longer
+ *      be refreshed, and nothing else. A spent pool is not broken — it reopens on its own, the translator routes
+ *      around it meanwhile, and since spend is the steady state of a 36-account fleet, listing it here made this
+ *      section longest at the exact moment nothing was wrong. Level 1 already counts it and dates its return.
  *   4. ROSTER — reconcile one account. A filterable table, because 36 near-identical gmail addresses are only
  *      navigable by search, and because a number a reader distrusts must be findable.
  *
@@ -132,6 +133,16 @@ const barTooltip = (row: PlanLimitRow): string =>
         ? `${row.label} · no reading yet`
         : `${row.label} · ${row.binding?.label ?? ``} ${formatUtilization(row.percent, row.stale)}` +
           (row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`);
+
+// ---- attention -------------------------------------------------------------------------------------------------
+
+/* A cap, because "every credential in the fleet expired at once" is a real morning — a laptop that slept through
+ * a token rotation, a provider that revoked a batch — and it must not turn the section back into the column this
+ * redesign removed. Generous enough that the ordinary case (one or two) never trips it. */
+const ATTENTION_SHOWN = 12;
+const attentionExpanded = ref(false);
+const attentionShown = computed(() => (attentionExpanded.value ? summary.value.attention : summary.value.attention.slice(0, ATTENTION_SHOWN)));
+const attentionHidden = computed(() => summary.value.attention.length - attentionShown.value.length);
 
 // ---- the roster ------------------------------------------------------------------------------------------------
 
@@ -330,18 +341,32 @@ const roster = computed(() => {
             </template>
         </div>
 
-        <!-- 3 · ATTENTION. Only what someone has to do something about. -->
-        <div v-if="summary.attention.length > 0" class="flex flex-col gap-1.5 px-4 py-3">
-            <span class="text-2xs font-medium text-content">Needs attention · {{ summary.attention.length }}</span>
-            <div v-for="row in summary.attention" :key="row.id" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-2xs">
-                <ProviderLogo :provider="row.provider" class="shrink-0 self-center text-muted" />
-                <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
-                <span :class="row.needsReauth ? `text-danger` : planLimitBandTone(`spent`)">
-                    {{ row.needsReauth ? `sign-in expired — reconnect it on the Agent tab` : `${row.binding?.label ?? `plan`} spent` }}
+        <!-- 3 · ATTENTION. One condition, so the FIX IS STATED ONCE and the list is nothing but accounts.
+             Every entry used to carry its own copy of "sign-in expired — reconnect it on the Agent tab", which
+             on a fleet meant the same eleven words down the whole column and the only part that varied — which
+             account — wedged between two repetitions of the part that didn't. The heading holds the condition
+             and the instruction; the rows hold names. -->
+        <div v-if="summary.attention.length > 0" class="flex flex-col gap-2 px-4 py-3">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span class="text-2xs font-medium text-danger">Sign-in expired · {{ summary.attention.length }}</span>
+                <span class="text-2xs text-subtle"> reconnect {{ summary.attention.length === 1 ? `it` : `them` }} on the Agent tab </span>
+            </div>
+            <!-- Names wrap as a set rather than stacking one per line: they are short, unordered and read by
+                 scanning for the one you recognise, so a column of them is height spent on nothing. -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span v-for="row in attentionShown" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
+                    <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
+                    <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
                 </span>
-                <span v-if="!row.needsReauth && row.binding?.resetsAt !== undefined" class="text-subtle">
-                    · reopens {{ formatReset(row.binding.resetsAt) }}
-                </span>
+                <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
+                <button
+                    v-if="attentionHidden > 0"
+                    type="button"
+                    class="cursor-pointer text-2xs text-link hover:underline"
+                    @click="attentionExpanded = true"
+                >
+                    +{{ attentionHidden }} more
+                </button>
             </div>
         </div>
 

@@ -505,15 +505,27 @@ describe(`plan-limit aggregates`, () => {
         );
     });
 
-    it(`raises only what someone has to act on — a spent pool or a dead credential`, () => {
+    /* A SPENT POOL IS NOT AN ALARM, and this is where that is enforced. It refills on the provider's own
+     * schedule, the translator routes around it in the meantime, and spend is what a fleet looks like at the end
+     * of a week — so raising it made this list grow to one line per account precisely when nothing was wrong,
+     * burying the one entry (a credential that cannot be refreshed) that no amount of waiting fixes. Spend is
+     * still counted and still dated; it is just counted, in the band it belongs to. */
+    it(`raises only a credential that cannot be refreshed, never a pool that will reopen on its own`, () => {
         const summary = planLimitSummary([
             at(95, { id: `spent` }),
             at(10, { id: `fine` }),
             at(undefined, { id: `broken`, needsReauth: true }),
             at(undefined, { id: `unread` }),
         ]);
-        expect(summary.attention.map((row) => row.id)).toEqual([`spent`, `broken`]);
+        expect(summary.attention.map((row) => row.id)).toEqual([`broken`]);
+        // Every account is still banded, so what the alarm dropped the capacity strip keeps.
         expect(summary.counts).toEqual({ spent: 1, tight: 0, room: 1, unread: 2, none: 0 });
         expect(summary.accounts).toBe(4);
+    });
+
+    // Even a spent account whose credential IS dead belongs here — on the reauth, not on the spend.
+    it(`raises a dead credential whatever its pools say`, () => {
+        const summary = planLimitSummary([at(99, { id: `both`, needsReauth: true }), at(99, { id: `justSpent` })]);
+        expect(summary.attention.map((row) => row.id)).toEqual([`both`]);
     });
 });

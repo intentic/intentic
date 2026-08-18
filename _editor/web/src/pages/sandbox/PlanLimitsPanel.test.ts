@@ -10,7 +10,7 @@
 //      "Claude Code refused its credential" above three accounts, two of which had never refused anything.
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -138,6 +138,61 @@ it(`names the account in the line when the group is folded and has no block to d
 
     const refusal = [...el.querySelectorAll(`p`)].find((line) => /Hit its usage limit/.test(line.textContent ?? ``));
     expect(refusal?.textContent?.trim()).toBe(`account-3@example.com · Hit its usage limit 3h ago — usage limit reached`);
+});
+
+/* ---- the alarm ------------------------------------------------------------------------------------------------
+ * The third subject: WHAT THIS SCREEN IS ALLOWED TO SHOUT ABOUT. It used to raise a spent pool, which is the most
+ * ordinary event on a fleet — so at the end of a week a 36-account sandbox drew a 32-line alarm saying, one
+ * account at a time, exactly what the capacity strip above it says in one sentence. An alarm that is longest when
+ * nothing is wrong is one its reader learns to scroll past, taking the dead credential in it along. */
+
+const spent = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96 }] };
+
+const alarm = (el: HTMLElement): HTMLElement | undefined =>
+    [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim().startsWith(`Sign-in expired`) === true);
+
+it(`stays silent about a fleet that is merely spent — the pools reopen on their own`, () => {
+    const el = mount([1, 2, 3, 4, 5].map((n) => claudeAccount({ id: `acc-${n}`, label: `account-${n}@example.com`, usage: spent })));
+
+    expect(alarm(el)).toBeUndefined();
+    // Not lost, just not shouted: the capacity strip still counts every one of them and dates the reopen.
+    expect(el.textContent).toContain(`0 of 5 accounts have room`);
+});
+
+it(`states the fix once and spends the rest of the section on names`, () => {
+    const el = mount([
+        claudeAccount({ id: `acc-1`, label: `first@example.com`, usage: undefined, needsReauth: true }),
+        claudeAccount({ id: `acc-2`, label: `second@example.com`, usage: undefined, needsReauth: true }),
+        claudeAccount({ id: `acc-3`, label: `third@example.com`, usage: spent }),
+    ]);
+
+    expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 2`);
+    // Once — the old section repeated this eleven-word instruction on every row it drew.
+    expect(el.textContent?.match(/reconnect them on the Agent tab/g)?.length).toBe(1);
+    // And the spent account is not among the named, however full its pool is.
+    const section = alarm(el)?.closest(`div.flex.flex-col`);
+    expect(section?.textContent).toContain(`first@example.com`);
+    expect(section?.textContent).not.toContain(`third@example.com`);
+});
+
+it(`caps the names rather than growing a column again, and says how many it held back`, async () => {
+    // Zero-padded: unread rows sort by label, so this makes "the last three" the same three a reader would name.
+    const el = mount(
+        Array.from({ length: 15 }, (_, index) => {
+            const name = `account-${String(index).padStart(2, `0`)}@example.com`;
+            return claudeAccount({ id: `acc-${index}`, label: name, usage: undefined, needsReauth: true });
+        }),
+    );
+
+    expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 15`);
+    const more = [...el.querySelectorAll(`button`)].find((button) => /\+3 more/.test(button.textContent ?? ``));
+    expect(more).toBeDefined();
+    expect(el.textContent).not.toContain(`account-14@example.com`);
+
+    // A cap, not a ceiling: the rest are one click away, in place.
+    more?.click();
+    await nextTick();
+    expect(el.textContent).toContain(`account-14@example.com`);
 });
 
 it(`reads a healed refusal as history — a footnote about the account, not an alarm over the provider`, () => {
