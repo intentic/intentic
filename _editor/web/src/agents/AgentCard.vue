@@ -558,26 +558,41 @@ const grab = (event: PointerEvent): void => {
                  it back out by hand), and until this line existed the card went on wearing its landed chip over
                  a workspace that held none of it — the one lie on this board the user could not catch, because
                  every other reading here is taken between commits and a discard moves no commit.
-                 THE SENTENCE LEADS AND THE BUTTON FOLLOWS, which is the reverse of the two blocks above and the
-                 whole point of the block: those are decisions waiting to be made, this is a FACT the card owes
-                 the reader whether or not they act on it. The offer under it is deliberately quiet — a bordered
-                 text button, not the success-filled primary "Land now" wears — because discarding is very often
-                 a rejection, and a board that answers it with a bright green button is arguing with a decision
-                 the user already made. Never automatic, for the same reason: nothing re-lands this without the
-                 press. The reassurance is not decoration either — "removed from your workspace" reads as work
-                 destroyed unless the card says, in the same breath, that the branch still has all of it. -->
-            <div v-if="away !== undefined" class="flex min-w-0 flex-col gap-0.5">
-                <p class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
-                    <Icon name="undo" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ away.text }}</span>
+                 IT IS ONE ROW, NOT A STACK, which is the whole difference between this block and the two above.
+                 Those are decisions waiting to be made and are read top-to-bottom: the ask, the press, the
+                 consequence. This is a FACT the card owes the reader whether or not they act on it, and it used
+                 to be spelled the same way — an amber line, a hand-rolled bordered button on its own line under
+                 it, and a two-line reassurance paragraph under THAT. Four rows and three left edges for one
+                 sentence and one press, on a card whose entire job is to be glanced at, and the tallest thing
+                 on the board belonged to the state the user cares least about. So the sentence and its offer
+                 share a line: fact left, press right, the mechanics folded into the sentence as a clause (see
+                 agentStatus.landedAway). It wraps rather than truncates on a narrow card — a fact clipped to an
+                 ellipsis is a fact not delivered — and the button drops below it when the row runs out.
+                 THE PRESS IS THE QUIETEST BUTTON ON THE CARD — the shared outlined secondary at the card's own
+                 micro type with a muted label, not the success-filled primary "Land now" wears, and no longer a
+                 one-off border that matched nothing else here — because discarding is very often a rejection,
+                 and a board that answers it with a bright button is arguing with a decision the user already
+                 made. Muted rather than the theme's near-white label for the same reason in miniature: the
+                 amber fact is what the row is FOR, and it has to be read before the offer beside it is. Never
+                 automatic either: nothing re-lands this without the press. -->
+            <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                <p class="flex min-w-0 flex-1 items-start gap-1.5 text-2xs leading-snug text-warning">
+                    <Icon name="undo" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
+                        >{{ away.text }} <span class="text-subtle">— {{ away.hint }}</span></span
+                    >
                 </p>
-                <button
-                    type="button"
-                    class="inline-flex shrink-0 items-center self-start whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                <!-- No resting glyph: the line it sits on already leads with this exact one, and the pair read
+                     as a stutter across six words. The spinner is the exception — that one is not decoration
+                     but the press reporting itself, and it only exists while the round trip is out. -->
+                <Button
+                    size="small"
+                    severity="secondary"
+                    :outlined="true"
+                    class="shrink-0 whitespace-nowrap !px-2 !py-0.5 !text-2xs !text-muted hover:!text-content"
                     @click.stop="emit('reland')"
                 >
-                    <Icon :name="relanding ? 'spinner' : 'undo'" :spin="relanding" class="mr-1 text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
-                </button>
-                <span class="text-2xs leading-snug text-subtle">{{ away.hint }}</span>
+                    <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
+                </Button>
             </div>
 
             <!-- The READY card's press — the deliberate land the user opted into by turning auto-land off (see

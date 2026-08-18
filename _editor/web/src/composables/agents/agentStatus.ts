@@ -303,15 +303,21 @@ export const landedAway = (agent: {
     if (presence === undefined) {
         return undefined;
     }
-    const hint = `Nothing is lost — this agent's branch still holds all of it, and "Land again" puts back what is missing.`;
+    /* THE HINT IS A CLAUSE, NOT A PARAGRAPH — it is read as the tail of `text` on the same line, so it carries
+     * exactly the one fact "removed" does not: the branch still has it. It used to be a 20-word reassurance
+     * ("Nothing is lost — this agent's branch still holds all of it, and \"Land again\" puts back what is
+     * missing.") stacked under a button, which is two lines of prose spent on a card that gets a glance: half
+     * of it narrated the button sitting directly above it, and "nothing is lost" announced a loss before
+     * denying it. The recovery is the button's own word — `again` — and needs no sentence of its own. */
     // The whole of it, which is the common shape: one discard of one agent's work, and no arithmetic to read.
     if (presence.present === 0) {
-        return { text: `Removed from your workspace`, hint };
+        return { text: `Removed from your workspace`, hint: `still on its branch` };
     }
     // A PART of it — a discarded selection, or a few rows reverted by hand. The fraction rather than the
     // remainder ("3 files gone") because what the user is deciding is whether enough survived to leave it be,
-    // and that reads off "9 of 12" without them having to do the subtraction.
-    return { text: `${presence.present} of ${presence.landed} files still in your workspace`, hint };
+    // and that reads off "9 of 12" without them having to do the subtraction. Its hint names the OTHER half for
+    // the same reason: the fraction already says what is here, so the clause is only useful about what is not.
+    return { text: `${presence.present} of ${presence.landed} files still in your workspace`, hint: `the rest is on its branch` };
 };
 
 /* ONE BIT — "this session isn't done with your tree yet" — for surfaces that name an agent while showing its

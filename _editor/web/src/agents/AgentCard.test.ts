@@ -291,10 +291,18 @@ it(`counts what survived when only part of a land was discarded`, () => {
     expect(mount(discarded(9, 12)).textContent).toContain(`9 of 12 files still in your workspace`);
 });
 
-// The half that stops "removed from your workspace" reading as work destroyed. It is not decoration: the
-// branch genuinely still holds all of it, and that fact is what makes the discard safe to have made.
+/* The half that stops "removed from your workspace" reading as work destroyed. It is not decoration: the
+ * branch genuinely still holds all of it, and that fact is what makes the discard safe to have made.
+ * A CLAUSE ON THE SAME LINE, not a paragraph under a button — hence the assertion on the joined sentence. The
+ * old wording spent two lines saying it, half of them narrating the button directly above them. */
 it(`says the work is not lost, in the same breath`, () => {
-    expect(mount(discarded(0, 4)).textContent).toContain(`this agent's branch still holds all of it`);
+    expect(mount(discarded(0, 4)).textContent).toContain(`Removed from your workspace — still on its branch`);
+});
+
+// The partial reading names the OTHER half: the fraction already said what is here, so the clause is only
+// worth its words about what is not.
+it(`points a partial discard at where the missing files still are`, () => {
+    expect(mount(discarded(9, 12)).textContent).toContain(`still in your workspace — the rest is on its branch`);
 });
 
 it(`offers the way back, and reports its own press`, () => {
