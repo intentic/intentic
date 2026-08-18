@@ -1,60 +1,55 @@
 import { type DeployOverviewResponse, DeployOverviewResponseSchema, DeploySeenResponseSchema, DEPLOYMENTS_BASE } from "./contract";
-import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import type { ViewBadge } from "@intentic/extension-api";
+import { sandboxPoll, sandboxRef } from "@intentic/extension-api";
 import { incidents, incidentTooltip, topTier, unseenIncidents } from "./incidents";
 import { host } from "./host";
 
 /* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updated while
- * you were already looking at Deployments could never tell you anything you did not know. That rules out the
- * view's own vue-query — it stops when the component unmounts — so this keeps its own timer.
+ * you were already looking at Deployments could never tell you anything you did not know (background.ts).
  *
  * Polled PER CONNECTION, because a sandbox can hold two Komodo capabilities and each is its own rail tile.
  * Which connections exist is not this module's question: the host calls detect() on every facts poll and hands
  * each activation's key straight back to badge(), so this only has to keep a map and fill it. */
 
-// Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
-// the minute is timely, and the view's own faster polling is what serves someone actually watching.
-const POLL_MS = 60_000;
-
-// Both scoped to the sandbox they describe. A Komodo capability belongs to the box it is configured in, so
-// after a switch the previous box's boards are not merely stale — they are keyed by capability ids this box may
-// not have, and the tile they badge is one this box may not show.
-const boards = sandboxRef(() => new Map<string, DeployOverviewResponse>());
 // Which capabilities to poll. Written by detect() on every facts poll, so a connection added or removed in
-// /capabilities starts or stops being watched without a reload — and emptied on a switch, so the first poll
-// after one asks about this box's connections rather than the last box's.
+// /capabilities starts or stops being watched without a reload. Sandbox-scoped and so emptied on a switch: a
+// Komodo capability belongs to the box it is configured in, so the first poll after a switch has to ask about
+// this box's connections rather than the last box's.
 const watched = sandboxRef<readonly string[]>(() => []);
 
-// Nothing in here may reject: it runs detached on a timer, where a throw becomes an unhandled rejection with
-// no one to catch it. That includes reading the host handle — an api shape without a sandbox transport (a test
-// harness, a partially wired host) must leave the badge alone rather than take the process down with it.
-const refresh = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        // Taken before the reads, asked after them: one round trip per connected Komodo, so a switch has room to
-        // land between the first and the last.
-        const current = sandboxScopeGuard();
-        const next = new Map(boards.value);
+/* Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
+ * the minute is timely, and the view's own faster polling is what serves someone actually watching.
+ *
+ * NO OPENING READ (`immediate: false`), unlike every other badge here: at activation this knows of no
+ * connections, so the first read would be a round of nothing. `watchConnections` below is what starts it, at
+ * the moment there is something to ask.
+ *
+ * The round ACCUMULATES onto what it already holds, which is why it takes `previous`: one unreachable Komodo
+ * must leave the others' boards standing, and its OWN last known board too. A flapping tile is worse than a
+ * slightly stale one, and "we could not ask" is not "nothing is wrong". */
+const {
+    state: boards,
+    start: startDeployAttention,
+    refresh,
+} = sandboxPoll({
+    host,
+    everyMs: 60_000,
+    immediate: false,
+    initial: () => new Map<string, DeployOverviewResponse>(),
+    read: async (api, previous) => {
+        const next = new Map(previous);
         for (const capability of watched.value) {
             try {
                 next.set(capability, DeployOverviewResponseSchema.parse(await api.sandbox.json(`${DEPLOYMENTS_BASE}/komodo/${capability}/overview`)));
             } catch {
-                // One unreachable connection leaves the others' boards standing — and leaves its OWN last
-                // known board standing too, rather than blanking it. A flapping tile is worse than a slightly
-                // stale one, and "we could not ask" is not "nothing is wrong".
+                // See above: this connection keeps whatever board it had.
             }
         }
-        if (!current()) {
-            return;
-        }
-        boards.value = next;
-    } catch {
-        // As above: a host without a transport is a no-op round, not a crash.
-    }
-};
+        return next;
+    },
+});
+
+export { startDeployAttention };
 
 // Called from detect() — the host's own per-facts-poll callback, which is the only place that knows which
 // Komodo capabilities are currently connected.
@@ -63,13 +58,8 @@ export const watchConnections = (capabilities: readonly string[]): void => {
     watched.value = capabilities;
     // A newly connected Komodo should badge on its first render, not a minute later.
     if (added.length > 0) {
-        void refresh();
+        refresh();
     }
-};
-
-export const startDeployAttention = (): Disposable => {
-    const timer = setInterval(() => void refresh(), POLL_MS);
-    return { dispose: () => clearInterval(timer) };
 };
 
 /* What the tile says. Read inside the host's render computed — touching `boards` here is what repaints it.

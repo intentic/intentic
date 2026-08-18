@@ -1,5 +1,4 @@
-import type { Disposable } from "@intentic/extension-api";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import { sandboxPoll } from "@intentic/extension-api";
 import { parseDocIndex } from "./docModel.js";
 import { host } from "./host.js";
 import { INDEX_TAIL, publishedPath, REPO_DOC_TAIL, underRepo } from "./paths.js";
@@ -20,10 +19,6 @@ import { documentedDirs, listStagedTails } from "./stagedTree.js";
  * then says plainly that it is a draft. Published wins where both exist, because that is what the tab opens by
  * default. */
 
-// Slow on purpose, like the badge's. Documents appear when a generation run finishes or a publish lands — minutes
-// apart — and the two moments that matter (publish, discard) call refresh() directly rather than waiting.
-const POLL_MS = 60_000;
-
 export interface DocumentPresence {
     // The package's one-line description from the index, so hovering the row's icon says what the thing IS. Empty
     // for a repo overview and for a staged document (whose index has not necessarily been generated yet).
@@ -31,12 +26,6 @@ export interface DocumentPresence {
     // Only a draft exists — worth saying on the row, since it is not in the repository yet.
     readonly draft: boolean;
 }
-
-/* Scoped to the sandbox these paths were read from, and this is the one where carrying over is most visibly
- * wrong: the keys are workspace paths, the Workspace tree draws an icon on every row it has an entry for, and
- * two sandboxes of the same monorepo share nearly every path. A switch would leave the tree offering documents
- * that were generated in the box the reader just left. */
-const documents = sandboxRef<ReadonlyMap<string, DocumentPresence>>(() => new Map());
 
 /* The published set, as package dir → its one-liner. ONE read per repository serves every package it documents,
  * because the derived index (`intentic-docs check` writes it; nothing authors it) already holds both the list and
@@ -75,17 +64,23 @@ const hasPublishedMap = async (repo: string): Promise<boolean> => {
     }
 };
 
-/* Never throws and never rejects — a timer nothing awaits (attention.ts documents the reasoning). It also runs at
- * activation, before the shell has a sandbox at all, so "not reachable yet" is an ordinary first state. */
-const scan = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        // Taken before the reads, asked after them: this is up to three reads per repository, so the poll is
-        // still in flight long after a switch that happens while it runs.
-        const current = sandboxScopeGuard();
+/* Slow on purpose, like the badge's. Documents appear when a generation run finishes or a publish lands —
+ * minutes apart — and the two moments that matter (publish, discard) call refresh() directly rather than
+ * waiting.
+ *
+ * Sandbox-scoped, and this is the state where carrying over is most visibly wrong: the keys are workspace
+ * paths, the Workspace tree draws an icon on every row it has an entry for, and two sandboxes of the same
+ * monorepo share nearly every path. A switch would leave the tree offering documents that were generated in the
+ * box the reader just left. */
+const {
+    state: documents,
+    start: startDocumentPresence,
+    refresh: refreshDocumentPresence,
+} = sandboxPoll<ReadonlyMap<string, DocumentPresence>>({
+    host,
+    everyMs: 60_000,
+    initial: () => new Map(),
+    read: async (api) => {
         const next = new Map<string, DocumentPresence>();
         await Promise.all(
             /* THE `docs` FACT DECIDES WHETHER THE PUBLISHED SIDE IS READ AT ALL. The daemon already knows which
@@ -115,24 +110,11 @@ const scan = async (): Promise<void> => {
                 }
             }),
         );
-        if (!current()) {
-            return;
-        }
-        documents.value = next;
-    } catch {
-        // Leave the previous map standing: a transient read failure is not evidence the documents are gone.
-    }
-};
+        return next;
+    },
+});
 
-export const startDocumentPresence = (): Disposable => {
-    void scan();
-    const timer = setInterval(() => void scan(), POLL_MS);
-    return { dispose: () => clearInterval(timer) };
-};
-
-// Re-read now, for the two moments that change this without waiting: publishing a draft into a repo, and
-// discarding one.
-export const refreshDocumentPresence = (): void => void scan();
+export { refreshDocumentPresence, startDocumentPresence };
 
 // What this workspace path has to read, if anything. A plain Map lookup — the host calls this for every visible
 // directory row on every render of the tree.

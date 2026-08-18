@@ -1,5 +1,5 @@
-import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import type { ViewBadge } from "@intentic/extension-api";
+import { sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { host } from "./host.js";
 import { SEEN_PATH, stagingKey } from "./paths.js";
 import { listStagedTails } from "./stagedTree.js";
@@ -14,63 +14,42 @@ import { listStagedTails } from "./stagedTree.js";
  *
  * What it counts instead is a document set that has been GENERATED AND NOT YET REVIEWED: a run finished, drafts are
  * sitting in staging, and nobody has looked. That is an event, it is addressed to the person seeing it, and it
- * clears by acting — reviewing, publishing or discarding — rather than by waiting.
+ * clears by acting — reviewing, publishing or discarding — rather than by waiting. */
+
+/* A PRESENCE LEDGER, unlike Maintenance's: what matters is whether this repo's staged set has been looked at at
+ * all, not whether its contents have moved since. So the mark is never compared — it records WHEN, which nothing
+ * reads and a human opening the file is glad of. */
+const seen = sandboxLedger(host, SEEN_PATH);
+
+/* Repos whose staged set is present and unacknowledged, kept current while the view is closed (background.ts) —
+ * a badge that only updated while you were already looking at Documentation could never tell you anything you
+ * did not know.
  *
- * Module state owned by activate(), not by the view, and its own timer rather than the view's query: a badge that
- * only updated while you were already looking at Documentation could never tell you anything you did not know.
- * The file-change push cannot serve this either — invalidation only reaches a query something is observing, and
- * nothing observes an unmounted view. */
-
-// Slow on purpose. This drives a glance; the view's own reads serve anyone actually watching a run.
-const POLL_MS = 60_000;
-
-// Repos whose staged set is present and unacknowledged. Scoped to the sandbox they were read from: repo names
-// repeat across workspaces, so carrying this over a switch does not merely show a stale number — it names
-// repositories that may exist in the new box too, and says something untrue about them.
-const pending = sandboxRef<readonly string[]>(() => []);
-
-// No file yet is the ordinary first state: nothing has been reviewed because nothing has been generated — which
-// is what api.workspace.readJson answers undefined for.
-const readSeen = async (): Promise<Record<string, number>> => (await host().workspace.readJson<Record<string, number>>(SEEN_PATH)) ?? {};
-
-/* Never throws, and never rejects. This runs on a timer that nothing awaits, so a failure here has no caller to
- * report to — it would surface as an unhandled rejection in the console of an app that is otherwise fine. It also
- * runs at ACTIVATION, which is before the shell has a sandbox at all, so "the host is not ready yet" is an
- * ordinary first state rather than an error: the next tick picks it up. */
-const scan = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        // Taken before the reads, asked after them: one staged-tree listing per repo, so a switch has plenty of
-        // room to land mid-poll on a workspace with several repositories.
-        const current = sandboxScopeGuard();
-        const seen = await readSeen();
-        const repos = api.workspace.repos().map((repo) => repo.repo);
+ * Sandbox-scoped, and here that is not merely tidiness: repo names repeat across workspaces, so carrying this
+ * over a switch would not show a stale number, it would name repositories that exist in the new box too and say
+ * something untrue about them.
+ *
+ * Slow on purpose. This drives a glance; the view's own reads serve anyone actually watching a run. */
+const { state: pending, start: startDocumentationAttention } = sandboxPoll<readonly string[]>({
+    host,
+    everyMs: 60_000,
+    initial: () => [],
+    read: async (api) => {
+        const acknowledged = await seen.read();
         const staged = await Promise.all(
-            repos.map(async (repo) => {
+            api.workspace.repos().map(async ({ repo }) => {
                 const tails = await listStagedTails(api, repo);
                 // A `repo.json` is the marker that a set is worth reviewing: a run that has only just started has
                 // a run manifest but no map yet, and lighting the rail for that would badge the user's own click
                 // back at them.
-                return tails.includes(`repo.json`) && seen[stagingKey(repo)] === undefined ? repo : undefined;
+                return tails.includes(`repo.json`) && acknowledged[stagingKey(repo)] === undefined ? repo : undefined;
             }),
         );
-        if (!current()) {
-            return;
-        }
-        pending.value = staged.filter((repo): repo is string => repo !== undefined);
-    } catch {
-        // Leave the previous verdict standing: a transient read failure is not evidence that nothing is waiting.
-    }
-};
+        return staged.filter((repo): repo is string => repo !== undefined);
+    },
+});
 
-export const startDocumentationAttention = (): Disposable => {
-    void scan();
-    const timer = setInterval(() => void scan(), POLL_MS);
-    return { dispose: () => clearInterval(timer) };
-};
+export { startDocumentationAttention };
 
 export const documentationBadge = (): ViewBadge | undefined => {
     const count = pending.value.length;
@@ -91,9 +70,13 @@ export const documentationBadge = (): ViewBadge | undefined => {
  * tree, where it survives a reload and is shared across the owner's browsers without adding a setting no user
  * would ever type. */
 export const acknowledgeStaged = async (repo: string): Promise<void> => {
-    const api = host();
-    const seen = await readSeen();
-    const next = { ...seen, [stagingKey(repo)]: Date.now() };
-    await api.workspace.write(SEEN_PATH, `${JSON.stringify(next, undefined, 2)}\n`);
+    const key = stagingKey(repo);
     pending.value = pending.value.filter((entry) => entry !== repo);
+    /* Only the FIRST look writes. The view calls this on every open, and a mark that is a fresh timestamp each
+     * time would rewrite the file every time — which the daemon pushes to every connected browser as a change,
+     * costing them all a refetch for a fact that did not move. Presence is the signal; the time is a courtesy to
+     * whoever reads the file. */
+    if ((await seen.read())[key] === undefined) {
+        await seen.mark({ [key]: new Date().toISOString() });
+    }
 };

@@ -59,6 +59,9 @@ packages have a page and a reader having to go looking for one.
 - **[scope.ts](src/scope.ts)** — `sandboxRef` and `sandboxScopeGuard`: how an extension keeps state that
   belongs to ONE sandbox. See "Where state lives" below; this is the rule most easily got wrong, because
   getting it wrong looks fine until somebody switches sandbox.
+- **[background.ts](src/background.ts)** — `sandboxPoll` and `sandboxLedger`: the work an extension does while
+  none of it is on screen. A tile that badges has to be filled by something, and what has already been seen has
+  to be written down somewhere; both were hand-written in six extensions before they were here.
 - **[stream.ts](src/stream.ts)**, **[version.ts](src/version.ts)** — SSE/ndjson helpers and the host API
   version (`engines.intentic` is checked against it before activation).
 
@@ -99,9 +102,40 @@ into the new one, which is the same wrong badge with a harder repro. It matters 
 WRITES: acknowledging what a badge has shown, in the wrong workspace's tree, is bookkeeping no later poll
 corrects.
 
-This is not advice. `sandboxScope.guard.test.ts` in the app refuses module-level `ref`/`shallowRef`/`reactive`
-and any reassignable module binding in an extension's browser-side source, because the failure it prevents was
-found in six extensions at once — a rail tile reading `21` under a workspace that had two.
+## Keeping a tile current while nothing is mounted
+
+Most of that third tier exists to feed a rail badge, so `sandboxPoll` covers the whole shape and you should not
+need `sandboxRef` directly for one:
+
+```ts
+const { state: unseen, start } = sandboxPoll<readonly Finding[]>({
+    host,                       // your hostSlot's accessor — nothing is bound until activate()
+    everyMs: 60_000,            // no default: the right interval is a claim about how fast the answer moves
+    initial: () => [],
+    read: async (api) => findings(await api.sandbox.fetch(query())),
+});
+```
+
+`start()` returns the `Disposable` to push onto `context.subscriptions`; `refresh()` reads off-cycle for the
+moments that should not wait out the interval. The five rules a hand-written version has to remember — never
+reject, skip an unreachable daemon, discard an answer that outlived its sandbox, keep the last good value on
+failure, stop the clock on disposal — are the poll's, not yours. Pass `immediate: false` if there is nothing
+worth asking until something else tells you what to ask about, and read `previous` in `read` if a round
+accumulates onto what you already hold rather than replacing it.
+
+What the tile SAYS stays yours: `badge()` is the judgement each surface exists to make, and no two of them
+agree about tone or wording.
+
+`sandboxLedger(host, path)` is the other half — the JSON file recording what the owner has already seen, as
+`key → mark`, where the mark is what makes an entry stale. Compare marks (a chore's evidence digest, a story's
+verdict) and the same key with new evidence is news again; ignore them and it is a plain presence ledger. It
+reads a missing or mangled file as "nothing acknowledged", writes nothing when nothing moved, and holds the
+scope guard across its own read-then-write so an acknowledgement cannot land in the wrong workspace's tree.
+
+This is not advice. `sandboxScope.guard.test.ts` in the app walks each extension's UI entry through its own
+imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassignable module binding, and any
+repeating clock in what it reaches — because the failure it prevents was found in six extensions at once: a
+rail tile reading `21` under a workspace that had two.
 
 ## Authoring an extension
 

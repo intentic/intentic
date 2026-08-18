@@ -39,4 +39,10 @@
 // timer kept the previous sandbox's count under the new sandbox's name, which is the one thing a badge must
 // never do. Additive: an extension that keeps no module state is unchanged, and the host resets the scope
 // whether or not anything registered.
-export const extensionApiVersion = "2.6.0";
+// 2.7.0 adds the two halves of work an extension does while none of it is on screen (background.ts):
+// `sandboxPoll`, the timer behind a rail badge, and `sandboxLedger`, the file recording what the owner has
+// already seen. Seven modules across six extensions had hand-written the same poller — five invisible rules
+// each, and six of the seven had the sandbox-switch one wrong — and three had hand-written the same tolerant
+// reader and careful write over the same shape of file. Additive: nothing is removed, and an extension that
+// keeps polling by hand still runs.
+export const extensionApiVersion = "2.7.0";

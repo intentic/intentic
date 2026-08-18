@@ -1,4 +1,5 @@
 export * from "./api.js";
+export * from "./background.js";
 export * from "./diff.js";
 export * from "./engines.js";
 export * from "./facts.js";

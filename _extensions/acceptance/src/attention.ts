@@ -1,20 +1,12 @@
 import { WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
-import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import type { IntenticApi, ViewBadge } from "@intentic/extension-api";
+import { sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { host } from "./host";
 import { parseManifest, parseResult, resultPath, RUNS_DIR, SCAN_RUNS, SEEN_PATH } from "./runs";
 
-/* The rail badge's source. Module state owned by activate(), NOT by the view: a badge that only updated while
- * you were already looking at Acceptance would never tell you anything you didn't know. That rules out the
- * view's vue-query — it stops when the component unmounts — so this keeps its own timer, exactly as
- * pipelines/ciAttention.ts does.
- *
- * WHAT IT COUNTS is the rail's bar, not a statistic: stories that came back `fail` or `blocked` in a run you
- * have not acknowledged. A run you have already looked at contributes nothing forever after, so the tile is lit
- * only when something happened that you don't know about. */
-
-// Slow on purpose. This drives a glance; the view's own polling serves anyone actually watching a run.
-const POLL_MS = 60_000;
+/* The rail badge's source: stories that came back `fail` or `blocked` in a run the owner has not acknowledged.
+ * A run already looked at contributes nothing forever after, so the tile is lit only when something happened
+ * that they don't know about — the rail's bar, rather than a statistic. */
 
 export interface AcceptanceFinding {
     readonly runId: string;
@@ -22,32 +14,24 @@ export interface AcceptanceFinding {
     readonly verdict: "fail" | "blocked";
 }
 
-// Scoped to the sandbox it was read from. It has to outlive the view being unmounted — a badge you only see
-// once you have already opened Acceptance tells you nothing — but a run that failed in another workspace is not
-// news about this one, and until the scope existed the tile said it was.
-const unseen = sandboxRef<AcceptanceFinding[]>(() => []);
+/* A COMPARING LEDGER: the key is the story within its run, and the mark is the VERDICT it was acknowledged at.
+ *
+ * That split is the whole subtlety of this file, and it used to be smuggled into a composite key. Acknowledging
+ * a story means acknowledging what it SAID, so a result file corrected from `blocked` to `fail` is new
+ * information rather than something inheriting the acknowledgement of its draft — which falls straight out of a
+ * mark comparison. It also means a run still in flight acknowledges nothing: a story with no completed result
+ * is not a finding, so there is no entry to write. */
+const seen = sandboxLedger(host, SEEN_PATH);
 
-// Acknowledges an actual completed finding, never the moment its run happened to start. Including the verdict
-// means a corrected result file becomes new information rather than inheriting the acknowledgement of its draft.
-export const findingKey = (finding: AcceptanceFinding): string => `${finding.runId}/${finding.slug}/${finding.verdict}`;
+export const findingKey = (finding: AcceptanceFinding): string => `${finding.runId}/${finding.slug}`;
 
-// seen.json is `{ "results": ["<run>/<story>/<verdict>"] }`. Anything else reads as nothing acknowledged:
-// malformed background bookkeeping may light a badge again, but it must never hide a failure.
-export const seenResultKeys = (source: string | undefined): ReadonlySet<string> => {
-    try {
-        const parsed: unknown = JSON.parse(source ?? ``);
-        const results = (parsed as { results?: unknown } | null)?.results;
-        return Array.isArray(results) && results.every((entry) => typeof entry === `string`) ? new Set(results) : new Set();
-    } catch {
-        return new Set();
-    }
-};
+export const unseenFindings = (findings: readonly AcceptanceFinding[], acknowledged: Readonly<Record<string, string>>): AcceptanceFinding[] =>
+    findings.filter((finding) => acknowledged[findingKey(finding)] !== finding.verdict);
 
-export const unseenFindings = (findings: readonly AcceptanceFinding[], seen: ReadonlySet<string>): AcceptanceFinding[] =>
-    findings.filter((finding) => !seen.has(findingKey(finding)));
+export const acknowledgement = (findings: readonly AcceptanceFinding[]): Record<string, string> =>
+    Object.fromEntries(findings.map((finding) => [findingKey(finding), finding.verdict]));
 
-const findings = async (): Promise<AcceptanceFinding[]> => {
-    const api = host();
+const findings = async (api: IntenticApi): Promise<AcceptanceFinding[]> => {
     const listing = WorkspaceChildrenSchema.parse(await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(RUNS_DIR)}`));
     const dirs = listing.entries
         .filter((entry) => entry.type === `dir`)
@@ -73,35 +57,20 @@ const findings = async (): Promise<AcceptanceFinding[]> => {
     return scanned.flat();
 };
 
-// Nothing in here may reject: it runs detached on a timer, where a throw becomes an unhandled rejection with no
-// one to catch it. That includes reading the host handle — an api shape without a sandbox transport (a test
-// harness, a partially wired host) must leave the badge alone rather than take the process down.
-const refresh = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        // Taken before the walk, asked after it: this reads a directory of runs and two files per story, so the
-        // window in which a switch can land mid-poll is the widest of any badge in the workspace.
-        const current = sandboxScopeGuard();
-        const next = unseenFindings(await findings(), seenResultKeys(await api.workspace.file(SEEN_PATH)));
-        if (!current()) {
-            return;
-        }
-        unseen.value = next;
-    } catch {
-        // A refused or unreachable daemon leaves the last known state standing rather than blanking the badge:
-        // "we can't reach the workspace" is not "everything passed", and a flapping tile is worse than a stale one.
-    }
-};
+/* Module state owned by activate(), NOT by the view: a badge that only updated while you were already looking
+ * at Acceptance would never tell you anything you didn't know (background.ts).
+ *
+ * Slow on purpose. This drives a glance; the view's own polling serves anyone actually watching a run — and this
+ * read is the widest of any badge in the workspace, a directory of runs plus two files per story. */
+const { state: unseen, start: startAcceptanceAttention } = sandboxPoll<AcceptanceFinding[]>({
+    host,
+    everyMs: 60_000,
+    initial: () => [],
+    read: async (api) => unseenFindings(await findings(api), await seen.read()),
+});
 
 // Started by activate() so the badge is live from login, and disposed with the extension.
-export const startAcceptanceAttention = (): Disposable => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), POLL_MS);
-    return { dispose: () => clearInterval(timer) };
-};
+export { startAcceptanceAttention };
 
 // Read inside the host's render computed — touching `unseen` here is what repaints the tile.
 export const acceptanceBadge = (): ViewBadge | undefined => {
@@ -116,24 +85,24 @@ export const acceptanceBadge = (): ViewBadge | undefined => {
     return { count: failed + blocked, tone: failed > 0 ? `danger` : `warning`, tooltip: `${parts.join(`, `)} since you last looked` };
 };
 
-// Called when the view is opened — opening IS reading, so the badge clears on the spot rather than at the next
-// poll. Best-effort, like the fleet board's markSeen: a failed write only means the badge returns in a minute,
-// which is a far smaller harm than an error surfacing from background bookkeeping.
+/* Called when the view is opened — opening IS reading, so the badge clears on the spot rather than at the next
+ * poll. Best-effort: a failed write only means the badge returns in a minute, which is a far smaller harm than
+ * an error surfacing from background bookkeeping.
+ *
+ * REPLACE, not merge, and this is the one ledger here that needs it: the keys go out of scope. Only the newest
+ * runs are ever scanned (SCAN_RUNS), so a story in a run that has scrolled past that window can never be seen
+ * again — and merging forever would grow this file with every run the workspace has ever done. */
 export const markAcceptanceSeen = async (): Promise<void> => {
     try {
         const api = host();
         if (!api.sandbox.reachable()) {
             return;
         }
-        // A switch between the walk and the write would record THIS workspace's runs as seen in the workspace the
-        // user moved to — bookkeeping filed in the wrong tree, which no later poll corrects.
-        const scoped = sandboxScopeGuard();
-        const found = await findings();
-        if (!scoped()) {
-            return;
+        // Cleared only if the acknowledgement landed: a switch mid-write abandons it, and blanking here anyway
+        // would silence the NEW box's tile for runs read in the old one.
+        if (await seen.replace(acknowledgement(await findings(api)))) {
+            unseen.value = [];
         }
-        await api.workspace.write(SEEN_PATH, JSON.stringify({ results: found.map(findingKey) }));
-        unseen.value = [];
     } catch {
         // See above.
     }

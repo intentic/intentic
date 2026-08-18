@@ -57,10 +57,19 @@ module state a badge needs — a count filled by a timer has to outlive the view
 only ever tell you what you had already gone and looked at — and that tier is declared with `sandboxRef(() =>
 initial)`, which the host empties whenever the browser is pointed at another sandbox. Anything asynchronous
 takes a `sandboxScopeGuard()` before its await and asks it after, so a poll that left under the last sandbox
-cannot write its answer into the next one. This is not a convention: `sandboxScope.guard.test.ts` in the web
-app refuses module-level `ref`/`shallowRef`/`reactive` and any reassignable module binding in browser-side
-extension source. Six packs here had the same omission at once, which is how a Maintenance tile came to read
-`21` over a workspace that had two.
+cannot write its answer into the next one.
+
+**Do not hand-write the poll behind a badge.** `sandboxPoll` is that poll, and `sandboxLedger` is the file
+recording what the owner has already seen — the two things every badging surface here needed, and six packs
+had each written out. What stays yours is the judgement: `badge()` decides the count, the tone and the wording,
+and no two of these agree about any of them. A poll takes its interval explicitly, accumulates onto `previous`
+when a round adds to what it holds rather than replacing it, and skips its opening read when there is nothing
+to ask until something else says what to ask about.
+
+This is not a convention: `sandboxScope.guard.test.ts` in the web app walks each pack's UI entry through its
+own imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassignable module binding, and any
+repeating clock in what it reaches. Six packs here had the same omission at once, which is how a Maintenance
+tile came to read `21` over a workspace that had two.
 
 ## The extensions
 

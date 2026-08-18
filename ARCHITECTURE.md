@@ -563,8 +563,13 @@ tier of client state and the one with no natural owner: a rail badge has to be f
 its view being unmounted, so every extension that badges keeps a module-level ref and a timer — and until this
 existed, none of them let go of it. The primitive is `sandboxRef`
 ([scope.ts](_sandbox/extension-api/src/scope.ts)), the host empties it, and `sandboxScope.guard.test.ts`
-refuses any other way of keeping module state in an extension's browser-side source. The shell's own
-singletons are re-scoped from one place beside it
+refuses any other way of keeping module state in an extension's browser-side source — a population it finds by
+walking each extension's UI entry through its own imports, rather than by a filter over what a file happens to
+name. Above that primitive sit the two shapes every badging surface needed and each had written out itself
+([background.ts](_sandbox/extension-api/src/background.ts)): `sandboxPoll`, the timer that fills a badge while
+its view is unmounted, and `sandboxLedger`, the workspace file recording what the owner has already seen. What
+a tile SAYS is deliberately not shared — the count, the tone and the wording are the judgement each surface
+exists to make. The shell's own singletons are re-scoped from one place beside it
 ([sandboxScope.ts](_editor/web/src/composables/sandbox/sandboxScope.ts)); cached reads need neither, since
 every key carries the active sandbox id.
 

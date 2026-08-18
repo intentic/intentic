@@ -1,6 +1,6 @@
 import { assessReport, type ChoreVerdict, ledgerKey, unseenVerdicts } from "@intentic/sandbox-contract/chores";
-import type { Disposable, ViewBadge } from "@intentic/extension-api";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import type { ViewBadge } from "@intentic/extension-api";
+import { sandboxLedger, sandboxPoll } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { choresReportQuery } from "./choresQuery";
 import { host } from "./host";
@@ -26,71 +26,37 @@ import { host } from "./host";
  * panel has to agree with the tile about what is new:
  *   state === due    the obvious one
  *   not settled      a turn has already been spent on exactly this evidence
- *   unseen digest    the owner has already seen this evidence in the panel
+ *   unseen digest    the owner has already seen this evidence in the panel */
+
+/* What the badge has already been shown, keyed repo|chore → the digest last acknowledged. A file rather than an
+ * extension setting: the badge is derived from files, so its acknowledgement belongs in the same tree, where it
+ * survives a reload and is shared across the owner's browsers without adding a setting no user would ever type.
  *
- * Module state owned by activate(), not by the view, and its own timer rather than the view's query: a badge that
- * only updated while you were already looking at Maintenance could never tell you anything you did not know. The
- * file-change push cannot serve this either — invalidation only reaches a query something is observing, and
- * nothing observes an unmounted view. */
+ * The digest IS the mark, which is what makes this a comparing ledger rather than a presence one: the same chore
+ * with new evidence has a new digest and is therefore new again, so acknowledging today's finding cannot swallow
+ * tomorrow's. */
+const seen = sandboxLedger(host, `${STATE_DIR}/chores/seen.json`);
 
-// Slow on purpose, and slower than any other attention poll in the workspace. Probes refresh on a daily-to-weekly
-// TTL, so the answer to "has anything changed" changes a few times a week; polling this faster would be spending
-// requests to re-learn the same thing.
-const POLL_MS = 10 * 60_000;
+/* The tile's whole source. Its own timer rather than the view's query — a badge that only updated while you were
+ * already looking at Maintenance could never tell you anything you did not know, and nothing observes an
+ * unmounted view, so neither the file push nor the panel's query can serve it (background.ts).
+ *
+ * The read goes THROUGH the host's cache, not straight at the route, so this poll and the panel are one read. It
+ * was fetching precisely what the panel renders, six times an hour, and handing it to nobody else; the panel then
+ * opened on a skeleton and asked again. Filed under the panel's key, the most recent poll IS what the panel
+ * paints from the moment it is opened.
+ *
+ * Slow on purpose, and slower than any other attention poll in the workspace. Probes refresh on a daily-to-weekly
+ * TTL, so the answer to "has anything changed" changes a few times a week; polling this faster would be spending
+ * requests to re-learn the same thing. */
+const { state: unseen, start: startMaintenanceAttention } = sandboxPoll<readonly ChoreVerdict[]>({
+    host,
+    everyMs: 10 * 60_000,
+    initial: () => [],
+    read: async (api) => unseenVerdicts(assessReport(await api.sandbox.fetch(choresReportQuery()), Date.now()), await seen.read()),
+});
 
-// What the badge has already been shown, keyed repo|chore → the digest last acknowledged. A file rather than an
-// extension setting: the badge is derived from files, so its acknowledgement belongs in the same tree, where it
-// survives a reload and is shared across the owner's browsers without adding a setting no user would ever type.
-const SEEN_PATH = `${STATE_DIR}/chores/seen.json`;
-
-// Scoped to the sandbox it was read from: this outlives the view being unmounted (that is the whole point of a
-// badge) but must not outlive the workspace it describes — a count from the box you just left, under the name of
-// the box you just opened, is the one thing a rail badge must never say.
-const unseen = sandboxRef<readonly ChoreVerdict[]>(() => []);
-
-// No file yet — and a hand-mangled one — read as "nothing acknowledged", which api.workspace.readJson already
-// answers with undefined. Non-string values are dropped: a digest is a string, and anything else is not one.
-const readSeen = async (): Promise<Record<string, string>> => {
-    const parsed = await host().workspace.readJson<Record<string, unknown>>(SEEN_PATH);
-    return Object.fromEntries(Object.entries(parsed ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
-};
-
-/* Never throws, and never rejects. This runs on a timer that nothing awaits, so a failure here has no caller to
- * report to — it would surface as an unhandled rejection in the console of an app that is otherwise fine. It also
- * runs at ACTIVATION, which is before the shell has a sandbox at all, so "the host is not ready yet" is an
- * ordinary first state rather than an error: the next tick picks it up. */
-const scan = async (): Promise<void> => {
-    try {
-        const api = host();
-        if (!api.sandbox.reachable()) {
-            return;
-        }
-        /* THROUGH THE HOST'S CACHE, not straight at the route — so this poll and the panel are one read.
-         *
-         * The badge has to keep its own timer (see above: nothing observes an unmounted view, so neither the
-         * file push nor the panel's query can serve it), but "its own timer" never had to mean "its own copy".
-         * It was fetching precisely what the panel renders, six times an hour, and handing it to nobody else;
-         * the panel then opened on a skeleton and asked again. Filed under the panel's key, the most recent
-         * poll IS what the panel paints from the moment it is opened. */
-        // Taken before the reads, asked after them: a poll issued against the previous sandbox can still be in
-        // flight when the switch lands, and its answer must not be written into the new scope.
-        const current = sandboxScopeGuard();
-        const report = await api.sandbox.fetch(choresReportQuery());
-        const verdicts = unseenVerdicts(assessReport(report, Date.now()), await readSeen());
-        if (!current()) {
-            return;
-        }
-        unseen.value = verdicts;
-    } catch {
-        // Leave the previous verdict standing: a transient read failure is not evidence that nothing is waiting.
-    }
-};
-
-export const startMaintenanceAttention = (): Disposable => {
-    void scan();
-    const timer = setInterval(() => void scan(), POLL_MS);
-    return { dispose: () => clearInterval(timer) };
-};
+export { startMaintenanceAttention };
 
 export const maintenanceBadge = (): ViewBadge | undefined => {
     const count = unseen.value.length;
@@ -121,20 +87,9 @@ export const acknowledge = async (verdicts: readonly ChoreVerdict[]): Promise<vo
     if (due.length === 0) {
         return;
     }
-    const api = host();
-    // A switch between the read and the write would file one workspace's acknowledgements in ANOTHER workspace's
-    // tree — the one case here that damages state on disk rather than merely painting a stale number.
-    const current = sandboxScopeGuard();
-    const seen = await readSeen();
-    const next = { ...seen, ...Object.fromEntries(due.map((verdict) => [ledgerKey(verdict.repo, verdict.chore.id), verdict.digest])) };
-    // Unchanged means nothing new was on screen — and a write here would cost every connected browser a refetch
-    // through the file push for a file whose content did not move.
-    if (Object.entries(next).every(([key, digest]) => seen[key] === digest) && Object.keys(next).length === Object.keys(seen).length) {
-        return;
+    // Fold them out of the badge only if the acknowledgement actually landed: a switch mid-write abandons it,
+    // and clearing here anyway would silence the NEW box's tile for evidence read in the old one.
+    if (await seen.mark(Object.fromEntries(due.map((verdict) => [ledgerKey(verdict.repo, verdict.chore.id), verdict.digest])))) {
+        unseen.value = unseen.value.filter((verdict) => !due.includes(verdict));
     }
-    if (!current()) {
-        return;
-    }
-    await api.workspace.write(SEEN_PATH, `${JSON.stringify(next, undefined, 2)}\n`);
-    unseen.value = unseen.value.filter((verdict) => !due.includes(verdict));
 };
