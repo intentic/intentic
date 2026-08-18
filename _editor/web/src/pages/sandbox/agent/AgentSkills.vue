@@ -213,8 +213,20 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             </div>
         </div>
 
-        <!-- Hidden while something is open, so there is only ever one skill being written or read at a time. -->
-        <Row v-else-if="openId === undefined" as="button" icon="plus" density="compact" interactive title="Write a skill" @click="startAdd" />
+        <!-- Hidden while something is open, so there is only ever one skill being written or read at a time.
+             Hand-written rather than <Row>: every tier of the shared row pads to px-4, which is what pushed the
+             plus a step right of the chevron column the rest of this group is hung on. This is the "New skill"
+             header below before it is clicked — same padding, same icon, same type — so opening the form reads
+             as the row unfolding, not as a different block arriving. -->
+        <button
+            v-else-if="openId === undefined"
+            type="button"
+            class="group flex w-full cursor-pointer items-center gap-2.5 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-content/4"
+            @click="startAdd"
+        >
+            <Icon name="plus" aria-hidden="true" class="shrink-0 text-2xs text-subtle" />
+            <span class="text-sm text-muted transition-colors group-hover:text-content">Write a skill</span>
+        </button>
 
         <!-- EVERYTHING THAT CAME WITH SOMETHING ELSE, behind one line. Last in the group because it is the half
              nobody came here to change — and a row inside the same surface rather than a section of its own, so

@@ -272,16 +272,19 @@ watch(
                     </div>
                 </div>
 
-                <!-- Hidden while something is open, so there is only ever one skill being written or read. -->
-                <Row
+                <!-- Hidden while something is open, so there is only ever one skill being written or read.
+                     Hand-written rather than <Row>: every tier of the shared row pads to px-4, which pushed the
+                     plus a step right of the chevron column the rows above are hung on. This is the "New skill"
+                     header before it is clicked, so opening the form reads as the row unfolding. -->
+                <button
                     v-else-if="openName === undefined"
-                    as="button"
-                    icon="plus"
-                    density="compact"
-                    interactive
-                    title="Write a skill"
+                    type="button"
+                    class="group flex w-full cursor-pointer items-center gap-2.5 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-content/4"
                     @click="startAdd"
-                />
+                >
+                    <Icon name="plus" aria-hidden="true" class="shrink-0 text-2xs text-subtle" />
+                    <span class="text-sm text-muted transition-colors group-hover:text-content">Write a skill</span>
+                </button>
             </div>
         </div>
 
