@@ -1,6 +1,6 @@
 import { type DeployOverviewResponse, DeployOverviewResponseSchema, DeploySeenResponseSchema, DEPLOYMENTS_BASE } from "./contract";
 import type { ViewBadge } from "@intentic/extension-api";
-import { sandboxPoll, sandboxRef } from "@intentic/extension-api";
+import { sandboxPoll, sandboxValue } from "@intentic/extension-api";
 import { incidents, incidentTooltip, topTier, unseenIncidents } from "./incidents";
 import { host } from "./host";
 
@@ -11,11 +11,18 @@ import { host } from "./host";
  * Which connections exist is not this module's question: the host calls detect() on every facts poll and hands
  * each activation's key straight back to badge(), so this only has to keep a map and fill it. */
 
-// Which capabilities to poll. Written by detect() on every facts poll, so a connection added or removed in
-// /capabilities starts or stops being watched without a reload. Sandbox-scoped and so emptied on a switch: a
-// Komodo capability belongs to the box it is configured in, so the first poll after a switch has to ask about
-// this box's connections rather than the last box's.
-const watched = sandboxRef<readonly string[]>(() => []);
+/* Which capabilities to poll. Written by detect() on every facts poll, so a connection added or removed in
+ * /capabilities starts or stops being watched without a reload. Sandbox-scoped and so emptied on a switch: a
+ * Komodo capability belongs to the box it is configured in, so the first poll after a switch has to ask about
+ * this box's connections rather than the last box's.
+ *
+ * NOT a `sandboxRef`, and this is the one place in the extension where that distinction bites. Nothing renders
+ * this list — it is the poller's note to itself about what to ask — while `detect()`, its only writer, runs
+ * inside the host's render computed. A reactive ref here is therefore a computed that reads and writes the
+ * same cell on every pass, and since detect() hands over a freshly mapped array each time, the write always
+ * counts as a change: the rail re-runs itself until Vue gives up on the frame and drops every update queued
+ * behind it. See sandboxValue in extension-api/scope.ts. */
+const watched = sandboxValue<readonly string[]>(() => []);
 
 /* Slow on purpose, the ciAttention budget. This drives a glance, not a screen: a breakage that surfaces within
  * the minute is timely, and the view's own faster polling is what serves someone actually watching.

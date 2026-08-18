@@ -93,13 +93,23 @@ export interface ViewRegistration {
     // logs, its status, its consumption) — inspected occasionally rather than worked in, so it costs a tab in
     // a scrolling word-labelled strip instead of an icon in the rail's fixed budget.
     readonly surface: "rail" | "directory" | "sandbox";
-    // Evidence-based detection over the public facts — one activation per sidebar element. Called on every
-    // facts poll; a throwing detect contributes nothing that round.
+    /* Evidence-based detection over the public facts — one activation per sidebar element. Called on every
+     * facts poll; a throwing detect contributes nothing that round.
+     *
+     * MUST NOT WRITE REACTIVE STATE. This runs inside the host's render computed, so a `sandboxRef` (or any
+     * other `Ref`) written here is a computed mutating its own dependency: Vue re-runs it, it writes again,
+     * and the rail recurses until the frame is abandoned — taking every unrelated update queued behind it, so
+     * the symptom is a window that stops responding rather than one misbehaving tile.
+     *
+     * It IS the right place to notice things, though — it is the only callback that sees the live facts — so
+     * for the bookkeeping that notice produces (which connections a poller should ask about next round) use
+     * `sandboxValue`, which has the same lifetime and no observers. Same rule for `badge` below. */
     readonly detect: (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]) => Activation[];
     // What this activation's tile should say without being opened. Read inside the host's own computed, so
     // reading a ref here re-renders the tile when it changes — no push channel needed. Called on every render
     // of every surface that draws tiles, so it must be cheap and pure: derive from state the extension already
-    // keeps, never fetch. A throwing badge simply yields none.
+    // keeps, never fetch, and never write a ref (see detect above — same computed, same recursion). A throwing
+    // badge simply yields none.
     //
     // Requires `badge: true` on the manifest's matching contributes.views entry — the host drops the function
     // otherwise, because a tile that can interrupt the user is a contribution the owner must have approved.
