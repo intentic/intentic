@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
-import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
+import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/workspace-files.js";
 import type { ActionResult } from "./changes.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 
@@ -89,6 +89,27 @@ export const createGitRoutes = (services: Services) => {
             throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
         }
         if (isControlPlanePath(services.workspace.root, target)) {
+            throw new ORPCError("NOT_FOUND", { message: "not found" });
+        }
+        return target;
+    };
+    /* The same two floors for the DIFF routes, with the one carve-out a review earns: a control-plane entry the
+     * root repo TRACKS is diffable (isReviewableStatePath — capabilities.json, and only because it is
+     * `versioned`). Without it the panel contradicted itself. `changes` lists whatever git reports, and git
+     * reports a tracked file, so the row was there; opening it asked this guard, which refused it as
+     * control-plane, and the review the tracking exists for 404'd. The two other diff sources — an agent's
+     * worktree, a checkpoint scope — never had the problem, because both read from a repo whose exclude list
+     * already decided what may be tracked. This makes the working tree agree with them.
+     *
+     * The file API's own read and write keep asking `guardRepoPath` and keep refusing: the write is the thing
+     * the lock is actually for (a PUT here grants a capability nobody approved), and the explorer answers a
+     * click with the Capabilities screen, which is a better door than a JSON buffer. */
+    const guardDiffPath = (dir: string, path: string): string => {
+        const target = resolveWithin(dir, path);
+        if (target === undefined) {
+            throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
+        }
+        if (isControlPlanePath(services.workspace.root, target) && !isReviewableStatePath(services.workspace.root, target)) {
             throw new ORPCError("NOT_FOUND", { message: "not found" });
         }
         return target;
@@ -326,7 +347,7 @@ export const createGitRoutes = (services: Services) => {
         // claimed. The agents review keeps its own ref-vs-worktree route — a worktree has no index to split.
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            guardRepoPath(dir, input.path);
+            guardDiffPath(dir, input.path);
             if (input.side === "staged") {
                 return services.git.stagedFileDiff(dir, input.path);
             }
@@ -362,7 +383,7 @@ export const createGitRoutes = (services: Services) => {
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
         commitFileDiff: i.commitFileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            guardRepoPath(dir, input.path);
+            guardDiffPath(dir, input.path);
             return services.git.commitFileDiff(dir, input.sha, input.path);
         }),
         // Write actions from the commit context menu (VSCode "Git Graph" parity). Branch/tag are

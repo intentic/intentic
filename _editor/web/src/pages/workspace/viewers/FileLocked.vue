@@ -30,8 +30,13 @@ interface Locked {
 }
 
 const LOCKED: Record<string, Locked> = {
+    /* The one entry here that holds no secret — its sign-ins moved to the vault under `auth/`, and what is left
+     * is the LIST: every account, computer and service the agent may reach. Locked all the same, because adding
+     * a line to that list by saving a file would be granting a capability nobody approved. Its sentence says
+     * connections rather than sign-ins for that reason; the old wording described a file that no longer exists,
+     * and it is also the entry whose changes ARE readable — the root repo tracks it, so the diff is in Changes. */
     "capabilities.json": {
-        holds: `the sign-ins for every account you've connected, so the agent can act as you on them`,
+        holds: `the list of accounts, computers and services this sandbox may reach, which the agent acts through`,
         manage: { label: `Capabilities`, to: `/capabilities` },
     },
     "owner.json": { holds: `who this sandbox belongs to`, manage: { label: `Access`, to: `/sandbox/access` } },

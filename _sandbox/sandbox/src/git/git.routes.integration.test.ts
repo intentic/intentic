@@ -405,6 +405,42 @@ test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path esca
     expect(await errorCode(client.git.fileDiff({ repo: "root", path: "../escape", side: "staged" }))).toBe("BAD_REQUEST");
 });
 
+/* THE PANEL MUST BE ABLE TO OPEN EVERY ROW IT DRAWS. `changes` lists what git reports, and the root repo tracks
+ * `.intentic/capabilities.json` (it is `versioned` — connecting this sandbox to a computer or an orchestrator is
+ * the largest change made to what it can do, and that belongs in review). The path is also control-plane, so the
+ * diff guard used to refuse it and the row 404'd on click: a file deliberately made reviewable, with no way to
+ * review it. The lock is about the WRITE, which is why only these two diff routes carve it out. */
+test("git.fileDiff serves the tracked control-plane entry and still refuses the rest of it", async () => {
+    const diffed: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                git: {
+                    ...services().git,
+                    stagedFileDiff: async (_dir, path) => {
+                        diffed.push(path);
+                        return { before: "{}\n", after: '{"ssh":{}}\n' };
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.fileDiff({ repo: "root", path: ".intentic/capabilities.json", side: "staged" })).toEqual({
+        before: "{}\n",
+        after: '{"ssh":{}}\n',
+    });
+    // The credentials, the identity binding and the private runtime state are untracked and stay unreachable —
+    // the carve-out follows `versioned`, so it cannot widen without the flag that puts a file in `git log`.
+    for (const path of [".intentic/owner.json", ".intentic/auth/codex/auth.json", ".intentic/browser/Default/Cookies"]) {
+        expect([path, await errorCode(client.git.fileDiff({ repo: "root", path, side: "staged" }))]).toEqual([path, "NOT_FOUND"]);
+    }
+    // …and the generic file API keeps refusing all of them, the tracked one included: reading a diff is review,
+    // writing this file would be granting a capability the owner never approved.
+    expect(await errorCode(client.git.readFile({ repo: "root", path: ".intentic/capabilities.json" }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.git.writeFile({ repo: "root", path: ".intentic/capabilities.json", content: "{}" }))).toBe("NOT_FOUND");
+    expect(diffed).toEqual([".intentic/capabilities.json"]);
+});
+
 /* THE WAY OUT OF A HALTED REPO. Nothing this daemon starts can leave one — every sequence verb aborts itself on
  * failure — so both of these exist for what a terminal left behind, and both are worth pinning: the read must
  * not queue behind the repo lock (a stuck repo would become a stuck panel), and the abort must checkpoint before

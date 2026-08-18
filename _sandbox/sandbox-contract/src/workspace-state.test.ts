@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
     isLockedWorkspacePath,
     isReportedManifest,
+    isReviewableLockedPath,
     REPORTED_MANIFEST_PATHS,
     staleQueryKeys,
     VERSIONED_STATE_PATHS,
@@ -226,6 +227,45 @@ describe(`isLockedWorkspacePath`, () => {
     it(`reads a platform path the same as a posix one`, () => {
         expect(isLockedWorkspacePath(`.intentic\\auth\\codex`)).toBe(true);
         expect(isLockedWorkspacePath(`./.intentic/capabilities.json`)).toBe(true);
+    });
+});
+
+/* The carve-out the diff routes ask for, and the reason it is derived: a locked entry the root repo TRACKS has
+ * a diff by construction, and refusing to serve it made the Changes panel list a row it could not open. */
+describe(`isReviewableLockedPath`, () => {
+    it(`admits the locked entry the root repo tracks, and nothing else locked`, () => {
+        expect(isReviewableLockedPath(`.intentic/capabilities.json`)).toBe(true);
+        // Every other locked entry is a credential, an identity binding or private runtime state. None is
+        // versioned, so none is reachable through a diff — the carve-out cannot widen without the flag.
+        expect(isReviewableLockedPath(`.intentic/owner.json`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/members.json`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/ci.json`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/auth/codex/auth.json`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/sessions/claude/x.jsonl`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/browser/Default/Cookies`)).toBe(false);
+        expect(isReviewableLockedPath(`.git/config`)).toBe(false);
+    });
+
+    it(`answers only for the locked set — an ordinary path was never refused to begin with`, () => {
+        // Tracked, but not locked: the guards never ask this of them, and a `true` here would read as "this
+        // path needed a carve-out", which is a different and wrong statement.
+        expect(isReviewableLockedPath(`.intentic/settings.json`)).toBe(false);
+        expect(isReviewableLockedPath(`src/app.ts`)).toBe(false);
+        // A repo's own nested state dir is its project's content, exactly as the lock reads it.
+        expect(isReviewableLockedPath(`myrepo/.intentic/capabilities.json`)).toBe(false);
+    });
+
+    it(`reads a platform path and a dot-relative one the same as a posix one`, () => {
+        expect(isReviewableLockedPath(`.intentic\\capabilities.json`)).toBe(true);
+        expect(isReviewableLockedPath(`./.intentic/capabilities.json`)).toBe(true);
+    });
+
+    it(`stays a strict subset of the lock`, () => {
+        // The carve-out is about which locked paths a DIFF may serve. A path it admits that the lock never
+        // held would mean the guards had stopped agreeing on what the control plane is.
+        for (const path of VERSIONED_STATE_PATHS) {
+            expect([path, isReviewableLockedPath(path) && !isLockedWorkspacePath(path)]).toEqual([path, false]);
+        }
     });
 });
 

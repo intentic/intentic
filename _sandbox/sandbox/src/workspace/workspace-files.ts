@@ -5,7 +5,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, isReviewableLockedPath } from "@intentic/sandbox-contract";
 
 // Resolve a repo-relative path to an absolute one, guarding against escaping the repo dir: the daemon serves
 // file reads/writes for the workspace repos, so a `../` or absolute path must not reach outside them. Returns
@@ -100,6 +100,13 @@ export const isUnder = (realRoot: string, real: string): string | undefined =>
 // per entry and the upload route 500s the whole drop instead of skipping the handful of paths that were never
 // writable to begin with.
 export const isControlPlanePath = (root: string, absPath: string): boolean => isLockedWorkspacePath(relative(resolve(root), absPath));
+
+// The one carve-out, and it applies to DIFFS ONLY — a control-plane entry the root repo tracks, whose change is
+// meant to be reviewed (isReviewableLockedPath holds the full reasoning; capabilities.json is the only one).
+// Asked alongside the check above by the two git review routes, so a row the Changes panel lists because git
+// reports it can actually be opened. Reading the diff publishes nothing the tracking did not: those bytes are in
+// `git log` and in every clone. Every other surface asks isControlPlanePath alone and still refuses.
+export const isReviewableStatePath = (root: string, absPath: string): boolean => isReviewableLockedPath(relative(resolve(root), absPath));
 
 /* Read a workspace file's text WHOLE; undefined when it does not exist. For the daemon's own readers, which
  * have already bounded what they ask for: a diff side (512 KiB cap, changes.ts), an untracked file's commit

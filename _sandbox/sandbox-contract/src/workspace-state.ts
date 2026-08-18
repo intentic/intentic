@@ -133,7 +133,12 @@ const STATE_FILES = [
      * left a diff nowhere. One consequence worth stating rather than discovering: an identifier that pairs with a
      * credential — Komodo's api key beside its api secret, which its own connector card calls "like a database
      * user" — is echoed, and therefore lands in the diff exactly as a database username would. */
-    { path: ".intentic/capabilities.json", invalidates: ["capabilities", "environment", "panels", "manifests"], portability: "carry", versioned: true },
+    {
+        path: ".intentic/capabilities.json",
+        invalidates: ["capabilities", "environment", "panels", "manifests"],
+        portability: "carry",
+        versioned: true,
+    },
 
     /* Which workspace-derived recommendations the owner has said "not needed" to, and the evidence each was
      * declined against. It rides the `capabilities` key because the catalog is what changes when one lands, and
@@ -690,6 +695,29 @@ export const isLockedWorkspacePath = (relPath: string): boolean => {
         return true;
     }
     return segments.length >= 2 && segments[0] === STATE_DIR && LOCKED_STATE_ENTRIES.has(segments[1] ?? "");
+};
+
+/* THE LOCKED ENTRIES THE ROOT REPO TRACKS — refused by the file API, and diffable anyway.
+ *
+ * `capabilities.json` is the only one today and the whole reason this exists. Both of its rules are right on
+ * their own: it is `versioned`, because connecting this sandbox to a deployment orchestrator is the largest
+ * change anyone makes to what it can DO and that belongs in review; and it is locked, because a member who
+ * could PUT one through the generic file API would be granting themselves a capability the owner never
+ * approved. The lock was always about that WRITE — its credentials live in the vault, not in the file.
+ *
+ * Together, though, the second silently cancelled the first. The Changes panel listed the file (git tracks it,
+ * so `git status` reports it), and clicking the row asked a diff route that refuses every control-plane path —
+ * a 404 on the one surface `versioned` exists to produce. The bytes were already in `git log`, in every clone
+ * of the root repo and in the workspace search; only the review was missing.
+ *
+ * So the review surfaces ask THIS instead of the flat lock, and it derives from the same flag rather than
+ * naming the file, so marking another locked entry `versioned` cannot reproduce the contradiction. Every other
+ * surface — read, write, move, delete, publish — still asks `isLockedWorkspacePath` and still refuses.
+ *
+ * Accepts either slash, like the rule above it. */
+export const isReviewableLockedPath = (relPath: string): boolean => {
+    const rel = relPath.replaceAll("\\", "/").replace(/^\.\//, "");
+    return isLockedWorkspacePath(rel) && VERSIONED_STATE_PATHS.some((path) => (path.endsWith("/") ? rel.startsWith(path) : rel === path));
 };
 
 /* Every path this table declares, as a type. `as const` above is what makes it one, and it is what finally makes

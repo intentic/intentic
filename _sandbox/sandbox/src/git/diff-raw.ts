@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import { isValidRepoId } from "../workspace/repo-discovery.js";
-import { contentTypeForPath, isControlPlanePath, MAX_RAW_BYTES, resolveWithin } from "../workspace/workspace-files.js";
+import { contentTypeForPath, isControlPlanePath, isReviewableStatePath, MAX_RAW_BYTES, resolveWithin } from "../workspace/workspace-files.js";
 
 /* THE BYTES BEHIND A BINARY DIFF — /diff/raw, the sibling of /workspace/raw, and for the same reason: an image
  * is rendered from its bytes, and the JSON diff contract can only carry text. Every file-diff route in this
@@ -102,13 +102,15 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
 
     // The two floors every file surface in this daemon applies: a path may not climb out of its repo, and it may
     // not reach the daemon's control plane — for repo "root" that dir IS the workspace, so without the second
-    // check this route would be the way around isControlPlanePath.
+    // check this route would be the way around isControlPlanePath. This route serves ONE side of a diff, so it
+    // carries the review carve-out with it (git.routes' guardDiffPath holds the reasoning): a tracked
+    // control-plane entry that the JSON diff will show must not 404 the moment it is a picture instead of text.
     const guardPath = (dir: string, path: string): string => {
         const target = resolveWithin(dir, path);
         if (target === undefined) {
             throw new DiffRawError(400, "invalid path");
         }
-        if (isControlPlanePath(services.workspace.root, target)) {
+        if (isControlPlanePath(services.workspace.root, target) && !isReviewableStatePath(services.workspace.root, target)) {
             throw new DiffRawError(404, "not found");
         }
         return target;
