@@ -115,6 +115,12 @@ export const MANIFESTS = family(`manifests`);
 export const PANELS = family(`panels`);
 export const PERSONAS = family(`personas`);
 export const PORTS = family(`ports`);
+/* SHARED WITH THE PREVIEW EXTENSION, deliberately and by exact path. That extension's manifest binds `public/`
+ * to the name `public` (contributes.files), which is what makes a write into the outbox refresh its view
+ * without a clock. `family("public").of()` and its `api.key("public")` produce the identical key, so the
+ * first-run screen's read of the same route rides the same push — rather than growing a second key for one
+ * directory, which the daemon would then have to be taught to invalidate twice. */
+export const PUBLIC = family(`public`);
 export const REGISTRY = family(`registry`);
 export const RULE_FIRINGS = family(`rule-firings`);
 export const SANDBOX_INFO = family(`info`);

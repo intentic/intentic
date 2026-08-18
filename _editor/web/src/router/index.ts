@@ -5,6 +5,7 @@ import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { firstRunDone } from "../pages/start/firstRun";
 import { setupRedirect } from "./setupGate";
 
 declare module "vue-router" {
@@ -127,11 +128,32 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
-            // keeps the workspace (its chat is docked), on the first session out of setup as much as on any
-            // later one: the workspace is where the code is, where getting code IN is offered, and where the
-            // docked chat is already sitting to be typed at.
-            { path: ``, redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`) },
+            /* WHERE SETUP LETS GO OF THE USER.
+             *
+             * The FIRST time, it is /start: a sandbox nobody has done anything on yet lands on the one screen
+             * that gives something before it asks for anything (pages/start/StartScreen.vue). Every other surface
+             * in this product is evidence-driven — the board's starters read the repos, the capability
+             * recommendations read the remotes — so an empty box makes all of them silent at once, which is the
+             * worst possible moment for the product to have nothing to say.
+             *
+             * AFTERWARDS it is what it always was: mobile lands on the agent fleet, desktop on the workspace
+             * (its chat is docked) — the workspace is where the code is, where getting code IN is offered, and
+             * where the docked chat is already sitting to be typed at.
+             *
+             * The flag is read SYNCHRONOUSLY here because a redirect cannot wait, and it is only ever half the
+             * decision: /start re-reads the live workspace and stands itself down the moment the panel list
+             * says there are already repositories, so a browser with cleared storage cannot strand anybody on
+             * an offer that no longer applies. */
+            {
+                path: ``,
+                redirect: () => (firstRunDone() ? (useDevice().mobile.value ? `/agents` : `/workspace`) : `/start`),
+            },
+            {
+                path: `start`,
+                name: `start`,
+                meta: { title: `Start` },
+                component: () => import(`../pages/start/StartScreen.vue`),
+            },
             // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
             // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter

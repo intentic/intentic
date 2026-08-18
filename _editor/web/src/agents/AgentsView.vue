@@ -29,6 +29,7 @@ import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
 import ConnectOffer from "../chat/ConnectOffer.vue";
+import { BUILD_IDEAS, buildPrompt } from "../pages/start/firstRun";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
@@ -695,10 +696,17 @@ const clearable = computed(() => lanes.value.finished.length);
  * A chip FILLS that composer, it does not send: it leaves the text there to be edited, which is the point of
  * suggesting it rather than doing it.
  *
- * THEY ARE ABOUT WORK THAT IS ALREADY HERE, and there are none when there isn't any. Getting code into an
- * empty workspace is the workspace pane's job — it is where setup lands and it offers all three doors
- * (WorkspaceEmptyState); a pair of chips here proposing the same thing in a sentence an agent has to interpret
- * was the second, worse answer to a question already answered one tab over. */
+ * THEY ARE ABOUT WORK THAT IS ALREADY HERE — with ONE exception, and the distinction is worth keeping
+ * straight. Getting EXISTING code in is the workspace pane's job: it offers all three doors, and a pair of
+ * chips here proposing the same thing in a sentence an agent has to interpret was the second, worse answer to
+ * a question already answered one tab over. Those chips are gone and stay gone.
+ *
+ * What is here instead is the one task that needs no code at all: BUILDING something. It is not a restatement
+ * of any door in the workspace pane — none of them makes anything — and it is the only suggestion on this
+ * board that a user with an empty box can actually press and get an artifact from. A board that offered
+ * literally nothing to somebody who has just connected an account is the silence this product is trying to
+ * stop having; the ladder is the same one the first-run screen walks (pages/start/firstRun.ts), which is where
+ * a user who has not made this choice yet meets it first. */
 // The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -710,9 +718,12 @@ const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChang
  * understand it, then a small safe change with a stop before anything is written. Concrete sentences rather
  * than feature names — "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
 const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
-    // Nothing to work on, nothing to suggest: every one of these points an agent at code that has to exist.
+    /* NOTHING TO WORK ON. Everything below this branch points an agent at code that has to exist, so none of
+     * it can be offered — but the one task that needs no code can, and it is the same one the first-run screen
+     * is built around: make something, and get a public link to it. Written from the shared prompt rather than
+     * from a second copy of it, so the two surfaces cannot drift into asking for different things. */
     if (!hasWork.value) {
-        return [];
+        return BUILD_IDEAS.map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
     }
     return [
         // Uncommitted work is the most urgent thing on a workspace that has any, so it leads when it exists.

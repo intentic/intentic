@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
-// THE FIRST SCREEN, MOUNTED. On a fresh workspace the desktop lands here (router/index.ts) straight out of
-// setup, so what the empty board renders is the whole of somebody's first impression — and the three things
-// that make it work are easy to break silently: that it offers the way in rather than a composer it cannot
-// send from, that the docked chat then drops its copy of that offer, and that once something CAN send a
-// starter fills the chat's composer rather than dispatching an agent. All three are asserted against the real
-// component.
+// THE EMPTY BOARD, MOUNTED. Out of setup the desktop now lands on /start (router/index.ts, and the screen
+// there gives something before it asks for anything) — but this board is still what a user meets the moment
+// they leave it, and on a box with nothing on it the things that make it work are easy to break silently: that
+// it offers the way in rather than a composer it cannot send from, that the docked chat then drops its copy of
+// that offer, that an empty workspace is offered the one task needing no code and none of the ones that need
+// some, and that a starter fills the chat's composer rather than dispatching an agent. All are asserted
+// against the real component.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -16,6 +17,7 @@ import { endpointProviders, trialStatus } from "../composables/chat/providerCata
 import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { PANELS } from "../composables/queryKeys";
+import { BUILD_IDEAS, buildPrompt } from "../pages/start/firstRun";
 import { router } from "../router";
 import AgentsView from "./AgentsView.vue";
 
@@ -115,7 +117,13 @@ it(`waits for the daemon before claiming nothing is connected`, async () => {
     expect(offerOnBoard.value).toBe(true);
 });
 
-it(`suggests nothing on an empty workspace — getting code in is the workspace pane's offer`, async () => {
+/* AN EMPTY WORKSPACE OFFERS THE ONE TASK THAT NEEDS NO CODE, and nothing that needs some. The distinction is
+ * the whole point of the branch and both halves are pinned here, because each has been got wrong once:
+ *   · the chips that proposed cloning and scaffolding are gone and stay gone — getting EXISTING code in is
+ *     the workspace pane's offer, made properly there and in an agent's words here
+ *   · but the board is not silent either, which is what it was: building something is the only suggestion a
+ *     user with an empty box can press and get an artifact from */
+it(`offers building on an empty workspace, and nothing that points at code which isn't there`, async () => {
     // A connected Claude subscription: the offer is answered, so the screen goes back to asking for the task.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
     const board = mount(AgentsView);
@@ -123,12 +131,30 @@ it(`suggests nothing on an empty workspace — getting code in is the workspace 
 
     expect(board.textContent).not.toContain(`Try free with Google`);
     expect(offerOnBoard.value).toBe(false);
-    // No repos and no changes in this mount. Every suggestion this screen has points an agent at code, and
-    // there is none — the two chips that used to stand here proposed cloning and scaffolding, which is the
-    // workspace pane's offer, made properly there (WorkspaceEmptyState) and in an agent's words here.
     expect(board.textContent).toContain(`Start your first agent`);
+
+    // No repos and no changes in this mount, so every code-pointing suggestion is absent.
     expect([...board.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).not.toContain(`Bring in my code`);
     expect(starterNamed(board, `Explain this codebase`)).toBeUndefined();
+    expect(starterNamed(board, `Review my changes`)).toBeUndefined();
+
+    // And the build ladder is, from the shared source the first-run screen uses.
+    for (const example of BUILD_IDEAS) {
+        expect(starterNamed(board, example.label)).toBeDefined();
+    }
+});
+
+// Filled, not sent — the same contract every other starter has, and the reason the chips are suggestions.
+it(`fills the composer with the build task rather than sending it`, async () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
+    const board = mount(AgentsView);
+    await nextTick();
+
+    starterNamed(board, BUILD_IDEAS[0]!.label)!.click();
+    await nextTick();
+
+    expect(useChat().active.value.draft.value).toBe(buildPrompt(BUILD_IDEAS[0]!.idea));
+    expect(useChat().active.value.messages.value).toHaveLength(0);
 });
 
 it(`suggests work once the workspace has some, and a starter fills the chat rather than sending`, async () => {

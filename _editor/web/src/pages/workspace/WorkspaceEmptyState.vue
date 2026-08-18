@@ -8,8 +8,9 @@ import { useAddRepo } from "../../composables/workspace/useAddRepo";
 
 /* TWO DIFFERENT SILENCES SHARE THIS PANE, and they used to get the same screen. A workspace with code in it and
  * no file open is a reader between files — they know what this place is, and the drop target is a footnote. A
- * workspace with NOTHING in it is somebody who has just finished setup and has not got their work in yet, and
- * for them this pane is the entire product: whatever it offers is what they will believe the options are.
+ * workspace with NOTHING in it is somebody who has come here to get their work in and has not done it yet —
+ * out of setup that is one press away, on the first screen's skip link (pages/start/StartScreen.vue) — and for
+ * them this pane is the entire product: whatever it offers is what they will believe the options are.
  *
  * It offered one, and the wrong one. "Drop your work here" is a file upload, and most people's code is on a
  * host — so the screen that greets an empty workspace asked them to drag their repository into a browser and

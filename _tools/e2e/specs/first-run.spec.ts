@@ -10,12 +10,32 @@ import { expect, test } from "@playwright/test";
  * asserting against a workspace that is no longer new. */
 test.describe.configure({ mode: `serial` });
 
-test(`the desktop's first landing is the workspace`, async ({ page }) => {
-    // The shell's own entry, not /workspace directly: the redirect IS what is under test. Setup ends here on
-    // every session, first or hundredth — the workspace is where the code is, and on a sandbox with none it is
-    // the pane that offers getting some in (the spec below).
+test(`the first landing gives something before it asks for anything`, async ({ page }) => {
+    /* The shell's own entry, not /start directly: the redirect IS what is under test. A sandbox nobody has
+     * done anything on lands here rather than on the workspace, because every other surface in this product is
+     * evidence-driven — the board's starters read the repos, the capability recommendations read the remotes —
+     * so an empty box makes all of them silent at once, which is the worst possible moment for the product to
+     * have nothing to say. (A browser that has answered this screen once goes back to /workspace; that is the
+     * localStorage flag in pages/start/firstRun.ts, and this context is fresh.) */
     await page.goto(`/`);
 
+    await expect(page).toHaveURL(/\/start$/);
+
+    /* NOTHING IS CONNECTED ON A FRESH SANDBOX, so this screen is the way in rather than a question it could
+     * not act on — the same card the chat's gate and the empty board show (ConnectOffer). */
+    await expect(page.getByText(`Try free with Google`)).toBeVisible();
+    // And it is never in the way: somebody who arrived with their own repository leaves in one press.
+    await expect(page.getByRole(`button`, { name: `Skip — I have my own code` })).toBeVisible();
+});
+
+test(`skipping the first-run screen lands on the workspace, and it stays skipped`, async ({ page }) => {
+    await page.goto(`/start`);
+    await page.getByRole(`button`, { name: `Skip — I have my own code` }).click();
+
+    await expect(page).toHaveURL(/\/workspace$/);
+
+    // The whole point of the flag: the offer is answered, so the shell's entry goes back to what it always was.
+    await page.goto(`/`);
     await expect(page).toHaveURL(/\/workspace$/);
 });
 
