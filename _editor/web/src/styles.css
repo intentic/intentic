@@ -31,6 +31,7 @@
  * the role tokens, the radius scale) at equal specificity, so source order is what lets it win. Everything about
  * the feature, including how to remove it, is in ./skins/README.md. */
 @import "./skins/hud.css";
+@import "./skins/sanctum.css";
 
 /* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,
  * so Tailwind won't auto-detect it). */

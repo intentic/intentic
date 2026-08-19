@@ -47,6 +47,14 @@ describe(`useSkin`, () => {
         expect(fontLink()).not.toBeNull();
     });
 
+    it(`restores the other skin just as well`, async () => {
+        localStorage.setItem(`ui-skin`, `sanctum`);
+        const { useSkin } = await load();
+
+        expect(useSkin().skin.value).toBe(`sanctum`);
+        expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
+    });
+
     it(`ignores a stored value that is not a skin`, async () => {
         localStorage.setItem(`ui-skin`, `neon`);
         const { useSkin } = await load();
@@ -86,5 +94,20 @@ describe(`useSkin`, () => {
         useSkin().setSkin(`hud`);
 
         expect(document.querySelectorAll(`#ui-skin-font`)).toHaveLength(1);
+    });
+
+    // Each skin has a face of its own, and swapping between them must RE-POINT the one <link> rather than stack
+    // a second one behind it — which is the bug the id and the re-point in applyFont exist to prevent.
+    it(`swaps one webfont for the other when the skin changes`, async () => {
+        const { useSkin } = await load();
+
+        useSkin().setSkin(`hud`);
+        const first = (fontLink() as HTMLLinkElement).href;
+        useSkin().setSkin(`sanctum`);
+        const second = (fontLink() as HTMLLinkElement).href;
+
+        expect(document.querySelectorAll(`#ui-skin-font`)).toHaveLength(1);
+        expect(first).toContain(`Chakra+Petch`);
+        expect(second).toContain(`Cinzel`);
     });
 });

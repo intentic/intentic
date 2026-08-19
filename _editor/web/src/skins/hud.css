@@ -132,12 +132,14 @@
      * Two corner glows, a survey grid, and a vignette — one image, painted twice.
      *
      * TWICE BECAUSE THE SHELL COVERS THE BODY. The app's root element carries `bg-canvas` and fills the
-     * viewport, so anything painted on <body> alone is never seen; `#app > *` is whatever route element is
-     * standing in front of it. `background-attachment: fixed` is what makes the pair read as ONE backdrop
+     * viewport, so anything painted on <body> alone is never seen; `#app > :first-child` is whatever route element
+     * is standing in front of it — `:first-child` rather than `> *` because `#app` also holds a screen-reader
+     * live region and a fixed toast layer, neither of which is a wall.
+     * `background-attachment: fixed` is what makes the pair read as ONE backdrop
      * rather than two: both are anchored to the viewport, so the grid lines and the glow line up across every
      * panel edge in the window and stay put while a column scrolls. */
     [data-skin="hud"] body,
-    [data-skin="hud"] #app > * {
+    [data-skin="hud"] #app > :first-child {
         background-image:
             radial-gradient(115% 80% at 6% -14%, var(--hud-glow-faint), transparent 56%),
             radial-gradient(95% 70% at 104% 112%, color-mix(in oklab, var(--color-primary-500) 20%, transparent), transparent 52%),
@@ -213,12 +215,18 @@
      * screen is built from (<RowGroup>: one bordered slab of hairline-divided rows, always the direct card-painted
      * child of its <section>), and the kanban slab the fleet board and the chat rail stand their cards in. Both
      * are read as ONE panel, which is exactly what a bracket marks; the small `bg-card` chips scattered through
-     * every row are not, and this is the selector that tells them apart. */
-    [data-skin="hud"] section > .bg-card {
+     * every row are not, and this is the selector that tells them apart.
+     *
+     * `.divide-y` IS PART OF THE SLAB'S IDENTITY, not decoration on the selector. `section > .bg-card` alone
+     * looked precise and was not: the workspace's file-tab strip is also a card-painted direct child of a
+     * <section>, and it wore bracket marks across a 40px bar of tabs. What actually distinguishes a grouped list
+     * is that its children are hairline-divided rows — which is what `divide-y` says, and what <RowGroup>
+     * always writes. */
+    [data-skin="hud"] section > .bg-card.divide-y {
         background-color: color-mix(in oklab, var(--color-card) 90%, transparent);
     }
 
-    [data-skin="hud"] section > .bg-card,
+    [data-skin="hud"] section > .bg-card.divide-y,
     [data-skin="hud"] .lane {
         background-image:
             linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 30%),

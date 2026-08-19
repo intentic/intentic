@@ -5,32 +5,41 @@ import { useTheme } from "@intentic/ui";
  *
  * The accent picker and the light/dark switch both answer "what colour"; a skin answers "what is this thing made
  * of". `none` is the app as designed. `hud` is the heads-up display in skins/hud.css — deep cool glass over a
- * survey grid, lit hairlines, corner brackets, angular geometry.
+ * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css — carved warm stone, gilded
+ * ornament along every panel edge, and inscriptional capitals.
  *
- * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in the skin's stylesheet is scoped to
- * `[data-skin="hud"]`, so the workspace's normal look is not a set of overrides being undone — it is the skin's
- * rules never matching at all. `none` therefore writes no attribute, which keeps the markup quiet for the look
- * almost everyone runs and makes "is a skin on?" answerable by looking at the element.
+ * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
+ * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone — it is the
+ * skin's rules never matching at all. `none` therefore writes no attribute, which keeps the markup quiet for the
+ * look almost everyone runs and makes "is a skin on?" answerable by looking at the element.
  *
- * A SKIN IMPLIES A SCHEME. The HUD is a dark instrument panel: its ground, its glass and its glow are all built
- * for a near-black canvas, and PrimeVue's own component preset keys its dark treatment off `data-mode` rather
- * than off anything this file controls. So turning the skin on turns the scheme dark with it — one call, here,
- * rather than a stylesheet trying to out-shout a component library. The scheme the user had is not remembered
- * across that: leaving the skin leaves them in dark, which is where they can see they are.
+ * A SKIN IMPLIES A SCHEME. Both skins are dark by construction: their grounds, their materials and their light
+ * are built for a near-black canvas, and PrimeVue's own component preset keys its dark treatment off `data-mode`
+ * rather than off anything this file controls. So turning a skin on turns the scheme dark with it — one call,
+ * here, rather than a stylesheet trying to out-shout a component library. The scheme the user had is not
+ * remembered across that: leaving the skin leaves them in dark, which is where they can see they are.
  *
- * THE DISPLAY FACE IS FETCHED ON DEMAND. Chakra Petch is the skin's headings and nothing else, and an app that
- * downloads a font for a look nobody has selected is an app that charges everyone for one person's taste. The
- * <link> is appended when the skin goes on and removed when it goes off; if it never arrives, --hud-display
- * falls through to the app's own stack and the skin simply reads in Inter. */
+ * THE DISPLAY FACE IS FETCHED ON DEMAND, AND IT IS PER SKIN. A look's typography is part of the look — the HUD
+ * wants an angular technical face, the Sanctum wants Roman capitals cut in stone — and an app that downloads
+ * either for a skin nobody has selected is an app charging everyone for one person's taste. The <link> is
+ * swapped when the skin changes and removed when there is none; if it never arrives, the skin's `--*-display`
+ * variable falls through to the app's own stack and everything still reads. */
 
-export type Skin = "none" | "hud";
+export type Skin = "none" | "hud" | "sanctum";
 
 const STORAGE_KEY = `ui-skin`;
 const ATTRIBUTE = `data-skin`;
 const FONT_ELEMENT_ID = `ui-skin-font`;
-const FONT_HREF = `https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap`;
 
-const isSkin = (value: unknown): value is Skin => value === `none` || value === `hud`;
+/* One entry per skin that wants a face of its own. Sanctum takes Cinzel — an inscriptional Roman capital, which
+ * is the closest a webfont gets to letters cut into a wall — and the HUD takes Chakra Petch's angular technical
+ * caps. A skin absent from this map simply loads nothing. */
+const FONT_HREF: Partial<Record<Skin, string>> = {
+    hud: `https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap`,
+    sanctum: `https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap`,
+};
+
+const isSkin = (value: unknown): value is Skin => value === `none` || value === `hud` || value === `sanctum`;
 
 const read = (): Skin => {
     try {
@@ -45,20 +54,26 @@ const read = (): Skin => {
     return isSkin(attribute) ? attribute : `none`;
 };
 
-/** Add or drop the skin's webfont <link>. Idempotent, so re-applying the same skin costs nothing. */
+/** Point the skin webfont <link> at `value`'s face, or drop it when the skin wants none. */
 const applyFont = (value: Skin): void => {
+    const href = FONT_HREF[value];
     const existing = document.getElementById(FONT_ELEMENT_ID);
-    if (value === `none`) {
+    if (href === undefined) {
         existing?.remove();
         return;
     }
-    if (existing !== null) {
+    // Re-pointed rather than replaced, so switching between two skins that both want a face never leaves two
+    // <link>s behind — and re-applying the same skin costs nothing at all.
+    if (existing instanceof HTMLLinkElement) {
+        if (existing.href !== href) {
+            existing.href = href;
+        }
         return;
     }
     const link = document.createElement(`link`);
     link.id = FONT_ELEMENT_ID;
     link.rel = `stylesheet`;
-    link.href = FONT_HREF;
+    link.href = href;
     document.head.append(link);
 };
 

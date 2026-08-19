@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ColorPicker, Row, RowGroup, SegmentedControl, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
-import { explorerTreatment } from "@intentic/ui";
+import { explorerTreatment, type IconName } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useToolCalls } from "../../composables/chat/useToolCalls";
@@ -10,7 +10,7 @@ import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
-import { useSkin } from "../../skins/useSkin";
+import { type Skin, useSkin } from "../../skins/useSkin";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), the one colour the whole app
  * is built out of, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX
@@ -61,21 +61,28 @@ const cap = (value: string): string => value.charAt(0).toUpperCase() + value.sli
  * So the value is the skin when one is on and the colour scheme otherwise, and picking a scheme drops the
  * skin — one row, one answer, no state you can get into that the row cannot show you.
  *
- * TO REMOVE SKINS ENTIRELY: delete this block and the `useSkin` import, drop `hud` from the options, and put
- * `:model-value="scheme"` / `@update:model-value="setScheme"` back on the row's control. */
+ * TO REMOVE SKINS ENTIRELY: delete this block and the `useSkin` import, leave `light`/`dark` in the options, and
+ * put `:model-value="scheme"` / `@update:model-value="setScheme"` back on the row's control. */
 const { skin, setSkin } = useSkin();
-type ThemeChoice = "light" | "dark" | "hud";
+type ThemeChoice = "light" | "dark" | Skin;
 const themeOptions = [
     { label: `Light`, value: `light` as const },
     { label: `Dark`, value: `dark` as const },
     { label: `HUD`, value: `hud` as const, title: `A heads-up display — glass panels, lit edges and a survey grid, in the colour you picked below.` },
+    {
+        label: `Sanctum`,
+        value: `sanctum` as const,
+        title: `Carved warm stone with gilded ornament along every panel edge, gilt in the colour you picked below.`,
+    },
 ];
-const themeChoice = computed<ThemeChoice>(() => (skin.value === `hud` ? `hud` : scheme.value));
+// The row's lead glyph names the look rather than the light level, which is what the row now chooses.
+const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, hud: `wave-pulse`, sanctum: `star-fill`, none: `moon` };
+const themeChoice = computed<ThemeChoice>(() => (skin.value === `none` ? scheme.value : skin.value));
 const setThemeChoice = (value: ThemeChoice): void => {
-    // The HUD is built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
+    // Both skins are built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
     // useSkin flips it — nothing to do here beyond naming the skin.
-    if (value === `hud`) {
-        setSkin(`hud`);
+    if (value !== `light` && value !== `dark`) {
+        setSkin(value);
         return;
     }
     setSkin(`none`);
@@ -112,9 +119,9 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <!-- Look — whole-workspace appearance choices. -->
         <RowGroup label="Look">
             <Row
-                :icon="themeChoice === `hud` ? `wave-pulse` : themeChoice === `dark` ? `moon` : `sun`"
+                :icon="THEME_ICON[themeChoice]"
                 title="Theme"
-                description="The workspace's whole look — light, dark, or the HUD's glass panels and lit edges over a survey grid."
+                description="The workspace's whole look — plain light and dark, the HUD's lit glass over a survey grid, or the Sanctum's gilded stone."
             >
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"

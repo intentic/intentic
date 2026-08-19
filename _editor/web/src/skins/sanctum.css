@@ -1,0 +1,737 @@
+/* ══ SANCTUM — CARVED STONE AND GILDING ════════════════════════════════════════════════════════════════════
+ *
+ * The second skin, and the opposite material to the first. Where the HUD is glass lit from behind, this is
+ * WEIGHT: a warm basalt ground with grain in it, panels sunk into that stone, and gilded ornament running the
+ * edge of every one of them. Headings are inscriptional capitals. Nothing glows; things CATCH the light.
+ *
+ * IT IS ORNATE AT THE EDGES AND PLAIN IN THE MIDDLE, which is the whole discipline of the thing. The reference
+ * this grew from puts carved relief behind the text as well, and that is the one decision not carried over —
+ * a paragraph laid over a temple wall is a paragraph nobody reads twice. So every piece of ornament here lives
+ * on a border, a corner or the empty floor of a panel, the body text sits on a flat surface at full contrast,
+ * and the stone grain is held below the threshold where it can compete with a letterform.
+ *
+ * ── HOW THE ORNAMENT IS DRAWN ─────────────────────────────────────────────────────────────────────────────
+ * Every motif is a hand-authored SVG carried inline as a data URI, and every one of them is used as a MASK
+ * rather than as a picture. That is what lets the gold follow the accent: an SVG in a `background-image` has its
+ * colours baked at the point it is written and can never see a custom property, but an SVG in `mask-image` is a
+ * SHAPE, and the colour showing through it is the pseudo-element's own background — a gradient mixed from
+ * `--color-primary-*`, which is the colour the picker writes. Pick Brass and the app is gilt; pick Lagoon and
+ * the same carvings are inlaid jade. One set of motifs, thirteen materials.
+ *
+ * The frame is a single pseudo-element carrying SEVEN mask layers (a crest, a sill, four corner pieces and a
+ * centre seal), unioned by the default `add` compositing. Layers a given surface does not want are switched to
+ * `none` through a variable, which contributes nothing under `add` — so one rule draws every framed panel in the
+ * app and each one only says how it differs.
+ *
+ * ── WHY THE PSEUDO-ELEMENTS ARE SAFE HERE ─────────────────────────────────────────────────────────────────
+ * A skin has no business touching layout, and the two properties in this file that come closest are the pair
+ * every ornament host carries: `position: relative`, which makes it a containing block for absolutely-positioned
+ * descendants, and `isolation: isolate`, which makes it a stacking context.
+ *
+ * BOTH ARE LOAD-BEARING, and the second one is not optional. `z-index: -1` is what puts the carving ABOVE the
+ * panel's fill and BELOW its words — but a negative layer is only placed against its host's background if the
+ * host is a stacking context of its own; without one it belongs to the nearest ancestor's context and paints
+ * BEHIND the host entirely, which is a frame that renders perfectly and cannot be seen. `isolation` is the
+ * purpose-built way to say so: unlike `transform` or `opacity` it changes nothing else, and in particular it
+ * creates no containing block, so a `position: fixed` descendant still measures itself against the viewport.
+ *
+ * The one thing a stacking context DOES change is that a descendant's z-index can no longer out-rank a sibling
+ * of the host — which is exactly why these hosts and no others. Every floating surface in this app is teleported
+ * to <body> before it is positioned (AnchoredOverlay does it explicitly; PrimeVue's overlays default to it), so
+ * nothing that has to escape a panel is ever painted inside one. What remains inside is sticky headers, whose
+ * z-index only ever has to beat the rows of their own list.
+ *
+ * The six hosts were each checked for existing `::before`/`::after` rules before being taken: the design
+ * system's card, a grouped-list slab, a kanban lane and its header, a dialog, and the icon rail.
+ * `pointer-events: none` keeps the whole layer out of the way of the mouse.
+ *
+ * ── EVERYTHING ELSE ───────────────────────────────────────────────────────────────────────────────────────
+ * As in the HUD: the surface ramp, the role tokens and the radius scale are restated, which repaints Tailwind's
+ * utilities and every PrimeVue component at once; selector rules sit in `@layer components` so a caller's own
+ * utility still wins; and the whole file is inert until `data-skin="sanctum"` is on <html>. */
+
+/* ── TIER 0 · THE STONE ────────────────────────────────────────────────────────────────────────────────────
+ * The surface ramp in warm basalt — hue 62, which is far enough round from the neutral's 65 to read as brown
+ * rather than as grey, with chroma that climbs as the ramp darkens. That last part is the trick: real stone
+ * holds its colour in shadow and loses it in the light, so the dark end carries three times the chroma of the
+ * pale end and the whole app reads as one quarried material rather than as tinted grey. */
+[data-skin="sanctum"] {
+    color-scheme: dark;
+
+    --color-surface-0: oklch(97% 0.01 74);
+    --color-surface-50: oklch(94% 0.014 72);
+    --color-surface-100: oklch(89% 0.018 70);
+    --color-surface-200: oklch(81% 0.022 68);
+    --color-surface-300: oklch(71% 0.026 66);
+    --color-surface-400: oklch(61% 0.028 64);
+    --color-surface-500: oklch(51% 0.03 63);
+    --color-surface-600: oklch(42% 0.03 62);
+    --color-surface-700: oklch(34% 0.028 62);
+    --color-surface-800: oklch(27% 0.026 62);
+    --color-surface-900: oklch(21% 0.022 62);
+    --color-surface-950: oklch(15% 0.018 62);
+
+    /* THE GILDING. Three steps of the accent rather than one, because gold is not a colour — it is a colour that
+     * changes along a surface. The bright step is what an edge catches, the deep step is what sits in the groove
+     * beside it, and the frame gradient below runs between them so every carving has a lit side and a shaded
+     * one. All three are `--color-primary-*`, so the picker retextures the metal without this file knowing. */
+    --sanctum-gold: var(--color-primary-400);
+    --sanctum-gold-bright: var(--color-primary-200);
+    --sanctum-gold-deep: var(--color-primary-600);
+
+    /* The gradient the ornament is cut out of — light from above, warmth pooling at the sill. Vertical across
+     * the whole panel, so a frame's crest and its sill are never the same shade of metal. */
+    --sanctum-gilt: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--sanctum-gold-bright) 92%, transparent) 0%,
+        color-mix(in oklab, var(--sanctum-gold) 66%, transparent) 26%,
+        color-mix(in oklab, var(--sanctum-gold-deep) 44%, transparent) 62%,
+        color-mix(in oklab, var(--sanctum-gold) 74%, transparent) 100%
+    );
+
+    /* ── THE MOTIFS ───────────────────────────────────────────────────────────────────────────────────────
+     * Authored by hand, as masks, in black-on-nothing — the colour of an SVG used as a mask is thrown away, so
+     * these say nothing about gold and everything about shape. Kept on one line each because a data URI cannot
+     * carry a newline; `<`, `>` and `#` are percent-escaped so the value survives every CSS parser.
+     *
+     * GRAIN — the mineral in the rock, and the single most over-cookable value in this file. It is one fine,
+     * high-frequency speckle and nothing else: the first cut carried a second, slow turbulence for the way a
+     * quarried face is never one tone, and at any strength where that blotching could be seen at all the whole
+     * app read as camouflage rather than as stone. Large-scale variation is the wall's radial gradients' job;
+     * this layer's only job is to stop a flat fill from looking like paint.
+     *
+     * The alpha curve is where the restraint lives: `0.5 * R - 0.36` over noise that averages R = 0.5 leaves the
+     * typical pixel at zero and lets only the top of the distribution through, peaking near 0.14. So it is not a
+     * veil over everything — it is a scattering of lit crystal faces, most of the surface untouched, which is
+     * both what stone looks like and what keeps a letterform's edge clean. `stitchTiles` makes the 240px tile
+     * seamless, so a 4K window has no grid in it.
+     *
+     * The only baked colour in the file, and deliberately so: this is the stone's own mineral, not gilding, and
+     * it has no business following the accent. */
+    --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.66 0 0 0 0 0.57 0 0 0 0 0.44 0.5 0 0 0 -0.36'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+
+    /* CREST — the running band, and the piece that went through the most drafts. It is a colonnade: a double
+     * fillet along the bottom, an arcade of pointed arches running the length of it, and one three-lobed
+     * palmette at the centre of the tile where two arches would otherwise be. That last part is what makes a
+     * repeat read as a carved COURSE rather than as a stamp pressed over and over — the eye finds the rhythm
+     * and then finds the thing that interrupts it.
+     *
+     * ARCHITECTURE, NOT BOTANY. The first cut of this was a lotus bud flanked by volutes, drawn at 18px, and at
+     * the size a UI actually renders it the bud resolved as a heart and the whole band turned decorative in the
+     * worst sense. Pointed arches survive the shrink because they are made of straight tension and one apex;
+     * 14px tall with a 1.1px stroke is the point where it still reads as cut stone and no longer competes with
+     * the first line of text under it. 96 × 14. */
+    --sanctum-crest: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='14' viewBox='0 0 96 14' fill='none' stroke='%23000' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M0 12.4H96'/%3E%3Cpath d='M0 13.9H96' opacity='0.45'/%3E%3Cpath d='M0 12.4C2 7.2 4 3.2 6 3.2C8 3.2 10 7.2 12 12.4C14 7.2 16 3.2 18 3.2C20 3.2 22 7.2 24 12.4C26 7.2 28 3.2 30 3.2C32 3.2 34 7.2 36 12.4'/%3E%3Cpath d='M60 12.4C62 7.2 64 3.2 66 3.2C68 3.2 70 7.2 72 12.4C74 7.2 76 3.2 78 3.2C80 3.2 82 7.2 84 12.4C86 7.2 88 3.2 90 3.2C92 3.2 94 7.2 96 12.4'/%3E%3Cpath d='M36 12.4C40 12.4 42 8 42 4.6C42 2 44.6 1.2 46 3.4C47 1 49 1 50 3.4C51.4 1.2 54 2 54 4.6C54 8 56 12.4 60 12.4'/%3E%3C/svg%3E");
+
+    /* SILL — the same course, mirrored, so the ornament along a panel's foot grows UP into the panel the way
+     * the crest grows down. A band merely repeated the same way up at the bottom is the tell that a frame was
+     * assembled rather than carved. */
+    --sanctum-sill: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='14' viewBox='0 0 96 14' fill='none' stroke='%23000' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(0 14) scale(1 -1)'%3E%3Cpath d='M0 12.4H96'/%3E%3Cpath d='M0 13.9H96' opacity='0.45'/%3E%3Cpath d='M0 12.4C2 7.2 4 3.2 6 3.2C8 3.2 10 7.2 12 12.4C14 7.2 16 3.2 18 3.2C20 3.2 22 7.2 24 12.4C26 7.2 28 3.2 30 3.2C32 3.2 34 7.2 36 12.4'/%3E%3Cpath d='M60 12.4C62 7.2 64 3.2 66 3.2C68 3.2 70 7.2 72 12.4C74 7.2 76 3.2 78 3.2C80 3.2 82 7.2 84 12.4C86 7.2 88 3.2 90 3.2C92 3.2 94 7.2 96 12.4'/%3E%3Cpath d='M36 12.4C40 12.4 42 8 42 4.6C42 2 44.6 1.2 46 3.4C47 1 49 1 50 3.4C51.4 1.2 54 2 54 4.6C54 8 56 12.4 60 12.4'/%3E%3C/g%3E%3C/svg%3E");
+
+    /* CORNERS — one motif, four orientations, each a wrapped transform of the same paths rather than four
+     * drawings that would drift apart the first time one of them was adjusted. A doubled quarter-arc, the inner
+     * one drawn lighter so the pair reads as a moulding with a shadow in it, and a leaf on the diagonal.
+     *
+     * NO BEAD IN THE ELBOW, which the first cut had: a dot 27px in from the corner is a dot INSIDE the panel,
+     * and on a settings row it landed in the middle of the words. The rule this taught is written into the sizes
+     * — the whole motif is authored at 30 and painted at 22, so it stays hard against the corner it belongs to. */
+    --sanctum-corner-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 30 30' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M0 26C0 11.6 11.6 0 26 0'/%3E%3Cpath d='M5.5 22.5C5.5 13.1 13.1 5.5 22.5 5.5' opacity='0.5'/%3E%3Cpath d='M10.5 10.5C15.2 10.5 19 14.3 19 19C14.3 19 10.5 15.2 10.5 10.5Z' fill='%23000' stroke='none' opacity='0.8'/%3E%3C/svg%3E");
+    --sanctum-corner-tr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 30 30' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cg transform='translate(30 0) scale(-1 1)'%3E%3Cpath d='M0 26C0 11.6 11.6 0 26 0'/%3E%3Cpath d='M5.5 22.5C5.5 13.1 13.1 5.5 22.5 5.5' opacity='0.5'/%3E%3Cpath d='M10.5 10.5C15.2 10.5 19 14.3 19 19C14.3 19 10.5 15.2 10.5 10.5Z' fill='%23000' stroke='none' opacity='0.8'/%3E%3C/g%3E%3C/svg%3E");
+    --sanctum-corner-bl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 30 30' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cg transform='translate(0 30) scale(1 -1)'%3E%3Cpath d='M0 26C0 11.6 11.6 0 26 0'/%3E%3Cpath d='M5.5 22.5C5.5 13.1 13.1 5.5 22.5 5.5' opacity='0.5'/%3E%3Cpath d='M10.5 10.5C15.2 10.5 19 14.3 19 19C14.3 19 10.5 15.2 10.5 10.5Z' fill='%23000' stroke='none' opacity='0.8'/%3E%3C/g%3E%3C/svg%3E");
+    --sanctum-corner-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 30 30' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cg transform='translate(30 30) scale(-1 -1)'%3E%3Cpath d='M0 26C0 11.6 11.6 0 26 0'/%3E%3Cpath d='M5.5 22.5C5.5 13.1 13.1 5.5 22.5 5.5' opacity='0.5'/%3E%3Cpath d='M10.5 10.5C15.2 10.5 19 14.3 19 19C14.3 19 10.5 15.2 10.5 10.5Z' fill='%23000' stroke='none' opacity='0.8'/%3E%3C/g%3E%3C/svg%3E");
+
+    /* SEAL — the lotus that sits centred on a big panel's sill, with tendrils running off along the course. Five
+     * petals, a banded base and two beads. Reserved for the surfaces that are read as ONE thing (a lane, a
+     * dialog): a page stacking six of these would be a page with six full stops in it. Authored at 140 × 46 and
+     * painted at 110 × 36, to sit on the 14px sill without towering over it. */
+    --sanctum-seal-lotus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='110' height='36' viewBox='0 0 140 46' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M70 3C77 14 77 27 70 36C63 27 63 14 70 3Z'/%3E%3Cpath d='M70 36C61 32 54 21 55 9C62 14 69 25 70 36Z'/%3E%3Cpath d='M70 36C79 32 86 21 85 9C78 14 71 25 70 36Z'/%3E%3Cpath d='M70 37C58 36 46 29 41 18C51 20 64 28 70 37Z'/%3E%3Cpath d='M70 37C82 36 94 29 99 18C89 20 76 28 70 37Z'/%3E%3Cpath d='M34 40C48 46 92 46 106 40'/%3E%3Cpath d='M6 43C18 43 27 38 34 40'/%3E%3Cpath d='M134 43C122 43 113 38 106 40'/%3E%3Ccircle cx='70' cy='30.5' r='1.5' fill='%23000' stroke='none'/%3E%3Ccircle cx='17' cy='37.5' r='1.3' fill='%23000' stroke='none'/%3E%3Ccircle cx='123' cy='37.5' r='1.3' fill='%23000' stroke='none'/%3E%3C/svg%3E");
+
+    /* HORIZON — the same temple as `--sanctum-spire`, drawn as a PICTURE rather than as a mask, because it hangs
+     * off the wall and the wall has no pseudo-element to give it. The wall is a background, and a background
+     * cannot be tinted by a variable; the mask trick that gilds every other motif needs a layer of its own, and
+     * the app's canvas surfaces are opaque, so any pseudo-element behind them is a temple nobody can see.
+     *
+     * SO THIS ONE IS THE STONE'S COLOUR, NOT THE GILDING'S — a warm carved relief at 22% — which is the same
+     * ruling the grain gets and for the same reason: it is the wall, not the metal on it. The lane's copy stays a
+     * mask and stays gilt, because a lane is a panel standing ON the wall and its ornament belongs to the panel.
+     *
+     * THE PATHS ARE THE SAME PATHS. Edit one, edit the other — they are one carving quarried twice. */
+    --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23e0a44e' fill-opacity='0.22' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
+
+    /* SPIRE — the horizon a lane stands against: a five-tower temple on a stepped plinth, the quincunx the
+     * reference is built around. It is not decoration on a border, it is the FLOOR of an empty column, which is
+     * why it only ever appears where there is nothing else — cards are opaque and simply stand in front of it.
+     * 260 × 92. */
+    --sanctum-spire: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23000' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
+
+    /* FILLET — the header's ornament, and NOT the arcade. A column header in this app is 36px tall; a 14px
+     * course inside it runs straight through the descenders of its own label, and on the board's toolbar it ran
+     * through the primary button as well. What a header wants is the MOULDING and none of the arcade above it:
+     * a double rule, a bead over each quarter, and one lozenge at the centre. Six pixels, no collisions, and it
+     * still says the same thing about the material. 96 × 6. */
+    --sanctum-fillet: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='6' viewBox='0 0 96 6' fill='%23000' stroke='none'%3E%3Cpath d='M0 4.05H96V4.95H0Z'/%3E%3Cpath d='M0 5.7H96V6H0Z' opacity='0.5'/%3E%3Cpath d='M44.4 3.9L48 0.6L51.6 3.9Z'/%3E%3Ccircle cx='16' cy='2.6' r='0.95'/%3E%3Ccircle cx='30' cy='2.6' r='0.7' opacity='0.7'/%3E%3Ccircle cx='66' cy='2.6' r='0.7' opacity='0.7'/%3E%3Ccircle cx='80' cy='2.6' r='0.95'/%3E%3C/svg%3E");
+
+    /* Per-surface switches into the one frame rule below. `none` contributes nothing under the default `add`
+     * compositing, so a surface opts out of a layer by naming it rather than by getting a rule of its own.
+     *
+     * The two TOP corners are switchable separately from the two bottom ones for one reason: a corner piece is
+     * where a crest MEETS a jamb, and on a surface with no crest it reads as a hook hanging off nothing. Any
+     * surface that turns the crest off turns these off with it. */
+    --sanctum-frame-crest: var(--sanctum-crest);
+    --sanctum-frame-tl: var(--sanctum-corner-tl);
+    --sanctum-frame-tr: var(--sanctum-corner-tr);
+    --sanctum-frame-seal: none;
+
+    /* The display face — Roman inscriptional capitals, which is the closest a webfont comes to letters cut into
+     * a wall. Headings and the small tracked labels only; body text stays Inter, because a screen read for eight
+     * hours is not the place for a personality. Fetched on demand by useSkin.ts, and if it never arrives this
+     * falls through to the app's own stack with nothing looking broken. */
+    --sanctum-display: "Cinzel", "Iowan Old Style", Georgia, serif;
+
+    /* ── TIER 1 · THE ROLES ───────────────────────────────────────────────────────────────────────────────
+     * Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. Every one of these is
+     * opaque. This is stone — a panel that you can see the wall through is not a panel, it is a hole — and it is
+     * also what lets sticky headers and menus occlude what slides under them without a second thought. */
+    --role-canvas: oklch(13% 0.015 62);
+    --role-card: oklch(18.5% 0.019 62);
+    --role-overlay: oklch(22.5% 0.021 62);
+    /* A SEAM, NOT A LINE. Hairlines here are gold bled into the stone rather than a lighter grey, because a
+     * carved edge is where the gilding has caught — that single substitution is most of why the app stops
+     * reading as "dark mode" and starts reading as a material. */
+    --role-line: color-mix(in oklab, var(--sanctum-gold) 24%, oklch(30% 0.026 62));
+    --role-line-strong: color-mix(in oklab, var(--sanctum-gold) 45%, oklch(38% 0.03 62));
+    /* Warm ivory, not white: paper and bone against basalt. It measures over 13:1 on the card, so the warmth
+     * costs nothing anyone can read. */
+    --role-content: oklch(94% 0.018 84);
+    --role-muted: oklch(76% 0.026 78);
+    --role-subtle: oklch(61% 0.03 74);
+    --role-link: var(--color-primary-300);
+
+    /* Status roles one step brighter than the stock dark scheme, as in the HUD and for the same reason: on a
+     * ground this deep a 500 sinks into the panel it is meant to be warning you about. */
+    --role-danger: var(--color-danger-400);
+    --role-success: var(--color-success-400);
+    --role-warning: var(--color-warning-400);
+    --role-info: var(--color-info-400);
+    --role-primary-fill: var(--color-primary-400);
+    --role-primary-fill-hover: var(--color-primary-300);
+    --role-success-fill: var(--color-success-400);
+    --role-warning-fill: var(--color-warning-400);
+    --role-danger-fill: var(--color-danger-400);
+    --role-fill-content: oklch(16% 0.02 62);
+
+    /* The terminal takes the ground's warmth, or it sits in the wall as a rectangle of a different rock. Must
+     * stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). */
+    --color-terminal: #100c07;
+
+    /* ── TIER 2 · THE GEOMETRY ────────────────────────────────────────────────────────────────────────────
+     * Barely rounded. A frame this ornate needs a corner that the corner ORNAMENT can sit in, and the arc of a
+     * 12px radius swallows a 30px carving; at 8px the two agree. Everything else steps down in proportion.
+     * `rounded-full` is a literal 9999px in Tailwind and is untouched, so avatars and status dots stay round. */
+    --radius-xs: 0.125rem;
+    --radius-sm: 0.1875rem;
+    --radius-md: 0.3125rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.625rem;
+    --radius-2xl: 0.75rem;
+    --ui-radius: 0.5rem;
+}
+
+@layer components {
+    /* ── THE WALL ─────────────────────────────────────────────────────────────────────────────────────────
+     * The ground everything is cut from: warm light falling from the upper left, a pooling of it at the foot of
+     * the window, the mineral grain, and a vignette that closes the corners down.
+     *
+     * PAINTED TWICE, on the body and on whatever route element is standing in front of it — the app's root
+     * carries `bg-canvas` and fills the viewport, so anything painted on <body> alone is never seen.
+     * `background-attachment: fixed` anchors both to the viewport, which is what makes the pair read as ONE
+     * wall: the grain does not slide under a scrolling column, and the light does not restart at a panel edge. */
+    [data-skin="sanctum"] body,
+    [data-skin="sanctum"] #app > :first-child,
+    [data-skin="sanctum"] .bg-canvas {
+        background-image:
+            radial-gradient(110% 70% at 12% -8%, color-mix(in oklab, var(--sanctum-gold) 13%, transparent), transparent 58%),
+            radial-gradient(90% 55% at 50% 112%, color-mix(in oklab, var(--sanctum-gold-deep) 16%, transparent), transparent 62%),
+            radial-gradient(150% 120% at 50% 40%, transparent 34%, oklch(8% 0.014 62 / 0.66) 100%),
+            var(--sanctum-horizon),
+            var(--sanctum-grain);
+        background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+        background-position: 0 0, 0 0, 0 0, center bottom, 0 0;
+        background-size: auto, auto, auto, min(48vw, 700px) auto, auto;
+        background-attachment: fixed;
+    }
+
+    /* THE HORIZON. The reference's single best idea, and the one that costs nothing to be right: a temple
+     * standing on the floor of the window, visible only where the app has put nothing in front of it.
+     *
+     * NO CODE KNOWS WHETHER A SCREEN IS EMPTY, and none needs to. Every panel in this skin is opaque, so the
+     * silhouette is simply occluded by whatever is there — a full board hides it completely, a board with two
+     * cards on it shows a courtyard under them, and a fresh workspace is all horizon. The behaviour falls out of
+     * the paint order rather than out of a condition somebody has to maintain.
+     *
+     * It hangs off the route element rather than the body because the body is covered (see above), and it is a
+     * pseudo-element rather than another background layer for the same reason as every other motif here: as a
+     * mask it takes the accent, and as a picture it could not.
+     *
+     * `:first-child` AND NOT `> *`, which is the same mistake as the one the frame selector made. `#app` holds
+     * more than the route: a screen-reader live region and a fixed, z-50 toast layer are siblings of it. Given
+     * the horizon, that layer grew a temple of its own and painted it — from a bar pinned above everything —
+     * straight across the settings panels. The route element is always the first of the three. */
+
+    /* ── THE FRAME ────────────────────────────────────────────────────────────────────────────────────────
+     * One rule, every framed surface in the app. The hosts are the design system's card, the grouped-list slab
+     * that every settings and detail screen is built from, the kanban lane, and the dialog — the four surfaces
+     * a reader takes in as a single object, which is exactly what a frame is for. The hundreds of small
+     * `bg-card` chips inside their rows are not objects of that kind and get none of this.
+     *
+     * `.divide-y` IS PART OF THE SLAB'S IDENTITY, not decoration on the selector. `section > .bg-card` alone
+     * looked precise and was not: the workspace's file-tab strip is also a card-painted direct child of a
+     * <section>, and it wore a full carved frame — crest, sill and corners — across a 40px bar of tabs. What
+     * actually distinguishes a grouped list is that its children are hairline-divided rows, which is exactly
+     * what `divide-y` says and what <RowGroup> always writes.
+     *
+     * The two structural properties are here rather than in each host's own rule so they and the thing that
+     * needs them are impossible to separate — see the note at the top of the file for why `isolation` is what
+     * makes `z-index: -1` mean "in the surface" instead of "behind it". */
+    [data-skin="sanctum"] .ui-card,
+    [data-skin="sanctum"] section > .bg-card.divide-y,
+    [data-skin="sanctum"] .lane,
+    [data-skin="sanctum"] .p-dialog {
+        position: relative;
+        isolation: isolate;
+    }
+
+    [data-skin="sanctum"] .ui-card::before,
+    [data-skin="sanctum"] section > .bg-card.divide-y::before,
+    [data-skin="sanctum"] .lane::before,
+    [data-skin="sanctum"] .p-dialog::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        /* ABOVE THE PANEL'S FILL, BELOW ITS WORDS. A negative layer paints between the host's own background and
+         * its in-flow content, which is the difference between ornament carved INTO a surface and ornament lying
+         * across the text on it. */
+        z-index: -1;
+        border-radius: inherit;
+        background: var(--sanctum-gilt);
+        mask-image:
+            var(--sanctum-frame-seal),
+            var(--sanctum-frame-crest),
+            var(--sanctum-sill),
+            var(--sanctum-frame-tl),
+            var(--sanctum-frame-tr),
+            var(--sanctum-corner-bl),
+            var(--sanctum-corner-br);
+        mask-size:
+            110px 36px,
+            96px 14px,
+            96px 14px,
+            22px 22px,
+            22px 22px,
+            22px 22px,
+            22px 22px;
+        mask-position:
+            bottom center,
+            top center,
+            bottom center,
+            top left,
+            top right,
+            bottom left,
+            bottom right;
+        mask-repeat: no-repeat, repeat-x, repeat-x, no-repeat, no-repeat, no-repeat, no-repeat;
+        -webkit-mask-image:
+            var(--sanctum-frame-seal),
+            var(--sanctum-frame-crest),
+            var(--sanctum-sill),
+            var(--sanctum-frame-tl),
+            var(--sanctum-frame-tr),
+            var(--sanctum-corner-bl),
+            var(--sanctum-corner-br);
+        -webkit-mask-size:
+            110px 36px,
+            96px 14px,
+            96px 14px,
+            22px 22px,
+            22px 22px,
+            22px 22px,
+            22px 22px;
+        -webkit-mask-position:
+            bottom center,
+            top center,
+            bottom center,
+            top left,
+            top right,
+            bottom left,
+            bottom right;
+        -webkit-mask-repeat: no-repeat, repeat-x, repeat-x, no-repeat, no-repeat, no-repeat, no-repeat;
+    }
+
+    /* THE SURFACE THE FRAME IS CUT INTO. Grain, a wash of light down the top third, a lit top edge and a
+     * shadow under the whole slab — the four things that make a rectangle read as a block of stone standing
+     * slightly proud of the wall behind it. */
+    [data-skin="sanctum"] .ui-card,
+    [data-skin="sanctum"] section > .bg-card.divide-y,
+    [data-skin="sanctum"] .p-dialog {
+        background-color: var(--color-card);
+        background-image:
+            linear-gradient(180deg, color-mix(in oklab, var(--sanctum-gold) 7%, transparent), transparent 42%),
+            var(--sanctum-grain);
+        background-repeat: no-repeat, repeat;
+        border-color: color-mix(in oklab, var(--sanctum-gold) 30%, oklch(28% 0.024 62));
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklab, var(--sanctum-gold-bright) 13%, transparent),
+            0 3px 16px oklch(6% 0.01 62 / 0.6);
+    }
+
+    /* A dashed card is a PLACE for something, not a thing — no gilding on an empty niche. */
+    [data-skin="sanctum"] .ui-card-dashed::before {
+        content: none;
+    }
+    [data-skin="sanctum"] .ui-card-dashed {
+        background-image: none;
+        border-color: color-mix(in oklab, var(--sanctum-gold) 28%, transparent);
+        box-shadow: none;
+    }
+
+    /* ── THE LANE ─────────────────────────────────────────────────────────────────────────────────────────
+     * A kanban column is the app's one full-height empty surface, so it is the one that gets a horizon. The
+     * spire sits on the floor of the column and fades upward; cards are opaque and stand in front of it, so a
+     * busy lane hides it entirely and an empty one is a courtyard. Exactly the behaviour the reference has, and
+     * it needs no code to know whether a lane is empty.
+     *
+     * The crest is switched OFF here and re-hung under the lane's own header instead: a lane's header is sticky
+     * and opaque, so a band across the top of the slab would be covered by it at rest and revealed only while
+     * scrolling — ornament that flickers in and out is worse than none. */
+    [data-skin="sanctum"] .lane {
+        --sanctum-frame-crest: none;
+        --sanctum-frame-tl: none;
+        --sanctum-frame-tr: none;
+        --sanctum-frame-seal: var(--sanctum-seal-lotus);
+        --lane-fill: oklch(12.5% 0.015 62);
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--sanctum-gold) 18%, transparent);
+    }
+    [data-skin="sanctum"] .lane-header {
+        --lane-fill: oklch(12.5% 0.015 62);
+        position: relative;
+        isolation: isolate;
+    }
+    /* The band under a lane's header — the course that would have run along the top of the slab, hung where it
+     * can actually be seen. `::after` rather than `::before` so it is the LAST thing in the header's box and
+     * cannot be mistaken for a lead ornament on the label. */
+    [data-skin="sanctum"] .lane-header::after,
+    [data-skin="sanctum"] .view-header::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0 0;
+        height: 6px;
+        pointer-events: none;
+        z-index: -1;
+        background: var(--sanctum-gilt);
+        mask-image: var(--sanctum-fillet);
+        mask-size: 96px 6px;
+        mask-repeat: repeat-x;
+        mask-position: bottom center;
+        -webkit-mask-image: var(--sanctum-fillet);
+        -webkit-mask-size: 96px 6px;
+        -webkit-mask-repeat: repeat-x;
+        -webkit-mask-position: bottom center;
+    }
+
+    [data-skin="sanctum"] .lane::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0 0;
+        height: 92px;
+        pointer-events: none;
+        z-index: -1;
+        /* Fading upward out of the floor, so the towers are a suggestion at their tips and a solid at their
+         * base. A flat silhouette at one opacity is a sticker; this is a relief catching a low light. */
+        background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--sanctum-gold) 17%, transparent) 78%);
+        mask-image: var(--sanctum-spire);
+        mask-size: 260px 92px;
+        mask-repeat: no-repeat;
+        mask-position: bottom center;
+        -webkit-mask-image: var(--sanctum-spire);
+        -webkit-mask-size: 260px 92px;
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-position: bottom center;
+    }
+
+    /* ── THE COLUMN ───────────────────────────────────────────────────────────────────────────────────────
+     * The navigation rail, as the carved pillar it is in the reference: darker than the wall, grained, lit down
+     * its inner face, and finished with a vertical course of the same ornament running its full height. */
+    [data-skin="sanctum"] .icon-rail {
+        position: relative;
+        isolation: isolate;
+        background-color: oklch(12% 0.015 62);
+        background-image:
+            linear-gradient(90deg, oklch(8% 0.01 62 / 0.5), transparent 45%, color-mix(in oklab, var(--sanctum-gold) 6%, transparent)),
+            var(--sanctum-grain);
+        background-repeat: no-repeat, repeat;
+        border-right-color: color-mix(in oklab, var(--sanctum-gold) 30%, transparent);
+    }
+    [data-skin="sanctum"] .icon-rail::after {
+        content: "";
+        position: absolute;
+        inset: 0 0 0 auto;
+        width: 14px;
+        pointer-events: none;
+        z-index: -1;
+        background: linear-gradient(
+            180deg,
+            color-mix(in oklab, var(--sanctum-gold-bright) 60%, transparent),
+            color-mix(in oklab, var(--sanctum-gold-deep) 40%, transparent) 55%,
+            color-mix(in oklab, var(--sanctum-gold) 55%, transparent)
+        );
+        /* The running course turned on its side — the same 120 × 18 paths inside a quarter-turn, so the pillar's
+         * ornament and the panels' ornament are provably the same carving rather than two that look alike. */
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='120' viewBox='0 0 18 120' fill='none' stroke='%23000' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='rotate(-90) translate(-120 0)'%3E%3Cpath d='M0 15.6H120'/%3E%3Cpath d='M60 15.6C60 9.4 54.8 8.6 54.8 4.9C54.8 2.1 57.4 1.4 60 4.1C62.6 1.4 65.2 2.1 65.2 4.9C65.2 8.6 60 9.4 60 15.6Z'/%3E%3Cpath d='M49.5 15.6C49.5 11.4 53.2 9.9 56.4 11.9'/%3E%3Cpath d='M70.5 15.6C70.5 11.4 66.8 9.9 63.6 11.9'/%3E%3Cpath d='M24 15.6C24 10.9 28.7 8.7 32.3 11C34.4 12.4 33.3 14.8 31.2 14.1'/%3E%3Cpath d='M96 15.6C96 10.9 91.3 8.7 87.7 11C85.6 12.4 86.7 14.8 88.8 14.1'/%3E%3Cpath d='M11 15.6C11 13 13.2 11.7 15.4 12.6'/%3E%3Cpath d='M109 15.6C109 13 106.8 11.7 104.6 12.6'/%3E%3Ccircle cx='4.5' cy='12.4' r='1.15' fill='%23000' stroke='none'/%3E%3Ccircle cx='115.5' cy='12.4' r='1.15' fill='%23000' stroke='none'/%3E%3C/g%3E%3C/svg%3E");
+        mask-size: 14px 96px;
+        mask-repeat: repeat-y;
+        mask-position: right center;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='120' viewBox='0 0 18 120' fill='none' stroke='%23000' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='rotate(-90) translate(-120 0)'%3E%3Cpath d='M0 15.6H120'/%3E%3Cpath d='M60 15.6C60 9.4 54.8 8.6 54.8 4.9C54.8 2.1 57.4 1.4 60 4.1C62.6 1.4 65.2 2.1 65.2 4.9C65.2 8.6 60 9.4 60 15.6Z'/%3E%3Cpath d='M49.5 15.6C49.5 11.4 53.2 9.9 56.4 11.9'/%3E%3Cpath d='M70.5 15.6C70.5 11.4 66.8 9.9 63.6 11.9'/%3E%3Cpath d='M24 15.6C24 10.9 28.7 8.7 32.3 11C34.4 12.4 33.3 14.8 31.2 14.1'/%3E%3Cpath d='M96 15.6C96 10.9 91.3 8.7 87.7 11C85.6 12.4 86.7 14.8 88.8 14.1'/%3E%3Cpath d='M11 15.6C11 13 13.2 11.7 15.4 12.6'/%3E%3Cpath d='M109 15.6C109 13 106.8 11.7 104.6 12.6'/%3E%3Ccircle cx='4.5' cy='12.4' r='1.15' fill='%23000' stroke='none'/%3E%3Ccircle cx='115.5' cy='12.4' r='1.15' fill='%23000' stroke='none'/%3E%3C/g%3E%3C/svg%3E");
+        -webkit-mask-size: 14px 96px;
+        -webkit-mask-repeat: repeat-y;
+        -webkit-mask-position: right center;
+    }
+
+    /* THE BAR AT THE TOP OF A COLUMN, which the desktop shell lines up across the whole window — so lighting it
+     * lights the app's main structural seam in one rule. The ornament under it is hung by the shared
+     * `.view-header::after` above. */
+    [data-skin="sanctum"] .view-header,
+    [data-skin="sanctum"] .view-header-wrap {
+        position: relative;
+        isolation: isolate;
+        background-image: linear-gradient(180deg, color-mix(in oklab, var(--sanctum-gold) 9%, transparent), transparent);
+        border-bottom-color: color-mix(in oklab, var(--sanctum-gold) 34%, transparent);
+    }
+
+    /* Every other card-painted surface in the app: the grain and a wash, and nothing else. It touches only
+     * `background-image`, which no colour utility sets, so a caller who painted their own background still wins
+     * outright and simply keeps the stone. */
+    [data-skin="sanctum"] .bg-card {
+        background-image:
+            linear-gradient(180deg, color-mix(in oklab, var(--sanctum-gold) 6%, transparent), transparent 48%),
+            var(--sanctum-grain);
+        background-repeat: no-repeat, repeat;
+    }
+
+    /* ── OVERLAYS ─────────────────────────────────────────────────────────────────────────────────────────
+     * Opaque, deliberately and without exception. An overlay is the only surface in the app that covers LIVE
+     * TEXT — a model list over a transcript, a dialog over a diff — and there is no amount of translucency that
+     * does not leave somebody else's words legible through the one you are reading. Depth comes from the lit
+     * rim, the grain and a deep shadow, all of which a browser always draws. */
+    [data-skin="sanctum"] .p-dialog,
+    [data-skin="sanctum"] .p-popover,
+    [data-skin="sanctum"] .p-menu,
+    [data-skin="sanctum"] .p-select-overlay,
+    [data-skin="sanctum"] .p-multiselect-overlay,
+    [data-skin="sanctum"] .p-autocomplete-overlay,
+    [data-skin="sanctum"] .ui-anchored-surface {
+        background-color: oklch(19.5% 0.02 62);
+        background-image: var(--sanctum-grain);
+        border: 1px solid color-mix(in oklab, var(--sanctum-gold) 38%, transparent);
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklab, var(--sanctum-gold-bright) 16%, transparent),
+            0 20px 60px oklch(5% 0.01 62 / 0.8);
+    }
+
+    /* A dialog is the biggest object the app puts on screen, so it is the one that wears the full frame — crest,
+     * sill, four corners and the lotus on the sill. It gets those from the frame rule above; all it names here
+     * is the seal, which every other framed surface leaves off. */
+    [data-skin="sanctum"] .p-dialog {
+        --sanctum-frame-seal: var(--sanctum-seal-lotus);
+    }
+
+    [data-skin="sanctum"] .p-dialog-mask {
+        background: radial-gradient(120% 90% at 50% 0%, oklch(12% 0.02 62 / 0.62), oklch(5% 0.01 62 / 0.88));
+        backdrop-filter: blur(3px);
+    }
+
+    [data-skin="sanctum"] .ui-tooltip-body {
+        background-color: oklch(17% 0.02 62);
+        border: 1px solid color-mix(in oklab, var(--sanctum-gold) 34%, transparent);
+    }
+
+    /* ── CONTROLS ─────────────────────────────────────────────────────────────────────────────────────────
+     * A field is a channel cut into the stone: darker than the panel around it, with the light caught on the
+     * upper lip of the cut and a gilded liner running the inside. */
+    [data-skin="sanctum"] .p-inputtext,
+    [data-skin="sanctum"] textarea,
+    [data-skin="sanctum"] input[type="text"],
+    [data-skin="sanctum"] input[type="search"],
+    [data-skin="sanctum"] input[type="email"],
+    [data-skin="sanctum"] input[type="password"],
+    [data-skin="sanctum"] input[type="number"] {
+        background-color: oklch(10.5% 0.013 62);
+        border-color: color-mix(in oklab, var(--sanctum-gold) 26%, transparent);
+        box-shadow:
+            inset 0 2px 4px oklch(4% 0.008 62 / 0.8),
+            inset 0 0 0 1px color-mix(in oklab, var(--sanctum-gold) 7%, transparent);
+    }
+
+    [data-skin="sanctum"] .p-inputtext:enabled:hover {
+        border-color: color-mix(in oklab, var(--sanctum-gold) 42%, transparent);
+    }
+
+    /* FOCUS IS THE METAL CATCHING THE LIGHT — a bright rim, a gilded liner and a soft warm halo. Stated as an
+     * inset ring plus outer rings so it survives on any surface that clips, and never as an `outline`, which the
+     * ornament layers would sit oddly against. */
+    [data-skin="sanctum"] .p-inputtext:focus,
+    [data-skin="sanctum"] .p-inputtext:focus-visible,
+    [data-skin="sanctum"] textarea:focus,
+    [data-skin="sanctum"] input:focus-visible,
+    [data-skin="sanctum"] button:focus-visible,
+    [data-skin="sanctum"] [tabindex]:focus-visible {
+        outline: none;
+        border-color: var(--sanctum-gold);
+        box-shadow:
+            inset 0 0 0 1px color-mix(in oklab, var(--sanctum-gold-bright) 45%, transparent),
+            0 0 0 3px color-mix(in oklab, var(--sanctum-gold) 24%, transparent),
+            0 0 20px color-mix(in oklab, var(--sanctum-gold) 22%, transparent);
+    }
+
+    /* A button is a cast plaque: the app's own tinted fill, on a gilded rim, with a second hairline set just
+     * inside it. The doubled rule is the whole difference between a coloured rectangle and a mounted thing —
+     * and it costs one inset shadow, no geometry. */
+    [data-skin="sanctum"] .p-button {
+        background-image: linear-gradient(180deg, color-mix(in oklab, var(--sanctum-gold-bright) 11%, transparent), transparent 68%);
+        border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 42%, transparent);
+        box-shadow:
+            inset 0 0 0 1px color-mix(in oklab, var(--sanctum-gold) 10%, transparent),
+            inset 0 1px 0 color-mix(in oklab, var(--sanctum-gold-bright) 16%, transparent);
+        transition:
+            box-shadow 0.18s ease-out,
+            background-color 0.18s ease-out,
+            border-color 0.18s ease-out;
+    }
+
+    [data-skin="sanctum"] .p-button:enabled:hover {
+        border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 70%, transparent);
+        box-shadow:
+            inset 0 0 0 1px color-mix(in oklab, var(--sanctum-gold) 22%, transparent),
+            inset 0 1px 0 color-mix(in oklab, var(--sanctum-gold-bright) 28%, transparent),
+            0 0 18px color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 20%, transparent);
+    }
+
+    /* Solid accent controls — checkbox, radio, switch — read as inlay: a warm halo where the metal meets the
+     * stone, and the unticked box cut down into it like a field. */
+    [data-skin="sanctum"] .p-checkbox-checked .p-checkbox-box,
+    [data-skin="sanctum"] .p-radiobutton-checked .p-radiobutton-box,
+    [data-skin="sanctum"] .p-toggleswitch-checked .p-toggleswitch-slider {
+        box-shadow: 0 0 12px color-mix(in oklab, var(--sanctum-gold) 40%, transparent);
+    }
+
+    [data-skin="sanctum"] .p-checkbox-box,
+    [data-skin="sanctum"] .p-radiobutton-box {
+        background-color: oklch(10.5% 0.013 62);
+        box-shadow: inset 0 1px 3px oklch(4% 0.008 62 / 0.7);
+    }
+
+    /* A picked row in any of the app's walkable lists: a warm wash that deepens toward the gilded edge it is
+     * pinned to. The bar on the left is the mark; the wash is only there to carry it. */
+    [data-skin="sanctum"] .ui-row-select-on,
+    [data-skin="sanctum"] .ui-row-select-on:hover:not(:disabled) {
+        background: linear-gradient(
+            90deg,
+            color-mix(in oklab, var(--sanctum-gold) 20%, transparent),
+            color-mix(in oklab, var(--sanctum-gold) 6%, transparent)
+        );
+        box-shadow: inset 2px 0 0 var(--sanctum-gold);
+    }
+
+    [data-skin="sanctum"] .ui-row-select:hover:not(:disabled) {
+        background: color-mix(in oklab, var(--sanctum-gold) 8%, transparent);
+    }
+
+    [data-skin="sanctum"] .p-progressbar {
+        background-color: oklch(10.5% 0.013 62);
+        box-shadow: inset 0 1px 3px oklch(4% 0.008 62 / 0.8);
+    }
+    [data-skin="sanctum"] .p-progressbar-value {
+        box-shadow: 0 0 10px color-mix(in oklab, var(--sanctum-gold) 45%, transparent);
+    }
+
+    /* ── TYPE ─────────────────────────────────────────────────────────────────────────────────────────────
+     * Inscriptional capitals on the chrome's headings, and a little air between the letters — Cinzel is drawn
+     * from letters cut with a chisel, and cut letters were always spaced further apart than written ones. */
+    [data-skin="sanctum"] h1,
+    [data-skin="sanctum"] h2,
+    [data-skin="sanctum"] h3,
+    [data-skin="sanctum"] h4 {
+        font-family: var(--sanctum-display);
+        letter-spacing: 0.035em;
+    }
+
+    /* EXCEPT INSIDE RENDERED MARKDOWN. Those headings are not the app's chrome, they are somebody's WRITING — an
+     * agent's answer, a README, a generated document — and dressing a document's own headings in the skin's face
+     * is the skin taking credit for content it did not author. The chrome is the skin's to style; the text is
+     * not. */
+    [data-skin="sanctum"] .md-prose :is(h1, h2, h3, h4) {
+        font-family: var(--font-sans);
+        letter-spacing: normal;
+    }
+
+    [data-skin="sanctum"] .ui-field-label {
+        font-family: var(--sanctum-display);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: color-mix(in oklab, var(--sanctum-gold) 42%, var(--color-muted));
+    }
+
+    /* ── EDGES OF THE WINDOW ──────────────────────────────────────────────────────────────────────────────
+     * The scrollbar as a brass runner, the selection as gilt, the loading placeholder sweeping warm. Small
+     * things, and between them most of what the eye catches while it is not reading anything. */
+    [data-skin="sanctum"] .scrollbar-thin {
+        scrollbar-color: color-mix(in oklab, var(--sanctum-gold) 42%, transparent) transparent;
+    }
+    [data-skin="sanctum"] .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: color-mix(in oklab, var(--sanctum-gold) 42%, transparent);
+        border-radius: 1px;
+    }
+    [data-skin="sanctum"] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: var(--sanctum-gold);
+    }
+    [data-skin="sanctum"] .ui-softscroll:hover {
+        scrollbar-color: color-mix(in oklab, var(--sanctum-gold) 36%, transparent) transparent;
+    }
+
+    [data-skin="sanctum"] ::selection {
+        background: color-mix(in oklab, var(--sanctum-gold) 34%, transparent);
+        color: oklch(97% 0.012 80);
+    }
+
+    [data-skin="sanctum"] .skeleton {
+        background-color: color-mix(in oklab, var(--sanctum-gold) 7%, transparent);
+        background-image: linear-gradient(90deg, transparent 20%, color-mix(in oklab, var(--sanctum-gold) 13%, transparent) 50%, transparent 80%);
+    }
+}
+
+/* ── THE INSCRIPTIONS ──────────────────────────────────────────────────────────────────────────────────────
+ * The app's section labels — "LOOK", "FILE TREE", "CHANGES" — which the design system already draws as small
+ * tracked capitals (`ui.sectionLabel`), and a page's own title. Both are re-cut here: the display face, tracking
+ * opened to inscriptional width, and gilt rather than grey. It is the one piece of type this skin claims outside
+ * the headings, and on a settings page it is the difference between a form and a tablet.
+ *
+ * MATCHED ON THE TREATMENT, not on a class the recipe owns: the recipe is a twMerge and a caller may legitimately
+ * swap the label's SIZE, so requiring `text-xs` would silently drop whichever label somebody made smaller.
+ *
+ * UNLAYERED, unlike every other selector in this file, and that is the whole reason these sit down here on their
+ * own. Every property they set is ALSO set by a utility in the same class list — `tracking-wide` owns the letter
+ * spacing, `text-subtle` and `text-content` the colour — and a rule in `@layer components` loses to a utility no
+ * matter how specific it is. An unlayered rule outranks every layer, which is the only way to restate a treatment
+ * the utilities are spelling out. Deliberately the exception: everywhere else, a caller's utility must still win.
+ *
+ * H1 ONLY for the gilding, and never inside rendered markdown. A page title is the one heading nobody colours to
+ * mean something, so it is the one that can be taken; an h2 in a transcript may well be `text-danger`, and a
+ * document's own title belongs to whoever wrote it. */
+[data-skin="sanctum"] .font-semibold.uppercase.tracking-wide {
+    font-family: var(--sanctum-display);
+    letter-spacing: 0.2em;
+    color: color-mix(in oklab, var(--sanctum-gold) 52%, var(--color-subtle));
+}
+
+[data-skin="sanctum"] h1:not(.md-prose h1) {
+    color: color-mix(in oklab, var(--color-primary-200) 62%, var(--color-content));
+}
