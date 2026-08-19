@@ -169,8 +169,20 @@ is in `about.ts` because `/about/` shares it.
    reader's *absence* ("close the browser", "come back to the diffs"), which argues against the
    co-piloted stance the headline sets one line earlier, and it is the trope every agent product
    is running at once. Ownership stays out of both lines for the standing reason (it answers a fear,
-   it does not create a want). CTAs, chips, the real fleet board cropped to two lanes, and the play
-   button into the live demo. (P1, P2, P6)
+   it does not create a want). CTAs, chips, and **two windows** — the workspace behind, the chat in
+   the window the product itself pops it out into, overlapping its bottom corner — with the play
+   button into the live demo in the app window's top-right corner, which is the one band all three
+   of its screens leave clear. (P1, P2, P6)
+
+   **Both frames cycle** (recorded decision 2026-08-19), roughly every four seconds and on alternate
+   beats, so the pair takes six steps to repeat rather than two. The lists are in `landing.ts`
+   (`hero.screens`): the app window walks `/agents` → `/workspace` (Changes, grouped by repository,
+   with a diff open) → `/pipelines`; the chat window walks its Agents cut → its Personas cut. Order
+   is editorial and the FIRST of each is what a stranger sees — the board, and the conversation its
+   cards lead to. Each frame **crops from the top-left** rather than fitting its screen, which is
+   what lets captures of very different lengths share one frame and what keeps the app's own 13px
+   type readable in a column this narrow. Under `prefers-reduced-motion` nothing rotates and the
+   first screen of each frame stands; the same is true if the script never runs at all.
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,

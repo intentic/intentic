@@ -36,11 +36,23 @@ const crossIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>');
 // The FAQ disclosure marker. Both strokes are drawn; CSS rotates the vertical one away when open.
 const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="16" height="16" aria-hidden="true"><path d="M5 12h14"/><path class="faq-marker-bar" d="M12 5v14"/></svg>`;
 
-/* The hero is the LCP and it is a CROP: the frame shows 262% of its own width on a phone and 168% from sm up,
- * so what the browser paints is that multiple of the column, not the column. Spelling the three cases out is
- * the difference between fetching ~950px of screenshot and fetching all 2144. */
-const heroImage = shotAsset(content.hero.shot.name);
-const heroSizes = "(min-width: 64rem) calc((min(100vw, 80rem) - 6rem) * 0.84), (min-width: 40rem) calc(min(100vw - 3rem, 34rem) * 1.68), calc(min(100vw - 3rem, 34rem) * 2.62)";
+/* THE HERO'S TWO WINDOWS. The workspace behind, the popped-out chat in front of its bottom corner — the
+ * arrangement the product itself offers, and the only one that shows a workspace and a conversation at once
+ * without shrinking either into illegibility.
+ *
+ * Each frame CROPS its screen rather than fitting it: the image is laid in at a multiple of the frame's own
+ * width, anchored top-left, and the frame's aspect ratio decides where the picture stops. That is how three
+ * captures of very different lengths (a board that ends after three cards, a CI list that runs past the fold)
+ * share one frame without it changing shape under them — and it is what keeps the app's own 13px type
+ * readable in a column this narrow, which fitting the whole 1270px-wide capture into ~500px could not.
+ *
+ * `sizes` says what the browser will actually paint, which is that same multiple of the column rather than the
+ * column: without it every visitor fetches the widest rung of a 2540px screenshot to paint 600 of its pixels.
+ */
+const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
+const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
+const appSizes = "(min-width: 80rem) 1300px, (min-width: 64rem) 1020px, (min-width: 40rem) 870px, calc((100vw - 3rem) * 1.94)";
+const chatSizes = "(min-width: 80rem) 880px, (min-width: 64rem) 700px, (min-width: 40rem) 660px, calc((100vw - 3rem) * 1.92)";
 
 // The tour leads with the first verb (Orchestrate) at full width; the rest are the compact cards.
 const [leadVerb, ...verbCards] = content.verbs.items;
@@ -131,50 +143,133 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                     </ul>
                 </div>
 
-                <!-- The claim, proven immediately: the real fleet board. The frame crops the full-width
-                     screenshot to its Attention + Active lanes so agent cards stay legible beside the copy;
-                     the third lane bleeds past the right edge, and section 2 shows the whole board. -->
-                <!-- Capped until the hero splits into two columns: the crop scales with the frame, so a
-                     full-width frame on a tablet would blow the screenshot up to twice its intended size. -->
-                <figure class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:max-w-none" style="animation-delay: 60ms">
-                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
-                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">{content.hero.shot.frameLabel}</span>
-                        </div>
-                        <!-- Crop window. The width percentages pick how much of the 1072px-wide surface shows:
-                             262% ≈ rail + the Attention lane (phones), 168% ≈ through the Active lane (from sm up).
-                             Each aspect ratio is the matching slice of the source, so the image fills the box.
+                <!-- THE CLAIM, PROVEN IMMEDIATELY, in the shape the product actually has: the workspace in one
+                     window and the chat lifted out of it into another. Both frames cycle through real captures
+                     (hero-screens.ts drives them); both crop from the top-left, so what a reader gets is the
+                     legible top of a screen rather than a whole one shrunk past reading.
 
-                             The press over it is a plain link to the demo's own page, the same on every screen and
-                             the same as every other "open the workspace" call on the site. An IDE needs a viewport:
-                             not this box (half a hero column) and not an overlay with a marketing chrome bar over
-                             it. The image stays the LCP, undimmed until hover, and the page still ships no part of
-                             the app. -->
-                        <div class="relative aspect-[5/7] overflow-hidden sm:aspect-6/5">
-                            <Image
-                                src={heroImage}
-                                alt={content.hero.shot.alt}
-                                widths={SHOT_WIDTHS}
-                                sizes={heroSizes}
-                                loading="eager"
-                                fetchpriority="high"
-                                decoding="async"
-                                class="w-[262%] max-w-none sm:w-[168%]"
-                            />
-                            <a
-                                href={DEMO_PATH}
-                                class="group absolute inset-0 flex items-center justify-center bg-canvas/10 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none"
-                            >
-                                <span
-                                    class="flex items-center gap-2.5 rounded-full border border-line bg-canvas/85 px-5 py-2.5 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500"
+                     The pair leans out of the hero's right column on large screens — the composition needs the
+                     width more than the gutter does, and the copy beside it is capped at its own measure
+                     anyway. It stays a single stacked block below that, where there is no column to lean out
+                     of and the chat window tucks into the app window's bottom corner instead. -->
+                <!-- It LEANS OUT of the container on the widest screens — `640px - 50vw` is exactly the distance
+                     from this column's right edge to a 24px gutter at the window's own edge, so the pair grows
+                     with the monitor instead of staying inside a 1232px measure that exists for prose. Nothing
+                     to correct below 80rem, where that expression is zero or positive and the frame simply
+                     stops at the column. -->
+                <figure
+                    class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:w-auto lg:max-w-none xl:mr-[min(0px,calc(640px_-_50vw))]"
+                    style="animation-delay: 60ms"
+                >
+                    <!-- Padded at the foot and the right so the chat window's overhang and both shadows have
+                         somewhere to land: it is positioned OUTSIDE the app window's box, and a parent that
+                         fitted the app window alone would clip it. -->
+                    <div class="relative pr-3 pb-24 sm:pb-28 lg:pr-6 lg:pb-32">
+                        <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
+                            <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                                {
+                                    appScreens.map((screen, index) => (
+                                        <span
+                                            class="hero-label ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle"
+                                            data-hero-label="app"
+                                            data-index={index}
+                                            hidden={index > 0}
+                                        >
+                                            {screen.frameLabel}
+                                        </span>
+                                    ))
+                                }
+                            </div>
+                            <!-- The crop window. Each screen is laid in at a multiple of this box's width and
+                                 anchored top-left, so the box's aspect ratio is what decides where the picture
+                                 stops. The multiples widen as the column narrows, for the same reason the old
+                                 single hero shot did: on a phone this box is ~330px, and a whole 1270px-wide
+                                 workspace painted into it is a picture of nothing.
+
+                                 The press over it is a plain link to the demo's own page — the same on every
+                                 screen and the same as every other "open the workspace" call on the site. An
+                                 IDE needs a viewport, and this box is not one. -->
+                            <div class="relative aspect-5/4 overflow-hidden sm:aspect-16/10">
+                                {
+                                    appScreens.map((screen, index) => (
+                                        <Image
+                                            src={screen.image}
+                                            alt={screen.alt}
+                                            widths={SHOT_WIDTHS}
+                                            sizes={appSizes}
+                                            loading={index === 0 ? "eager" : "lazy"}
+                                            fetchpriority={index === 0 ? "high" : undefined}
+                                            decoding="async"
+                                            class:list={[
+                                                "hero-screen absolute top-0 left-0 w-[200%] max-w-none sm:w-[162%] lg:w-[142%]",
+                                                index === 0 && "is-on",
+                                            ]}
+                                            data-hero-screen="app"
+                                            data-index={index}
+                                            aria-hidden={index > 0 ? "true" : undefined}
+                                        />
+                                    ))
+                                }
+                                <!-- The press sits in the TOP-RIGHT rather than dead centre. Centre is where a play
+                                     button belongs on a video and the one place it cannot go here: the chat
+                                     window covers this screen from its middle down, at every width, so a
+                                     centred pill is a call to action with another window through the middle of
+                                     it. The top strip is the only band all three surfaces leave clear, and the
+                                     right of it is the emptiest part of all three. -->
+                                <a
+                                    href={DEMO_PATH}
+                                    class="group absolute inset-0 flex items-start justify-end bg-canvas/10 p-3 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none sm:p-4"
                                 >
-                                    <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 5v14l11-7z" /></svg>
-                                    {content.hero.demo.playLabel}
-                                </span>
-                            </a>
+                                    <span
+                                        class="flex items-center gap-2.5 rounded-full border border-line bg-canvas/85 px-5 py-2.5 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 5v14l11-7z" /></svg>
+                                        {content.hero.demo.playLabel}
+                                    </span>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- The chat, in the window the product pops it out into. Absolutely placed over the app
+                             window's bottom-right corner, at 58% of the composition's width — small enough to
+                             read as a second, lesser window, large enough that a persona card is still a face
+                             and a name. Inert to the pointer: the press underneath is the page's one call, and a
+                             second target stacked on it would only make that one harder to hit. -->
+                        <div
+                            class="pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card shadow-2xl shadow-black/60"
+                            aria-hidden="true"
+                        >
+                            <div class="flex items-center gap-1.5 border-b border-line bg-overlay/50 px-2.5 py-1.5">
+                                <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>
+                                {
+                                    chatScreens.map((screen, index) => (
+                                        <span class="hero-label ml-2 font-mono text-2xs text-subtle" data-hero-label="chat" data-index={index} hidden={index > 0}>
+                                            {screen.frameLabel}
+                                        </span>
+                                    ))
+                                }
+                            </div>
+                            <div class="relative aspect-3/2 overflow-hidden">
+                                {
+                                    chatScreens.map((screen, index) => (
+                                        <Image
+                                            src={screen.image}
+                                            alt=""
+                                            widths={SHOT_WIDTHS}
+                                            sizes={chatSizes}
+                                            loading="lazy"
+                                            decoding="async"
+                                            class:list={["hero-screen absolute top-0 left-0 w-[290%] max-w-none sm:w-[180%] lg:w-[150%]", index === 0 && "is-on"]}
+                                            data-hero-screen="chat"
+                                            data-index={index}
+                                        />
+                                    ))
+                                }
+                            </div>
                         </div>
                     </div>
                     <figcaption class="mt-3 text-2xs leading-relaxed text-subtle/80">{content.hero.demo.note}</figcaption>
@@ -627,6 +722,52 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                 },
                 { passive: true },
             );
+        }
+
+        /* THE HERO'S TWO FRAMES, each walking its own screens in the order the content lists them.
+         *
+         * Two lists of different lengths (three surfaces behind, two conversations in front) on one clock, so
+         * the pair takes six steps to repeat rather than two — a visitor who watches for ten seconds sees five
+         * different pictures instead of the same two swapping.
+         *
+         * They advance on ALTERNATE ticks: both frames changing on the same beat reads as the page reloading
+         * under the reader, where one at a time reads as two windows being worked in.
+         *
+         * Nothing here decides what is visible on the first frame — the markup ships the first screen of each
+         * already on, so this is only ever a change to a picture that is already correct. If the script never
+         * runs, the hero is the still image it used to be.
+         */
+        const STEP_MS = 4000;
+        const frames = ["app", "chat"] as const;
+        const shown = { app: 0, chat: 0 };
+        const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
+        const labelsOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-label="${frame}"]`);
+
+        // Only where there is something to rotate, and only for a reader who has not asked the page to hold
+        // still: this is decoration on a screenshot, which is exactly what "prefers reduced motion" means.
+        const rotates = screensOf("app").length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        if (rotates) {
+            let tick = 0;
+            setInterval(() => {
+                const frame = frames[tick % frames.length]!;
+                tick += 1;
+                const screens = screensOf(frame);
+                if (screens.length < 2) {
+                    return;
+                }
+                const next = (shown[frame] + 1) % screens.length;
+                shown[frame] = next;
+                screens.forEach((screen, index) => {
+                    screen.classList.toggle("is-on", index === next);
+                    // The frame's own alt text is the one on screen: a reader on a screen reader must not be
+                    // handed three descriptions of one picture.
+                    screen.setAttribute("aria-hidden", index === next ? "false" : "true");
+                });
+                labelsOf(frame).forEach((label, index) => {
+                    label.hidden = index !== next;
+                });
+            }, STEP_MS / frames.length);
         }
     </script>
 </BaseLayout>

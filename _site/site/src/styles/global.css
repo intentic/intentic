@@ -636,6 +636,29 @@
     animation: hub-flow 1.4s linear infinite;
 }
 
+/* ── The hero's two frames ───────────────────────────────
+ *
+ * Every screen a frame can show is stacked in the same box; exactly one carries `is-on`, and the swap is a
+ * cross-fade rather than a cut so the frame reads as one window changing what it holds rather than as a
+ * slideshow of pictures. The first is marked on in the markup, so the frame is correct before any script runs
+ * and stays correct if none ever does.
+ *
+ * The fade is the only motion here and it is bounded: opacity alone, no transform, so nothing reflows and the
+ * image behind is composited rather than repainted. Under reduced motion the change is instant — the script
+ * stops rotating there anyway, and this is the belt to that brace. */
+.hero-screen {
+    opacity: 0;
+    transition: opacity 0.7s ease;
+}
+.hero-screen.is-on {
+    opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+    .hero-screen {
+        transition: none;
+    }
+}
+
 /* ── Hero floating orbs ──────────────────────────────── */
 .hero-orbs {
     position: absolute;

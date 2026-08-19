@@ -9,7 +9,8 @@
     "exports": {
         "./main": "./src/main.ts",
         "./builtins": "./src/extension-host/builtins.ts",
-        "./popout-keeper": "./src/popout/keeper.ts"
+        "./popout-keeper": "./src/popout/keeper.ts",
+        "./chat-tabs": "./src/composables/chat/tabSnapshot.ts"
     },
     "scripts": {
         "dev": "esbuild src/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",

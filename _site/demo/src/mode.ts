@@ -12,7 +12,9 @@ import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, REVIEW_AGENT_ID } from "./fixture
  * Two knobs decide almost all of it, because they are what the app builds itself out of: WHICH AGENTS the
  * daemon's roster carries, and WHICH EXTENSIONS the owner has left switched on (an extension that is off
  * contributes no rail tile, no view and no badge — the loader never activates it). A third, the teammate's
- * presence, is here because a second avatar is the one remaining piece of furniture nobody chose.
+ * presence, is here because a second avatar is the one remaining piece of furniture nobody chose. A fourth,
+ * the open chats, because the rail's Personas cut is built from the conversations this WINDOW holds rather
+ * than from the personas the daemon serves — so an empty strip empties that surface too.
  *
  * Everything else the fixture serves stays put in every mode: the workspace and its diffs, the sessions
  * history, the pipelines' own record, the connected accounts. Those are read on the way in to a surface the
@@ -36,6 +38,11 @@ export interface DemoMode {
     readonly extensions?: readonly string[];
     /** Whether a second member is in the workspace. */
     readonly teammate: boolean;
+    /* Whether this window opens holding chats at all — the featured run plus one per persona
+     * (fixture/openChats.ts). A fourth knob rather than a constant for the same reason as the three above:
+     * the chat rail's Personas cut counts the conversations the WINDOW holds, so open tabs are what makes
+     * that surface exist — and open tabs are exactly what the emptiest state is claiming there aren't. */
+    readonly openChats: boolean;
 }
 
 /* One agent and nothing else — a sandbox on its first afternoon. The one kept is the featured turn, because a
@@ -47,6 +54,7 @@ const MINIMAL: DemoMode = {
     agents: [FEATURED_AGENT_ID],
     extensions: [],
     teammate: false,
+    openChats: false,
 };
 
 /* THE ONE THE PLAY BUTTON OPENS. Three agents, one per lane, chosen as the three moments the landing page
@@ -64,6 +72,7 @@ const DEFAULT: DemoMode = {
     agents: [FEATURED_AGENT_ID, AWAITING_AGENT_ID, REVIEW_AGENT_ID],
     extensions: [`intentic.acceptance`, `intentic.documentation`, `intentic.pipelines`, `intentic.viewers`],
     teammate: true,
+    openChats: true,
 };
 
 // Everything the fixture has, which is what this demo used to open on: every lane occupied and every extension
@@ -74,6 +83,7 @@ const FULL: DemoMode = {
     label: `Everything`,
     note: `The whole fleet, every extension.`,
     teammate: true,
+    openChats: true,
 };
 
 export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL];

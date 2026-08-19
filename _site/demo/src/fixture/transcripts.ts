@@ -1,6 +1,7 @@
 import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
+import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
 /** The transcript route's body: `AgentTranscriptSchema` — the restored messages, plus the session they came from. */
 interface AgentTranscript {
@@ -19,9 +20,15 @@ interface AgentTranscript {
  * paths (fixture/workspace.ts), because they are the same change seen from the other side: the transcript is
  * where it was decided, the review is where it is read.
  *
- * One conversation is fixtured — the agent holding a finished delta, which is the one a visitor is steered to
- * open. Anything else still answers an empty transcript, and the panel's empty state is honest there: those
- * cards are a roster, not a recording. */
+ * FOUR conversations are fixtured: the agent holding a finished delta, which is the one a visitor is steered
+ * to open from the board, and one per persona — the chats the window opens holding (fixture/openChats.ts),
+ * so the rail's Personas cut opens onto work rather than onto an empty pane. Anything else still answers an
+ * empty transcript, and the panel's empty state is honest there: those cards are a roster, not a recording.
+ *
+ * The three persona chats read differently from the coding one ON PURPOSE. Nothing in them touches a file:
+ * they are a support queue, a launch thread and a payouts reconciliation, done through the accounts the
+ * persona carries. That contrast is the whole argument for personas being in a workspace for coding agents,
+ * and it is made by what the transcripts DO rather than by a sentence anywhere claiming it. */
 
 const SCHEMA_BEFORE = `export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -185,9 +192,59 @@ const MAYA_SUPPORT: AgentTranscript = {
     ],
 };
 
+/* GROWTH'S CHAT. Shorter than Maya's and deliberately so: it is the second row of a list of people, read far
+ * more often than it is opened, and its job when it IS opened is to be recognisably a different kind of work
+ * from the one above it — writing, posted through this persona's own accounts, with the owner holding the
+ * final word on what goes out. */
+const OWEN_LAUNCH: AgentTranscript = {
+    sessionId: `ses_01j9owen`,
+    messages: [
+        {
+            role: `user`,
+            text: `2.4 ships Thursday. Draft the launch thread — lead with soft deletes, keep it to five posts, and don't announce a date for the audit log.`,
+        },
+        {
+            role: `assistant`,
+            text: `Drafted five posts. The first opens on the restore, not the schema — "delete a customer, change your mind, get them back" tested better in the 2.2 thread than any feature framing did.\n\nNo date on the audit log; it's one line saying it's next.`,
+        },
+        {
+            role: `user`,
+            text: `Good. Queue it for 09:00 Thursday and cross-post the first one to LinkedIn.`,
+        },
+        {
+            role: `assistant`,
+            text: `Queued for **Thursday 09:00**, and the opener is scheduled on LinkedIn for the same minute. I'll hold the replies for you rather than answering as the brand.`,
+        },
+    ],
+};
+
+/* OPERATIONS' CHAT. The third kind again: reading two systems that disagree and coming back with the ONE
+ * number a person has to decide about. It ends on a question rather than a result, because that is what this
+ * persona's work usually ends on — and because a list of people whose every chat is finished says the wrong
+ * thing about what they are for. */
+const PRIYA_PAYOUTS: AgentTranscript = {
+    sessionId: `ses_01j9priya`,
+    messages: [
+        {
+            role: `user`,
+            text: `Reconcile August payouts against the ledger and tell me what doesn't match.`,
+        },
+        {
+            role: `assistant`,
+            text: `412 payouts, **$186,340** settled. All but three reconcile to the cent.\n\nThe three are the same shape: a refund issued after the payout closed, so August paid out on revenue September took back. Two are under $40. The third is **$2,180** — Northwind's annual, refunded on the 29th.`,
+        },
+        {
+            role: `assistant`,
+            text: `I can net the three against September's payout, or open a credit note for each. Netting is one line and hides the reversal; credit notes leave a trail your accountant can follow.\n\nWhich way do you want them?`,
+        },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
-    cnv_maya_support: MAYA_SUPPORT,
+    [MAYA_CHAT_ID]: MAYA_SUPPORT,
+    [OWEN_CHAT_ID]: OWEN_LAUNCH,
+    [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,
 };
 
 export const transcriptFor = (id: string): AgentTranscript => TRANSCRIPTS[id] ?? { messages: [] };

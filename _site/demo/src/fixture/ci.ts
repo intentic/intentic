@@ -4,9 +4,19 @@ import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic
  * to flatten — `web` on GitHub, `api` on GitLab, one board, one vocabulary. A visitor who runs both sees their
  * own situation; one who runs either sees theirs.
  *
- * The runs are a plausible afternoon rather than a demonstration of green: the newest is still going, the one
- * before it broke, and the same e2e job broke two runs ago as well — which is what makes the view's
- * "keeps breaking" analysis (useFailureHistory) say something instead of being an empty affordance.
+ * The runs are a plausible afternoon on a HEALTHY workspace: one still going, five green behind it, and one
+ * that broke. That balance is the honest picture of CI on a repo whose agents land reviewed work — and it is
+ * what the board has to show, because a board that is mostly red teaches the reader that the product's output
+ * does not pass, which is the opposite of the claim it sits under.
+ *
+ * The one failure is a MIXED run rather than a wholesale collapse: `test:integration` is red, everything
+ * before it is green, and the deploy behind it is skipped. That is the shape a real break has, and it is the
+ * only shape from which the row's fan-in and its "fix with agent" affordance mean anything.
+ *
+ * There is deliberately no REPEATED failure any more. The streak analysis (useFailureHistory) needs the same
+ * job red in consecutive runs, and buying that costs a second red row plus a red banner across the top of the
+ * board — a price the whole rest of the picture then pays. The analysis is exercised by its own unit tests
+ * (failureHistory.test.ts), which is where a rule belongs; this fixture's job is to be a truthful afternoon.
  *
  * Two shapes of job list, deliberately. GitLab reports a `stage` per job, so the api runs carry stages and the
  * row draws its circles from them; GitHub's jobs API has none, so the web runs carry only timestamps and the
@@ -35,6 +45,37 @@ const ciRuns = (now: number): PipelineRun[] => [
         createdAt: now - minutes(2),
     },
     {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_820,
+        title: `Fix the flaky signup e2e test`,
+        authorName: `Ada Lovelace`,
+        trigger: `push`,
+        branch: `agent/flaky-signup`,
+        sha: `19a7e55`,
+        status: `success`,
+        url: `https://github.com/acme/shop-web/actions/runs/4820`,
+        createdAt: now - minutes(48),
+        durationSeconds: 268,
+    },
+    {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_819,
+        title: `Tighten the pricing page bundle budget`,
+        authorName: `Ada Lovelace`,
+        trigger: `push`,
+        branch: `agent/bundle-budget`,
+        sha: `0c33d81`,
+        status: `success`,
+        url: `https://github.com/acme/shop-web/actions/runs/4819`,
+        createdAt: now - minutes(96),
+        durationSeconds: 254,
+    },
+    // THE ONE THAT BROKE, and the only red on the board.
+    {
         repo: `api`,
         host: `gitlab`,
         project: `acme/shop-api`,
@@ -49,38 +90,6 @@ const ciRuns = (now: number): PipelineRun[] => [
         createdAt: now - minutes(26),
         durationSeconds: 412,
         failedJobs: [`test:integration`],
-    },
-    {
-        repo: `web`,
-        host: `github`,
-        project: `acme/shop-web`,
-        runId: 4_820,
-        title: `Fix the flaky signup e2e test`,
-        authorName: `Ada Lovelace`,
-        trigger: `push`,
-        branch: `agent/flaky-signup`,
-        sha: `19a7e55`,
-        status: `failed`,
-        url: `https://github.com/acme/shop-web/actions/runs/4820`,
-        createdAt: now - minutes(48),
-        durationSeconds: 268,
-        failedJobs: [`e2e (chromium)`],
-    },
-    {
-        repo: `web`,
-        host: `github`,
-        project: `acme/shop-web`,
-        runId: 4_819,
-        title: `Fix the flaky signup e2e test`,
-        authorName: `Ada Lovelace`,
-        trigger: `push`,
-        branch: `agent/flaky-signup`,
-        sha: `0c33d81`,
-        status: `failed`,
-        url: `https://github.com/acme/shop-web/actions/runs/4819`,
-        createdAt: now - minutes(96),
-        durationSeconds: 254,
-        failedJobs: [`e2e (chromium)`],
     },
     {
         repo: `api`,
@@ -122,10 +131,10 @@ const ciRuns = (now: number): PipelineRun[] => [
         trigger: `web`,
         branch: `agent/auth-middleware`,
         sha: `a90bb17`,
-        status: `canceled`,
+        status: `success`,
         url: `https://gitlab.com/acme/shop-api/-/pipelines/90301`,
         createdAt: now - minutes(410),
-        durationSeconds: 44,
+        durationSeconds: 356,
     },
 ];
 
@@ -207,7 +216,7 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
     return run.host === `gitlab` ? gitlabJobs(run.createdAt, failing) : githubJobs(run.createdAt, failing);
 };
 
-// When the owner last read the board. Older than the two failures above, so the rail badge that brought them
+// When the owner last read the board. Older than the failure above, so the rail badge that brought them
 // here is telling the truth — and `POST /ci/seen` clears it, exactly as it does against a real daemon.
 export const ciRunsResponse = (now: number, seenAt: number | undefined): CiRunsResponse => ({
     repos: CI_REPOS,

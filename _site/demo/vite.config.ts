@@ -71,6 +71,10 @@ export default defineConfig({
             "@intentic-app/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
             // The pop-out window's own script, and the only code a floating panel runs in its own realm.
             "@intentic-app/web/popout-keeper": fromRoot(`_editor/web/src/popout/keeper.ts`),
+            // How the app persists a window's open chat tabs. The recording seeds four of them (fixture/
+            // openChats.ts), and takes the shape from the app so a change to the strip's stored form is a
+            // build error here rather than four rows that quietly stop appearing.
+            "@intentic-app/web/chat-tabs": fromRoot(`_editor/web/src/composables/chat/tabSnapshot.ts`),
         },
     },
     base: `/demo/`,

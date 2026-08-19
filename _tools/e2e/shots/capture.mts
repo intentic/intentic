@@ -48,11 +48,42 @@ const DEFAULT_DPR = 2;
  * visitor needs to know which of three states they are looking at, and to nothing on the marketing site. It is
  * hidden rather than left to the trim below because it sits BELOW the content: left in, every shot would be
  * padded out to it and the dead canvas it caused is exactly what this harness is trying to stop shooting. */
-const HIDE_DEMO_CHROME = `#demo-switcher { display: none !important; }`;
+/* …and the hover label, which is not the demo's chrome but is just as certainly not part of the picture. A
+ * headless browser's pointer sits at the top-left corner of the window, which in this app is the sandbox
+ * avatar — so a shot taken without a click landing somewhere else came back with the rail's tooltip open
+ * across the page title. Suppressed rather than dodged by parking the pointer, because there is no square of
+ * a full-bleed workspace that is reliably inert: an empty lane on one surface is a card on the next. */
+const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important; }`;
 
 // The composer's textarea is the docked chat's left edge — every desktop surface shares the shell, so one
 // landmark decides where the workspace ends and the chat begins.
 const COMPOSER = 'textarea[name="draft"]';
+
+/* The control that moves the chat out of the layout and into a window of its own (ChatTabs.vue). Matched on
+ * the START of its label because the label carries the keyboard shortcut after it, and that string is the
+ * reader's platform's, not ours. */
+const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
+
+/* THE POPPED-OUT CHAT'S WINDOW, shared by both shots that take one — they alternate inside a single frame on
+ * the landing page, so a difference between them would show up as the frame changing shape mid-rotation.
+ *
+ * 1060 × 700 is chosen against the CONTENT rather than against a device: the rail is a fixed width, so the
+ * remaining ~690px is the conversation, wide enough that a paragraph is two lines rather than five, and the
+ * height is where these two transcripts END — a taller window would be a third of a frame of empty canvas
+ * under the last message, which is the thing the trim below spends its whole existence preventing elsewhere. */
+const POPOUT_WINDOW = { width: 1_060, height: 700 } as const;
+
+/* THE BIG FRAME'S WINDOW — the app window the landing page's three rotating surfaces are all shot in.
+ *
+ * Same width as every other desktop shot, so these downsample into the page's column rather than stretch (see
+ * DESKTOP above), and ONE height for all three, because they take turns inside a single frame and a frame that
+ * changed shape every four seconds would be the only thing anybody noticed about it.
+ *
+ * Deliberately TALLER than the frame that shows them. The frame crops from the top, the way the hero's old
+ * single shot already did, and that is what lets three surfaces of very different lengths share it: the board
+ * is a few cards and stops, the pipelines list runs past the fold, and the crop — not the capture — decides
+ * where the picture ends. Shooting them to fit instead would mean a frame as short as the emptiest surface. */
+const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
 
 interface Shot {
     name: string;
@@ -92,6 +123,33 @@ interface Shot {
     raw?: true;
     /** Type into a field once the surface is up, for a shot whose story is a conversation. */
     type?: { target: string; text: string; settleMs?: number };
+    /* SHOOT THE POPPED-OUT CHAT INSTEAD OF THE APP. The chat is the one panel the product itself lifts out of
+     * the layout into a real OS window (composables/usePopout.ts), so a picture of it is a picture of a WINDOW
+     * — not a crop of a column, which is what `clip: "chat"` can only ever be. Pressing the control opens the
+     * window; everything after that happens inside it, and the frame is the whole of it, so no clip applies.
+     *
+     * The size is the window's, chosen per shot: the rail is a fixed width, so what widening buys is entirely
+     * conversation, and how much of that a shot wants depends on how small the page paints it. */
+    popout?: {
+        width: number;
+        height: number;
+        /* Controls to press INSIDE the popped-out window, in order — the rail's cut, for these two shots.
+         * Named `press` rather than `then`, which would make this object thenable and so a hazard the day
+         * anybody awaits one. */
+        press?: string[];
+        settleMs?: number;
+    };
+    /* KEEP THE WHOLE WINDOW HEIGHT, instead of trimming to where the content stops.
+     *
+     * The trim is right for a figure printed beside a paragraph: that picture is as tall as it needs to be and
+     * a page can lay out around whatever comes back. It is wrong for the landing page's first frame, which is
+     * one FRAME that several shots take turns inside — trimmed, the fleet board comes back at 3.8:1 and the
+     * changes view at 1.4:1, and the frame lurches into a different shape every time the picture behind it
+     * changes.
+     *
+     * So these say what they are: a screen, of a fixed size, with an app in it — and a board with three agents
+     * on it leaves room under the lanes, exactly as it does on the monitor this is a picture of. */
+    fullHeight?: true;
 }
 
 const SHOTS: Shot[] = [
@@ -120,6 +178,92 @@ const SHOTS: Shot[] = [
         settleMs: 1200,
         clip: "area",
         mode: "full",
+    },
+    /* ── THE HERO'S TWO SCREENS ──────────────────────────────────────────────────────────────────────────
+     *
+     * The landing page's first frame is no longer one picture: it is an app window with the chat lifted out
+     * of it into a second, smaller one — the arrangement the product itself offers (usePopout.ts), and the
+     * only honest way to show a workspace and a conversation at once without cropping one of them away.
+     *
+     * Both frames cycle. The big one walks three surfaces, the small one two cuts of the rail, and the two
+     * loops are different lengths on purpose so the pair never settles into a single repeating picture.
+     *
+     * These are shot SEPARATELY from the surfaces further down the page even where the address matches,
+     * because the hero asks a different question of a screenshot. Below the fold a shot illustrates a claim
+     * it is captioned with and can be as full as the truth allows; up here it is the first thing a stranger
+     * reads, at a fraction of its own width, with no caption. So every one of them runs on the CURATED
+     * recording rather than the full one, and opens exactly one thing.
+     *
+     * `clip: "area"` throughout: the docked chat is not in these pictures, because the chat is the other
+     * frame. */
+    {
+        name: "hero-agents",
+        path: "/agents",
+        // Same reason fleet-board does it: without a conversation already open the Active lane leads with an
+        // empty "New agent" draft card, which is a truthful screen and a confusing screenshot.
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: "text=ATTENTION",
+        settleMs: 1400,
+        clip: "area",
+        viewport: HERO_WINDOW,
+        fullHeight: true,
+    },
+    {
+        name: "hero-changes",
+        path: "/workspace",
+        waitFor: 'button:has-text("Changes")',
+        /* Opens Changes and then the largest of the five diffs. Both presses are the shot's subject: the tab
+         * groups the working tree BY REPOSITORY (`web` and `api`, each with its own branch and count), and
+         * the file opens that grouping into an actual review rather than the "drop your work here" pane the
+         * Files tab lands on. */
+        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        settleMs: 1800,
+        clip: "area",
+        viewport: HERO_WINDOW,
+        fullHeight: true,
+    },
+    // The CI board, flattened across the two hosts acme-shop's repos live on. Mostly green with one broken
+    // run, which is what the fixture now records (_site/demo/src/fixture/ci.ts).
+    {
+        name: "hero-pipelines",
+        path: "/ext/pipelines",
+        waitFor: "text=pass rate",
+        settleMs: 1600,
+        clip: "area",
+        viewport: HERO_WINDOW,
+        fullHeight: true,
+    },
+    /* The chat in its own window, on the rail's two cuts. Agents first — the conversations this window holds,
+     * which is the cut the rail opens on — then Personas, the people this sandbox can send as.
+     *
+     * Both open on the featured agent, so the window has a real turn in it rather than an empty draft: the
+     * fixture's turn keeps streaming across the navigation, so the panel arrives mid-plan. The persona shot
+     * then walks the rail the way a reader would — press Personas, press a person — because that press is what
+     * puts their conversation on screen, and a deep link to it would prove nothing about the list beside it. */
+    {
+        name: "hero-chat-agents",
+        path: "/agents/cnv_checkout_stripe",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: COMPOSER,
+        settleMs: 2600,
+        popout: POPOUT_WINDOW,
+        dpr: DENSE_DPR,
+    },
+    {
+        name: "hero-chat-personas",
+        path: "/agents/cnv_checkout_stripe",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: COMPOSER,
+        settleMs: 2600,
+        popout: {
+            ...POPOUT_WINDOW,
+            /* Press Personas, press Maya, then open the run she did the work in. The last press is the
+             * difference between a conversation and a picture of one: collapsed, the browser session she
+             * cleared the queue through is a pill reading "1"; opened, it is the screen she was looking at. */
+            press: ['button[role="tab"]:has-text("Personas")', "text=Maya · Customer Care", "button.chat-run-bar"],
+            settleMs: 1_800,
+        },
+        dpr: DENSE_DPR,
     },
     { name: "agent-review", path: "/agents/cnv_soft_deletes", waitFor: "text=Ready to land", settleMs: 1600, clip: "area" },
     {
@@ -410,9 +554,39 @@ const clipFor = async (page: Page, shot: Shot): Promise<{ x: number; y: number; 
     const split = await composerLeft(page, window.width);
     // 26px of gutter on the chat side of the split belongs to neither panel.
     const [x, width] = shot.clip === "area" ? [0, split - 26] : [split - 26, window.width - split + 26];
+    if (shot.fullHeight === true) {
+        return { x, y: 0, width, height: window.height };
+    }
     const measured = await contentBottom(page, x, x + width);
     const height = Math.min(measured + TRIM_PAD, shot.stopAt ?? window.height, window.height);
     return { x, y: 0, width, height };
+};
+
+/* Press the pop-out control, take the window that opens, and shoot THAT.
+ *
+ * Two things about it are not the ordinary Playwright dance. The window is opened by the app rather than by
+ * this harness, so its size is whatever `window.open` asked for — set it here, because the whole point of the
+ * shot is a window sized for reading. And what it displays is rendered by the OPENER's realm and teleported
+ * across (usePopout.ts), so "loaded" tells us nothing: the wait is for the composer to actually exist in the
+ * new window, which only happens once the panel has arrived in it.
+ *
+ * The keeper veils a window nobody is drawing in, so a shot taken too early is a picture of "Reconnecting…".
+ * Waiting on the composer is what rules that out. */
+const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["popout"]>): Promise<void> => {
+    const [window] = await Promise.all([page.context().waitForEvent("page"), page.click(POPOUT_BUTTON, { timeout: 20_000 })]);
+    try {
+        window.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}/popout] ${error.message.split("\n")[0]}`));
+        await window.setViewportSize({ width: popout.width, height: popout.height });
+        await window.waitForSelector(COMPOSER, { timeout: 20_000 });
+        for (const target of popout.press ?? []) {
+            await window.click(target, { timeout: 20_000 });
+            await window.waitForTimeout(600);
+        }
+        await window.waitForTimeout(popout.settleMs ?? 1_200);
+        await window.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`) });
+    } finally {
+        await window.close();
+    }
 };
 
 const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
@@ -457,6 +631,11 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
             await page.mouse.move(300, 400);
             await page.mouse.wheel(0, shot.scrollTo);
             await page.waitForTimeout(600);
+        }
+        if (shot.popout !== undefined) {
+            await shootPopout(page, shot, shot.popout);
+            console.log(`  ✓ ${shot.name} → ${shot.path} (popped out)`);
+            return true;
         }
         await page.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`), clip: await clipFor(page, shot) });
         console.log(`  ✓ ${shot.name} → ${shot.path}`);

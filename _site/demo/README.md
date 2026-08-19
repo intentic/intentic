@@ -45,7 +45,7 @@ blocked and unpinned rows remain non-admitted.
 | `src/browser.ts` | the recorded screencast of the agent's Chromium, played from the pages below |
 | `src/mode.ts` | how full the recording is — the three states, and which one this page load serves |
 | `src/switcher.ts` | the bar at the bottom of the screen that switches between them; the demo's only chrome |
-| `src/fixture/` | the data — `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
+| `src/fixture/` | the data — `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `openChats.ts` (the chats this window opens holding — the featured run, plus one per persona), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
 `fixture/workspace.ts` holds one flat path → content table that the tree, every directory listing, every read,
 the content search and every write derive from — so the surfaces whose whole state is FILES (Acceptance's
@@ -69,17 +69,20 @@ The fixture is written to prove every surface exists, which made the opening fra
 nine agents, a question, a land conflict, fourteen extensions in the rail. Fullness is a **control** now
 (`src/mode.ts`), and the site's demo link opens the middle one.
 
-| Mode | The board | The rail |
-| --- | --- | --- |
-| `minimal` | the featured agent alone | no extensions at all |
-| `default` | three agents — one running, one asking, one ready to land | Acceptance, Documentation, Pipelines (+ `viewers`, which has no tile) |
-| `full` | the whole roster, every lane occupied | every extension |
+| Mode | The board | The rail | The chat strip |
+| --- | --- | --- | --- |
+| `minimal` | the featured agent alone | no extensions at all | empty — a fresh draft |
+| `default` | three agents — one running, one asking, one ready to land | Acceptance, Documentation, Pipelines (+ `viewers`, which has no tile) | the featured run + one chat per persona |
+| `full` | the whole roster, every lane occupied | every extension | the featured run + one chat per persona |
 
 Two knobs decide almost all of it, because they are what the shell builds itself out of: which agents the
 roster carries, and which extensions the owner left switched on. A third drops the teammate's presence in
-`minimal`. Everything else the fixture serves is the same in all three — the workspace, the sessions history,
-the pipelines' record, the connected accounts are read on the way in to a surface the visitor asked for, not
-things the opening frame is made of.
+`minimal`. A fourth seeds the open chat tabs, because the chat rail's Personas cut counts the conversations
+**this window** holds rather than the personas the daemon serves — an empty strip empties that surface too, so
+`fixture/openChats.ts` opens the featured run plus one chat per person and `src/main.ts` writes them where the
+app restores tabs from, exactly as it writes the session. Everything else the fixture serves is the same in all three — the
+workspace, the sessions history, the pipelines' record, the connected accounts are read on the way in to a
+surface the visitor asked for, not things the opening frame is made of.
 
 The mode is applied where it is **served** — `daemon.ts` filters the roster, the presence frame and the
 workflow run; `fixture/sandbox.ts` decides each extension's switch — so the fixture stays one full cast and a

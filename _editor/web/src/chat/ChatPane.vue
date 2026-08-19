@@ -609,13 +609,32 @@ const forkInsteadOfEdit = (): void => {
 const modeLabel = computed(() => modeMeta(mode.value).label);
 const modeIcon = computed(() => modeMeta(mode.value).icon);
 
-// Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
+/* Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
+ *
+ * WITH A FLOOR OF ONE LINE, because `scrollHeight` is a measurement and a measurement can be taken at a moment
+ * that has no answer. Every caller below fires on something this pane just did — a tab switch, a send, an
+ * account connecting — and lands on `nextTick` or a post-flush watch, which guarantees the DOM is updated and
+ * guarantees nothing about the box being laid out and styled yet. When it isn't, the element reports a height
+ * smaller than one line of its own text, and the old code wrote that number into `style.height` and never
+ * looked again. The result was a composer permanently the height of its own padding, with the placeholder
+ * sliced through the middle — worst in a popped-out window, where the panel is measured in the window it left
+ * and dressed in the one it arrived in, so nothing this pane does ever re-measures it.
+ *
+ * The floor is computed rather than assumed: line-height plus the vertical padding is what this box is when it
+ * holds one line, whatever the reader's text size. Below it, the measurement is not believed at all and the
+ * height is left as `auto` — the browser's own one-line size, and the same thing the box would show if this
+ * function had never run. A later grow (the first keystroke, the next tab switch) then measures properly. */
 const grow = (): void => {
     const el = input.value;
     if (!el) {
         return;
     }
     el.style.height = `auto`;
+    const style = getComputedStyle(el);
+    const oneLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    if (!(el.scrollHeight >= oneLine)) {
+        return;
+    }
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
 };
 

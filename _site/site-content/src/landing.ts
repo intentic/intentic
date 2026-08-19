@@ -23,10 +23,28 @@ export interface ShotImage {
     alt: string;
 }
 
-/** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
-export interface HeroShot extends ShotImage {
+/** One screen inside one of the hero's two frames, with the address it was taken at for the frame's title bar. */
+export interface HeroScreen extends ShotImage {
     /** The pill in the frame's title bar. Where in the app this shot was taken. */
     frameLabel: string;
+}
+
+/* THE HERO VISUAL: two windows, because that is what this product looks like in use — the workspace in one,
+ * and the chat lifted out of it into another (the app's own pop-out). One still frame of a fleet board could
+ * only ever make one of the page's claims; a workspace beside a live conversation makes the whole of it.
+ *
+ * EACH FRAME CYCLES, in the order written here, and the two lists are DIFFERENT LENGTHS on purpose: three
+ * surfaces behind, two conversations in front, so the pair never settles into one repeating picture. Order is
+ * editorial and the first of each is the one a stranger sees first — so `app` opens on the board, which is the
+ * page's subject, and `chat` opens on the agents cut, which is the conversation the board's cards lead to.
+ *
+ * The frames CROP their screens rather than fitting them (see Landing.astro): every capture is one window
+ * height and the surfaces inside are wildly different lengths, so what a reader sees is the top of each. */
+export interface HeroScreens {
+    /** The workspace window, behind and larger. */
+    app: HeroScreen[];
+    /** The chat, in the window the product pops it out into — in front, smaller, overlapping. */
+    chat: HeroScreen[];
 }
 
 /* The invitation to stop looking at the screenshot and use the thing. The hero keeps the still image because it
@@ -76,7 +94,7 @@ export interface LandingContent {
         /** The plain, literal restatement under the subhead. Named concepts, not persuasion. */
         summary: string;
         chips: string[];
-        shot: HeroShot;
+        screens: HeroScreens;
         demo: HeroDemo;
     };
     /* The one telling of what you do with the product, in the same five verbs as the Features menu. So the
@@ -156,10 +174,36 @@ export const landingContent: LandingContent = {
         // reader to already know what an agent is and that they have one, which is the assumption the
         // whole first screen was making. Three names they recognise do the same job with no decoding.
         chips: ["Free and open source", "Works with Claude, Codex and Grok", "Runs on your own machine"],
-        shot: {
-            name: "fleet-board",
-            alt: "The intentic fleet board: an agent with a question for you and one blocked on a land conflict, beside three running on a Stripe checkout, a reviewed change and a latency spike, and three finished waiting to land. Each card shows its model, branch, cost and diff stats.",
-            frameLabel: "acme-shop · /agents",
+        screens: {
+            app: [
+                {
+                    name: "hero-agents",
+                    alt: "The intentic fleet board: an Attention lane holding a Front Desk question and an agent asking one of its own, an Active lane with an agent running a Stripe checkout under two subagents, and a Finished lane where a completed change offers Land now. Each card shows its model, branch, cost and diff stats.",
+                    frameLabel: "acme-shop · /agents",
+                },
+                {
+                    name: "hero-changes",
+                    alt: "The workspace's Changes tab: the working tree grouped by repository — three files under web, two under api, each with its branch and its own insertions and deletions — beside a side-by-side diff of CheckoutPanel.tsx.",
+                    frameLabel: "acme-shop · /workspace",
+                },
+                {
+                    name: "hero-pipelines",
+                    alt: "The Pipelines view: CI runs from a GitHub repo and a GitLab repo on one board, five passed, one running and one failed, at an 83% pass rate, each row drawing the circles of its own jobs.",
+                    frameLabel: "acme-shop · /pipelines",
+                },
+            ],
+            chat: [
+                {
+                    name: "hero-chat-agents",
+                    alt: "The chat in its own window, on the Agents cut: one active conversation in the rail and, beside it, the plan the agent wrote for adding Stripe checkout, with Approve and No, keep planning under it.",
+                    frameLabel: "Chat · Agents",
+                },
+                {
+                    name: "hero-chat-personas",
+                    alt: "The same chat window on the Personas cut: Maya from customer care, Owen from growth and Priya from operations in the rail, with Maya's overnight support sweep open beside them and the screenshot she took of the cleared inbox.",
+                    frameLabel: "Chat · Personas",
+                },
+            ],
         },
         demo: {
             playLabel: "Open the live workspace",
