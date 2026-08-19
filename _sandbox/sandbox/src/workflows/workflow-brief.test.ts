@@ -1,6 +1,6 @@
 import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { briefForStep, stepConversations } from "./workflow-brief.js";
+import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 
 /* WHAT A STEP IS TOLD. The brief is the only thing standing between a graph of separate sessions and four
  * agents doing four unrelated jobs, and it is pure text assembly — so it is testable here, exactly, rather
@@ -138,4 +138,30 @@ test("a continued step shares its predecessor's conversation and a fresh one doe
     const conversations = stepConversations("r1", design.steps);
     expect(conversations.get("carry")).toBe(conversations.get("first"));
     expect(conversations.get("apart")).toBe("wf-r1-apart");
+});
+
+/* WHERE THE PREDECESSOR'S WORK IS, in the three states the handover carries — the distinction that keeps a
+ * reviewer from reading an empty diff and calling it a pass. `undefined` is the shared-tree case where the
+ * question does not arise; a list is work that has been resolved; and the EMPTY list is the one that has to be
+ * said out loud, because a reader told nothing assumes the ordinary case and goes looking for a diff.
+ */
+const after = (over: Partial<Handover>): string =>
+    briefForStep(step("second", { needs: ["first"] }), [{ title: "first", document: undefined, report: "did some of it", ...over }]);
+
+test("a resolved branch is handed over as a diff against the run's own starting commit", () => {
+    const brief = after({ branches: [{ repo: "root", base: "abc123", branch: "agent/xyz" }] });
+    expect(brief).toContain("git diff abc123...agent/xyz");
+});
+
+test("a step that committed nothing says so, instead of leaving the reader to find an empty diff", () => {
+    const brief = after({ branches: [] });
+    expect(brief).toContain("no committed changes");
+    expect(brief).not.toContain("git diff");
+});
+
+// The shared-tree case: the work is simply in the tree the reader is standing in, and a paragraph about
+// branches would send it looking for one that was never made.
+test("a handover with no branch question says nothing about branches at all", () => {
+    expect(after({})).not.toContain("git diff");
+    expect(after({})).not.toContain("no committed changes");
 });

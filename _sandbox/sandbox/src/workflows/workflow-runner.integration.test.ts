@@ -91,7 +91,18 @@ test("steps run in dependency order and each is handed what the one before it pr
     expect(prompts[1]).toContain("plan says true");
     // A `json`-shaped document rides across as JSON, not as a paragraph mentioning it.
     expect(prompts[2]).toContain(`"note": "build"`);
-    expect(prompts[1]).toContain(`git diff ${REPOS[0].base}...agent/`);
+    /* AND NO DIFF IS PROMISED, because in this tree there is nothing to diff — see the header: the temp root
+     * has no git in it, so `agent/<conversation>` does not resolve in the one repository the run declares.
+     *
+     * This assertion used to be its exact opposite, and the inversion is the fix rather than a relaxation. The
+     * branch name is DERIVED from the conversation id, so it can always be written; whether it names anything
+     * is a separate question that nothing was asking. A reviewer handed the unresolved name runs the diff, gets
+     * nothing back, and reports that it found no problems — a pass over work it never saw, which is the exact
+     * failure the branch name was introduced to prevent. Resolved first (handover-branches.ts), the empty case
+     * becomes a sentence that says so.
+     */
+    expect(prompts[1]).not.toContain(`git diff`);
+    expect(prompts[1]).toContain(`no committed changes`);
     // And the first step, which was handed nothing, is not given an empty handover section.
     expect(prompts[0]).not.toContain("What the steps before you concluded");
 });

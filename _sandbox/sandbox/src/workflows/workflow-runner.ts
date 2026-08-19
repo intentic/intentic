@@ -17,6 +17,7 @@ import type { Services } from "../composition.js";
 // through agent.routes that loop-runner's header warns about.
 import { stopTurn } from "../agent/agent-steering.js";
 import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
+import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { workflowProjection } from "./workflow-state.js";
 import { stateRelPath } from "../workspace/state-paths.js";
@@ -392,25 +393,29 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
                 return BLOCKED;
             }
             const conversationId = before?.conversationId ?? "";
-            // The branch is named only when this step CANNOT simply look at the work: every fresh session is
-            // in its own worktree off the run's pinned snapshot, while a step that shares its predecessor's
-            // conversation is already standing in the tree that branch describes.
-            const handoverFrom = (entry: { parent: WorkflowStep; outcome: StepOutcome }): Handover => {
+            /* The branch is named only when this step CANNOT simply look at the work: every fresh session is
+             * in its own worktree off the run's pinned snapshot, while a step that shares its predecessor's
+             * conversation is already standing in the tree that branch describes.
+             *
+             * AND IT IS RESOLVED BEFORE IT IS NAMED. `agent/<conversation>` against every repo of the
+             * composition is a derived string, and three ordinary things falsify it — a step that touched one
+             * repo of six, a turn that ended unclean so nothing was committed, work that produced no diff
+             * against the pinned base. Handing an unresolved name on is how a reviewer ends up reading an empty
+             * diff and calling it a pass; handover-branches.ts explains why dropping is the safe direction and
+             * why an empty result is stated rather than hidden. */
+            const handoverFrom = async (entry: { parent: WorkflowStep; outcome: StepOutcome }): Promise<Handover> => {
                 const parentConversation = recorded.get(entry.parent.id)?.conversationId;
                 const separate = parentConversation !== undefined && parentConversation !== conversationId;
+                const branches = separate ? await resolvedBranches(services.workspace.root, run.repos, `agent/${parentConversation}`) : undefined;
                 return {
                     title: entry.parent.title,
                     document: entry.outcome.document,
                     report: entry.outcome.report,
                     ...(entry.outcome.reportPath !== undefined ? { reportPath: entry.outcome.reportPath } : {}),
-                    ...(separate
-                        ? {
-                              branches: run.repos.map(({ repo, base }) => ({ repo, base, branch: `agent/${parentConversation}` })),
-                          }
-                        : {}),
+                    ...(branches !== undefined ? { branches } : {}),
                 };
             };
-            const handovers: Handover[] = upstream.map(handoverFrom);
+            const handovers: Handover[] = await Promise.all(upstream.map(handoverFrom));
             await gate.take();
             try {
                 /* ASKED AGAIN ON THE FAR SIDE OF THE SLOT, and it is not the same question as the one above.

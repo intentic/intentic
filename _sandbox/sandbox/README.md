@@ -123,6 +123,10 @@ reports the profile.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.
+  A handover names a predecessor's branch only after resolving it (src/workflows/handover-branches.ts): the ref
+  has to exist and carry commits the pinned base does not, so a repository the step never touched is dropped
+  and a step that committed nothing says so — an unresolved name sends a reviewer to an empty diff, which comes
+  back as a pass over work it never saw.
 - Hold up the daemon's end of the creator pool — with NO usage telemetry, by design. Installing (or updating)
   a `tier: "premium"` extension donates the owner's credits to its publisher through the platform
   (src/platform/pool-donate.ts — the donation IS the premium gate, keyed on the checkout's own manifest
@@ -264,7 +268,7 @@ reports the profile.
   stopped existing and ten sessions went on naming them.
 - [src/auth/role-floor.ts](src/auth/role-floor.ts) — the minimum trust tier per route, in one table. [src/auth/auth.ts](src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches.
 - [src/workflows](src/workflows) — workflow scheduling, immutable run snapshots, restart recovery, run-ledger
-  retention, and complete handoff artifacts; [src/loops](src/loops) drives each individual step.
+  retention, and complete, resolved handoff artifacts; [src/loops](src/loops) drives each individual step.
 
 ## How it fits
 

@@ -62,7 +62,7 @@ export interface Handover {
     // Complete response artifact. `report` is deliberately only a ledger/UI preview; a downstream session must
     // be able to consume a long analysis or document without its middle silently disappearing.
     readonly reportPath?: string;
-    /* The branch the upstream step's work is on, for an ISOLATED run where this step is a fresh session.
+    /* The branches the upstream step's work is on, for an ISOLATED run where this step is a fresh session.
      *
      * This closes what would otherwise be a silent hole in the whole design. In an isolated run every fresh
      * step gets its own worktree off the run's pinned repository snapshot, so a reviewer told "check the implementation" opens a tree that
@@ -71,8 +71,16 @@ export interface Handover {
      * along: `git diff <pinned-base>...<branch>` is what reviewing a change actually is, and it works precisely
      * BECAUSE the sessions are separate.
      *
-     * Absent on a shared-tree run, where the work is simply there, and absent when the step is continuing the
-     * same session, where it is already in the worktree the step is standing in.
+     * THE THREE STATES ARE ALL DIFFERENT, and collapsing the last two is how the hole above reopens:
+     *
+     * - `undefined` — the question does not arise. A shared-tree run, or a step continuing the same session,
+     *   where the work is simply in the tree the reader is standing in. Say nothing.
+     * - a non-empty list — every entry has been RESOLVED (workflows/handover-branches.ts): the ref exists and
+     *   carries commits the pinned base does not. A diff command against one of these is known to show
+     *   something.
+     * - EMPTY — the question was asked and the answer was nothing. The step left no committed changes in any
+     *   repository of the composition. That has to be stated rather than omitted, because a reader who is told
+     *   nothing assumes the ordinary case and goes looking in its own tree.
      */
     readonly branches?: readonly { readonly repo: string; readonly base: string; readonly branch: string }[];
 }
@@ -80,18 +88,26 @@ export interface Handover {
 // One upstream step's output, as the next step reads it. A `json` document leads with its data because that is
 // what the step was promised and what it is expected to act on; the prose follows as context.
 const handoverFrom = ({ title, document, report, reportPath, branches }: Handover): string => {
+    /* Where to look, in the three states the field carries. The empty case says the thing nobody wants to
+     * write down — and is the only one of the three that changes what a reviewer does, because it is the one
+     * where the obvious next move (go and read the diff) is a waste of a turn that ends in a false all-clear. */
     const where =
         branches === undefined
             ? []
-            : [
-                  ``,
-                  `Its work is on the following branches. Each command compares against this run's exact starting commit, not against a branch name that may have moved:`,
-                  ...branches.map(({ repo, base, branch }) =>
-                      repo === "root"
-                          ? `- workspace root: \`git diff ${base}...${branch}\``
-                          : `- \`${repo}\`: \`git -C ${shellQuote(repo)} diff ${base}...${branch}\``,
-                  ),
-              ];
+            : branches.length === 0
+              ? [
+                    ``,
+                    `It left no committed changes in any repository, so there is no diff to read. Judge it on what it said above and on the current state of the tree — do not go looking for a branch of its work.`,
+                ]
+              : [
+                    ``,
+                    `Its work is on the following branches. Each command compares against this run's exact starting commit, not against a branch name that may have moved:`,
+                    ...branches.map(({ repo, base, branch }) =>
+                        repo === "root"
+                            ? `- workspace root: \`git diff ${base}...${branch}\``
+                            : `- \`${repo}\`: \`git -C ${shellQuote(repo)} diff ${base}...${branch}\``,
+                    ),
+                ];
     const full =
         reportPath === undefined
             ? []
