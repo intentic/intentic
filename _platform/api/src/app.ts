@@ -18,6 +18,7 @@ import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
 import { poolHttpRoutes } from "./pool/pool.routes.js";
+import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
@@ -380,6 +381,13 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * POOL_STRIPE_PRICE_ID are set, the trial's pattern: unset, everything under here 404s and no surface
      * anywhere offers a membership. */
     app.route(`/pool`, poolHttpRoutes({ config, prisma }));
+
+    /* The agent wallet's signer — a sandbox's two connect-token routes (see wallet/wallet.routes.ts): make
+     * this member's wallet, and mint one EIP-712 signature over one fully-specified USDC transfer, with the
+     * owner's caps re-checked HERE against this database rather than trusted from the container. Off unless
+     * WALLET_CUSTODY_URL + WALLET_CUSTODY_KEY are set, the pool's pattern: unset, everything under here
+     * 404s, no key material exists anywhere, and a sandbox's wallet card stays pending and says so. */
+    app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {

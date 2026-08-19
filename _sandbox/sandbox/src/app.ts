@@ -51,6 +51,7 @@ import { createSyncSshRoute } from "./platform/sync-ssh.js";
 import { soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
 import { relayServiceCatalog, relayServiceRun, relayServiceWant } from "./platform/pool-services.js";
 import { gatedServiceRun } from "./platform/service-offer.js";
+import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
@@ -1237,6 +1238,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const askRoutes = createCapabilityAskRoutes(services);
     app.get("/capabilities/connectable", askRoutes.connectable);
     app.post("/capabilities/ask", askRoutes.ask);
+
+    /* The wallet surface — the `wallet` CLI's three routes (wallet/wallet.routes.ts). `status` and `history`
+     * are reads; `fetch` is the one door money can leave through, and it enforces the whole consent story
+     * inline: the daemon makes the request itself, parses the endpoint's x402 challenge, checks the owner's
+     * policy, parks the agent's call on an approval card for anything outside the standing auto-approve
+     * band, has the PLATFORM sign (the key never enters this container), retries, and answers with the paid
+     * response. Same consent shape as the priced-services gate above: the model may ask, and only the
+     * owner's click (or their standing delegation) moves money. */
+    const walletRoutes = createWalletRoutes(services);
+    app.get("/wallet/status", walletRoutes.status);
+    app.post("/wallet/fetch", walletRoutes.fetch);
+    app.get("/wallet/history", walletRoutes.history);
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
     // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),

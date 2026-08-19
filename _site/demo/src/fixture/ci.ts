@@ -16,7 +16,7 @@ import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic
  * There is deliberately no REPEATED failure any more. The streak analysis (useFailureHistory) needs the same
  * job red in consecutive runs, and buying that costs a second red row plus a red banner across the top of the
  * board — a price the whole rest of the picture then pays. The analysis is exercised by its own unit tests
- * (failureHistory.test.ts), which is where a rule belongs; this fixture's job is to be a truthful afternoon.
+ * (ciStreaks.test.ts), which is where a rule belongs; this fixture's job is to be a truthful afternoon.
  *
  * Two shapes of job list, deliberately. GitLab reports a `stage` per job, so the api runs carry stages and the
  * row draws its circles from them; GitHub's jobs API has none, so the web runs carry only timestamps and the

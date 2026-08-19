@@ -1,0 +1,207 @@
+#!/usr/bin/env node
+// The in-sandbox wallet command — how an agent pays x402-payable endpoints in USDC from the sandbox wallet.
+// The ASK is the whole of it: `fetch` parks on the daemon, which makes the request itself, parses the
+// endpoint's own 402 challenge, checks the owner's policy caps, raises an approval card in the owner's chat
+// for anything outside their standing auto-approve band (wallet/payment-offer.ts), has the PLATFORM sign the
+// one-transfer authorization — the key never enters this container — and retries with the payment attached.
+// The agent never quotes a price the card doesn't already show, and cannot spend without the click or the
+// owner's standing delegation — the consent step is plumbing, not etiquette.
+//
+// It owns NO keys and NO economics: the daemon enforces policy at the route, and the platform signer
+// re-checks the same caps where the key lives, so this command is a terminal-shaped surface and nothing
+// else. `status` says what the wallet holds and what today's budget has left; `history` prints the ledger;
+// `fetch` prints the endpoint's response on stdout alone so it composes into pipes, with the receipt line on
+// stderr where it can't corrupt the data.
+//
+// node:http rather than fetch, deliberately: a parked `fetch` holds its connection for as long as the owner
+// takes to answer (bounded by the daemon's own deadline), and undici's default header timeout would kill the
+// wait at five minutes with the card still up.
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
+// three wallet routes this command drives, never to anything credential-shaped.
+
+import { readFileSync } from "node:fs";
+import { request } from "node:http";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
+// WHOSE chat the approval card belongs in. The daemon falls back to the sole live turn when it is unset.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
+const USAGE = `wallet — the sandbox's USDC balance, spendable on x402-payable endpoints under the owner's policy
+
+  wallet status                              address, network, balance, and what today's budget has left
+  wallet fetch <url> [options]               fetch a (possibly paid) endpoint; a 402 challenge is paid
+                                             from the wallet after policy and the owner's consent
+      --method <verb>                        request method (default GET)
+      --body <json>                          request body ("-" reads stdin); sets content-type json
+      --content-type <type>                  override the body's content type
+      --max <usd>                            your own ceiling for this one call, e.g. 0.50
+      --why "one line"                       your case for spending — shown verbatim on the card
+  wallet history                             the payment ledger, newest first
+
+\`fetch\` never pays on its own authority. The daemon makes the request, and on a 402 it checks the price
+against the owner's caps (per payment, per day) and raises an approval card in their chat — price, recipient
+and today's meter on it, parsed from the endpoint's own challenge — unless the price sits inside the owner's
+standing auto-approve band. A skip or an expired offer spends nothing and answers with a sentence to act on.
+One click covers one payment; ask again to repeat. Hold the command open — an answered card, onchain
+settlement (~2s) and the endpoint's real work all happen inside it.
+
+A paid response prints on stdout; the receipt ("paid $0.10, tx 0x…") prints on stderr. A free endpoint
+passes through untouched — \`wallet fetch\` on a 200 is just a fetch.`;
+
+const die = (message) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+};
+
+// Read lazily, not at startup: `wallet --help` has to work in any shell, including one where the daemon
+// isn't running yet — only an actual call needs the token.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`wallet: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
+// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
+const call = (method, path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () =>
+                resolve({
+                    status: response.statusCode ?? 502,
+                    text: raw,
+                    paidUsd: response.headers["x-intentic-paid-usd"] ?? null,
+                    transaction: response.headers["x-intentic-paid-tx"] ?? null,
+                }),
+            );
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
+    });
+
+// The daemon's refusals arrive as {error: {message}} or {error: string} — surface the sentence, which is
+// already written for the person reading the chat.
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.error === "string") return parsed.error;
+        if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    } catch {
+        // Not JSON — fall through to the raw text.
+    }
+    return text || "the daemon did not say why";
+};
+
+const status = async () => {
+    const { status: code, text } = await call("GET", "/wallet/status");
+    if (code !== 200) {
+        return die(`wallet: ${refusalOf(text)}`);
+    }
+    const answer = JSON.parse(text);
+    if (answer.connected !== true) {
+        process.stdout.write(`${answer.hint ?? "No wallet is connected."}\n`);
+        return;
+    }
+    process.stdout.write(`Address: ${answer.address ?? "(pending — the platform has not answered yet)"}\n`);
+    process.stdout.write(`Network: ${answer.networkLabel} (${answer.network}) — USDC only\n`);
+    if (answer.balanceUsd !== undefined) {
+        process.stdout.write(`Balance: $${answer.balanceUsd}\n`);
+    }
+    const p = answer.policy;
+    process.stdout.write(`Policy: max $${p.perPaymentMaxUsd}/payment · auto-approve ≤ $${p.autoApproveUnderUsd} · cap $${p.dailyCapUsd}/day\n`);
+    if (p.allow) process.stdout.write(`Auto-approve hosts: ${p.allow}\n`);
+    if (p.deny) process.stdout.write(`Denied hosts: ${p.deny}\n`);
+    process.stdout.write(`Today: $${answer.spentTodayUsd} spent or in flight, $${answer.remainingTodayUsd} left (resets midnight UTC)\n`);
+};
+
+const readStdin = async () => {
+    let raw = "";
+    for await (const chunk of process.stdin) {
+        raw += chunk;
+    }
+    return raw;
+};
+
+const fetchCommand = async (args) => {
+    const rest = [];
+    const options = {};
+    for (let i = 0; i < args.length; i += 1) {
+        if (args[i] === "--method" || args[i] === "--body" || args[i] === "--content-type" || args[i] === "--max" || args[i] === "--why") {
+            options[args[i].slice(2)] = args[i + 1] ?? "";
+            i += 1;
+        } else {
+            rest.push(args[i]);
+        }
+    }
+    const [url] = rest;
+    if (url === undefined) {
+        return die(USAGE);
+    }
+    const body = options.body === "-" ? await readStdin() : options.body;
+    const payload = JSON.stringify({
+        url,
+        ...(options.method !== undefined ? { method: options.method } : {}),
+        ...(body !== undefined ? { body } : {}),
+        contentType: options["content-type"] ?? (body !== undefined ? "application/json" : undefined),
+        ...(options.max !== undefined ? { maxUsd: options.max } : {}),
+        ...(options.why !== undefined ? { why: options.why } : {}),
+    });
+    const { status: code, text, paidUsd, transaction } = await call("POST", "/wallet/fetch", payload);
+    if (code < 200 || code >= 300) {
+        return die(`wallet: ${refusalOf(text)}`);
+    }
+    process.stdout.write(`${text}\n`);
+    if (paidUsd !== null) {
+        process.stderr.write(`(paid $${paidUsd}${transaction !== null ? `, tx ${transaction}` : ""})\n`);
+    }
+};
+
+const history = async () => {
+    const { status: code, text } = await call("GET", "/wallet/history");
+    if (code !== 200) {
+        return die(`wallet: ${refusalOf(text)}`);
+    }
+    const { payments } = JSON.parse(text);
+    if (!Array.isArray(payments) || payments.length === 0) {
+        process.stdout.write("No payments yet.\n");
+        return;
+    }
+    for (const row of payments) {
+        const when = new Date(row.at).toISOString();
+        const tx = row.transaction !== undefined ? ` tx ${row.transaction}` : "";
+        process.stdout.write(`${when} $${row.amountUsd} ${row.outcome}${row.auto ? " (auto)" : ""} ${row.host}${tx}\n`);
+    }
+};
+
+const main = async () => {
+    const [command, ...rest] = process.argv.slice(2);
+    if (command === "status") {
+        return status();
+    }
+    if (command === "fetch") {
+        return fetchCommand(rest);
+    }
+    if (command === "history") {
+        return history();
+    }
+    return die(USAGE);
+};
+
+main().catch((error) => die(`wallet: ${error?.message ?? error}`));

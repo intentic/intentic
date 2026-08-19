@@ -38,7 +38,9 @@ const UNRELAYABLE: RelayedAnswer = {
     contentType: "application/json",
 };
 
-const relay = (config: Config, method: "GET" | "POST", path: string, payload?: string): Promise<RelayedAnswer> =>
+// Exported for the wallet's signer relay (wallet/wallet-signer.ts), which is the same door with a different
+// path: one buffered platform call, authenticated by the connect token, refusals carried through verbatim.
+export const relayPlatform = (config: Config, method: "GET" | "POST", path: string, payload?: string): Promise<RelayedAnswer> =>
     new Promise((resolve) => {
         if (config.platform.url === "" || config.connectToken === "") {
             resolve(UNRELAYABLE);
@@ -84,11 +86,11 @@ const relay = (config: Config, method: "GET" | "POST", path: string, payload?: s
     });
 
 // The catalog + the owner's meter, as the platform states them.
-export const relayServiceCatalog = (config: Config): Promise<RelayedAnswer> => relay(config, "GET", "/pool/services");
+export const relayServiceCatalog = (config: Config): Promise<RelayedAnswer> => relayPlatform(config, "GET", "/pool/services");
 
 // One "the catalog had nothing for this", filed onto the platform's wanted list. Spends nothing, parks on no
 // card — it is a note to providers, not a run — so it relays as plainly as the catalog read above.
-export const relayServiceWant = (config: Config, body: string): Promise<RelayedAnswer> => relay(config, "POST", "/pool/wanted", body);
+export const relayServiceWant = (config: Config, body: string): Promise<RelayedAnswer> => relayPlatform(config, "POST", "/pool/wanted", body);
 
 export interface RelayedRunAnswer extends RelayedAnswer {
     // The run reached the platform's stream — set even when the stream then broke, so a consumer can tell "a

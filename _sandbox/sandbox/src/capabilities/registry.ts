@@ -16,6 +16,7 @@ import { pluginHandler } from "./handlers/plugin.js";
 import { serviceHandler } from "./handlers/service.js";
 import { sshHandler } from "./handlers/ssh.js";
 import { vpnHandler } from "./handlers/vpn.js";
+import { walletHandler } from "./handlers/wallet.js";
 
 // Every capability kind's handler. Total over CapabilityKind, so an unhandled kind is a compile error.
 export const registry: Record<CapabilityKind, CapabilityHandler> = {
@@ -35,4 +36,5 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     host: hostHandler,
     agent: agentHandler,
     endpoint: endpointHandler,
+    wallet: walletHandler,
 };

@@ -556,6 +556,68 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
      * platform accounts opened through it share that browser, which is what turns "Continue with Google" into
      * one click. The open-accounts switch is the consent that matters, so it is a field here with the warning
      * on its face — off by default, per identity, never global. */
+    /* THE WALLET — the agent's ability to buy things on the open web, and the card that bounds it.
+     *
+     * One per sandbox (there is one owner and one balance; a second entry would be a second opinion about
+     * the same money), and every field on it is a LIMIT rather than a credential: the signing key lives with
+     * the platform's custody provider and never enters the container, so what the owner is deciding here is
+     * exactly how much of their money an agent may move and how often it has to ask. Defaults are the
+     * conservative ones — every payment carded, small ceilings — because the safe posture must be the one a
+     * user gets by clicking through. */
+    {
+        id: "wallet",
+        name: "Wallet",
+        kind: "wallet",
+        category: "business",
+        icon: "credit-card",
+        description: "Let the agent pay per-call APIs in USDC.",
+        singleton: true,
+        fields: [
+            {
+                key: "network",
+                label: "Network",
+                default: "eip155:8453",
+                options: [
+                    { value: "eip155:8453", label: "Base — real USDC" },
+                    { value: "eip155:84532", label: "Base Sepolia — test money" },
+                ],
+                hint: "Start on test money: the whole flow — approval cards, budgets, receipts — works identically with faucet USDC and costs nothing.",
+            },
+            {
+                key: "perPaymentMaxUsd",
+                label: "Most per payment (USD)",
+                default: "1.00",
+                hint: "A hard ceiling. Anything dearer is refused outright — the agent cannot even ask.",
+            },
+            {
+                key: "dailyCapUsd",
+                label: "Most per day (USD)",
+                default: "5.00",
+                hint: "Across every payment, carded or not. Resets at midnight UTC.",
+            },
+            {
+                key: "autoApproveUnderUsd",
+                label: "Approve automatically under (USD)",
+                default: "0",
+                hint: "Leave at 0 and every single payment asks you in chat first. Raise it to let small payments through without interrupting you — they still count against the daily cap.",
+            },
+            {
+                key: "allow",
+                label: "Auto-approve only these hosts",
+                optional: true,
+                placeholder: "api.example.com, data.example.org",
+                hint: "Optional. With hosts listed, automatic approval applies only to them; everything else still asks. Ignored when automatic approval is off.",
+            },
+            {
+                key: "deny",
+                label: "Never pay these hosts",
+                optional: true,
+                placeholder: "sketchy.example",
+                hint: "Refused before any card goes up, whatever the price.",
+            },
+        ],
+        hint: "Your sandbox gets its own USDC wallet, held by the platform's custody provider — the agent never sees a key and cannot move money without your limits allowing it. Fund it by sending USDC to the address shown on the card after it connects, then the agent can pay any endpoint that charges per call over the x402 protocol. Every payment is receipted with its on-chain transaction.",
+    },
     {
         id: "identity",
         name: "Identity",

@@ -58,6 +58,7 @@ import { contributionRegistry } from "./capabilities/contributions.js";
 import { fileSecretVault, type SecretVault } from "./capabilities/secret-vault.js";
 import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
 import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
+import { fileWalletLedger, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
@@ -173,6 +174,7 @@ import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
+import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
@@ -328,6 +330,9 @@ export interface Services {
     // The use ledger those exits feed — one row per resolved reference or typed field, joined onto the
     // secrets inventory as each entry's "last used" (secrets/secret-uses.ts).
     readonly secretUses: SecretUsesStore;
+    // The wallet's payment record — one row per attempt that reached policy, opened before any signature is
+    // asked for and settled after the endpoint answers; the daily-cap arithmetic reads it (wallet/wallet-ledger.ts).
+    readonly walletLedger: WalletLedgerStore;
     // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
@@ -848,6 +853,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         onOwnerStopped: onTurnSettled,
         logger,
     });
+    /* A settled turn's outside-content bit is dropped with the turn (guard/turn-taint.ts). The bit's LIFETIME
+     * is the turn — a page read three tool calls ago still counts, the next turn starts clean — and the
+     * registry that publishes it to the daemon's own consult sites has to be told when that moment is. */
+    onTurnSettled(clearTurnTaint);
     // Hoisted like the presences above, and for the same reason: the attribution caches report into the
     // resource series — they are the structures whose silent growth was once the daemon's memory leak.
     const agentOrigins = createAgentOrigins({ agents, logger });
@@ -1040,6 +1049,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
         secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
+        walletLedger: fileWalletLedger(statePath(workspace.root, ".intentic/records/wallet-ledger.json")),
         trial,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,

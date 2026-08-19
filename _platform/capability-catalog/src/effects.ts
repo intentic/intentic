@@ -66,7 +66,15 @@ export type CapabilityEffect =
     // consequence of adding an endpoint: no file is written, no process runs, no image changes — the prompts,
     // file contents and command output of every turn on it simply leave for that URL. `url` is named because a
     // typo'd host is exactly the mistake this disclosure exists to catch before it is made.
-    | { readonly kind: "endpoint"; readonly url: string };
+    | { readonly kind: "endpoint"; readonly url: string }
+    /* Lets the agent spend REAL MONEY — the wallet card, and the only effect in this union whose consequence
+     * is measured in dollars. Its own member for the `machine` reason: nothing else here describes value
+     * leaving the owner's control, and a user reading "stores a credential" would not learn the thing that
+     * actually matters. The two numbers are the ceilings the signer enforces (per payment, per UTC day), and
+     * `carded` says whether every payment stops for a click or a band of them settles on the owner's
+     * standing delegation — which is the difference between "it asks" and "it asks sometimes", and exactly
+     * what a person deciding this needs on the row. */
+    | { readonly kind: "spend"; readonly perPaymentUsd: string; readonly dailyUsd: string; readonly carded: boolean };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -232,6 +240,20 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
         }
         return effects;
     },
+    /* Deliberately NO `secret` row, which is the most informative thing this card's disclosure can say: the
+     * signing key is held by the platform's custody provider and never enters the sandbox, so adding a
+     * wallet stores no credential here at all. What it does add is the spend itself, with the numbers the
+     * user is typing while they read the row. */
+    wallet: (input) => [
+        {
+            kind: "spend",
+            perPaymentUsd: filled(input.config["perPaymentMaxUsd"]) ? String(input.config["perPaymentMaxUsd"]) : "1.00",
+            dailyUsd: filled(input.config["dailyCapUsd"]) ? String(input.config["dailyCapUsd"]) : "5.00",
+            // Every payment stops for a click unless the owner opened an auto-approve band above zero.
+            carded: !filled(input.config["autoApproveUnderUsd"]) || Number(input.config["autoApproveUnderUsd"]) === 0,
+        },
+        { kind: "skill", name: "wallet" },
+    ],
 };
 
 export const capabilityEffects = (input: CapabilityEffectInput): readonly CapabilityEffect[] => KIND_EFFECTS[input.kind](input);

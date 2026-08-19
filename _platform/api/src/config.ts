@@ -330,6 +330,21 @@ export const configSchema = z.object({
             httpsCert: z.string().default(``),
         })
         .prefault({}),
+    /* THE AGENT WALLET's signer — the platform half of a sandbox spending USDC on x402 endpoints.
+     *
+     * `custodyUrl` + `custodyKey` are the switch, exactly like pool.stripeSecretKey: both empty (the
+     * default, and the right one for a self-hosted platform) and there is no signer — /wallet routes 404,
+     * a sandbox's wallet capability stays pending and says so on its card. The platform never holds key
+     * material either way: the credential here authenticates it to a custody provider that holds the
+     * member's wallet and signs with it (wallet/wallet-custody.ts). */
+    wallet: z
+        .object({
+            // The custody provider's API root. WALLET_CUSTODY_URL.
+            custodyUrl: z.string().default(``),
+            // The platform's API credential there. WALLET_CUSTODY_KEY.
+            custodyKey: z.string().default(``).meta({ secret: true }),
+        })
+        .prefault({}),
     // Pino logging. LOG_LEVEL sets verbosity; LOG_PRETTY toggles human-readable dev output (colorized,
     // in-process) vs. single-line JSON for prod. Defaults to pretty everywhere but production.
     log: z

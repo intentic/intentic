@@ -156,6 +156,16 @@ reports the profile.
   for the connection to come live, so the agent resumes in the same turn with the capability usable; a no is
   remembered for the conversation so a repeat ask never raises a second card. The model contributes one line
   of why and can connect nothing itself.
+- Let an agent **pay for things on the open web** out of a USDC wallet, under the owner's policy
+  (src/wallet/). The agent's `wallet fetch` (bin/wallet + the baked wallet skill) parks while the daemon
+  makes the request itself, reads the endpoint's own **x402** challenge (src/wallet/x402.ts — both live wire
+  revisions parsed into one quote; the rival MPP dialect refused by name rather than misread), checks the
+  wallet capability's caps, and raises the spend gate's card with every number taken from that challenge and
+  the payment ledger (src/wallet/payment-offer.ts). Payments inside the owner's standing auto-approve band
+  skip the card; everything else needs the click. **No key is ever in this container**: the signature over
+  the one-transfer EIP-3009 authorization is minted by the platform (src/wallet/wallet-signer.ts), which
+  re-checks the same caps where the key lives — the daemon's checks are the UX, the platform's are the
+  guarantee. A payment that fails after signing spends nothing, because the authorization expires unused.
 
 ## Key files
 
@@ -244,6 +254,11 @@ reports the profile.
   ([src/agent/agent-secrets.ts](src/agent/agent-secrets.ts)) and the browser's `type_secret`
   ([src/browser/secrets-tools.ts](src/browser/secrets-tools.ts)) — each use landing on the ledger
   (`src/secrets/secret-uses.ts`) the inventory joins as "last used".
+- [src/wallet/payment-offer.ts](src/wallet/payment-offer.ts) — the payment gate: probe unpaid, parse the
+  endpoint's challenge, check the owner's caps, card it (or not, inside their band), have the platform sign,
+  retry with payment, receipt what settled. The ledger row ([src/wallet/wallet-ledger.ts](src/wallet/wallet-ledger.ts))
+  opens BEFORE the signature is asked for — an unwritable ledger refuses the payment, and an in-flight row
+  holds its amount against the daily cap so two turns cannot race one budget.
 - [src/personas/personas.ts](src/personas/personas.ts) — who a turn is and what it may do, resolved in one
   function whose header carries the reasoning for why accounts default to nothing and powers default to
   everything. Identities count as accounts there — an unattended wake that names no persona loses them first. [src/personas/persona-scope.ts](src/personas/persona-scope.ts) is the folder limit and the

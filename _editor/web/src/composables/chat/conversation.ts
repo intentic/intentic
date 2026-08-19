@@ -1596,6 +1596,27 @@ export class Conversation {
         }
     }
 
+    /* The payment decision — the click that is the ONLY way a USDC payment can leave the wallet (the daemon
+     * holds the agent's `wallet fetch` parked until this settles it; wallet/payment-offer.ts). Approve
+     * releases exactly one payment at exactly the price on the card; skip spends nothing and tells the agent
+     * to carry on without it. The receipt that follows an approval arrives as its own frame and patches the
+     * card — nothing here predicts whether the endpoint will actually settle. */
+    async decidePaymentOffer(message: ChatMessage, approve: boolean): Promise<void> {
+        const offer = message.paymentOffer;
+        if (offer?.status !== `pending`) {
+            return;
+        }
+        const landed = await this.decide(
+            message.id,
+            { kind: `payment_offer`, requestId: offer.requestId, approve },
+            `Could not record your decision — the offer may have expired.`,
+            { paymentOffer: { ...offer, status: approve ? `approved` : `skipped` } },
+        );
+        if (landed) {
+            void this.drainQueue();
+        }
+    }
+
     /* The setup decision — the click that decides a missing-capability ask (the daemon holds the agent's
      * request parked until this settles it; capabilities/capability-offer.ts). Connect moves the card to
      * `connecting` — the owner is now setting it up, and the agent stays parked watching for the connection;

@@ -174,6 +174,18 @@ const STATE_FILES = [
      * secrets, and an export that dropped it would arrive claiming none had ever been touched. */
     { path: ".intentic/records/secret-uses.json", invalidates: ["secrets"], portability: "carry" },
 
+    /* The wallet's payment ledger — one row per payment attempt that reached policy (sandbox's
+     * wallet/wallet-ledger.ts): what was paid, to whom, how it settled, with the onchain transaction hash
+     * when the endpoint stated one. Holds amounts, hosts and addresses, never a credential — the signing key
+     * never enters the container at all — so it may `carry`: like the secret-use ledger, a spend history is
+     * about the owner's money, and an export that dropped it would arrive claiming none was ever spent. */
+    {
+        path: ".intentic/records/wallet-ledger.json",
+        invalidates: [],
+        why: "Rendered through the wallet CLI and the capability card's live status probe, not from a browser query key.",
+        portability: "carry",
+    },
+
     /* The named personas this sandbox shows the outside world — which connected accounts each one speaks for,
      * what a session wearing it may do, where it works (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
      * its own key because a card and the accounts it names are read together everywhere they are shown: connect

@@ -86,6 +86,10 @@ describe("contributionCard", () => {
             "plugin",
             "ssh",
             "vpn",
+            // Static for the docker/vpn reason in its strongest form: this card's fields are the ceilings a
+            // signer enforces on the owner's own money, and a card an extension could supply is a ceiling an
+            // extension could write. The handler and the card belong to the same core decision.
+            "wallet",
         ]);
     });
 

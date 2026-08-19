@@ -48,3 +48,30 @@ export const createTurnTaint = (born?: string): TurnTaint => {
 // A turn that can never be tainted — the shape callers use where no taint is tracked (a bench turn, a helper
 // one-shot). Its own object rather than `undefined` so consult sites stay branch-free.
 export const NO_TAINT: TurnTaint = { tainted: () => false, source: () => undefined, mark: () => {} };
+
+/* THE LIVE TURNS' BITS, BY CONVERSATION — so a consult site OUTSIDE the turn generator can ask the same
+ * question the command gate asks from inside it.
+ *
+ * There is exactly one such site today and it is the one that most needs the answer: the wallet's payment
+ * gate (wallet/payment-offer.ts) runs in the daemon's HTTP layer, because the agent's `wallet fetch` arrives
+ * as a request while its turn sits inside a Bash tool. A turn that has read a hostile page must not be able
+ * to spend on the owner's standing auto-approve delegation — that band was granted for the agent's own
+ * judgment, and a fetched page is exactly what replaces it — so the band is suspended while this bit is set
+ * and the payment asks in chat instead. Nothing else changes: the wallet still works, the caps still hold.
+ *
+ * A conversation's entry is replaced when its next turn mints one and cleared when the turn settles (wired
+ * in composition.ts). If a provider ever ran a turn without minting one, the stale entry would make the next
+ * turn ask MORE often rather than less — the safe direction, deliberately. */
+const live = new Map<string, TurnTaint>();
+
+export const publishTurnTaint = (conversationId: string, taint: TurnTaint): void => {
+    live.set(conversationId, taint);
+};
+
+export const clearTurnTaint = (conversationId: string): void => {
+    live.delete(conversationId);
+};
+
+// Whether the live turn in this conversation has taken in outside content. Unknown conversation ⇒ false: no
+// turn of ours is running there, and the payment gate's own "is there a live run" check is what refuses that.
+export const conversationTainted = (conversationId: string): boolean => live.get(conversationId)?.tainted() ?? false;

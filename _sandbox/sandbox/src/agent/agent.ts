@@ -41,7 +41,7 @@ import { type SecretAccess, secretCommandHooks } from "./agent-secrets.js";
 import { commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { outsideResultHooks } from "../guard/outside-results.js";
-import { createTurnTaint } from "../guard/turn-taint.js";
+import { createTurnTaint, publishTurnTaint } from "../guard/turn-taint.js";
 import { type PersonaScope, personaScopeHooks } from "../personas/persona-scope.js";
 import type { JsExecutionPlan } from "../execution/js-runtime.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../execution/js-tool.js";
@@ -478,6 +478,12 @@ const baseOptions = (
      * below: the wrap hook SETS it (a page fetched, a foreign server answered) and the command gate READS it
      * per command. Born set when a stranger caused the wake at all (guard/turn-taint.ts). */
     const taint = createTurnTaint(request.outsideWake);
+    /* Published for the consult sites that live OUTSIDE this generator — today the wallet's payment gate,
+     * which runs in the daemon's HTTP layer and suspends the owner's auto-approve band while this is set
+     * (guard/turn-taint.ts). Cleared when the turn settles, wired in composition.ts. */
+    if (request.conversationId !== undefined) {
+        publishTurnTaint(request.conversationId, taint);
+    }
     return {
         cwd: request.cwd,
         // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its

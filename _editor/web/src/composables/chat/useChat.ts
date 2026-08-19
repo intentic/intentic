@@ -598,6 +598,8 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     decideServiceOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decideServiceOffer(message, approve),
     // The setup click for a missing-capability ask — connect (and go set it up) or continue without it.
     decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
+    // The pay click for a USDC payment — the only thing that releases it (or skips it, spending nothing).
+    decidePaymentOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decidePaymentOffer(message, approve),
     // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
     declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
     // The same for a terminal-help card; "hand back" lives on the terminal panel, over the waiting prompt.

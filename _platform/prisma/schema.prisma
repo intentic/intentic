@@ -39,6 +39,7 @@ model User {
     publisherClaims  PublisherClaim[]
     payoutAccount    PayoutAccount?
     payouts          CreatorPayout[]
+    wallets          Wallet[]
 
     @@map("user")
 }
@@ -506,6 +507,66 @@ model ServiceWant {
     @@index([userId, createdAt])
     @@index([createdAt])
     @@map("service_want")
+}
+
+/* THE MEMBER'S OWN USDC WALLET — one per (account, network), and the reason the platform is in this story at
+ * all: the sandbox container is not a key boundary (its daemon and its agent both run as root in one
+ * container, which SECURITY.md states as the threat model), so a wallet the agent could read is a wallet the
+ * agent can drain. The key therefore lives on the far side of the connect token, and not even here as raw
+ * material — `providerWalletId` names a wallet held by a regulated custody API, and this row is the join
+ * from an account to it plus the caps the signer enforces.
+ *
+ * OWNER-SCOPED, NEVER POOLED, and that is a compliance property rather than a schema preference: funds are
+ * the member's own, the platform never aggregates or moves value between accounts, and every signature is
+ * one instruction from that member's own balance. `perPaymentMaxUsd`/`dailyCapUsd` mirror the sandbox
+ * capability card's policy — re-sent on every apply, and re-checked HERE on every signature, so a
+ * compromised sandbox can at worst spend what its owner already delegated.
+ *
+ * Amounts are decimal strings in USD (USDC's display form, six decimals): the signer's arithmetic runs in
+ * atomic units, and a float column would be a rounding bug in the money path. */
+model Wallet {
+    id               String          @id @default(cuid())
+    userId           String
+    user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // CAIP-2 ("eip155:8453"). Part of the unique key: mainnet and testnet wallets coexist per account.
+    network          String
+    // The public address — what the owner funds and what the sandbox is told.
+    address          String
+    // The custody provider's own id for this wallet. Not a credential (the provider authenticates the
+    // platform's API key separately), but never served to a sandbox either — it is a signing handle.
+    providerWalletId String
+    perPaymentMaxUsd String          @default("1.00")
+    dailyCapUsd      String          @default("5.00")
+    createdAt        DateTime        @default(now())
+    updatedAt        DateTime        @updatedAt
+    payments         WalletPayment[]
+
+    @@unique([userId, network])
+    @@index([userId])
+    @@map("wallet")
+}
+
+// One signature the platform minted — the unfakeable half of the sandbox's own ledger, and what the daily
+// cap is actually computed from (the sandbox's copy is what the owner reads where they already are; this is
+// what the signer trusts). A row is written BEFORE the signature is returned, so two concurrent requests
+// cannot both fit under the same remaining cap. `day` is the UTC day the cap resets on, keyed like
+// CreditSpend so the sum is an index scan rather than a date computation.
+model WalletPayment {
+    id        String   @id @default(cuid())
+    walletId  String
+    wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+    userId    String
+    day       String
+    // USD decimal string, as signed.
+    amountUsd String
+    // Where it went: the paid endpoint's hostname, and the recipient address off the challenge.
+    host      String
+    payTo     String
+    createdAt DateTime @default(now())
+
+    @@index([walletId, day])
+    @@index([userId, createdAt])
+    @@map("wallet_payment")
 }
 
 /* WHO A PUBLISHER NAME BELONGS TO — the join the pool has never had. Earnings accrue against the manifest's

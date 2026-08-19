@@ -56,6 +56,7 @@ const {
     decidePermission,
     decideServiceOffer,
     decideCapabilityOffer,
+    decidePaymentOffer,
     declineBrowserHelp,
     declineTerminalHelp,
     awaitingDecision,
@@ -1402,6 +1403,66 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
                     <ChatDecisionButton tone="secondary" icon="times" @click="decideServiceOffer(message, false)">Skip — free</ChatDecisionButton>
+                </div>
+            </div>
+
+            <!-- A USDC payment asking for the owner's click — the wallet's spend gate. Every number on it is
+                 the daemon's arithmetic over the ENDPOINT's own 402 challenge and the wallet's ledger, never
+                 typed by the model; the agent's own words are the one `why` line. The click here is the ONLY
+                 way the money can move: the agent's command sits parked on the daemon until this card settles
+                 it, and the signature is minted off-box by the platform only after it does. -->
+            <div v-if="message.paymentOffer" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="credit-card" class="text-sm text-primary-500" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
+                        >Pay ${{ message.paymentOffer.offer.amountUsd }} {{ message.paymentOffer.offer.assetName }}?</span
+                    >
+                    <span v-if="message.paymentOffer.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
+                    <span v-else-if="message.paymentOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
+                    <span v-else-if="message.paymentOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span v-if="message.paymentOffer.offer.description" class="text-xs text-content/85">{{
+                        message.paymentOffer.offer.description
+                    }}</span>
+                    <!-- The URL in full on hover: which endpoint is being paid is the fact this card exists to
+                         put in front of the owner, and a truncated host is exactly how a lookalike gets paid. -->
+                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.url"
+                        >{{ message.paymentOffer.offer.url }}</span
+                    >
+                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.payTo"
+                        >To {{ message.paymentOffer.offer.payTo }}</span
+                    >
+                    <span v-if="message.paymentOffer.offer.why" class="text-2xs text-subtle"
+                        >The agent's case: {{ message.paymentOffer.offer.why }}</span
+                    >
+                    <span class="pt-1 font-mono text-xs text-content">
+                        ${{ message.paymentOffer.offer.amountUsd }} · ${{ message.paymentOffer.offer.spentTodayUsd }} of ${{
+                            message.paymentOffer.offer.dailyCapUsd
+                        }}
+                        spent today
+                    </span>
+                </div>
+
+                <!-- The receipt, from the endpoint's own settlement answer: what was paid and the onchain
+                     transaction, or the one honest failure — a payment that never settled spends nothing,
+                     because the signed authorization simply expires. -->
+                <div v-if="message.paymentOffer.receipt" class="border-t border-line px-3.5 py-2.5">
+                    <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
+                        >Paid ${{ message.paymentOffer.receipt.amountUsd }}<template v-if="message.paymentOffer.receipt.transaction">
+                            · {{ message.paymentOffer.receipt.transaction }}</template
+                        ></span
+                    >
+                    <span v-else class="text-2xs text-muted">The payment didn't go through — nothing was spent.</span>
+                </div>
+
+                <div v-if="message.paymentOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <ChatDecisionButton tone="primary" icon="check" @click="decidePaymentOffer(message, true)"
+                        >Pay ${{ message.paymentOffer.offer.amountUsd }}</ChatDecisionButton
+                    >
+                    <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
+                    <ChatDecisionButton tone="secondary" icon="times" @click="decidePaymentOffer(message, false)">Skip — free</ChatDecisionButton>
                 </div>
             </div>
 

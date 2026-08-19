@@ -124,6 +124,24 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     endpoint: [
         { id: "ollama", kind: "endpoint", config: { baseUrl: "https://x.example.com", protocol: "openai", apiKey: "sk-x", headers: "X-A: b" } },
     ],
+    // Maximal like every sample here, and the kind with the least to hide: the wallet's signing key never
+    // enters this container, so its config is an address and the owner's own policy numbers — every one of
+    // which the handler echoes, which is exactly what this guard is checking it still does.
+    wallet: [
+        {
+            id: "wallet",
+            kind: "wallet",
+            config: {
+                network: "eip155:8453",
+                address: "0x857b06519E91e3A54538791bDbb0E22373e36b66",
+                perPaymentMaxUsd: "1.00",
+                autoApproveUnderUsd: "0.25",
+                dailyCapUsd: "5.00",
+                allow: "api.example.com",
+                deny: "sketchy.example",
+            },
+        },
+    ],
 };
 
 // Exactly what withSecretVault's upsert writes: the vaulted keys replaced by the marker, everything else as it

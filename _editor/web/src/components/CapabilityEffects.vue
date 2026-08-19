@@ -86,6 +86,17 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                         ? `Sends this sandbox's prompts, files and command output to the model API you configure`
                         : `Sends this sandbox's prompts, files and command output to ${effect.url}`,
             };
+        case "spend":
+            // Warned like `machine`, and for the same reason: the consequence leaves the sandbox and cannot be
+            // undone by removing the card. The row leads with the ceiling and says plainly whether the agent
+            // has to ask each time, because that is the sentence the reader is actually deciding about.
+            return {
+                icon: `credit-card`,
+                label: effect.carded
+                    ? `Lets the agent spend real money — up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and it asks you in chat every time`
+                    : `Lets the agent spend real money — up to $${effect.perPaymentUsd} per payment and $${effect.dailyUsd} a day, and small payments go through without asking`,
+                warn: true,
+            };
     }
 };
 

@@ -70,7 +70,16 @@ const agentReach = (method: string, path: string): boolean =>
     // asked of the model; nothing here reads a secret, and a want spends nothing (the platform caps it).
     (method === "GET" && path === "/pool/services") ||
     (method === "POST" && path === "/pool/wanted") ||
-    (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path));
+    (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path)) ||
+    // The wallet surface the `wallet` CLI drives: what the wallet holds and has left today, one paid fetch,
+    // and the payment history. The spend is bounded by the owner's policy caps twice over (the daemon's
+    // check at the route, the platform signer's re-check where the key lives), and every payment outside the
+    // owner's standing auto-approve band parks on an owner-approval card before anything is signed
+    // (wallet/payment-offer.ts) — consent enforced at the route, like the services gate above. Nothing here
+    // reads a key: the container never holds one.
+    (method === "GET" && path === "/wallet/status") ||
+    (method === "POST" && path === "/wallet/fetch") ||
+    (method === "GET" && path === "/wallet/history");
 
 /* The WIDE grant — a panel's backend is server-side code running inside this container that legitimately acts
  * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one

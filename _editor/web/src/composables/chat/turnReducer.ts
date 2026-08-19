@@ -10,6 +10,7 @@ import {
     type PermissionStatus,
     type PlanStatus,
     type QuestionStatus,
+    type PaymentOfferStatus,
     type ServiceOfferStatus,
     type TerminalHelpStatus,
 } from "./transcript";
@@ -347,6 +348,9 @@ const serviceOfferStatusOf = (reply: AgentReply | undefined): ServiceOfferStatus
 // `connecting` and stays there until the capability_outcome frame says how the setup ended.
 const capabilityOfferStatusOf = (reply: AgentReply | undefined): CapabilityOfferStatus =>
     reply?.kind !== `capability_offer` ? `cancelled` : reply.connect ? `connecting` : `skipped`;
+// A yes settles the decision; whether the money actually moved is the payment_receipt frame's to say.
+const paymentOfferStatusOf = (reply: AgentReply | undefined): PaymentOfferStatus =>
+    reply?.kind !== `payment_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
 
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
@@ -378,6 +382,9 @@ const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resol
         }
         if (message.capabilityOffer?.requestId === event.requestId) {
             return { ...message, capabilityOffer: { ...message.capabilityOffer, status: capabilityOfferStatusOf(event.reply) } };
+        }
+        if (message.paymentOffer?.requestId === event.requestId) {
+            return { ...message, paymentOffer: { ...message.paymentOffer, status: paymentOfferStatusOf(event.reply) } };
         }
         return message;
     }),
@@ -580,6 +587,40 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             }));
             return step({ ...attached, bubbleId: null });
         }
+        case `payment_offer`: {
+            // Same flow as the service offer above: the asking `wallet fetch` sits inside a tool call of this
+            // same turn, so the endpoint's answer lands in that tool's own output — the card carries the
+            // decision and, via the receipt frame below, whether the money actually moved.
+            const opened = withBubble(flushPending(state));
+            const attached = mapMessage(opened.state, opened.id, (message) => ({
+                ...message,
+                paymentOffer: { requestId: event.requestId, offer: event.offer, status: `pending` },
+            }));
+            return step({ ...attached, bubbleId: null });
+        }
+        case `payment_receipt`:
+            // How the approved payment ended, patched onto the card the requestId names: settled (with its
+            // onchain transaction), or failed — in which case the authorization expired unused and the card
+            // can honestly say nothing was spent.
+            return step({
+                ...state,
+                messages: state.messages.map((message): ChatMessage =>
+                    message.paymentOffer?.requestId === event.requestId
+                        ? {
+                              ...message,
+                              paymentOffer: {
+                                  ...message.paymentOffer,
+                                  receipt: {
+                                      outcome: event.outcome,
+                                      amountUsd: event.amountUsd,
+                                      ...(event.transaction !== undefined ? { transaction: event.transaction } : {}),
+                                      ...(event.network !== undefined ? { network: event.network } : {}),
+                                  },
+                              },
+                          }
+                        : message,
+                ),
+            });
         case `capability_outcome`:
             // How an accepted ask's setup ended, patched onto the card the requestId names — what settles the
             // "waiting for you to finish setup" state, here and on every replaying surface.

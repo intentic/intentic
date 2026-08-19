@@ -1333,6 +1333,14 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         requestId: z.string().min(1),
         connect: z.boolean(),
     }),
+    // A USDC payment's yes or no. The click is the ONLY way the money can move — the daemon holds the agent's
+    // `wallet fetch` parked until this settles it (wallet/payment-offer.ts) — so `approve` carries no
+    // qualifiers: one true releases exactly one payment, and anything else spends nothing.
+    z.object({
+        kind: z.literal("payment_offer"),
+        requestId: z.string().min(1),
+        approve: z.boolean(),
+    }),
 ]);
 export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
@@ -3190,6 +3198,7 @@ export const CapabilityKindSchema = z.enum([
     "host",
     "agent",
     "endpoint",
+    "wallet",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
@@ -3591,6 +3600,47 @@ export const EndpointConfigSchema = z.object({
     apiKey: z.string().optional(),
     headers: z.string().optional(),
 });
+/* THE SANDBOX WALLET — a USDC balance the agent can spend on x402-payable endpoints, under owner policy.
+ *
+ * WHAT IS DELIBERATELY NOT HERE IS A KEY. The signing key lives with the PLATFORM (one wallet per owner,
+ * reached with the connect token the agent's grant never covers) — the container filesystem is explicitly not
+ * a boundary in this codebase's threat model (see the daemon's secret-vault.ts header), so the key does not
+ * enter the container at all. `address` is the wallet's PUBLIC address, written back by the handler's apply
+ * from the platform's answer, never typed by anyone: it is where the owner sends USDC, and everything the
+ * agent may know.
+ *
+ * POLICY IS THE OWNER'S DELEGATION, and its defaults are the conservative ones: every payment raises an
+ * approval card (`autoApproveUnderUsd: "0"`), bounded per payment and per UTC day. The daemon enforces it at
+ * the route AND the platform re-validates at the signer — the daemon's check is UX, the signer's is the
+ * guarantee, so a compromised container can at worst request what the owner already permitted. Amounts are
+ * DECIMAL STRINGS, never floats: the daemon does its arithmetic in the token's atomic units (USDC has six
+ * decimals), and a float here would be a rounding bug wearing a type.
+ *
+ * `allow`/`deny` are hostname lists (comma- or newline-separated). Empty allow = any host, each behind its
+ * card; deny wins over allow. One capability per sandbox (singleton card): a second balance would just be a
+ * second opinion about the same owner's wallet. */
+const usdAmount = z
+    .string()
+    .regex(/^\d+(\.\d{1,6})?$/, "a USD amount like 0.50 (up to six decimals — USDC's own precision)");
+export const WalletNetworkSchema = z.enum(["eip155:8453", "eip155:84532"]);
+export type WalletNetwork = z.infer<typeof WalletNetworkSchema>;
+export const WalletConfigSchema = z.object({
+    // The chain payments settle on, CAIP-2. Base mainnet, or Base Sepolia for test mode (faucet USDC, the
+    // whole flow — cards, ledger, receipts — with zero real money).
+    network: WalletNetworkSchema.default("eip155:8453"),
+    // The wallet's public address — the platform's answer at apply time, never a form field.
+    address: z.string().optional(),
+    // Hard per-payment ceiling: over it the route refuses without raising a card.
+    perPaymentMaxUsd: usdAmount.default("1.00"),
+    // Payments at or under this settle without a card, inside the daily cap. "0" = every payment is carded.
+    autoApproveUnderUsd: usdAmount.default("0"),
+    // The UTC-day ceiling across all payments, carded or not.
+    dailyCapUsd: usdAmount.default("5.00"),
+    allow: z.string().optional(),
+    deny: z.string().optional(),
+});
+export type WalletConfig = z.infer<typeof WalletConfigSchema>;
+
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
 export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
@@ -3639,6 +3689,8 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     // precedent, with the prefix because these two are the only capability kinds that mint providers and they
     // want opposite ability records (an ACP agent owns its own loop; an endpoint runs the full Claude Code one).
     z.object({ id: entryId, kind: z.literal("endpoint"), config: EndpointConfigSchema }),
+    // The sandbox's USDC wallet (WalletConfigSchema) — one per sandbox; the key never enters the container.
+    z.object({ id: entryId, kind: z.literal("wallet"), config: WalletConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 

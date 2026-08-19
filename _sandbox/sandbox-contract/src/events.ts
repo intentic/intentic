@@ -119,6 +119,32 @@ export const ServiceRunReceiptSchema = z.object({
 });
 export type ServiceRunReceipt = z.infer<typeof ServiceRunReceiptSchema>;
 
+/* ONE OUTBOUND USDC PAYMENT, OFFERED — the card the daemon raises when the agent asks to pay an x402
+ * endpoint out of the sandbox wallet (wallet/payment-offer.ts). Every number on it is the daemon's own
+ * arithmetic over the ENDPOINT's parsed challenge and the wallet's own ledger — the model that asked
+ * contributes `why` (its one line of rationale) and nothing else, which is what makes the price on the card
+ * impossible to misquote, and the click on it the only way the money can move. */
+export const PaymentOfferSchema = z.object({
+    // The paid resource, as the endpoint's challenge stated it.
+    url: z.string(),
+    description: z.string().optional(),
+    // Where the money goes, verbatim off the challenge: recipient address, CAIP-2 network, token contract.
+    payTo: z.string(),
+    network: z.string(),
+    asset: z.string(),
+    // The token's display name ("USDC") — dollar-pegged, which is what lets every amount below read as USD.
+    assetName: z.string(),
+    // The exact price in display units ("0.10") — the x402 exact scheme has no ranges, so this is the whole
+    // spend, not a ceiling.
+    amountUsd: z.string(),
+    // The wallet's meter as the daemon's ledger states it — what "spent today / cap" renders from.
+    spentTodayUsd: z.string(),
+    dailyCapUsd: z.string(),
+    // The agent's one-line case for paying — the only prose on the card that is the model's.
+    why: z.string().optional(),
+});
+export type PaymentOffer = z.infer<typeof PaymentOfferSchema>;
+
 // One provider-advertised slash command — an ACP agent's available_commands entry, or a Claude Code session's
 // supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
 // `hint` is the argument placeholder the popover shows after the name.
@@ -641,6 +667,24 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         requestId: z.string(),
         outcome: z.enum(["connected", "unfinished"]),
         id: z.string().optional(),
+    }),
+    /* A USDC payment awaiting the owner's click. Raised OUTSIDE the turn generator exactly like the service
+     * offer above (the daemon's wallet route parks the agent's `wallet fetch` call and pushes this frame into
+     * the live run; wallet/payment-offer.ts), so it is not journalled for restore either: its waiter is the
+     * CLI's held connection, which dies with the daemon. Settles through the same `POST /agent/reply`. */
+    z.object({ kind: z.literal("payment_offer"), requestId: z.string(), offer: PaymentOfferSchema }),
+    /* How an approved (or auto-approved) payment ended, pushed after the endpoint answered so the card can
+     * settle as a receipt rather than a promise: `paid` — the endpoint confirmed settlement (`transaction` is
+     * the onchain hash when it stated one); `failed` — the payment was refused or settlement failed, in which
+     * case the signed authorization expires unused and NOTHING left the wallet. A skip needs no receipt —
+     * nothing moved, and `resolved` already says so. */
+    z.object({
+        kind: z.literal("payment_receipt"),
+        requestId: z.string(),
+        outcome: z.enum(["paid", "failed"]),
+        amountUsd: z.string(),
+        transaction: z.string().optional(),
+        network: z.string().optional(),
     }),
     // The card above named by `requestId` is released — the user answered (or dismissed it, or the turn was
     // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its

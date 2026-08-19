@@ -430,6 +430,10 @@ COPY --chmod=755 _sandbox/sandbox/bin/services /usr/local/bin/services
 # ask the owner in chat to connect one. Same shape as services — it relays through the daemon, which owns the
 # consent card and the setup watch; the CLI connects nothing and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
+# The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable
+# endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
+# consent card and the ledger; the signing key lives with the platform and never enters this container.
+COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

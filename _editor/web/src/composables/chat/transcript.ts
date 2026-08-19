@@ -1,6 +1,7 @@
 import type {
     AskQuestion,
     CapabilityOffer,
+    PaymentOffer,
     PermissionAsk,
     ServiceOffer,
     ServiceStreamEvent,
@@ -105,6 +106,22 @@ export interface ServiceOfferRequest {
     // How an approved run ended (the service_receipt frame): served and charged, refunded in full because the
     // service failed to answer, or refused by the platform after the click (a raced-out allowance).
     readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };
+}
+
+/* A USDC payment awaiting the owner's click — the daemon's payment gate (wallet/payment-offer.ts).
+ * 'pending' shows Pay/Skip with the endpoint's own price and the wallet's meter; 'approved'/'skipped' freeze
+ * the decision. 'cancelled' is nobody answering — the turn stopped under the card, the asking command died,
+ * or the offer expired — every one of which spent nothing. */
+export type PaymentOfferStatus = ServiceOfferStatus;
+
+export interface PaymentOfferRequest {
+    readonly requestId: string;
+    readonly offer: PaymentOffer;
+    readonly status: PaymentOfferStatus;
+    // How an approved payment ended (the payment_receipt frame): settled (with its onchain transaction hash
+    // when the endpoint stated one), or failed — in which case the signed authorization expired unused and
+    // nothing left the wallet.
+    readonly receipt?: { readonly outcome: "paid" | "failed"; readonly amountUsd: string; readonly transaction?: string; readonly network?: string };
 }
 
 /* A missing capability asking for the owner's setup — the daemon's setup gate (capabilities/
@@ -301,6 +318,9 @@ export interface ChatMessage {
     // Set when this turn asked the owner to connect a missing capability; carries the decision and, once
     // accepted, how the setup ended.
     readonly capabilityOffer?: CapabilityOfferRequest;
+    // Set when this turn asked to pay an endpoint from the wallet; carries the decision and, once paid, the
+    // receipt with its onchain transaction.
+    readonly paymentOffer?: PaymentOfferRequest;
     // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
     // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably
     // (mapTool rewrites by id), so it's readonly to the element level like `attachments`.
@@ -316,7 +336,16 @@ export interface ChatMessage {
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
-export const CARD_KINDS = ["plan", "question", "permission", "browserHelp", "terminalHelp", "serviceOffer", "capabilityOffer"] as const;
+export const CARD_KINDS = [
+    "plan",
+    "question",
+    "permission",
+    "browserHelp",
+    "terminalHelp",
+    "serviceOffer",
+    "capabilityOffer",
+    "paymentOffer",
+] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
@@ -338,6 +367,7 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
         ...(message.terminalHelp?.status === `pending` ? { terminalHelp: { ...message.terminalHelp, status: `cancelled` } } : {}),
         ...(message.serviceOffer?.status === `pending` ? { serviceOffer: { ...message.serviceOffer, status: `cancelled` } } : {}),
         ...(message.capabilityOffer?.status === `pending` ? { capabilityOffer: { ...message.capabilityOffer, status: `cancelled` } } : {}),
+        ...(message.paymentOffer?.status === `pending` ? { paymentOffer: { ...message.paymentOffer, status: `cancelled` } } : {}),
     };
 };
 
