@@ -230,8 +230,19 @@ const fit = (): void => void flow.value?.fitView(FIT);
                     data.dimmed === true ? `opacity-30` : ``,
                 ]"
             >
-                <!-- The card's whole face is the select target; the handles and the add button sit over it. -->
-                <button type="button" v-tooltip.top="data.tooltip" class="block h-full w-full overflow-hidden text-left" @click="toggle(data.id)">
+                <!-- The card's whole face is the select target; the handles and the add button sit over it.
+
+                     IT IS `relative` AND ROUNDED, AND BOTH ARE LOAD-BEARING RATHER THAN COSMETIC. A card's slot
+                     content may position something against the card's own edge — the workflow card's status
+                     stripe runs `inset-y-0 left-0` down the leading edge — and an `overflow-hidden` on a static
+                     element does NOT clip a descendant whose containing block is an ancestor of it. Without
+                     `relative` here the stripe resolved against the FRAME instead, escaped this clip entirely,
+                     and painted its square corners over the frame's rounded ones: two dark notches at the top
+                     and bottom of the leading edge, visible the moment a selected card put a ring behind them.
+                     5px rather than `rounded-md` because the frame's 6px radius is its BORDER box; the padding
+                     box this button fills curves at 6 − 1. DagGraph never had the bug because its card is one
+                     element — border, rounding and clip on the same box. -->
+                <button type="button" v-tooltip.top="data.tooltip" class="relative block h-full w-full overflow-hidden rounded-[5px] text-left" @click="toggle(data.id)">
                     <slot name="node" :node="data" :selected="data.id === selectedId" />
                 </button>
                 <Handle type="target" :position="targetPosition" class="dag-editor-handle" />

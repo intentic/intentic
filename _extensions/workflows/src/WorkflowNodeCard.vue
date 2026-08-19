@@ -18,8 +18,13 @@ const { node } = defineProps<{ node: WorkflowNode }>();
 
 <template>
     <span class="flex h-full flex-col justify-center gap-0.5 py-1.5 pl-3 pr-2.5">
-        <!-- Status stripe down the leading edge — the layer you scan before reading a word. -->
-        <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-l-md" :class="toneFor(node).bar"></span>
+        <!-- Status stripe down the leading edge — the layer you scan before reading a word.
+
+             SQUARE, and the card's own clip is what rounds it. It used to carry `rounded-l-md`, which cannot
+             work: at 2px wide the browser scales a 6px radius down to 2px, so the stripe followed a curve of
+             its own that met the card's nowhere. The frame it sits in is rounded and clips, in both the run
+             view and the designer — so the honest shape is no shape, and one element owns the corner. -->
+        <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="toneFor(node).bar"></span>
         <span class="flex items-center gap-1.5">
             <Icon :name="toneFor(node).icon" class="shrink-0 text-2xs" :class="[toneFor(node).text, toneFor(node).spin ? `animate-spin` : ``]" />
             <span class="min-w-0 flex-1 truncate text-xs font-medium leading-tight text-content">{{ node.step.title }}</span>
