@@ -10,6 +10,7 @@ import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
+import { useSkin } from "../../skins/useSkin";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), the one colour the whole app
  * is built out of, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX
@@ -50,10 +51,36 @@ const applyImport = (): void => {
 
 // SegmentedControl option lists — labels capitalized, values are the raw token strings the composables store.
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
-const schemeOptions = [
+
+/* ── SKINS ────────────────────────────────────────────────────────────────────────────────────────────────
+ * A skin is a whole-interface look rather than a colour (src/skins/README.md), and it rides the THEME row
+ * alongside the two colour schemes because "which theme am I in" is one question. Asked as two controls it
+ * becomes two, and someone ends up sitting in a light scheme with a dark instrument panel drawn over it,
+ * looking for the switch that undoes it.
+ *
+ * So the value is the skin when one is on and the colour scheme otherwise, and picking a scheme drops the
+ * skin — one row, one answer, no state you can get into that the row cannot show you.
+ *
+ * TO REMOVE SKINS ENTIRELY: delete this block and the `useSkin` import, drop `hud` from the options, and put
+ * `:model-value="scheme"` / `@update:model-value="setScheme"` back on the row's control. */
+const { skin, setSkin } = useSkin();
+type ThemeChoice = "light" | "dark" | "hud";
+const themeOptions = [
     { label: `Light`, value: `light` as const },
     { label: `Dark`, value: `dark` as const },
+    { label: `HUD`, value: `hud` as const, title: `A heads-up display — glass panels, lit edges and a survey grid, in the colour you picked below.` },
 ];
+const themeChoice = computed<ThemeChoice>(() => (skin.value === `hud` ? `hud` : scheme.value));
+const setThemeChoice = (value: ThemeChoice): void => {
+    // The HUD is built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
+    // useSkin flips it — nothing to do here beyond naming the skin.
+    if (value === `hud`) {
+        setSkin(`hud`);
+        return;
+    }
+    setSkin(`none`);
+    setScheme(value);
+};
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: cap(value), value })));
 const iconRailOptions = [
     { label: `Compact`, value: `compact` as const },
@@ -84,8 +111,14 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
     <div class="flex flex-col gap-6">
         <!-- Look — whole-workspace appearance choices. -->
         <RowGroup label="Look">
-            <Row :icon="scheme === `dark` ? `moon` : `sun`" title="Theme" description="Light or dark appearance for the workspace.">
-                <template #control><SegmentedControl :model-value="scheme" :options="schemeOptions" @update:model-value="setScheme" /></template>
+            <Row
+                :icon="themeChoice === `hud` ? `wave-pulse` : themeChoice === `dark` ? `moon` : `sun`"
+                title="Theme"
+                description="The workspace's whole look — light, dark, or the HUD's glass panels and lit edges over a survey grid."
+            >
+                <template #control
+                    ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
+                /></template>
             </Row>
             <!-- The colour the rest of the workspace is built out of. In #below rather than #control because it
                  is two rails and a row of swatches, and because the app around it repaints as they move — a
@@ -101,11 +134,17 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
             <Row icon="expand" title="Text size" description="How large everything reads — text, spacing and controls together.">
-                <template #control><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize" /></template>
+                <template #control
+                    ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
+                /></template>
             </Row>
             <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
                 <template #control>
-                    <SegmentedControl :model-value="iconRailSize" :options="iconRailOptions" @update:model-value="(value) => (iconRailSize = value)" />
+                    <SegmentedControl
+                        :model-value="iconRailSize"
+                        :options="iconRailOptions"
+                        @update:model-value="(value) => (iconRailSize = value)"
+                    />
                 </template>
             </Row>
         </RowGroup>
@@ -114,7 +153,11 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <RowGroup label="File tree">
             <Row icon="sitemap" title="Explorer" description="Size, colour and emphasis of the file tree.">
                 <template #control>
-                    <SegmentedControl :model-value="explorerStyle" :options="explorerOptions" @update:model-value="(value) => (explorerStyle = value)" />
+                    <SegmentedControl
+                        :model-value="explorerStyle"
+                        :options="explorerOptions"
+                        @update:model-value="(value) => (explorerStyle = value)"
+                    />
                 </template>
                 <template #below>
                     <div class="flex flex-col gap-0.5 pl-[1.85rem]">

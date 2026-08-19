@@ -1,0 +1,529 @@
+/* ══ HUD — THE WHOLE SKIN, IN ONE FILE ═════════════════════════════════════════════════════════════════════
+ *
+ * A skin is not a colour. The accent picker already changes colour, and the point of this file is everything a
+ * colour cannot say: what a surface is MADE of, what an edge is, what light does when you touch something. This
+ * one is a heads-up display — deep cool glass over a survey grid, hairlines that glow, corner brackets instead
+ * of soft rounding, and type that reads as instrumentation.
+ *
+ * EVERY RULE IS SCOPED TO `[data-skin="hud"]` ON <html>. Nothing here can fire while the attribute is absent, so
+ * the app's normal look is not "the skin turned down", it is the skin never having run. Removing the feature is
+ * deleting this directory and three one-line call sites — see README.md in this folder.
+ *
+ * WHAT IT OVERRIDES, AND WHY THAT IS THE WHOLE APP. Three tiers do almost all the work:
+ *   · the `--color-surface-*` ramp, which BOTH Tailwind utilities and every PrimeVue component resolve through
+ *     (theme.ts points `--p-*` at these), so one ramp repaints two component worlds at once;
+ *   · the `--role-*` tokens, which is where `bg-card`, `border-line`, `text-muted` and their thousand call sites
+ *     end up — restated unconditionally so the skin does not care which colour scheme is underneath it;
+ *   · the `--radius-*` scale, which is how a rounded app becomes an angular one without touching a template.
+ * Only then does the file name individual components, and only ever to change PAINT — never a width, a padding
+ * or a position. A skin that moves things is a skin that breaks screens it has never been looked at on.
+ *
+ * IT KEEPS THE ACCENT. The ground is fixed cool blue-teal because that is what makes white text on glass legible
+ * at this depth, but every glow, edge and focus ring is mixed from `--color-primary-*`, which is the colour the
+ * picker writes. Lagoon gives the cyan of the reference images; Ember gives the same instrument panel lit amber.
+ *
+ * LAYERING. The token blocks are unlayered (they are variables, they collide with nothing). Everything that
+ * names a selector sits in `@layer components`, one layer BELOW Tailwind's utilities on purpose: a caller who
+ * wrote `bg-warning/10` on a card still wins, exactly as they do without the skin. */
+
+/* ── TIER 0 · THE GROUND ──────────────────────────────────────────────────────────────────────────────────
+ * The surface ramp, restated in cool blue-teal. Hue 232 — one hue for every ground colour in this file, so no
+ * two surfaces disagree about which blue this is — with real chroma at the dark end (0.04–0.05, where the stock
+ * neutral carries 0.007). That chroma is the difference between "dark grey" and "deep water", and it is the
+ * single biggest reason the skin reads as a different app rather than as the same app at night. */
+[data-skin="hud"] {
+    color-scheme: dark;
+
+    --color-surface-0: oklch(98% 0.008 232);
+    --color-surface-50: oklch(95% 0.013 232);
+    --color-surface-100: oklch(90% 0.018 232);
+    --color-surface-200: oklch(82% 0.023 232);
+    --color-surface-300: oklch(72% 0.03 232);
+    --color-surface-400: oklch(62% 0.036 232);
+    --color-surface-500: oklch(52% 0.042 232);
+    --color-surface-600: oklch(44% 0.048 232);
+    --color-surface-700: oklch(36% 0.052 232);
+    --color-surface-800: oklch(29% 0.052 232);
+    --color-surface-900: oklch(23% 0.048 232);
+    --color-surface-950: oklch(17% 0.042 232);
+
+    /* THE INSTRUMENT LIGHT, and everything mixed from it. `--hud-glow` is the accent's bright step — the one the
+     * dark scheme already trusts for links — so the skin follows the colour picker instead of fighting it. */
+    --hud-glow: var(--color-primary-400);
+    --hud-glow-dim: color-mix(in oklab, var(--color-primary-400) 45%, transparent);
+    --hud-glow-faint: color-mix(in oklab, var(--color-primary-400) 26%, transparent);
+
+    /* The survey grid under everything. Deliberately below the threshold where you can count the squares: it is
+     * meant to be felt at the edge of vision and to disappear the moment you read a word on top of it. */
+    --hud-grid: color-mix(in oklab, var(--color-primary-200) 6%, transparent);
+    --hud-grid-step: 44px;
+
+    /* THE SCANLINE. Two pixels of nothing and one of the faintest possible light, repeated — the texture that
+     * makes a panel read as a SCREEN rather than as a painted rectangle. It has to stay under the threshold
+     * where you can resolve the stripes, or it becomes a moiré on every line of text laid over it. */
+    --hud-scan: repeating-linear-gradient(180deg, color-mix(in oklab, var(--color-primary-100) 2.5%, transparent) 0 1px, transparent 1px 3px);
+
+    /* A HAIRLINE THAT IS LIT, NOT DRAWN — the accent bled into a cool steel, which is what stops the app's
+     * thousand `border-line` strokes from reading as grey pencil on glass. */
+    --hud-edge: color-mix(in oklab, var(--color-primary-300) 30%, oklch(40% 0.06 232));
+    --hud-edge-strong: color-mix(in oklab, var(--color-primary-300) 50%, oklch(48% 0.07 232));
+
+    /* Corner brackets: the mark that says "panel" without a border doing it. Length only — the colour is the
+     * glow and the thickness is always the hairline. */
+    --hud-bracket: 11px;
+
+    /* The display face, for headings and instrument labels only. Body text stays Inter, because a screen you
+     * read for eight hours is not the place for a personality. Loaded on demand by useSkin.ts — if the network
+     * refuses it, this falls through to the app's own stack and nothing looks broken. */
+    --hud-display: "Chakra Petch", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+    /* ── TIER 1 · THE ROLES ───────────────────────────────────────────────────────────────────────────────
+     * Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. `useSkin` also flips
+     * `data-mode` to dark so PrimeVue's own dark preset comes with it, but nothing here depends on that having
+     * happened — a light-mode window that somehow lands on this attribute still renders the skin correctly. */
+    --role-canvas: oklch(16.5% 0.04 232);
+    /* THE CARD TOKEN IS OPAQUE, and the glass is applied one tier down instead. `bg-card` is on hundreds of
+     * elements and a few of them have a job that translucency breaks: the workspace tree's footer bar is sticky
+     * and has to OCCLUDE the rows sliding under it, and a bar you can read the list through is worse than a bar
+     * with no glass in it. So the token stays solid, and the two surfaces that are always big standalone panels
+     * — .ui-card and a <RowGroup>'s slab — take their translucency explicitly, below. Same reasoning as the
+     * overlays: glass is for the surfaces that can afford it, never for the ones something depends on. */
+    --role-card: oklch(23.5% 0.048 232);
+    --role-overlay: oklch(26% 0.05 232);
+    --role-line: color-mix(in oklab, var(--hud-edge) 68%, transparent);
+    --role-line-strong: var(--hud-edge-strong);
+    --role-content: oklch(95.5% 0.014 220);
+    --role-muted: oklch(78% 0.026 220);
+    --role-subtle: oklch(63% 0.032 224);
+    --role-link: var(--color-primary-300);
+
+    /* Status roles ride one step brighter than the stock dark scheme. On a ground this deep and this saturated
+     * a 500 starts to sink into the panel it is warning you about. */
+    --role-danger: var(--color-danger-400);
+    --role-success: var(--color-success-400);
+    --role-warning: var(--color-warning-400);
+    --role-info: var(--color-info-400);
+    --role-primary-fill: var(--color-primary-400);
+    --role-primary-fill-hover: var(--color-primary-300);
+    --role-success-fill: var(--color-success-400);
+    --role-warning-fill: var(--color-warning-400);
+    --role-danger-fill: var(--color-danger-400);
+    --role-fill-content: oklch(17% 0.04 232);
+
+    /* The terminal takes the ground's hue too, or it sits in the shell as a black hole. Must stay a hex
+     * literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). */
+    --color-terminal: #061420;
+
+    /* ── TIER 2 · THE GEOMETRY ────────────────────────────────────────────────────────────────────────────
+     * Sharp, not square. Every `rounded-*` utility and every component that reads the scale follows, which is
+     * what turns a soft app angular in six declarations. `rounded-full` is a literal 9999px in Tailwind and is
+     * untouched, so avatars, pills and status dots stay circular. */
+    --radius-xs: 0.0625rem;
+    --radius-sm: 0.125rem;
+    --radius-md: 0.1875rem;
+    --radius-lg: 0.25rem;
+    --radius-xl: 0.375rem;
+    --radius-2xl: 0.5rem;
+    --ui-radius: 0.25rem;
+}
+
+@layer components {
+    /* ── THE BACKDROP ─────────────────────────────────────────────────────────────────────────────────────
+     * Two corner glows, a survey grid, and a vignette — one image, painted twice.
+     *
+     * TWICE BECAUSE THE SHELL COVERS THE BODY. The app's root element carries `bg-canvas` and fills the
+     * viewport, so anything painted on <body> alone is never seen; `#app > *` is whatever route element is
+     * standing in front of it. `background-attachment: fixed` is what makes the pair read as ONE backdrop
+     * rather than two: both are anchored to the viewport, so the grid lines and the glow line up across every
+     * panel edge in the window and stay put while a column scrolls. */
+    [data-skin="hud"] body,
+    [data-skin="hud"] #app > * {
+        background-image:
+            radial-gradient(115% 80% at 6% -14%, var(--hud-glow-faint), transparent 56%),
+            radial-gradient(95% 70% at 104% 112%, color-mix(in oklab, var(--color-primary-500) 20%, transparent), transparent 52%),
+            radial-gradient(70% 50% at 78% 4%, color-mix(in oklab, var(--color-primary-300) 8%, transparent), transparent 60%),
+            radial-gradient(150% 115% at 50% 42%, transparent 38%, oklch(9% 0.03 232 / 0.62) 100%),
+            repeating-linear-gradient(0deg, var(--hud-grid) 0 1px, transparent 1px var(--hud-grid-step)),
+            repeating-linear-gradient(90deg, var(--hud-grid) 0 1px, transparent 1px var(--hud-grid-step));
+        background-attachment: fixed;
+    }
+
+    /* THE POWER RAIL — a lit hairline across the very top of the window, the one piece of pure ceremony in the
+     * skin. It is at the top edge, out of the reading path, two pixels tall, and it is the thing that makes the
+     * app feel switched ON rather than painted. Fixed and pointer-transparent, so it belongs to no layout. */
+    [data-skin="hud"] body::before {
+        content: "";
+        position: fixed;
+        inset: 0 0 auto 0;
+        height: 2px;
+        z-index: 2147483000;
+        pointer-events: none;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            var(--hud-glow-dim) 12%,
+            var(--hud-glow) 28%,
+            var(--hud-glow-dim) 44%,
+            transparent 62%,
+            transparent 100%
+        );
+        background-size: 220% 100%;
+        animation: hud-rail 14s linear infinite;
+    }
+
+    /* ── PANELS ───────────────────────────────────────────────────────────────────────────────────────────
+     * The design system's own card, wearing the skin's whole vocabulary at once: a translucent fill, a lit
+     * hairline, a sheen down the top eighth, and corner brackets.
+     *
+     * THE BRACKETS ARE BACKGROUND IMAGES, not pseudo-elements. A card is a container — its ::before and ::after
+     * belong to whoever is using it — and four one-pixel gradients cost nothing and can never collide with
+     * somebody's own decoration. `background-color` is set separately from `background-image` for the same
+     * reason: the shorthand would wipe whichever half this rule did not mention. */
+    [data-skin="hud"] .ui-card {
+        /* THE GLASS, applied here rather than to the card token — see --role-card. Nine tenths of the panel
+         * fill over one tenth of the ground, so the grid and the corner glow carry on underneath it and the
+         * card reads as a pane laid on the display instead of as a lighter rectangle drawn on it. */
+        background-color: color-mix(in oklab, var(--color-card) 90%, transparent);
+        background-image:
+            linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 38%),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow));
+        background-size:
+            100% 100%,
+            var(--hud-bracket) 1px,
+            1px var(--hud-bracket),
+            var(--hud-bracket) 1px,
+            1px var(--hud-bracket);
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            100% 100%,
+            100% 100%;
+        background-repeat: no-repeat;
+        border-color: var(--hud-edge);
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklab, var(--color-primary-100) 7%, transparent),
+            0 2px 18px oklch(8% 0.02 232 / 0.5);
+    }
+
+    /* THE SAME BRACKETS ON THE APP'S OTHER TWO BIG PANELS — the grouped-list surface every settings and detail
+     * screen is built from (<RowGroup>: one bordered slab of hairline-divided rows, always the direct card-painted
+     * child of its <section>), and the kanban slab the fleet board and the chat rail stand their cards in. Both
+     * are read as ONE panel, which is exactly what a bracket marks; the small `bg-card` chips scattered through
+     * every row are not, and this is the selector that tells them apart. */
+    [data-skin="hud"] section > .bg-card {
+        background-color: color-mix(in oklab, var(--color-card) 90%, transparent);
+    }
+
+    [data-skin="hud"] section > .bg-card,
+    [data-skin="hud"] .lane {
+        background-image:
+            linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 30%),
+            var(--hud-scan),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow));
+        background-size:
+            100% 100%,
+            100% 100%,
+            var(--hud-bracket) 1px,
+            1px var(--hud-bracket),
+            var(--hud-bracket) 1px,
+            1px var(--hud-bracket);
+        background-position:
+            0 0,
+            0 0,
+            0 0,
+            0 0,
+            100% 100%,
+            100% 100%;
+        background-repeat: no-repeat, repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+    }
+
+    [data-skin="hud"] .ui-card-dashed {
+        background-image: none;
+        border-color: color-mix(in oklab, var(--hud-glow) 30%, transparent);
+        box-shadow: none;
+    }
+
+    /* THE BAR AT THE TOP OF A COLUMN. Its bottom border is the line that runs across the whole window when the
+     * desktop shell stands columns side by side (see .view-header in the app's stylesheet), so lighting it lights
+     * the app's main structural line in one rule. The fade downward makes the bar read as a lens over the
+     * content below rather than as a strip laid on it. */
+    [data-skin="hud"] .view-header,
+    [data-skin="hud"] .view-header-wrap {
+        background-image: linear-gradient(180deg, color-mix(in oklab, var(--color-primary-300) 8%, transparent), transparent);
+        border-bottom-color: var(--hud-edge);
+        box-shadow: 0 1px 0 color-mix(in oklab, var(--hud-glow) 12%, transparent);
+    }
+
+    /* The kanban slab, and the header capping it. A lane goes DARKER than the canvas around it rather than
+     * lighter — it is a recess the cards sit in, which is the opposite of what the stock treatment says, and it
+     * is what lets a card stay the raised object without having to shout. One variable for both, because the
+     * header has to be opaque to occlude the cards scrolling under it and a header a shade off its own lane is a
+     * seam across the slab. */
+    [data-skin="hud"] .lane,
+    [data-skin="hud"] .lane-header {
+        --lane-fill: oklch(13.5% 0.036 232);
+    }
+    [data-skin="hud"] .lane {
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--hud-edge) 45%, transparent);
+    }
+
+    /* EVERY CARD-PAINTED SURFACE IN THE APP, given the same sheen the .ui-card gets — a single gradient over the
+     * top of the box. It touches only `background-image`, which no colour utility sets, so a caller who painted
+     * their own background still wins outright and simply keeps the sheen. */
+    [data-skin="hud"] .bg-card {
+        background-image:
+            linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 44%),
+            var(--hud-scan);
+    }
+
+    /* ── OVERLAYS ─────────────────────────────────────────────────────────────────────────────────────────
+     * The one place real glass is affordable. These are floated above everything else, contain nothing that
+     * anchors to a fixed ancestor, and there is at most a couple on screen — so they get the backdrop blur the
+     * hundreds of inline `bg-card` boxes cannot.
+     *
+     * AND THEY ARE OPAQUE, which is the one place this skin refuses to be glass. An overlay is the only surface
+     * in the app that covers LIVE TEXT — a model list over a transcript, a dialog over a diff — and the first cut
+     * of this rule leaned on a backdrop blur to separate the two behind an 88% fill. Two things were wrong with
+     * that. `backdrop-filter` is the single property here a browser may quietly decline (no GPU compositing, a
+     * low-power mode, a headless render), and even at 96% with the blur working, 4% of white-on-black text
+     * underneath is a legible ghost running through the middle of the menu. Depth is carried by the lit edge, the
+     * inner highlight and a deep shadow instead — all of which a browser always draws, and none of which put
+     * somebody else's words behind the one you are reading. */
+    [data-skin="hud"] .p-dialog,
+    [data-skin="hud"] .p-popover,
+    [data-skin="hud"] .p-menu,
+    [data-skin="hud"] .p-select-overlay,
+    [data-skin="hud"] .p-multiselect-overlay,
+    [data-skin="hud"] .p-autocomplete-overlay,
+    [data-skin="hud"] .ui-anchored-surface {
+        background-color: oklch(20% 0.045 232);
+        border: 1px solid var(--hud-edge-strong);
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklab, var(--color-primary-100) 9%, transparent),
+            0 18px 60px oklch(6% 0.02 232 / 0.75),
+            0 0 40px color-mix(in oklab, var(--color-primary-500) 12%, transparent);
+    }
+
+    /* A dialog is the app's biggest panel, so it is the one that wears the CUT CORNER — the signature this skin
+     * can afford in exactly one place. `clip-path` clips everything the element paints, its own focus ring
+     * included, which is why no control in this file gets one; a dialog draws no focus ring on itself, so there
+     * is no indicator for the clip to swallow.
+     *
+     * WHICH TWO CORNERS IS NOT A TASTE DECISION. The cut is top-LEFT and bottom-RIGHT, so the two corners that
+     * hold controls stay square: the close button lives top-right, and it is the one thing in a dialog that must
+     * never be a pixel short of clickable. 16px against PrimeVue's 20px of dialog padding also means the clipped
+     * triangle stops short of anything drawn inside — a footer's confirm button included. The brackets mark the
+     * two square corners, so all four are spoken for. */
+    [data-skin="hud"] .p-dialog {
+        clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+        background-image:
+            linear-gradient(var(--hud-glow), var(--hud-glow)),
+            linear-gradient(var(--hud-glow), var(--hud-glow));
+        background-size:
+            16px 1px,
+            1px 16px;
+        background-position:
+            100% 0,
+            0 100%;
+        background-repeat: no-repeat;
+    }
+
+    [data-skin="hud"] .p-dialog-mask {
+        background: radial-gradient(120% 90% at 50% 0%, oklch(14% 0.05 232 / 0.6), oklch(6% 0.02 232 / 0.86));
+        backdrop-filter: blur(3px);
+    }
+
+    [data-skin="hud"] .ui-tooltip-body {
+        background-color: oklch(17% 0.05 232);
+        border: 1px solid var(--hud-edge-strong);
+    }
+
+    /* ── CONTROLS ─────────────────────────────────────────────────────────────────────────────────────────
+     * An input is a slot cut INTO the panel — recessed, darker than what surrounds it, with the light catching
+     * its top edge. That inset shadow is the whole trick, and it is why the fields stop looking like flat
+     * rectangles the moment the skin comes on. */
+    [data-skin="hud"] .p-inputtext,
+    [data-skin="hud"] textarea,
+    [data-skin="hud"] input[type="text"],
+    [data-skin="hud"] input[type="search"],
+    [data-skin="hud"] input[type="email"],
+    [data-skin="hud"] input[type="password"],
+    [data-skin="hud"] input[type="number"] {
+        background-color: oklch(11% 0.028 232);
+        border-color: var(--hud-edge);
+        box-shadow: inset 0 1px 3px oklch(6% 0.02 232 / 0.75);
+    }
+
+    [data-skin="hud"] .p-inputtext:enabled:hover {
+        border-color: var(--hud-edge-strong);
+    }
+
+    /* FOCUS IS LIGHT, and it is stated twice on purpose. The inner ring is `inset`, so it survives on the
+     * surfaces this skin clips a corner off; the outer halo is what makes the focused control the brightest
+     * thing on the panel. */
+    [data-skin="hud"] .p-inputtext:focus,
+    [data-skin="hud"] .p-inputtext:focus-visible,
+    [data-skin="hud"] textarea:focus,
+    [data-skin="hud"] input:focus-visible,
+    [data-skin="hud"] button:focus-visible,
+    [data-skin="hud"] [tabindex]:focus-visible {
+        outline: none;
+        border-color: var(--hud-glow);
+        box-shadow:
+            inset 0 0 0 1px color-mix(in oklab, var(--hud-glow) 55%, transparent),
+            0 0 0 3px color-mix(in oklab, var(--color-primary-500) 22%, transparent),
+            0 0 18px color-mix(in oklab, var(--color-primary-500) 22%, transparent);
+    }
+
+    /* Buttons keep their tinted-fill recipe — that is the app's own language and the skin has no quarrel with
+     * it. What changes is what the tint sits ON: a faint vertical gradient so the fill has a direction, a lit
+     * border, and a glow that arrives under the pointer. */
+    [data-skin="hud"] .p-button {
+        background-image: linear-gradient(180deg, color-mix(in oklab, var(--color-primary-100) 8%, transparent), transparent 70%);
+        transition:
+            box-shadow 0.16s ease-out,
+            background-color 0.16s ease-out,
+            border-color 0.16s ease-out;
+    }
+
+    [data-skin="hud"] .p-button:enabled:hover {
+        border-color: color-mix(in oklab, var(--ui-button-tone, var(--hud-glow)) 55%, transparent);
+        box-shadow:
+            inset 0 0 12px color-mix(in oklab, var(--ui-button-tone, var(--hud-glow)) 18%, transparent),
+            0 0 16px color-mix(in oklab, var(--ui-button-tone, var(--hud-glow)) 22%, transparent);
+    }
+
+    /* Solid accent controls — checkbox, radio, switch — get the light they are painted in as an actual halo,
+     * which is what makes a ticked box on this ground read as ON rather than merely coloured. */
+    [data-skin="hud"] .p-checkbox-checked .p-checkbox-box,
+    [data-skin="hud"] .p-radiobutton-checked .p-radiobutton-box,
+    [data-skin="hud"] .p-toggleswitch-checked .p-toggleswitch-slider {
+        box-shadow: 0 0 12px color-mix(in oklab, var(--color-primary-500) 45%, transparent);
+    }
+
+    [data-skin="hud"] .p-checkbox-box,
+    [data-skin="hud"] .p-radiobutton-box {
+        background-color: oklch(11% 0.028 232);
+    }
+
+    /* A picked row in any of the app's walkable lists. The accent tint stays; the lit left edge is what turns
+     * it from a highlighted row into a selected CHANNEL. */
+    [data-skin="hud"] .ui-row-select-on,
+    [data-skin="hud"] .ui-row-select-on:hover:not(:disabled) {
+        background: linear-gradient(90deg, color-mix(in oklab, var(--color-primary-500) 22%, transparent), color-mix(in oklab, var(--color-primary-500) 8%, transparent));
+        box-shadow: inset 2px 0 0 var(--hud-glow);
+    }
+
+    [data-skin="hud"] .ui-row-select:hover:not(:disabled) {
+        background: color-mix(in oklab, var(--color-primary-300) 9%, transparent);
+    }
+
+    /* Progress readouts are the most HUD-native thing the app already owns; all they needed was to be lit. */
+    [data-skin="hud"] .p-progressbar {
+        background-color: oklch(11% 0.028 232);
+        box-shadow: inset 0 1px 3px oklch(6% 0.02 232 / 0.8);
+    }
+    [data-skin="hud"] .p-progressbar-value {
+        box-shadow: 0 0 12px color-mix(in oklab, var(--color-primary-500) 55%, transparent);
+    }
+
+    /* ── TYPE ─────────────────────────────────────────────────────────────────────────────────────────────
+     * Headings and instrument labels only. Element selectors, so this cannot miss a heading or catch a
+     * paragraph, and the reading column stays in the face it was designed for. */
+    [data-skin="hud"] h1,
+    [data-skin="hud"] h2,
+    [data-skin="hud"] h3,
+    [data-skin="hud"] h4 {
+        font-family: var(--hud-display);
+        letter-spacing: 0.012em;
+    }
+
+    /* EXCEPT INSIDE RENDERED MARKDOWN. Those headings are not the app's chrome, they are somebody's WRITING — an
+     * agent's answer, a README, a generated document — and a display face on a document's own headings is the
+     * skin dressing up content it did not author. The chrome is the skin's to style; the text is not. */
+    [data-skin="hud"] .md-prose :is(h1, h2, h3, h4) {
+        font-family: var(--font-sans);
+        letter-spacing: normal;
+    }
+
+    [data-skin="hud"] .ui-field-label {
+        font-family: var(--hud-display);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: color-mix(in oklab, var(--hud-glow) 45%, var(--color-muted));
+    }
+
+    /* ── EDGES OF THE WINDOW ──────────────────────────────────────────────────────────────────────────────
+     * The scrollbar is a rail with a lit thumb; the selection is the instrument light; the loading placeholder
+     * sweeps in the accent instead of in grey. Small things, and between them they are most of what the eye
+     * catches while it is not reading anything. */
+    [data-skin="hud"] .scrollbar-thin {
+        scrollbar-color: color-mix(in oklab, var(--color-primary-500) 45%, transparent) transparent;
+    }
+    [data-skin="hud"] .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: color-mix(in oklab, var(--color-primary-500) 45%, transparent);
+        border-radius: 0;
+    }
+    [data-skin="hud"] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: var(--hud-glow);
+    }
+    [data-skin="hud"] .ui-softscroll:hover {
+        scrollbar-color: color-mix(in oklab, var(--color-primary-500) 40%, transparent) transparent;
+    }
+
+    [data-skin="hud"] ::selection {
+        background: color-mix(in oklab, var(--color-primary-500) 40%, transparent);
+        color: oklch(98% 0.01 232);
+    }
+
+    [data-skin="hud"] .skeleton {
+        background-color: color-mix(in oklab, var(--color-primary-300) 8%, transparent);
+        background-image: linear-gradient(90deg, transparent 20%, color-mix(in oklab, var(--color-primary-300) 14%, transparent) 50%, transparent 80%);
+    }
+}
+
+/* THE GROUP HEADINGS — "LOOK", "FILE TREE", "CHANGES" — every section label in the app, which the design system
+ * already draws as small tracked capitals (`ui.sectionLabel`). Capitals in the display face with the tracking
+ * opened right up is what turns a settings page into a console readout, and it is the one piece of type the skin
+ * changes outside the headings.
+ *
+ * MATCHED ON THE TREATMENT, not on a class the recipe owns: the recipe is a twMerge and a caller may legitimately
+ * swap the label's SIZE, so requiring `text-xs` would silently drop whichever label somebody made smaller.
+ *
+ * UNLAYERED, unlike every other selector in this file, and that is the whole reason it sits down here on its own.
+ * Both properties it sets are ALSO set by the utilities in that same class list — `tracking-wide` owns the letter
+ * spacing, `text-subtle` the colour — and a rule in `@layer components` loses to a utility no matter how specific
+ * it is. An unlayered rule outranks every layer, which is the only way to restate a treatment the utilities are
+ * spelling out. It is deliberately the exception: everywhere else, a caller's utility must still win. */
+[data-skin="hud"] .font-semibold.uppercase.tracking-wide {
+    font-family: var(--hud-display);
+    letter-spacing: 0.16em;
+    color: color-mix(in oklab, var(--hud-glow) 42%, var(--color-subtle));
+}
+
+/* The rail's travel. One shot of light crossing the top of the window every fourteen seconds — slow enough that
+ * it never asks to be watched, present enough that the window has a pulse. */
+@keyframes hud-rail {
+    from {
+        background-position: -110% 0;
+    }
+    to {
+        background-position: 110% 0;
+    }
+}
+
+/* MOTION IS A PREFERENCE, and the rail is decoration by definition — it reports nothing. Somebody who has asked
+ * their system for less movement keeps the lit edge and loses the travel. */
+@media (prefers-reduced-motion: reduce) {
+    [data-skin="hud"] body::before {
+        animation: none;
+        background-position: 30% 0;
+    }
+}
