@@ -12,7 +12,7 @@ import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
  *
  * The two used to be one, because editing did not exist: an automation could only be made, never changed, and
  * the fields lived inside the dialog that made it. Adding an editor meant either a second copy of forty fields
- * or this. A copy would have drifted on the first Doorbell setting anyone added to one and not the other, and
+ * or this. A copy would have drifted on the first Front Desk setting anyone added to one and not the other, and
  * the half that drifted would be the half nobody had open while they were changing the other.
  *
  * So the STATE is a composable (useAutomationForm) and the MARKUP is this component, and the two callers differ
@@ -20,7 +20,7 @@ import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
  *
  * THEY ALSO AGREE ON WIDTH NOW, which is what let the fields below become two columns. While creating happened
  * in a 44rem modal they did not: the same markup rendered at two measures, every fold tuned for the narrower
- * one, and a Doorbell — eight fields before the Prompt is even reached — was a column you scrolled twice. */
+ * one, and a Front Desk — eight fields before the Prompt is even reached — was a column you scrolled twice. */
 
 const props = defineProps<{
     state: AutomationFormState;
@@ -33,7 +33,7 @@ const props = defineProps<{
 const {
     form,
     schedule,
-    isDoorbell,
+    isFrontDesk,
     listenerSource,
     branchField,
     liveSources,
@@ -68,13 +68,13 @@ const personas = computed(() =>
         .toSorted((a, b) => a.label.localeCompare(b.label)),
 );
 
-/* The rows, blank first. Blank means something different on a Doorbell — a stranger writes those prompts, so
+/* The rows, blank first. Blank means something different on a Front Desk — a stranger writes those prompts, so
  * leaving it alone is filled in with the read-only front desk on save — and the row says which it is.
  *
  * A PIN WHOSE CARD IS GONE still has to appear, or the trigger renders empty and reads as "nobody", which is
  * the one other thing it could mean and behaves very differently: that one gets nothing at all. */
 const personaOptions = computed<readonly PickerOption[]>(() => [
-    isDoorbell.value ? { value: ``, label: `Front desk`, description: `read-only` } : { value: ``, label: `Nobody`, description: `no accounts` },
+    isFrontDesk.value ? { value: ``, label: `Front desk`, description: `read-only` } : { value: ``, label: `Nobody`, description: `no accounts` },
     ...personas.value,
     ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
         ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, disabled: true }]
@@ -110,10 +110,10 @@ defineExpose({ nameInput, promptInput });
 /* HOW TALL THE PROMPT STARTS, and the floor a drag on the seam under it sets.
  *
  * It is a MINIMUM rather than a height, because the box also stretches to whatever the trigger column beside
- * it happens to be: a Doorbell is eight fields tall, and a prompt that ignored that would end its column 400px
+ * it happens to be: a Front Desk is eight fields tall, and a prompt that ignored that would end its column 400px
  * short — the dead rectangle that made this panel look broken before the two halves were made to meet. So the
  * drag says "at least this tall" and the layout keeps the rest: on a schedule (a short trigger column) the
- * drag is the whole height and moves the edge pixel for pixel, and on a Doorbell it only bites once dragged
+ * drag is the whole height and moves the edge pixel for pixel, and on a Front Desk it only bites once dragged
  * past the column. Double-clicking the seam comes back to PROMPT_HEIGHT. */
 const PROMPT_HEIGHT = 208;
 const promptHeight = ref(PROMPT_HEIGHT);
@@ -277,7 +277,7 @@ const setProvider = (provider: string): void => {
         </label>
         <!-- THE TWO QUESTIONS AN AUTOMATION ANSWERS, SIDE BY SIDE — and now SAYING SO. What fires it, and what
              it then does. They used to be one column forty fields tall, because the form lived in a 44rem modal
-             and a column was the only thing that fit — the Doorbell branch alone is eight fields, and reaching
+             and a column was the only thing that fit — the Front Desk branch alone is eight fields, and reaching
              the Prompt meant scrolling past every one of them without ever seeing the two halves together.
              Both callers hand this component the whole page, so the split is the same in the create
              panel and in the row's editor — one layout, not two to keep honest. It stacks back to one column once
@@ -386,9 +386,9 @@ const setProvider = (provider: string): void => {
                             </button>
                         </div>
                     </div>
-                    <!-- A Doorbell is configured by WHERE it may be embedded and WHO may talk to it — the shared
+                    <!-- A Front Desk is configured by WHERE it may be embedded and WHO may talk to it — the shared
                  listener fields (events, mention, channel) say nothing about a widget, so they fold away. -->
-                    <template v-if="isDoorbell">
+                    <template v-if="isFrontDesk">
                         <label class="ui-field">
                             <span class="ui-field-label">Allowed sites</span>
                             <textarea
@@ -479,7 +479,7 @@ const setProvider = (provider: string): void => {
                             </p>
                         </label>
                     </template>
-                    <div v-if="!isDoorbell" class="ui-field">
+                    <div v-if="!isFrontDesk" class="ui-field">
                         <span class="ui-field-label">Events</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button
@@ -506,7 +506,7 @@ const setProvider = (provider: string): void => {
                             {{ listenerSource.mentionLabel }}
                         </label>
                     </div>
-                    <label v-if="!isDoorbell" class="ui-field">
+                    <label v-if="!isFrontDesk" class="ui-field">
                         <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
                         <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="ui.input()" />
                     </label>
@@ -570,7 +570,7 @@ const setProvider = (provider: string): void => {
                 <p v-if="form.kind === 'event'" class="text-xs text-muted">
                     Wakes when an external system POSTs its webhook URL — shown after you create it.
                 </p>
-                <p v-else-if="isDoorbell" class="text-xs text-muted">
+                <p v-else-if="isFrontDesk" class="text-xs text-muted">
                     Wakes when a visitor writes in the chat widget on your site — one conversation each, live for you to take over.
                 </p>
                 <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider
@@ -751,9 +751,9 @@ const setProvider = (provider: string): void => {
                         <Picker v-model="form.actsAs" :options="personaOptions" aria-label="Persona this automation runs as" class="w-full" />
                     </div>
                 </div>
-                <!-- The one sentence saving needs: on a Doorbell, leaving this blank does not mean "unbounded",
+                <!-- The one sentence saving needs: on a Front Desk, leaving this blank does not mean "unbounded",
                      it WRITES a read-only front-desk persona — a thing no control on screen shows. -->
-                <p v-if="isDoorbell && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
+                <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     Strangers write these prompts, so saving adds a read-only front desk to your personas.
                 </p>
 
@@ -794,10 +794,10 @@ const setProvider = (provider: string): void => {
                     />
                     seconds before it starts
                 </label>
-                <!-- The one place this caveat lands where it changes a decision. It is in the Doorbell docs, but
+                <!-- The one place this caveat lands where it changes a decision. It is in the Front Desk docs, but
                      nobody reads those while flipping a toggle, and a support chat that can never answer is not
                      what "require my approval" sounds like. -->
-                <p v-if="form.requireApproval && isDoorbell" class="-mt-1 text-2xs text-warning">
+                <p v-if="form.requireApproval && isFrontDesk" class="-mt-1 text-2xs text-warning">
                     Visitors get no answer in the widget — approved replies land in your chat instead.
                 </p>
             </template>

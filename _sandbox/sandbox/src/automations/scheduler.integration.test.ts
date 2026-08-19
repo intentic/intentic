@@ -495,14 +495,14 @@ test("a deny refuses even an approved replay — approve-then-tighten does not e
     expect((await services.automations.get("revoked"))?.runs[0]?.outcome).toBe("skipped");
 });
 
-test("the webchat floor keys off its own source — a listener rule does not reach the Doorbell, nor vice versa", async () => {
+test("the webchat floor keys off its own source — a listener rule does not reach the Front Desk, nor vice versa", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
     await services.automations.upsert(
         automation("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
     );
     const prompts: string[] = [];
     const record = (await services.automations.get("door")) as AutomationRecord;
-    // listener:hold does not hold a webchat wake — the Doorbell has its own admission key. The visitor's
+    // listener:hold does not hold a webchat wake — the Front Desk has its own admission key. The visitor's
     // payload rides sealed in the outside-content envelope, same id on both ends.
     await fireAutomation(services, record, fakeWake(prompts), { payload: "hi" });
     expect(prompts[0]).toMatch(

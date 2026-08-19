@@ -18,7 +18,7 @@ import type { ExtensionHost } from "../extensions/installed-extensions.js";
  * (it holds the pipeline webhook receiver and the poller standing in for it) — plus the workspace events it
  * raises as the fleet works. Everything else arrives from an extension manifest and leaves with it.
  *
- * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, which is why the doorbell and the CI fix are here rather than
+ * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, which is why the front desk and the CI fix are here rather than
  * in the packs that draw those surfaces: a source's starter and a template's prompt describe the same payload,
  * and one payload described in two packages is two descriptions to keep in step. A template on the generic
  * `event` webhook has no source to sit beside, so it goes with the pack carrying the capability card it names —
@@ -29,7 +29,7 @@ const WEBCHAT_PROVIDER = "webchat";
 
 const WEBCHAT_SOURCE: TriggerSource = {
     provider: WEBCHAT_PROVIDER,
-    label: "Doorbell",
+    label: "Front Desk",
     icon: "globe",
     // The widget IS the connection — a website's own <script> tag, nothing to connect here first.
     requires: [],
@@ -115,14 +115,14 @@ const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) =>
 
 export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     {
-        id: "website-concierge",
-        title: "Website concierge",
+        id: "front-desk",
+        title: "Front Desk",
         icon: "globe",
         requires: [],
         trigger: { kind: "listener", provider: WEBCHAT_PROVIDER, eventType: "message" },
         note: "instant",
         // Offered on the page itself: nobody opens this page looking for "put a chat on my website". `configure`
-        // rather than `create` because a Doorbell with no allowed sites admits nobody.
+        // rather than `create` because a Front Desk with no allowed sites admits nobody.
         offer: "configure",
         description: "Put a chat bubble on your own site and let visitors talk to this agent.",
         prompt:

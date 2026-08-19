@@ -33,7 +33,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
         // Identity reads the workspace's authorized emails to decide the `member` tag; an empty list is the
-        // ordinary case for a public Doorbell.
+        // ordinary case for a public Front Desk.
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // A held automation notifies the owner (scheduler.ts). Fire-and-forget there, so a missing stub
         // surfaces only as an unhandled rejection — loud enough to poison a later test, quiet enough to hide.
@@ -42,7 +42,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
             notifyIfAway: async () => ({ delivered: 0, failed: 0 }),
         }),
         // Real parsed defaults: the admission gate reads them on every fire (all-allow out of the box), and
-        // the spin-loop guard's limit defaults to 0 — which keeps these tests about the Doorbell.
+        // the spin-loop guard's limit defaults to 0 — which keeps these tests about the Front Desk.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
     });
 
@@ -126,7 +126,7 @@ test("a requireApproval automation holds the wake and streams a pending notice i
 /* THE HELD WAKE KEEPS THE VISITOR'S THREAD. Without the conversation on the approval the approve route has
  * nothing to resume, so it minted a fresh one — and a chat the owner approves message by message became one
  * fleet card and one worktree per message, each with an agent meeting the visitor for the first time. */
-test("a held Doorbell wake snapshots the conversation the visitor's thread already owns", async () => {
+test("a held Front Desk wake snapshots the conversation the visitor's thread already owns", async () => {
     const { services } = await setup(webchat("wc-thread", { requireApproval: true }));
     const app = appFor(services, fakeWake([]));
     // Draining the SSE body is what waits for the fire — the response resolves as soon as the stream opens.
@@ -194,7 +194,7 @@ test("a conversation is rate limited after the window fills", async () => {
     expect(statuses.at(-1)).toBe(429);
 });
 
-/* ---- threading: the property that makes a Doorbell a conversation rather than a series of strangers ---- */
+/* ---- threading: the property that makes a Front Desk a conversation rather than a series of strangers ---- */
 
 test("a visitor's follow-up reuses the same conversation and resumes its session", async () => {
     const { services } = await setup(webchat("wc-thread"));
@@ -209,7 +209,7 @@ test("a visitor's follow-up reuses the same conversation and resumes its session
     expect(turns[1]?.sessionId).toBe("sess-1");
 });
 
-test("two visitors of one Doorbell get two conversations", async () => {
+test("two visitors of one Front Desk get two conversations", async () => {
     const { services } = await setup(webchat("wc-two"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns));
@@ -270,10 +270,10 @@ test("the daily ceiling is per automation, not per conversation", async () => {
     expect((await post(app, "wc-daily", { conversationId: "c", content: "1" })).status).toBe(429);
 });
 
-/* A Doorbell whose owner set no ceiling is the common case — the create dialog leaves the field blank — and
+/* A Front Desk whose owner set no ceiling is the common case — the create dialog leaves the field blank — and
  * every message it answers is an agent turn billed to that owner. The per-minute window caps the rate but not
  * the day, so without a fallback a script could run tens of thousands of turns before anyone looked. */
-test("a Doorbell with no configured ceiling still stops at the default", async () => {
+test("a Front Desk with no configured ceiling still stops at the default", async () => {
     const { services } = await setup(webchat("wc-unset", { webchat: {} }));
     const app = appFor(services, fakeWake([]));
     for (let sent = 0; sent < WEBCHAT_DAILY_MAX_DEFAULT; sent += 1) {
@@ -428,15 +428,15 @@ test("a widget load is recorded against the origin it came from, admitted or ref
     expect(installs.origins.find((probe: { origin: string }) => probe.origin === ORIGIN)).toMatchObject({ allowed: true, loads: 1 });
 });
 
-test("a Doorbell nobody has loaded reports no origins at all — the honest 'not installed' answer", async () => {
+test("a Front Desk nobody has loaded reports no origins at all — the honest 'not installed' answer", async () => {
     const { services } = await setup(webchat("wc-silent"));
     const app = appFor(services, fakeWake([]));
     expect((await (await app.request(`/webchat/wc-silent/installs`)).json()).origins).toEqual([]);
 });
 
-test("a probe for an id that is not a Doorbell records nothing", async () => {
+test("a probe for an id that is not a Front Desk records nothing", async () => {
     const { services } = await setup(webchat("wc-real"));
     const app = appFor(services, fakeWake([]));
-    await app.request(`/webchat/not-a-doorbell/config`, { headers: { origin: ORIGIN } });
-    expect((await (await app.request(`/webchat/not-a-doorbell/installs`)).json()).origins).toEqual([]);
+    await app.request(`/webchat/not-a-front-desk/config`, { headers: { origin: ORIGIN } });
+    expect((await (await app.request(`/webchat/not-a-front-desk/installs`)).json()).origins).toEqual([]);
 });

@@ -4,8 +4,8 @@
  * The envelope tells the MODEL what it is reading. This tells the GATE, which is the half that does not depend
  * on the model choosing to believe its instructions. The attack the pair exists to break has three links —
  * outside text arrives, the agent is talked into reading a credential, the credential leaves — and the middle
- * one is the only place a policy can stand: the first link is the product working (a Doorbell that refuses
- * strangers is not a Doorbell), and by the third the value is already in a process's argv.
+ * one is the only place a policy can stand: the first link is the product working (a Front Desk that refuses
+ * strangers is not a Front Desk), and by the third the value is already in a process's argv.
  *
  * SET TWO WAYS, both of them "content the owner did not write entered this turn":
  *   · at birth, for a wake a stranger caused — a listener message, a webchat visitor (automations/scheduler.ts

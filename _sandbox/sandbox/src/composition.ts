@@ -374,7 +374,7 @@ export interface Services {
     // Wakes from `requireApproval` automations, held for the owner (.intentic/records/approvals/, one file per wake) —
     // the /automations pending routes approve (run the held wake) or reject them.
     readonly approvals: ApprovalsStore;
-    // Which sandbox conversation each inbound THREAD owns (.intentic/records/thread-sessions.json) — a Doorbell
+    // Which sandbox conversation each inbound THREAD owns (.intentic/records/thread-sessions.json) — a Front Desk
     // visitor's chat, a Discord or Slack channel. What makes a stream of messages one agent that remembers
     // instead of one fresh worktree per message; a thread past its TTL starts over.
     readonly threadSessions: ThreadSessionsStore;

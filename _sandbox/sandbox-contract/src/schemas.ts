@@ -278,7 +278,7 @@ export const AgentTurnSchema = z
          * It is the birth half of the turn's taint (guard/turn-taint.ts). The other half marks itself as the
          * turn works — a fetched page, a foreign MCP server's answer — and together they are what the command
          * gate reads before letting a command read credential material unasked. Distinct from `unattended`,
-         * which is about whether anyone is WATCHING: a Doorbell wake is both, an owner asking the agent to read
+         * which is about whether anyone is WATCHING: a Front Desk wake is both, an owner asking the agent to read
          * a web page is neither, and each flag governs a different decision. */
         outsideWake: z.string().min(1).optional(),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
@@ -289,7 +289,7 @@ export const AgentTurnSchema = z
         /* Narrows the turn to these tool names (the SDK option of the same name — not to be confused with the
          * daemon's MCP `tools`, which are servers). Absent ⇒ every tool the runtime has, which is what an
          * owner-driven chat wants. Set by the automation dispatchers from Automation.allowedTools: a wake driven
-         * by an OUTSIDE message runs bypassPermissions like any other automation turn, so for a public Doorbell
+         * by an OUTSIDE message runs bypassPermissions like any other automation turn, so for a public Front Desk
          * this list is the actual boundary — prompt wording is advice, an empty toolbox is not. */
         allowedTools: z.array(z.string().min(1)).optional(),
         effort: z.string().optional(),
@@ -3793,12 +3793,12 @@ export type Persona = z.infer<typeof PersonaSchema>;
 /* THE ONE CARD ID THE PRODUCT NAMES ITSELF — the read-only persona a public web chat answers through.
  *
  * Nothing else is stock: a fresh workspace has no personas at all, and every card on the Personas page is one
- * the owner wrote. This id is the exception because a Doorbell is driven by a stranger with nobody watching, so
+ * the owner wrote. This id is the exception because a Front Desk is driven by a stranger with nobody watching, so
  * it is the one wake whose bounds cannot be left to the prompt's wording — the daemon writes the card the moment
- * a Doorbell is saved (personas/front-desk.ts) and the automations form fills a blank Doorbell persona with it.
+ * a Front Desk is saved (personas/front-desk.ts) and the automations form fills a blank Front Desk persona with it.
  *
  * It lives HERE because those two are in different packages and must agree exactly. A literal in each would
- * drift into a Doorbell pinned to a card nobody creates, and turnPersona answers a missing card by denying
+ * drift into a Front Desk pinned to a card nobody creates, and turnPersona answers a missing card by denying
  * everything — a public chat that cannot even read, which is safe and useless.
  *
  * It is FRONT DESK and not "visitor": the card is who answers the people who arrive, not the person arriving. */
@@ -4412,7 +4412,7 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
-/* The Doorbell widget's settings — everything about the embeddable chat that isn't the automation's prompt.
+/* The Front Desk widget's settings — everything about the embeddable chat that isn't the automation's prompt.
  * Present only on `webchat` listener automations; the trigger keeps `allowedOrigins` because that one is the
  * admission gate the message route reads, not a rendering choice.
  *
@@ -4422,7 +4422,7 @@ export type Trigger = z.infer<typeof TriggerSchema>;
  * the second: a field added here is invisible to the widget until it is listed there. */
 export const WebchatConfigSchema = z.object({
     // `public` admits anyone; `google` refuses a message that carries no verifiable Google ID token. Absent ⇒
-    // public — a Doorbell with no access setting is the anonymous support box it looks like.
+    // public — a Front Desk with no access setting is the anonymous support box it looks like.
     access: z.enum(["public", "google"]).optional(),
     // Ask an anonymous visitor for a display name before the first message. Cosmetic: the name is typed, so it
     // reaches the model as untrusted `displayName`, never as identity.
@@ -4456,7 +4456,7 @@ export const WebchatConfigSchema = z.object({
      *
      * `dailyMessageMax` absent ⇒ WEBCHAT_DAILY_MAX_DEFAULT, not uncapped. Every message here is an agent turn
      * billed to the owner, and the per-minute window bounds the RATE without bounding the DAY — twenty a minute,
-     * sustained, is tens of thousands of turns before anyone notices. A Doorbell nobody configured should not be
+     * sustained, is tens of thousands of turns before anyone notices. A Front Desk nobody configured should not be
      * able to spend that, so the safe number is the one you get for free and the owner raises it deliberately.
      * `conversationMessageMax` stays optional-means-uncapped: it is per visitor thread, which the daily ceiling
      * already bounds in aggregate. */
@@ -4469,18 +4469,18 @@ export const WebchatConfigSchema = z.object({
 });
 export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
 
-/* The daily agent-turn ceiling a Doorbell gets when its owner sets none. Lives here rather than beside the
+/* The daily agent-turn ceiling a Front Desk gets when its owner sets none. Lives here rather than beside the
  * route that enforces it because both ends need the number: the daemon to apply it, and the automation editor
  * to show the owner what they are already protected by (an invisible limit is one people hit and file as a bug).
  *
- * 200 is chosen to be irrelevant to real support traffic and decisive against a script. A Doorbell answering
+ * 200 is chosen to be irrelevant to real support traffic and decisive against a script. A Front Desk answering
  * two hundred questions in one UTC day is a busy one; a scripted flood reaches that in ten seconds and then
  * stops costing anything. */
 export const WEBCHAT_DAILY_MAX_DEFAULT = 200;
 
 /* ---- the widget wire: three shapes GET /webchat/<id>/config, GET …/challenge and POST …/message speak ----
  *
- * They live here, beside the stored config they derive from, because the Doorbell widget is a SECOND client of
+ * They live here, beside the stored config they derive from, because the Front Desk widget is a SECOND client of
  * this daemon — a bundle running on a stranger's page — and the reason this package exists is that both ends of
  * a wire read one definition. The widget imports these as types only (`import type`), so zod never reaches a
  * visitor's browser. */
@@ -4538,13 +4538,13 @@ export const AutomationSchema = z.object({
     // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
     guard: z.string().min(1).optional(),
     prompt: z.string().min(1),
-    // The Doorbell widget's settings — `webchat` listener automations only, ignored on every other trigger.
+    // The Front Desk widget's settings — `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional(),
     /* NARROW THIS ONE JOB FURTHER than the persona it runs as — raw tool names, and the escape hatch under the
      * shelves rather than the way anyone is expected to answer this question.
      *
      * The persona (`actsAs` below) is where a session's toolbox is decided now, because the answer is worth
-     * reusing: the same bounds apply to the chat, the workflow and the Doorbell that name the same card. This
+     * reusing: the same bounds apply to the chat, the workflow and the Front Desk that name the same card. This
      * stays for the job that needs LESS than its persona allows — and only less, which is a rule the composer
      * enforces rather than a convention: an edit here can never hand back a shelf the persona switched off. */
     allowedTools: z.array(z.string().min(1)).optional(),
@@ -4557,14 +4557,14 @@ export const AutomationSchema = z.object({
      * A sandbox holds several accounts side by side, and when the first one is out of headroom — or belongs to
      * an organization that has disabled the plan — every fire of every automation errors against it until a
      * human happens to read the row. Pinning the wake to an account that can actually run is the difference
-     * between "my nightly sweep is quiet" and a Doorbell that turns visitors away all day. */
+     * between "my nightly sweep is quiet" and a Front Desk that turns visitors away all day. */
     account: z.string().optional(),
     /* WHICH FACE THE WAKE SHOWS THE OUTSIDE WORLD (AgentTurnSchema.actsAs — read its note for why this is not
      * spelled `account`, which is the field directly above and means who PAYS).
      *
      * Absent ⇒ the wake reaches NO logged-in account at all. That is the one place this whole layer stops being
      * a convenience and becomes a boundary, and it is deliberately the strictest default in the schema: an
-     * automation fires with nobody at the composer, on a prompt that — for a Doorbell — a stranger helped write.
+     * automation fires with nobody at the composer, on a prompt that — for a Front Desk — a stranger helped write.
      * `allowedTools` above already carries this exact reasoning for tools; an unrepeatable public post deserves
      * it at least as much. An automation that genuinely means "post as us" says so, once, in a field a reviewer
      * can see. */
@@ -4606,7 +4606,7 @@ export const AutomationApprovalSchema = z.object({
      * already opened for it and the provider session that conversation last ran on.
      *
      * Snapshotted for the same reason the payload is, and it is the half that was missing: without it an
-     * approved wake fell through to minting a fresh conversation, so a Doorbell visitor's chat became one card
+     * approved wake fell through to minting a fresh conversation, so a Front Desk visitor's chat became one card
      * per approved message instead of the single thread the dispatcher had opened for them — a second worktree
      * each time, and an agent that met the visitor again on every turn. Absent for a schedule or a webhook,
      * which own no thread. */
@@ -4718,7 +4718,7 @@ export type TriggerSource = z.infer<typeof TriggerSourceSchema>;
  *   create    — a shelf card on the page that makes the automation in one click, switched off, ready to read.
  *               The chores are all of these: upkeep nobody opens an automations page hunting for.
  *   configure — a shelf card that opens the dialog PREFILLED, for a template that cannot work unconfigured (a
- *               Doorbell with no allowed sites admits nobody, and a row that silently does nothing is worse
+ *               Front Desk with no allowed sites admits nobody, and a row that silently does nothing is worse
  *               than a form). */
 export const TemplateOfferSchema = z.enum(["create", "configure"]);
 
@@ -4889,14 +4889,14 @@ export const WorkflowGateSchema = z.object({
     /* Runs per UTC day, across every caller. A gate is a paid endpoint reachable with no person in the loop:
      * one of these wired into a push-triggered pipeline is a fan-out of sessions per commit, and the
      * per-request deadline bounds one call's WALL CLOCK without bounding the day's SPEND. Absent ⇒
-     * GATE_DAILY_MAX_DEFAULT, not uncapped, for the reason the Doorbell's ceiling is not optional either.
+     * GATE_DAILY_MAX_DEFAULT, not uncapped, for the reason the Front Desk's ceiling is not optional either.
      */
     dailyMax: z.number().int().positive().optional(),
 });
 export type WorkflowGate = z.infer<typeof WorkflowGateSchema>;
 
-/* The gate's daily ceiling when its author sets none. Deliberately small next to the Doorbell's 200: a
- * Doorbell message is one turn, a gate run is a whole graph of sessions, and the honest comparison is cost
+/* The gate's daily ceiling when its author sets none. Deliberately small next to the Front Desk's 200: a
+ * Front Desk message is one turn, a gate run is a whole graph of sessions, and the honest comparison is cost
  * rather than count. Twenty is a busy day of merges and a script's first minute. */
 export const GATE_DAILY_MAX_DEFAULT = 20;
 

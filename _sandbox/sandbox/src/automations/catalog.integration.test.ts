@@ -59,7 +59,7 @@ test("serves the daemon's own sources with no extension installed at all", async
 
     expect(catalog.sources.map((source) => source.provider)).toEqual(CORE_TRIGGER_SOURCES.map((source) => source.provider));
     // The chore book's scheduled forms are generated, so the count is not asserted — that they arrive at all is.
-    expect(catalog.templates.some((template) => template.id === "website-concierge")).toBe(true);
+    expect(catalog.templates.some((template) => template.id === "front-desk")).toBe(true);
     expect(catalog.templates.some((template) => template.id === "fix-failing-ci")).toBe(true);
 });
 

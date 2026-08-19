@@ -8,7 +8,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
  *
  * An audit searched this site for "troubleshoot" and for "not working" and got nothing back, on a product whose
  * hard parts are Docker, a tunnel and somebody else's credentials. All the failure-mode writing that existed was
- * one paragraph on the Doorbell page, and it is the best paragraph on the site. This page follows its shape:
+ * one paragraph on the Front Desk page, and it is the best paragraph on the site. This page follows its shape:
  * SYMPTOM as the heading, in the words a reader would use; the cause in a sentence; the fix;
  * and where the product already says so, because most of these announce themselves and the reader has not
  * necessarily looked.
@@ -154,7 +154,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Unattended runs error every time and chats are fine</h3>
     <p>
-        The commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the first unless something pinned one. When that account runs out of headroom, or belongs to an organisation that turned the plan off, every automation, Doorbell and nightly workflow errors against it until somebody reads the row.
+        The commonest failure nobody is present for. A sandbox holds several accounts per provider, and an unattended run takes the first unless something pinned one. When that account runs out of headroom, or belongs to an organisation that turned the plan off, every automation, Front Desk and nightly workflow errors against it until somebody reads the row.
     </p>
     <p>
         The sandbox keeps the last refusal per provider and shows it beside the account on <strong>Sandbox → Agent</strong>, which is where
@@ -174,11 +174,11 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         an automation carrying both waits for you. <a href="/docs/automations/">Automations, workflows &amp; loops</a> covers the queue.
     </p>
 
-    <h3>The Doorbell is installed and stays silent</h3>
+    <h3>The Front Desk is installed and stays silent</h3>
     <p>
         Nearly always the allowed origin. <code>https://example.com</code> and <code>https://www.example.com</code> are different origins, the
         site redirects one to the other, and the browser ends up on the one you did not list. List both. The install panel names the origin it
-        turned away and offers to add it: <a href="/docs/doorbell/">Doorbell</a> has the detail.
+        turned away and offers to add it: <a href="/docs/front-desk/">Front Desk</a> has the detail.
     </p>
 
     <h2>Landing work</h2>

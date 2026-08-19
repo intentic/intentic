@@ -248,11 +248,11 @@ export const docsBook: Book = {
                     label: "Worked examples",
                     items: [
                         {
-                            id: "doorbell",
-                            title: "Doorbell",
+                            id: "front-desk",
+                            title: "Front Desk",
                             blurb: "Put a chat on your website, answered by your agent",
                             meta: {
-                                title: "Doorbell · put your agent on your website · intentic docs",
+                                title: "Front Desk · put your agent on your website · intentic docs",
                                 description:
                                     "Embed a chat widget on your site with one script tag. Visitors talk to your sandbox agent; you watch and take over from the fleet board.",
                                 datePublished: "2026-08-01",

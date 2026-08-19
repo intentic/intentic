@@ -7,7 +7,7 @@ import type { Automation, AutomationApproval, AutomationSummary } from "@intenti
  *   schedule  — the nightly dependency audit (a code CHORE: maintenance of this codebase), and its runs are
  *               the fleet card the board shows as an automation's overnight pass.
  *   listener  — Discord: @mention the agent in #eng-alerts and it answers there, as a participant.
- *   listener  — the Doorbell webchat on the marketing site, held for approval because it is driven by strangers.
+ *   listener  — the Front Desk webchat on the marketing site, held for approval because it is driven by strangers.
  *   workspace — a land into the main tree wakes the doc-check chore.
  *   event     — CI: a red pipeline wakes an agent with the failed job's log already in hand.
  *
@@ -48,7 +48,7 @@ const seed = (now: number): AutomationSummary[] => [
         ],
     },
     {
-        id: `aut_doorbell`,
+        id: `aut_front_desk`,
         trigger: { kind: `listener`, provider: `webchat`, allowedOrigins: [`https://acme.example`] },
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
         webchat: {
@@ -61,7 +61,7 @@ const seed = (now: number): AutomationSummary[] => [
         },
         requireApproval: true,
         enabled: true,
-        runs: [{ at: now - hours(4), outcome: `completed`, detail: `answered 2 messages`, conversationId: `cnv_doorbell_visitor` }],
+        runs: [{ at: now - hours(4), outcome: `completed`, detail: `answered 2 messages`, conversationId: `cnv_front_desk_visitor` }],
     },
     {
         id: `aut_docs_after_land`,
@@ -87,11 +87,11 @@ const seed = (now: number): AutomationSummary[] => [
 
 const seedApprovals = (now: number): AutomationApproval[] => [
     {
-        id: `apr_doorbell_1`,
-        automationId: `aut_doorbell`,
+        id: `apr_front_desk_1`,
+        automationId: `aut_front_desk`,
         payload: `visitor: "Does intentic work with a self-hosted GitLab?"`,
-        origin: { automationId: `aut_doorbell`, provider: `webchat`, author: `visitor · 84.12.9.x` },
-        title: `Doorbell: self-hosted GitLab?`,
+        origin: { automationId: `aut_front_desk`, provider: `webchat`, author: `visitor · 84.12.9.x` },
+        title: `Front Desk: self-hosted GitLab?`,
         createdAt: now - minutes(6),
     },
 ];

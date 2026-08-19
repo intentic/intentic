@@ -4,9 +4,9 @@
  * The typed name is deliberately NOT part of identity — it rides the message as `displayName` and the daemon
  * hands it to the model tagged unverified. Anyone can type "admin"; only Google's signature says who someone is. */
 
-// localStorage keys are namespaced per automation: two Doorbells on one site are two threads, and clearing one
+// localStorage keys are namespaced per automation: two Front Desks on one site are two threads, and clearing one
 // must not log the visitor out of the other.
-const key = (automationId: string, name: string): string => `intentic.doorbell.${automationId}.${name}`;
+const key = (automationId: string, name: string): string => `intentic.front-desk.${automationId}.${name}`;
 
 // localStorage throws in Safari's private mode and wherever the site blocks storage. A visitor with no storage
 // still gets a working chat — just a fresh thread per page load, which is the honest degradation.
@@ -71,7 +71,7 @@ interface GoogleIdentityServices {
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 
-// One <script> per page however many Doorbells are on it, and one promise however many times sign-in is opened.
+// One <script> per page however many Front Desks are on it, and one promise however many times sign-in is opened.
 let gisLoad: Promise<GoogleIdentityServices> | undefined;
 
 const loadGis = async (): Promise<GoogleIdentityServices> => {
@@ -108,7 +108,7 @@ export interface GoogleSignIn {
 
 // Render Google's button into `container` and resolve with the ID token once the visitor signs in. Never
 // resolves if they don't — the caller keeps the panel open and the composer disabled, which is the whole point
-// of an access-gated Doorbell.
+// of an access-gated Front Desk.
 export const renderGoogleSignIn = async (container: HTMLElement, clientId: string): Promise<GoogleSignIn> => {
     const gis = await loadGis();
     return new Promise<GoogleSignIn>((resolve) => {

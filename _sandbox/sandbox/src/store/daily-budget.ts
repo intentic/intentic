@@ -6,7 +6,7 @@
  *
  * DELIBERATELY NOT PERSISTED. Its job is to bound a runaway day, and a daemon restart resetting it is a smaller
  * problem than a counter file written on every inbound request. Anything that must survive a restart rides a
- * record that was being written anyway (the Doorbell's per-conversation ceiling rides its thread session).
+ * record that was being written anyway (the Front Desk's per-conversation ceiling rides its thread session).
  *
  * ponytail: in-memory, per daemon — swap for a shared store only if the sandbox ever runs multi-process.
  */

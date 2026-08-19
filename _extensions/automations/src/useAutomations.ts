@@ -30,7 +30,7 @@ export const webhookUrl = (automation: AutomationSummary): string | undefined =>
     return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${automation.trigger.token ?? ``}`;
 };
 
-/* The one line a customer pastes into their site to put a Doorbell on it. The daemon's own origin serves both
+/* The one line a customer pastes into their site to put a Front Desk on it. The daemon's own origin serves both
  * the bundle and the routes it talks to, so the snippet needs no second address and no key — the automation id
  * is the whole address, and the origin allowlist below it is what decides who may use it. */
 export const embedSnippet = (automation: AutomationSummary): string | undefined => {
@@ -41,11 +41,11 @@ export const embedSnippet = (automation: AutomationSummary): string | undefined 
     return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
 };
 
-/* Which sites have actually loaded a Doorbell's widget — the answer to "did the snippet land?", which nothing
- * else in the app can give: a working Doorbell nobody has written to and one that was never pasted both show an
+/* Which sites have actually loaded a Front Desk's widget — the answer to "did the snippet land?", which nothing
+ * else in the app can give: a working Front Desk nobody has written to and one that was never pasted both show an
  * empty run history. Polled rather than pushed, and only while the install panel is open (`enabled`), because
  * the one minute after pasting a snippet is the entire window in which this changes for anyone. */
-export interface DoorbellInstall {
+export interface FrontDeskInstall {
     readonly origin: string;
     readonly allowed: boolean;
     readonly lastSeenAt: number;
@@ -54,23 +54,23 @@ export interface DoorbellInstall {
 
 const INSTALL_POLL_MS = 4_000;
 
-export function useDoorbellInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
+export function useFrontDeskInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
     const api = host();
     const query = useQuery({
         queryKey: computed(() => api.sandbox.key(`webchat-installs`, automationId.value ?? ``)),
-        queryFn: async (): Promise<DoorbellInstall[]> => {
+        queryFn: async (): Promise<FrontDeskInstall[]> => {
             const id = automationId.value;
             if (id === undefined) {
                 return [];
             }
-            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: DoorbellInstall[] };
+            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: FrontDeskInstall[] };
             return body.origins ?? [];
         },
         enabled: computed(() => enabled.value && automationId.value !== undefined && api.sandbox.reachable()),
         refetchInterval: INSTALL_POLL_MS,
     });
     return {
-        installs: computed<DoorbellInstall[]>(() => query.data.value ?? []),
+        installs: computed<FrontDeskInstall[]>(() => query.data.value ?? []),
         isLoading: query.isLoading,
         error: computed(() => query.error.value?.message),
     };

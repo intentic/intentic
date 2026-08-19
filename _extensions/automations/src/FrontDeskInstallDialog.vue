@@ -3,12 +3,12 @@ import type { AutomationSummary } from "@intentic/sandbox-contract";
 import { Button, CopyButton, Icon, Modal, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";
-import { type DoorbellInstall, embedSnippet, useAutomations, useDoorbellInstalls } from "./useAutomations";
+import { type FrontDeskInstall, embedSnippet, useAutomations, useFrontDeskInstalls } from "./useAutomations";
 
 /* "Did the snippet land?" — the question the app could not answer until the config route started recording who
  * asks for it.
  *
- * This panel exists because copying the snippet is the ONLY act that matters for a Doorbell, and everything
+ * This panel exists because copying the snippet is the ONLY act that matters for a Front Desk, and everything
  * about it used to happen once, inside the create dialog, at the moment the user was least able to act on it:
  * they had not opened their site's code yet. So the snippet lives here instead, reachable from the row forever,
  * with the thing that was missing entirely beside it — whether a browser has actually loaded it.
@@ -22,7 +22,7 @@ const props = defineProps<{ automation: AutomationSummary }>();
 const visible = defineModel<boolean>(`visible`, { default: false });
 
 const { save } = useAutomations();
-const { installs, isLoading, error } = useDoorbellInstalls(
+const { installs, isLoading, error } = useFrontDeskInstalls(
     computed(() => props.automation.id),
     toRef(visible),
 );
@@ -35,8 +35,8 @@ const allowedOrigins = computed<string[]>(() => {
 
 // Split rather than sorted: a refused origin is an ACTION and a working one is reassurance, and mixing them by
 // recency would bury the action under the reassurance on a busy site.
-const refused = computed<DoorbellInstall[]>(() => installs.value.filter((probe) => !probe.allowed));
-const loaded = computed<DoorbellInstall[]>(() => installs.value.filter((probe) => probe.allowed));
+const refused = computed<FrontDeskInstall[]>(() => installs.value.filter((probe) => !probe.allowed));
+const loaded = computed<FrontDeskInstall[]>(() => installs.value.filter((probe) => probe.allowed));
 
 const addError = ref<string | undefined>(undefined);
 const adding = ref<string | undefined>(undefined);

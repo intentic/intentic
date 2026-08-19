@@ -1,7 +1,7 @@
 import type { WebchatConfig, WebchatPublicConfig } from "@intentic/sandbox-contract";
 import type { AutomationRecord } from "../automations/automations-store.js";
 
-/* The one place that decides what an unset Doorbell setting MEANS, and the one place that decides which
+/* The one place that decides what an unset Front Desk setting MEANS, and the one place that decides which
  * settings a stranger's browser may see.
  *
  * Both halves are here on purpose. `publicConfig` names every field it emits — so a secret added to
@@ -9,11 +9,11 @@ import type { AutomationRecord } from "../automations/automations-store.js";
  * moment a future author forgets to strip it. And resolving the defaults daemon-side means the widget carries
  * no fallback logic: "what does an unset accent look like" has exactly one answer, on this side of the wire. */
 
-// A Doorbell with nothing configured still has to look like something. These are that something.
+// A Front Desk with nothing configured still has to look like something. These are that something.
 const DEFAULT_TITLE = "Chat";
 const DEFAULT_GREETING = "Hi! Ask me anything.";
 /* Intentic's brand orange (the app's `--color-brand-600`, converted from oklch for a browser that may not speak
- * it). A Doorbell with nothing configured should look like the product it came from rather than like the
+ * it). A Front Desk with nothing configured should look like the product it came from rather than like the
  * interchangeable indigo every chat widget ships with — and a customer who wants their own brand sets `accent`. */
 const DEFAULT_ACCENT = "#e47100";
 // Top-right, because a launcher there collides with fewer cookie banners and support widgets than bottom-right.

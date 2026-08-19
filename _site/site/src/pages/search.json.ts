@@ -7,7 +7,7 @@ import type { APIRoute } from "astro";
 /* The documentation search index: this route serves it under `astro dev`; the build writes it from dist.
  *
  * BOTH BOOKS, ONE INDEX, at the site root rather than under either of them. Someone who knows they need
- * "webhook" should not have to know whether that lives under automations, the HTTP API, or the doorbell guide
+ * "webhook" should not have to know whether that lives under automations, the HTTP API, or the front desk guide
  * (it is all three), and after the split they would additionally have had to know which BOOK it was in, which
  * is a worse question. The result row names the shelf it came from, so the answer still says where it lives.
  *

@@ -10,7 +10,7 @@ cron expression, or a listener a connector provides) with the prompt to run when
 - Compose an automation: its trigger, its prompt, which agent runs it, and which persona it runs as.
 - Draw every trigger and every starting template from the daemon's catalogue, owning the name of no integration.
 - Translate a schedule into something a person can read back before they save it.
-- Install the doorbell widget, the automation whose trigger is a visitor on your website.
+- Install the front desk widget, the automation whose trigger is a visitor on your website.
 
 ## Key files
 
@@ -41,11 +41,11 @@ disagreement waiting for whichever was edited second.
   why an automation stays useful when the thing it reacts to changes shape.
 - "Runs as" is one choice covering three things — whose accounts the wake may speak through, what it may do, and
   where in the workspace it works. It is a persona, edited on the Personas page, so the same bounds apply to the
-  chat, the workflow and the Doorbell that name the same card. Naming none keeps the full toolbox and reaches no
+  chat, the workflow and the Front Desk that name the same card. Naming none keeps the full toolbox and reaches no
   account; naming one that has been deleted gets neither, which is why the picker keeps an orphaned pin visible
   rather than rendering blank. "Narrow this one job further" is raw tool names on top of the card, and only ever
   narrower — it cannot hand back a shelf the persona switched off.
-- A Doorbell that names no persona is saved onto the seeded read-only one. It is the single automation a
+- A Front Desk that names no persona is saved onto the seeded read-only one. It is the single automation a
   stranger drives with nobody watching, so it is the one whose bounds cannot be left to the prompt's wording;
   an owner who deliberately points it at a card with more powers keeps that choice.
 - Two ways to keep a hand on the wheel, and they compose: `requireApproval` holds every fire for the owner's

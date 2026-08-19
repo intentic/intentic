@@ -20,7 +20,7 @@ import {
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationRow from "./AutomationRow.vue";
-import DoorbellInstallDialog from "./DoorbellInstallDialog.vue";
+import FrontDeskInstallDialog from "./FrontDeskInstallDialog.vue";
 import { since } from "./cronSchedule";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
@@ -74,7 +74,7 @@ const createOpen = ref(false);
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
-// The Doorbell whose install panel is open, by id rather than by object so it survives the list refetching
+// The Front Desk whose install panel is open, by id rather than by object so it survives the list refetching
 // underneath it (the panel polls, which invalidates nothing, but a save from inside it does).
 const installId = ref<string | undefined>(undefined);
 const installing = computed(() => automations.value.find((automation) => automation.id === installId.value));
@@ -143,8 +143,8 @@ const availableChores = computed(() =>
     offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
 );
 
-/* The same offer for templates marked `configure` — today just the Doorbell, which nobody arrives at this page
- * looking for. Unlike a `create` one, picking it opens the composer prefilled rather than saving: a Doorbell
+/* The same offer for templates marked `configure` — today just the Front Desk, which nobody arrives at this page
+ * looking for. Unlike a `create` one, picking it opens the composer prefilled rather than saving: a Front Desk
  * with no allowed sites admits nobody, so silently creating the row would be creating a row that does nothing. */
 const availableSuggestions = computed(() =>
     offered.value.filter((template) => template.offer === `configure` && !automations.value.some((automation) => automation.id === template.id)),
@@ -457,9 +457,9 @@ const toggleDetail = (id: string): void => {
             </section>
         </div>
 
-        <!-- Keyed on the row so re-opening a different Doorbell remounts the panel rather than showing the
+        <!-- Keyed on the row so re-opening a different Front Desk remounts the panel rather than showing the
              previous one's install probes while its own query is still in flight. -->
-        <DoorbellInstallDialog
+        <FrontDeskInstallDialog
             v-if="installing"
             :key="installing.id"
             :automation="installing"

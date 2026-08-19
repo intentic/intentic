@@ -15,7 +15,7 @@ test("writes the front desk into a workspace that has no personas", async () => 
 });
 
 /* THE OWNER'S EDITS SURVIVE. A front desk that was widened on purpose — given an account to answer through, or
- * the web — must not be reset to the stock card the next time any Doorbell is saved. */
+ * the web — must not be reset to the stock card the next time any Front Desk is saved. */
 test("leaves a front desk the owner has widened alone", async () => {
     const personas = memoryPersonasStore([
         {

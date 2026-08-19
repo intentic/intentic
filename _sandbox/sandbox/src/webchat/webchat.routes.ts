@@ -15,7 +15,7 @@ import { resolveVisitor, SignInRequired } from "./webchat-identity.js";
 import { fileWebchatInstallsStore, type WebchatInstallsStore } from "./webchat-installs.js";
 import { threadKey, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 
-/* The Doorbell's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
+/* The Front Desk's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
  * process holding a connection) the transport is inbound HTTP, so these routes ARE the source — they normalize
  * the message and drive fireAutomation directly, reusing the automation's guard, requireApproval gate, run
  * history and activity log unchanged.
@@ -64,7 +64,7 @@ const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
 };
 
 // A visitor thread's sandbox conversation id. Bounded and charset-checked by the contract's ConversationIdSchema
-// like the scheduler's own, and prefixed so a Doorbell thread is recognizable on the board and in worktree names.
+// like the scheduler's own, and prefixed so a Front Desk thread is recognizable on the board and in worktree names.
 const CONVERSATION_ID_MAX = 60;
 const mintConversationId = (automationId: string, visitorConversationId: string): string =>
     `wc-${automationId}-${visitorConversationId}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-").slice(0, CONVERSATION_ID_MAX);
@@ -72,7 +72,7 @@ const mintConversationId = (automationId: string, visitorConversationId: string)
 /* Resolve the automation this request addresses, or the refusal to answer with.
  *
  * A refusal carries the automation whenever one was found, because the install panel's most useful line is
- * built from exactly that case: a real Doorbell, asked for by an origin that is not on its list. Nothing about
+ * built from exactly that case: a real Front Desk, asked for by an origin that is not on its list. Nothing about
  * the RESPONSE changes — the caller still answers with `status` and `error` alone. */
 type Resolved = { automation: AutomationRecord; config: WebchatConfig } | { status: 403 | 404 | 409; error: string; automation?: AutomationRecord };
 
@@ -107,18 +107,18 @@ export const createWebchatRoutes = (
     wake: WakeFn = streamAgent,
     installs: WebchatInstallsStore = fileWebchatInstallsStore(services.workspace.root),
 ) => {
-    // The Doorbell is one PROVIDER of the shared thread store (services.threadSessions): its "channel" is the id
+    // The Front Desk is one PROVIDER of the shared thread store (services.threadSessions): its "channel" is the id
     // the widget minted for this visitor, so a five-message chat is one conversation exactly as a five-mention
     // Discord thread is.
     const store = services.threadSessions;
 
     return {
-        /* What the widget renders itself from. Origin-gated like the message route so a Doorbell's greeting,
+        /* What the widget renders itself from. Origin-gated like the message route so a Front Desk's greeting,
          * accent and sign-in settings aren't readable from anywhere on the internet.
          *
          * This is also the INSTALL PROBE: it is the one request every widget makes on every page load, so
          * recording it — admitted or refused — is what lets the app answer "did the snippet land?" instead of
-         * showing the same empty run history for a working Doorbell and an unpasted one. */
+         * showing the same empty run history for a working Front Desk and an unpasted one. */
         config: async (c: Context<AppEnv, "/webchat/:id/config">): Promise<Response> => {
             const origin = c.req.header("origin");
             const resolved = await resolve(services, c.req.param("id"), origin);
@@ -131,7 +131,7 @@ export const createWebchatRoutes = (
             return c.json(publicConfig(resolved.automation));
         },
 
-        /* What the owner's install panel reads: which origins have actually loaded this Doorbell's widget, and
+        /* What the owner's install panel reads: which origins have actually loaded this Front Desk's widget, and
          * which were turned away. OWNER-ONLY — deliberately absent from app.ts's public webchat paths, so it
          * goes through the ordinary bearer middleware like every other route the app calls. */
         installs: async (c: Context<AppEnv, "/webchat/:id/installs">): Promise<Response> =>

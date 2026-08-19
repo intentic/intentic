@@ -133,7 +133,7 @@ export interface AgentRequest {
      * below, which are MCP servers. Absent ⇒ the runtime's full toolbox.
      *
      * This is the only real bound on a turn nobody is watching. bypassPermissions above is the default posture
-     * because the container is the isolation — but a Doorbell turn is driven by an anonymous website visitor,
+     * because the container is the isolation — but a Front Desk turn is driven by an anonymous website visitor,
      * where "the container is disposable" is not the whole answer: the automation's allowlist is what stops an
      * instruction smuggled into a support question from reaching Bash. */
     readonly allowedTools?: readonly string[];
@@ -516,7 +516,7 @@ const baseOptions = (
          *
          * `fastModePerSessionOptIn` is the load-bearing half. Without it the harness PERSISTS the choice to the
          * settings file, and the sandbox's user tier is shared by every conversation in the container — so one
-         * chat's toggle would silently start billing every other chat, and every automation and doorbell turn, at
+         * chat's toggle would silently start billing every other chat, and every automation and front desk turn, at
          * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
          *
          * Omitted entirely when the turn didn't ask, rather than sent as `false`: a `false` in the flag layer would

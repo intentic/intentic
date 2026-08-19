@@ -10,7 +10,7 @@ import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
  */
 
 // Which admission-floor key a wake falls under, from the automation's trigger. The webchat listener is its own
-// source — a Doorbell visitor is a stranger on a public widget, which is not the same trust as a Discord
+// source — a Front Desk visitor is a stranger on a public widget, which is not the same trust as a Discord
 // channel the owner wired — and every other listener provider shares the "listener" rule.
 export const wakeSourceOf = (trigger: Trigger): WakeSource => {
     switch (trigger.kind) {

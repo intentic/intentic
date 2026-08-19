@@ -7,7 +7,7 @@ import type { TurnPersona } from "./personas.js";
  *
  * A REFUSAL, NOT A WALL, AND THE CARD SAYS SO WHERE IT IS SET. This is a PreToolUse hook, so it sees exactly
  * what worktree-redirect.ts sees: the paths that arrive as structured tool input. It stops the whole class of
- * mistake these limits are bought for — a chore wandering out of its repo, a Doorbell-driven turn reading a
+ * mistake these limits are bought for — a chore wandering out of its repo, a Front-Desk-driven turn reading a
  * file the visitor named, an instruction smuggled into a support question — and it does not stop a shell, which
  * computes its own paths and never shows them to a hook. That is why the shelf above it is `shell`: switching
  * that off is what turns this from a strong default into a fence, and PersonaPowersSchema says the same thing

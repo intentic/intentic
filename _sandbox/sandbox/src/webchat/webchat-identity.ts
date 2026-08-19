@@ -48,7 +48,7 @@ const authorizedEmails = async (services: Pick<Services, "workspace" | "members"
     return new Set([...(owner === undefined ? [] : [owner]), ...members.map(({ email }) => email)].map((email) => email.toLowerCase()));
 };
 
-/* Resolve one message's sender. Throws SignInRequired when the Doorbell is sign-in-only and the token is
+/* Resolve one message's sender. Throws SignInRequired when the Front Desk is sign-in-only and the token is
  * absent or bad — the route answers 401, and the widget re-opens its sign-in gate.
  *
  * A verification failure is deliberately NOT distinguished from a missing token in what the visitor is told:
@@ -78,7 +78,7 @@ export const resolveVisitor = async (
         if (gated) {
             throw new SignInRequired("sign-in required");
         }
-        // An open Doorbell that was handed an unusable token still serves the visitor — as an anonymous one.
+        // An open Front Desk that was handed an unusable token still serves the visitor — as an anonymous one.
         return { author: displayName ?? "visitor", ...(displayName !== undefined ? { displayName } : {}) };
     }
 

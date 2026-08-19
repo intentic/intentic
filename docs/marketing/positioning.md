@@ -124,7 +124,7 @@ below, so that is what the page now claims and proves; the rest support it or li
 6. **Minutes to a live workspace** — Google sign-in, one copy-paste command, no Cloudflare account,
    no open ports, workspace opens itself when the sandbox reports in. (P3)
 7. **A lean core plus extensions** — automations, Discord/Slack, IMAP, memory, pipelines, previews and
-   the Doorbell webchat are things you bolt on, not what the product is (`_extensions/README.md`, the
+   the Front Desk webchat are things you bolt on, not what the product is (`_extensions/README.md`, the
    VSCode bet). This is genuinely a selling point *and* the thing that blurred the site when it was
    sold band by band; on the landing page it is one quiet index with links out. (P5, P6)
 

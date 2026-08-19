@@ -206,7 +206,7 @@ export function buildSoftwareAppSchema() {
             "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Google",
             "Environment overlays: the job's dev-tools really installed",
             "Capabilities: repos, databases, and services wired in as credentials the agent operates",
-            "Extensions: automations, Discord and Slack, a website Doorbell, memory, pipelines",
+            "Extensions: automations, Discord and Slack, a website Front Desk, memory, pipelines",
         ],
         author: founderRef,
         publisher: orgRef,

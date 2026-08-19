@@ -150,7 +150,7 @@ export const createBufferedPainter = (send: (text: string) => Promise<void>, onE
  * reads as the bot ignoring you rather than as anything having gone wrong.
  *
  * The reason goes out as the daemon wrote it: a gateway delivers into the owner's own space, so the real
- * sentence beats something neutral (the Doorbell, which faces strangers, redacts at its own sink instead).
+ * sentence beats something neutral (the Front Desk, which faces strangers, redacts at its own sink instead).
  * Marked so it reads as the system speaking rather than as the agent, and clamped to the provider's ceiling. */
 export const failureNotice = (reason: string, maxChars: number): string => `⚠️ ${reason}`.slice(0, maxChars);
 

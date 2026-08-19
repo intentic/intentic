@@ -11,7 +11,7 @@ import { triggerKey, useAutomationForm } from "./useAutomationForm";
 /* NEW automation, IN the list rather than over it.
  *
  * This was a 44rem modal, and the modal had been losing for a while: its width had already gone 32rem → 44rem
- * to stop the Doorbell branch wrapping into a column you scrolled twice, and its template gallery had already
+ * to stop the Front Desk branch wrapping into a column you scrolled twice, and its template gallery had already
  * been demoted to a fold-away disclosure because one card per connected capability pushed Name below the fold.
  * Both are symptoms of the same thing — an automation is the biggest form in the app, and a dialog is the
  * smallest surface in it.
@@ -23,7 +23,7 @@ import { triggerKey, useAutomationForm } from "./useAutomationForm";
  * MOUNTED ONLY WHILE OPEN, so every field, the pick and the error start empty — the dialog stayed mounted
  * between openings and had to hand-reset all three on @hide.
  *
- * The one thing it keeps from the dialog is the HANDOFF: a webhook and a Doorbell are not finished when they
+ * The one thing it keeps from the dialog is the HANDOFF: a webhook and a Front Desk are not finished when they
  * are saved, because a URL or a snippet still has to be pasted into some other system. That belongs where the
  * act happened, so the panel stays in place and swaps its body for what to paste — the list is above and below
  * it the whole time, never covered. */
@@ -66,7 +66,7 @@ const template = computed(() =>
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
 const recipeFilterInput = ref<HTMLInputElement>();
-// After creating an event or Doorbell automation the panel stays on this id to show what to paste.
+// After creating an event or Front Desk automation the panel stays on this id to show what to paste.
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
 const shaking = ref(false);
@@ -139,7 +139,7 @@ const submit = async (): Promise<void> => {
         await save.mutateAsync(build());
         // The two triggers that are not finished by saving hold the panel on their handoff; everything else is
         // done, so the panel closes and the new row opens to show what was made.
-        if (form.kind === `event` || state.isDoorbell.value) {
+        if (form.kind === `event` || state.isFrontDesk.value) {
             savedId.value = id;
             return;
         }
@@ -285,7 +285,7 @@ const finish = (id: string): void => {
         <!-- The handoff: the one thing creating an automation does NOT finish. Same shape for both — a copyable
              line and what to do with it. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
-            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Doorbell created — drop this into your site:</p>
+            <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created — drop this into your site:</p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
                 <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) }}</code>
                 <CopyButton :text="embedSnippet(savedAutomation) ?? ''" :aria-label="`Copy the embed snippet for ${savedAutomation.id}`" />

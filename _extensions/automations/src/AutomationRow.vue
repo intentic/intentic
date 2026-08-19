@@ -109,7 +109,7 @@ const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !
  * The form is loaded from the stored automation when Edit is pressed and thrown away on Cancel, so the row is
  * never quietly holding a half-typed version of something the list is showing as saved. There is no
  * save-as-you-type here, unlike the acceptance rows this borrows its shape from: a story is a document, while
- * an automation EXECUTES — a Doorbell with half an origin typed into it would start turning visitors away
+ * an automation EXECUTES — a Front Desk with half an origin typed into it would start turning visitors away
  * between keystrokes. */
 const editing = ref(false);
 const editError = ref<string | undefined>(undefined);
@@ -149,11 +149,11 @@ const saveEdit = async (): Promise<void> => {
     }
 };
 
-/* The Doorbell summary the expanded row shows: the snippet to paste, and the two settings that decide whether
+/* The Front Desk summary the expanded row shows: the snippet to paste, and the two settings that decide whether
  * it works at all. Undefined for every other automation, which is what keeps the block out of their rows.
  * Undefined until the sandbox's own origin is known, because without it there is no snippet to install and
  * the Install action would open a panel with nothing in it. */
-const doorbell = computed(() => {
+const frontDesk = computed(() => {
     const fires = props.automation.trigger;
     if (fires.kind !== `listener` || fires.provider !== `webchat` || embedSnippet(props.automation) === undefined) {
         return undefined;
@@ -237,12 +237,12 @@ const doorbell = computed(() => {
                 {{ nextLabel }}
             </span>
 
-            <!-- A Doorbell's snippet is the DELIVERABLE — the one thing the owner came here to get — so unlike
+            <!-- A Front Desk's snippet is the DELIVERABLE — the one thing the owner came here to get — so unlike
                  Run and Delete it is always visible rather than hover-revealed, and it sits before them because
                  installing is what you do first and most often. It also carries the install status, which is
                  the only place in the app that can say whether the paste worked. -->
             <button
-                v-if="doorbell"
+                v-if="frontDesk"
                 type="button"
                 class="shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:bg-overlay hover:text-content"
                 :aria-label="`Install ${automation.id} on a website`"
@@ -308,7 +308,7 @@ const doorbell = computed(() => {
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
         <div v-if="expanded" class="flex flex-col gap-2.5 border-t border-line bg-canvas/40 px-3 py-2.5 pl-8">
             <!-- EDITING HAPPENS HERE, not in a dialog. Same argument the acceptance rows make: a modal hides the
-                 list you are comparing against, and at 32rem it turned a form with a Doorbell's worth of fields
+                 list you are comparing against, and at 32rem it turned a form with a Front Desk's worth of fields
                  into a column you scrolled twice. The row has the whole page width and the automation's own
                  history under it. -->
             <div v-if="editing" class="flex flex-col gap-3 pr-3">
@@ -335,16 +335,16 @@ const doorbell = computed(() => {
                     />
                 </div>
 
-                <!-- A Doorbell's embed snippet, where the owner will actually look for it: on the row, months after
+                <!-- A Front Desk's embed snippet, where the owner will actually look for it: on the row, months after
                  the create dialog that first showed it. Beside it, the two things that decide whether the widget
                  works at all — which sites may load it, and who it lets in. -->
                 <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
                  copies of the one string the owner acts on is two places for it to be stale or disagree. -->
-                <div v-if="doorbell" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                    <span v-if="doorbell.origins.length > 0">on {{ doorbell.origins.join(`, `) }}</span>
+                <div v-if="frontDesk" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                    <span v-if="frontDesk.origins.length > 0">on {{ frontDesk.origins.join(`, `) }}</span>
                     <span v-else class="text-danger">no sites allowed — nobody can chat</span>
-                    <span>{{ doorbell.access }}</span>
-                    <span>{{ doorbell.botCheck }}</span>
+                    <span>{{ frontDesk.access }}</span>
+                    <span>{{ frontDesk.botCheck }}</span>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">

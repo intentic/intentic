@@ -3811,7 +3811,7 @@
       "hasTests": true,
       "loc": 1462,
       "name": "@intentic/webchat-widget",
-      "oneLiner": "Doorbell — the embeddable chat bubble a website loads to talk to a sandbox agent.",
+      "oneLiner": "Front Desk — the embeddable chat bubble a website loads to talk to a sandbox agent.",
       "readmeRev": "30afa15c696215fcf39fdd1f899c5e60e9eab381",
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,

@@ -67,7 +67,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
                             write({ automationId, delta: text });
                         }
                     },
-                    // Forwarded VERBATIM, unlike the Doorbell's: a gateway delivers into the owner's own
+                    // Forwarded VERBATIM, unlike the Front Desk's: a gateway delivers into the owner's own
                     // channel, so the provider's actual sentence is the useful thing to put there rather than
                     // something neutral. What a source does with the frame is the source's own call.
                     failed: (reason) => write({ automationId, failed: reason }),

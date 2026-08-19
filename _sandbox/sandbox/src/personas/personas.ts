@@ -24,7 +24,7 @@ import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
  *   would tax every ordinary turn to prevent a mistake a human is already positioned to catch.
  *
  *   AN UNATTENDED WAKE WITH NO PERSONA GETS NOTHING. Nobody is watching, the prompt may have been shaped by a
- *   stranger (a Doorbell), and the failure mode is a public post from the wrong account that cannot be taken
+ *   stranger (a Front Desk), and the failure mode is a public post from the wrong account that cannot be taken
  *   back. Here the prompt's wording is the only thing left standing, and advice does not bound anything.
  *
  * THE POWERS RULE IS THE OPPOSITE, and deliberately so: an unpinned turn keeps its full toolbox, attended or
@@ -36,7 +36,7 @@ import { FRONT_DESK_GUIDANCE } from "./front-desk.js";
  * NAMING A PERSONA THAT DOES NOT EXIST DENIES EVERYTHING — accounts and powers both, and this is the one case
  * where the two rules agree. Falling back to "all accounts" would be perverse (the owner asked for one specific
  * persona, and answering a missing card with every account they own inverts the request into the exact accident
- * the layer exists to stop) and falling back to "the full toolbox" is worse: a Doorbell pinned to a read-only
+ * the layer exists to stop) and falling back to "the full toolbox" is worse: a Front Desk pinned to a read-only
  * card would quietly regain a shell the moment somebody deleted that card, with anonymous visitors driving it.
  * A card can go missing for entirely ordinary reasons — a workspace cloned before its personas were committed,
  * a card renamed in one place and not the other — so this is a state to REPORT loudly, not to assume away.
@@ -199,7 +199,7 @@ export const personaCliEnv = (
 /* WHICH BUILT-IN TOOLS THIS TURN DOES NOT GET — the shelves that are not capability-shaped, spelled as the tool
  * names the runtime knows them by.
  *
- * A DENYLIST RATHER THAN AN ALLOWLIST, which is the opposite of how the Doorbell's original bound was written
+ * A DENYLIST RATHER THAN AN ALLOWLIST, which is the opposite of how the Front Desk's original bound was written
  * and is the right way round for a default-permissive card. An allowlist has to name every tool a session may
  * use — including the ones a runtime upgrade adds next month and every `mcp__…` name a connected account
  * mints — so the day it goes stale it goes stale by taking something away that the owner never chose to remove.
@@ -290,7 +290,7 @@ export const personaPrompt = (
  * it is expected to stay inside, because a refusal there arrives mid-task and reads as a broken tool.
  *
  * NOTHING HERE IS AUTHORED BY THE OWNER. Every sentence is derived from a field they SET, so the note cannot say
- * something they did not decide. The one exception is the desk the daemon writes for a Doorbell, whose manner
+ * something they did not decide. The one exception is the desk the daemon writes for a Front Desk, whose manner
  * belongs to the product rather than to any workspace (front-desk.ts).
  *
  * Returns undefined when there is nothing worth saying: an open attended turn is the status quo, and a turn

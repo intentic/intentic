@@ -15,14 +15,14 @@ else lets you edit the prompt; we let you edit the environment"*. That is a **re
 a promise — it only lands on a reader already deep in the agent-tooling debate, and it cost four
 consecutive bands (`#contrast`, `#anatomy`, `#sandbox`, `#integrations`) restating one abstract point
 at four altitudes. Around them sat five more "and also" bands — a Discord teammate, team sharing, a
-whole company of agents, a website Doorbell. Fourteen sections, **16,254 px at 1440 wide, about
+whole company of agents, a website Front Desk. Fourteen sections, **16,254 px at 1440 wide, about
 eighteen screens**, and the reported effect was exactly what that adds up to: *"individually all
 interesting, together I lost track of what the product is."*
 
 So the page now makes one claim and proves it, and the flexibility is **stated once** in a quiet band
 near the bottom instead of demonstrated nine times. That band is also the honest framing —
 `_extensions/README.md` calls the app *"a lean core + an extension system (the VSCode bet)"*, and
-automations, Discord, Slack, IMAP, memory, pipelines and the Doorbell webchat really are things you
+automations, Discord, Slack, IMAP, memory, pipelines and the Front Desk webchat really are things you
 bolt on. Result: **9,592 px, five arguments and one index** — 10,298 px once `#trust` joined it.
 
 **The environment argument did not die — it was demoted.** It rides in the FAQ's "How is this
@@ -105,7 +105,7 @@ summary that links there, never a second copy of it. Also off the page: the prom
 argument (`/features/review/`), the four-layer anatomy (same page), the integrations hub
 (`/features/connect/`), the Discord teammate mock (same page), team sharing (`/features/host/`), the
 workforce triptych and the company topology (`/docs/autonomous-employees/`, `/docs/reference-architecture/`),
-and Doorbell (`/features/connect/`, `/docs/doorbell/`). Adding any of those back as a full band is a
+and Front Desk (`/features/connect/`, `/docs/front-desk/`). Adding any of those back as a full band is a
 regression, not an improvement — the `#verbs` tour carries the link instead.
 
 **Deployment is not part of the product (do not re-add).** The monorepo happens to include a
@@ -236,7 +236,7 @@ read as table stakes any agentic editor has, and half the menu undersold the pro
 menu order:
 
 - **Orchestrate** — run the whole fleet, get pulled in only when one needs you (was Fleet board).
-- **Empower** — wire agents into your systems and onto your own website (was Capabilities, Doorbell folded in).
+- **Empower** — wire agents into your systems and onto your own website (was Capabilities, Front Desk folded in).
 - **Automate** — agents that wake on an event under permissions you set (NEW — this had no page before).
 - **Supervise** — plan, approve, review every diff, curate the context (was Chat & plan mode + Review & land + the shared editor).
 - **Delegate** — give the sandbox a server of its own and hand off operation (was Sandbox & ownership).
@@ -252,8 +252,8 @@ flat ordered list of verbs, and each verb folds the relevant surfaces underneath
   letting it operate autonomously — ownership + autonomy. The deployment engine is still never a pillar
   (see messaging.md); Delegate never means "ship your app with our deployer", and ownership leads the page
   so the moat stays legible.
-- **Doorbell folded into Empower, not deleted.** A website chat widget is one thing you empower an agent to
-  do, not a product of its own — it is a block on `/features/connect/`, and `/docs/doorbell/` still owns the
+- **Front Desk folded into Empower, not deleted.** A website chat widget is one thing you empower an agent to
+  do, not a product of its own — it is a block on `/features/connect/`, and `/docs/front-desk/` still owns the
   deep guide.
 
 Rules that keep them honest:

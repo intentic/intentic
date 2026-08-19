@@ -224,7 +224,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * unbounded on another depending on a dropdown nobody associates with security. For an account filter that
      * was already wrong; for a toolbox it is the difference between a fence and a decoration.
      *
-     * Every session start in the sandbox passes through this function — the chat, an automation wake, a Doorbell
+     * Every session start in the sandbox passes through this function — the chat, an automation wake, a Front Desk
      * message, a workflow step, a loop iteration — so this is the one place that can answer the question once
      * and have every surface inherit it. */
     const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true });

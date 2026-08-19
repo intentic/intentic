@@ -3,13 +3,13 @@ import DocsLayout from "../../components/DocsLayout.astro";
 ---
 
 <DocsLayout
-    pageId="doorbell"
-    heading="Doorbell · put your agent on your website"
+    pageId="front-desk"
+    heading="Front Desk · put your agent on your website"
     lead="One script tag on your site gives visitors a chat bubble. Each conversation opens on your fleet board, where you can watch it live and take over mid-sentence."
 >
     <h2>What it is</h2>
     <p>
-        A <strong>Doorbell</strong> is an automation with a chat widget in front of it. A visitor types a question and your sandbox agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering has your repository, your docs and your connected tools, so it answers from what is true today.
+        A <strong>Front Desk</strong> is an automation with a chat widget in front of it. A visitor types a question and your sandbox agent answers, streaming as it writes. Unlike a support bot bolted onto a help centre, the thing answering has your repository, your docs and your connected tools, so it answers from what is true today.
     </p>
     <p>
         Every visitor's thread becomes <strong>one conversation on your fleet board</strong>: a card you can open, read, and type into. If a
@@ -18,8 +18,8 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
     <h2>1 · Create it</h2>
     <p>
-        Open <strong>Automations</strong> and pick <strong>Website concierge</strong> under "Reach this agent from elsewhere", or press{" "}
-        <strong>New automation</strong>, choose <strong>Listen (live)</strong>, then <strong>Doorbell</strong>. The prompt comes prefilled
+        Open <strong>Automations</strong> and pick <strong>Front Desk</strong> under "Reach this agent from elsewhere", or press{" "}
+        <strong>New automation</strong>, choose <strong>Listen (live)</strong>, then <strong>Front Desk</strong>. The prompt comes prefilled
         with instructions that tell the agent to answer visitors' questions and refuse anything that asks it to change files or run commands.
         Edit it to say what your site is about.
     </p>
@@ -31,19 +31,19 @@ import DocsLayout from "../../components/DocsLayout.astro";
     <pre><code>https://example.com
 https://www.example.com</code></pre>
     <p>
-        <strong>Those two are different origins.</strong> This is the commonest reason a fresh Doorbell stays silent: the site redirects one to the other, the browser lands on the one you did not list, and every request is refused. List both. The install panel names the origin it turned away and offers to add it.
+        <strong>Those two are different origins.</strong> This is the commonest reason a fresh Front Desk stays silent: the site redirects one to the other, the browser lands on the one you did not list, and every request is refused. List both. The install panel names the origin it turned away and offers to add it.
     </p>
 
     <h2>3 · Paste the snippet</h2>
     <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
-    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/webchat/widget.js" data-automation="website-concierge" defer&gt;&lt;/script&gt;</code></pre>
+    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/webchat/widget.js" data-automation="front-desk" defer&gt;&lt;/script&gt;</code></pre>
     <p>
         The script carries one piece of information: which automation to talk to. The sandbox it calls is the origin the script came from, so there is no second address to keep in sync and no key to leak. The widget is about 6 kB gzipped, renders in a shadow root so neither stylesheet can reach the other, and loads no framework.
     </p>
 
     <h2>4 · Check that it landed</h2>
     <p>
-        Reload your site, then look at the <strong>Install</strong> panel again. It lists every origin that has asked for this Doorbell and
+        Reload your site, then look at the <strong>Install</strong> panel again. It lists every origin that has asked for this Front Desk and
         whether it was let in, so "installed, nobody has written yet" is visibly different from "the snippet never ran". A refused origin
         appears with an <strong>Allow</strong> button beside it.
     </p>
@@ -72,7 +72,7 @@ https://www.example.com</code></pre>
 
     <h2>What the agent may do behind it</h2>
     <p>
-        A Doorbell is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it reads files, searches the workspace and fetches a page, and it cannot run commands or write anything. That is enforced as a list of allowed tools on the automation, not asked for in the prompt, so an instruction smuggled into a question has nothing to reach.
+        A Front Desk is driven by strangers, so it runs with a <strong>read-only toolbox</strong> by default: it reads files, searches the workspace and fetches a page, and it cannot run commands or write anything. That is enforced as a list of allowed tools on the automation, not asked for in the prompt, so an instruction smuggled into a question has nothing to reach.
     </p>
     <p>
         On top of that, each visitor thread runs in its own throwaway git worktree. There is a per-conversation rate limit and a daily message
@@ -83,6 +83,6 @@ https://www.example.com</code></pre>
     <ul>
         <li>The widget loads from your sandbox, so while the sandbox is off the launcher does not appear on your site.</li>
         <li>A visitor's thread keeps its conversation for a day of quiet, then the next message starts a fresh one.</li>
-        <li>Approval-gated Doorbells tell the visitor a human will review their message; the reply is not delivered back into the widget yet.</li>
+        <li>Approval-gated Front Desks tell the visitor a human will review their message; the reply is not delivered back into the widget yet.</li>
     </ul>
 </DocsLayout>

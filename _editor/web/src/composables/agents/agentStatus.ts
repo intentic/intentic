@@ -438,7 +438,7 @@ const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
     discord: { icon: `comments`, label: `Discord` },
     slack: { icon: `comments`, label: `Slack` },
     imap: { icon: `envelope`, label: `Email` },
-    webchat: { icon: `globe`, label: `Doorbell` },
+    webchat: { icon: `globe`, label: `Front Desk` },
     webhook: { icon: `bolt`, label: `Webhook` },
 };
 

@@ -4,7 +4,7 @@ import type { WebchatChallenge, WebchatConfig, WebchatMessage } from "@intentic/
 /* The bot ceiling for a public endpoint, in the two flavours webchat-config offers — and the reason it is a
  * ceiling rather than a wall: neither of these stops a determined human, and the automation's tool allowlist
  * and budget caps are what bound the damage if one gets through. What these buy is that a scraper pointed at
- * a Doorbell does not get to spend an agent turn per request. */
+ * a Front Desk does not get to spend an agent turn per request. */
 
 // A challenge is spent on the FIRST message of a visitor thread (an existing session record is the admission
 // mark), so this window only has to cover "opened the panel, then typed".

@@ -180,7 +180,7 @@ survive reconnects. Its subsystems:
   automation fires too: trying a prompt before switching it on is the main reason to press it. Every run records
   the session it ran in, so the row's run history opens the transcript — the answer to "it failed overnight and
   I can't see why".
-- **Doorbell** — a chat bubble a customer embeds on their own website, talking to a `webchat` listener
+- **Front Desk** — a chat bubble a customer embeds on their own website, talking to a `webchat` listener
   automation ([webchat/](_sandbox/sandbox/src/webchat/), widget in
   [\_sandbox/webchat-widget](_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
   no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Four
@@ -194,11 +194,11 @@ survive reconnects. Its subsystems:
   Each thread maps to ONE sandbox conversation, resumed by session id
   ([webchat-sessions.ts](_sandbox/sandbox/src/webchat/webchat-sessions.ts)), so a five-message support chat is one
   fleet card the owner can watch live and take over — not five worktrees with amnesia. And because an
-  automation turn runs `bypassPermissions` by default, a Doorbell's real boundary is `Automation.allowedTools`,
+  automation turn runs `bypassPermissions` by default, a Front Desk's real boundary is `Automation.allowedTools`,
   carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
   doubles as the **install probe** ([webchat-installs.ts](_sandbox/sandbox/src/webchat/webchat-installs.ts)):
   every widget load records its origin and whether it was admitted, which is the only thing that can tell a
-  working Doorbell nobody has written to from a snippet that was never pasted — and turns the commonest
+  working Front Desk nobody has written to from a snippet that was never pasted — and turns the commonest
   mistake of all (`example.com` listed, `www.example.com` not) into a named origin with an Allow button.
 - **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
   UI surface ([ci/](_sandbox/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected

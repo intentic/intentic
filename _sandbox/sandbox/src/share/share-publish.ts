@@ -14,12 +14,12 @@ import type { SharePicture } from "./share-payload.js";
  * built assets that every share loads, and a directory per share holding its own page and its own pictures.
  *
  * The assets are resolved through the package's own export, so this works identically from a checkout in dev
- * and from the pruned production tree in the image — the same resolution the Doorbell widget's route uses,
+ * and from the pruned production tree in the image — the same resolution the Front Desk widget's route uses,
  * for the same reason. */
 
 /* Where the built page lives, resolved through the package's own export rather than by walking node_modules —
  * so it works identically from a checkout in dev and from the pruned production tree in the image, the same
- * resolution the Doorbell widget's route uses.
+ * resolution the Front Desk widget's route uses.
  *
  * Called at share time, never at boot: `import.meta.resolve` throws for a package that is not there, and a
  * daemon that refused to start because the page bundle is missing would trade one broken feature for a broken

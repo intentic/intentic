@@ -190,7 +190,7 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
 };
 
 // An in-memory thread-session store, so the routes that turn an inbound message into a CONVERSATION (the
-// Doorbell, a listener gateway's dispatch) are testable without the fs. Honours the TTL, because "a quiet
+// Front Desk, a listener gateway's dispatch) are testable without the fs. Honours the TTL, because "a quiet
 // thread starts over" is behaviour and not bookkeeping.
 const memoryThreadSessionsStore = (): ThreadSessionsStore => {
     const sessions = new Map<string, ThreadSession>();
@@ -442,7 +442,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             clearTurn: async () => {},
             clearFire: async () => {},
         },
-        // In-memory thread sessions: every inbound-message fire (Doorbell, listener gateway) resolves which
+        // In-memory thread sessions: every inbound-message fire (Front Desk, listener gateway) resolves which
         // conversation it belongs to through this, and these suites only need it to answer consistently.
         threadSessions: memoryThreadSessionsStore(),
         activity: { append: async () => {}, list: async () => [] },

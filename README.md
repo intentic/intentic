@@ -129,7 +129,7 @@ workspace and never shown in the file tree.
 
 <img src="_site/site/src/assets/product/sandbox-spend.png" alt="The Usage tab: token and cost breakdown per agent and per model">
 
-<img src="_site/site/src/assets/product/doorbell.png" alt="An automation waking an agent on an incoming event">
+<img src="_site/site/src/assets/product/front-desk.png" alt="An automation waking an agent on an incoming event">
 
 </details>
 

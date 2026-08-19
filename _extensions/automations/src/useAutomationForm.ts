@@ -16,7 +16,7 @@ import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
 /* ONE automation form, for both the thing that creates automations and the thing that edits them.
  *
  * It lives here rather than inside the create dialog because there are now two callers and the fields are the
- * expensive part to keep honest: a Doorbell's origins are validated against what the daemon actually compares,
+ * expensive part to keep honest: a Front Desk's origins are validated against what the daemon actually compares,
  * a cron is previewed against the same parser that will fire it, and the Advanced block knows which providers
  * have a harness to choose. A second copy of that for editing would be a second place to get it wrong, and the
  * one that got it wrong would be the one nobody re-read.
@@ -86,7 +86,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         branch: ``,
         workspaceEvent: `turn.settled` as WorkspaceEventKind,
         repo: ``,
-        // Doorbell — `origins` is edited as one line per site because that is how people hold a short allowlist
+        // Front Desk — `origins` is edited as one line per site because that is how people hold a short allowlist
         // in their head; it is split on save.
         origins: ``,
         access: `public` as `public` | `google`,
@@ -106,7 +106,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
 
     /* ---- derived ---- */
 
-    const isDoorbell = computed(() => form.kind === `listener` && form.provider === `webchat`);
+    const isFrontDesk = computed(() => form.kind === `listener` && form.provider === `webchat`);
     const listenerSource = computed(() => listenerSourceOf(sources.value, form.provider, form.eventType));
 
     // The picked source's second narrowing axis, when it has one (only CI does). Drives both the extra input
@@ -226,11 +226,11 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
     // An origin must be exactly what a browser puts in the Origin header — scheme + host, no path — because that
     // is what the daemon compares against. Saying so at the point of typing beats a 403 the visitor sees.
     const originsError = computed<string | undefined>(() => {
-        if (!isDoorbell.value) {
+        if (!isFrontDesk.value) {
             return undefined;
         }
         if (originList.value.length === 0) {
-            return `Add at least one site — a Doorbell with no allowed sites admits nobody.`;
+            return `Add at least one site — a Front Desk with no allowed sites admits nobody.`;
         }
         const bad = originList.value.find((origin) => !/^https?:\/\/[^/]+$/.test(origin));
         return bad === undefined ? undefined : `"${bad}" isn't an origin — use scheme + host only, e.g. https://example.com`;
@@ -404,8 +404,8 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
                           ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
                           ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
                           ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
-                          // The Doorbell's admission list lives on the trigger, beside the provider it gates.
-                          ...(isDoorbell.value ? { allowedOrigins: originList.value } : {}),
+                          // The Front Desk's admission list lives on the trigger, beside the provider it gates.
+                          ...(isFrontDesk.value ? { allowedOrigins: originList.value } : {}),
                       };
         // Start with the stored record so a field added to the contract is preserved until the editor explicitly
         // owns it. The assignments below are the complete set this form does own, including clearing defaults.
@@ -450,15 +450,15 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         // A workspace trigger is a chore by definition; clock-based chores carry the stored form flag.
         if (form.kind === `workspace` || form.chore) automation.chore = true;
         else delete automation.chore;
-        if (isDoorbell.value) {
+        if (isFrontDesk.value) {
             automation.webchat = webchatOf();
-            /* A DOORBELL THAT NAMED NO PERSONA GETS THE FRONT DESK — the read-only card, which the daemon writes
+            /* A FRONT DESK THAT NAMED NO PERSONA GETS THE FRONT DESK — the read-only card, which the daemon writes
              * on save if the workspace has not got one yet (nothing is seeded; personas/front-desk.ts).
              *
-             * A Doorbell is driven by a stranger and runs with nobody watching, so it is the one automation whose
+             * A Front Desk is driven by a stranger and runs with nobody watching, so it is the one automation whose
              * bounds cannot be left to the prompt's wording. It used to carry a hidden four-tool allowlist for
              * exactly that reason; naming a persona does the same job in a place the owner can SEE, edit, and
-             * reuse. The owner's own choice always stands — a Doorbell deliberately pointed at a card with more
+             * reuse. The owner's own choice always stands — a Front Desk deliberately pointed at a card with more
              * powers is a decision they made on a visible field — so this fills a blank rather than overriding an
              * answer. */
             if (automation.actsAs === undefined) {
@@ -474,7 +474,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form,
         schedule,
         // derived
-        isDoorbell,
+        isFrontDesk,
         listenerSource,
         branchField,
         liveSources,

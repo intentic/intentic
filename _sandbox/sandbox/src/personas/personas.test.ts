@@ -99,7 +99,7 @@ test("an unpinned wake keeps the full toolbox even though it has lost every acco
 });
 
 /* Naming a card that isn't there must FAIL CLOSED — on BOTH halves, and the tools half is the one with teeth.
- * A Doorbell pinned to a read-only card would otherwise regain a shell the moment somebody deleted that card,
+ * A Front Desk pinned to a read-only card would otherwise regain a shell the moment somebody deleted that card,
  * with anonymous visitors driving it. A missing card is ordinary (a workspace cloned before its personas were
  * committed, a card renamed on one side only), not a corruption, so this is a state to fail loudly in. */
 test("naming a persona no card carries denies everything — accounts and tools alike", () => {

@@ -55,7 +55,7 @@ Particularly interesting: **anything that crosses the sandbox boundary the wrong
 remote visitor reach the workspace API, a preview or public-files route that serves a file outside its root, a
 redaction gap that puts a credential into a transcript or a log, or an agent-facing tool that escapes its
 worktree. Also **an ingestion path that reaches the agent unmarked**: content the operator did not write — a
-listener or Doorbell message, a fetched page, a foreign MCP server's result — that arrives outside the
+listener or Front Desk message, a fetched page, a foreign MCP server's result — that arrives outside the
 `<untrusted-content>` envelope, or a way for such content to forge or escape one. On the platform side: anything that would let it reach a user's code or credentials, which
 [ARCHITECTURE.md](ARCHITECTURE.md) argues it structurally cannot — except for **hosted** sandboxes, where the
 platform runs the machine on its own provider account by design; there the interesting findings are the ones
@@ -68,7 +68,7 @@ anyone other than the platform's own configuration reach the provider credential
   the operator's agent on the operator's hardware; that agent is trusted by construction.
 
   What is **not** covered by that sentence, and is in scope: the agent reads content the operator did not
-  write, and a workspace with a public Doorbell or a listener reads it from strangers. Trusting the agent is
+  write, and a workspace with a public Front Desk or a listener reads it from strangers. Trusting the agent is
   not trusting everything it has read. The envelope, the marker neutralization and the credential-read floor
   that follows outside content into a turn are there for exactly that gap — bugs in them are in scope under
   the ingestion-path clause above. Prompt injection on its own is not a vulnerability here (no in-process

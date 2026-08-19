@@ -15,7 +15,7 @@ import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
 
 /* THE RELEASE GATE — the daemon's third door for a caller with no identity, and the only one that ANSWERS.
  *
- * The Doorbell proved the shape: a route that is itself the source, normalizing an outside request and driving
+ * The Front Desk proved the shape: a route that is itself the source, normalizing an outside request and driving
  * the existing machinery rather than wrapping a second copy of it. This is that shape pointed at a workflow
  * instead of an agent turn, and the whole of what it adds is a wait and a verdict.
  *
@@ -24,9 +24,9 @@ import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
  * told "the gate probably ran". Here the workflow named in the URL is the workflow that runs, and nothing
  * decides otherwise.
  *
- * WHY IT IS TOKEN-AUTHED AND NOT ORIGIN-AUTHED. The Doorbell's gate is its embed-origin allowlist, which works
+ * WHY IT IS TOKEN-AUTHED AND NOT ORIGIN-AUTHED. The Front Desk's gate is its embed-origin allowlist, which works
  * because its caller is a browser on a page the owner controls. A pipeline runner sends no Origin at all — the
- * Doorbell would refuse it by design — so this takes the event automation's model instead: a minted token in
+ * Front Desk would refuse it by design — so this takes the event automation's model instead: a minted token in
  * the query string, the one mechanism every CI system can carry. Enforced ALWAYS, fail-closed even in loopback,
  * because the token always exists once a gate is declared.
  *
@@ -66,7 +66,7 @@ export const createGateRoute =
     (services: Services, wake: TurnFn = streamAgent) =>
     async (c: Context<AppEnv, "/workflows/:id/gate">): Promise<Response> => {
         const workflow = await services.workflows.get(c.req.param("id"));
-        // One 404 for "no such workflow" and for "that workflow declares no gate", unlike the Doorbell's
+        // One 404 for "no such workflow" and for "that workflow declares no gate", unlike the Front Desk's
         // 404/403 split. There is nothing here for a caller to fix by learning which it was: a workflow with no
         // gate has no token either, so the request was never going to be admitted under any spelling.
         if (workflow?.gate === undefined) {

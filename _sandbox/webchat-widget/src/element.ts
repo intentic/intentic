@@ -4,7 +4,7 @@ import { renderGoogleSignIn, resetConversation, storeDisplayName, storedDisplayN
 import { styles } from "./styles.js";
 import { type Endpoint, fetchChallenge, sendMessage, WebchatError } from "./transport.js";
 
-/* <intentic-doorbell> — the whole visible widget: a launcher in a corner, and a panel holding the thread.
+/* <intentic-front-desk> — the whole visible widget: a launcher in a corner, and a panel holding the thread.
  *
  * Everything renders into a shadow root so the host page's CSS cannot reach it and ours cannot leak out. The
  * ONE exception is the gate area (Google's sign-in button, Turnstile's checkbox): those are third-party iframes
@@ -30,7 +30,7 @@ interface Turn {
     text: string;
 }
 
-export class DoorbellElement extends HTMLElement {
+export class FrontDeskElement extends HTMLElement {
     // Assigned in connectedCallback, which the host calls immediately after `open()` sets these.
     private config!: WebchatPublicConfig;
     private endpoint!: Endpoint;

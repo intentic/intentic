@@ -1,4 +1,4 @@
-import { DoorbellElement } from "./element.js";
+import { FrontDeskElement } from "./element.js";
 import { fetchConfig } from "./transport.js";
 
 /* The embed's entry point. One <script> on a customer's page:
@@ -9,7 +9,7 @@ import { fetchConfig } from "./transport.js";
  * thing a copy-pasted snippet can't get wrong. `data-base` overrides it for a site fronting the sandbox behind
  * its own proxy — the only case where the two legitimately differ. */
 
-const TAG = "intentic-doorbell";
+const TAG = "intentic-front-desk";
 
 // `document.currentScript` is only valid while the script body is executing, so it is read at module scope
 // rather than inside the async boot below. The querySelector is the fallback for a bundler or tag manager that
@@ -22,7 +22,7 @@ const boot = async (script: HTMLScriptElement): Promise<void> => {
     if (automationId === undefined || automationId === "") {
         // The one mistake worth a console line: without it the widget is silently absent and the site owner has
         // nothing to go on. Every other failure surfaces inside the panel, where the visitor can see it.
-        console.error(`[intentic] the Doorbell embed needs data-automation="<automation id>"`);
+        console.error(`[intentic] the Front Desk embed needs data-automation="<automation id>"`);
         return;
     }
     const base = (script.dataset["base"] ?? new URL(script.src, window.location.href).origin).replace(/\/$/, "");
@@ -32,7 +32,7 @@ const boot = async (script: HTMLScriptElement): Promise<void> => {
     // deleted, or an origin that isn't on the allowlist all land here — and in every one of those cases the
     // right thing is to render NOTHING. A launcher that opens onto an error is worse than no launcher.
     const config = await fetchConfig(endpoint).catch((error: unknown) => {
-        console.error(`[intentic] Doorbell is unavailable:`, error);
+        console.error(`[intentic] Front Desk is unavailable:`, error);
         return undefined;
     });
     if (config === undefined) {
@@ -40,15 +40,15 @@ const boot = async (script: HTMLScriptElement): Promise<void> => {
     }
 
     if (customElements.get(TAG) === undefined) {
-        customElements.define(TAG, DoorbellElement);
+        customElements.define(TAG, FrontDeskElement);
     }
-    const element = document.createElement(TAG) as DoorbellElement;
+    const element = document.createElement(TAG) as FrontDeskElement;
     element.configure(config, endpoint);
     document.body.append(element);
 };
 
 if (ownScript === null) {
-    console.error(`[intentic] the Doorbell embed could not find its own <script> tag`);
+    console.error(`[intentic] the Front Desk embed could not find its own <script> tag`);
 } else {
     void boot(ownScript);
 }

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Context } from "hono";
 import type { AppEnv } from "../context.js";
 
-/* Serves the Doorbell bundle at /webchat/widget.js — the one <script> a customer's page loads.
+/* Serves the Front Desk bundle at /webchat/widget.js — the one <script> a customer's page loads.
  *
  * The daemon serves it rather than a CDN because the widget and the routes it talks to then move together: a
  * daemon that has been redeployed cannot be handed a widget built against an older wire, and there is no cache
@@ -39,7 +39,7 @@ export const createWidgetRoute =
             // The package is absent or unbuilt. JS rather than a 404 so the site's console says what is wrong
             // instead of only that a script failed to load.
             c.header("content-type", "application/javascript; charset=utf-8");
-            return c.body(`console.error("[intentic] the Doorbell widget bundle is missing from this sandbox image");`, 500);
+            return c.body(`console.error("[intentic] the Front Desk widget bundle is missing from this sandbox image");`, 500);
         }
         // Revalidate every time, serve from the browser's cache when unchanged: the URL is version-less (it must
         // be — the embed snippet is copied once and lives on the customer's page forever), so a long max-age

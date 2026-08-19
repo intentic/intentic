@@ -174,7 +174,7 @@ export const dispatchListenerMessage = async (
                     }
                     /* The channel's LIVE conversation, or a fresh one when it has been quiet past the TTL. This
                      * is what makes a run of mentions in one channel one agent that remembers what it just said,
-                     * instead of a fleet card and a worktree per message: the same shape the Doorbell gives a
+                     * instead of a fleet card and a worktree per message: the same shape the Front Desk gives a
                      * visitor's chat, keyed by channel instead of by visitor. */
                     const openedAt = Date.now();
                     const session = await services.threadSessions.open(

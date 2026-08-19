@@ -186,8 +186,8 @@ export const productPages: ProductPage[] = [
                     "Each visitor thread runs in its own throwaway git worktree, behind a bot check.",
                 ],
                 shot: {
-                    name: "doorbell",
-                    alt: "A robotics company's website with the Doorbell widget open in the corner: the agent greets the visitor, the visitor asks whether the arms work outdoors, and the agent answers with the IP66 rating and a cold-weather caveat, then offers to open a ticket.",
+                    name: "front-desk",
+                    alt: "A robotics company's website with the Front Desk widget open in the corner: the agent greets the visitor, the visitor asks whether the arms work outdoors, and the agent answers with the IP66 rating and a cold-weather caveat, then offers to open a ticket.",
                     frame: "browser",
                     label: "a customer's site",
                 },

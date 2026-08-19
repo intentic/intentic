@@ -12,7 +12,7 @@ test(`the thread id is minted once and reused — this is what threads a follow-
     expect(visitorConversationId(`support`)).toBe(first);
 });
 
-test(`two Doorbells on one site are two threads`, () => {
+test(`two Front Desks on one site are two threads`, () => {
     expect(visitorConversationId(`support`)).not.toBe(visitorConversationId(`sales`));
 });
 

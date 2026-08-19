@@ -55,14 +55,14 @@ reports the profile.
   and a failure: an unattended turn that names no persona is denied every account, so a browser-published draft
   without one is failed unsent rather than handed to a turn that cannot reach the login.
 - Gate what runs without the owner, in two layers that share one decision seam (src/guard). Before a session
-  starts: every outside-driven wake (automations, listeners, the Doorbell, the workflow release gate) is
+  starts: every outside-driven wake (automations, listeners, the Front Desk, the workflow release gate) is
   allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls
   are checked against the owner's action rules, and shell commands whose class the owner holds — destructive
   git, recursive deletes, credential reads, publishes, outbound fetches — park on a permission card before they
   execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
   where the permission cards are never raised at all.
 - Tell the agent which words are not the owner's, and act on it (src/guard/outside-content.ts). Everything that
-  arrives from outside the workspace — a stranger's listener or Doorbell message, a fetched page, a foreign MCP
+  arrives from outside the workspace — a stranger's listener or Front Desk message, a fetched page, a foreign MCP
   server's answer, the output of a shell command that reached the internet — is wrapped in an
   `<untrusted-content>` envelope whose id is minted per wrap, so content can never close its own envelope and
   speak in the owner's voice after it. Marker lookalikes (including fullwidth, CJK and zero-width spellings),
@@ -242,7 +242,7 @@ reports the profile.
   "change the sandbox" switch as a PreToolUse hook — a refusal, honestly weaker than the container, and the
   card's own UI says so where it is set. Nothing is seeded: a fresh workspace has no personas, and
   [src/personas/front-desk.ts](src/personas/front-desk.ts) is the one card the daemon writes by itself — the
-  read-only front desk a public web chat answers through, created when a Doorbell is saved rather than at boot.
+  read-only front desk a public web chat answers through, created when a Front Desk is saved rather than at boot.
   [src/personas/persona-kit.ts](src/personas/persona-kit.ts) is the folder beside each card, shaped as a plugin
   so the runtime's own loader reads that persona's prompt, skills and tools and this daemon parses none of it.
 - [src/agent/system-prompt.ts](src/agent/system-prompt.ts) — what the model is told before the conversation

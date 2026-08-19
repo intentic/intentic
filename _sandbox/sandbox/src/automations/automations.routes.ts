@@ -72,10 +72,10 @@ export const createAutomationsRoutes = (services: Services) => {
                     ? { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } }
                     : input;
             await services.automations.upsert(automation);
-            /* A DOORBELL PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
+            /* A FRONT DESK PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
              * the card this wake names may not exist yet — and turnPersona answers a named-but-missing card by
              * denying everything, which would make a freshly installed public chat one that cannot even read.
-             * Written here rather than by the surface that installed it, so a Doorbell arriving through any
+             * Written here rather than by the surface that installed it, so a Front Desk arriving through any
              * route — the composer, a hand-edited manifest, an extension — lands with its bound present and
              * visible on the Personas page. Awaited: the wake it bounds can fire the moment this returns. */
             if (automation.actsAs === FRONT_DESK_PERSONA) {

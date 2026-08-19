@@ -33,7 +33,7 @@ export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal 
  *
  * `failed` is the third frame because a turn that produces NO text is otherwise indistinguishable from a turn
  * that errored — and the two are opposite things to say to whoever is waiting. Every sink used to end on `end`
- * alone, so a Doorbell visitor whose wake died on a revoked credential watched the typing dots disappear and
+ * alone, so a Front Desk visitor whose wake died on a revoked credential watched the typing dots disappear and
  * got nothing at all, while the daemon had the provider's exact sentence and wrote it to a row nobody was
  * looking at. It carries the RAW reason: what an audience may be told differs per sink (a stranger on a
  * customer's website and the owner's own Discord channel are not owed the same sentence), so the redaction
@@ -135,7 +135,7 @@ export interface FireOptions {
     // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
     readonly attempts?: number;
     /* Set by the restart path, and by any dispatcher that owns a CONTINUING thread rather than a one-off wake:
-     * the Doorbell hands the same id every time a visitor writes, so their whole chat is one conversation —
+     * the Front Desk hands the same id every time a visitor writes, so their whole chat is one conversation —
      * one fleet card, one worktree, one agent that remembers the last message. A first fire mints its own
      * identity after the guard/approval gates clear. */
     readonly conversationId?: string;
@@ -292,7 +292,7 @@ const runFire = async (
                     ...(origin !== undefined ? { origin } : {}),
                     ...(title !== undefined ? { title } : {}),
                     // …and the THREAD it would have continued, for the same reason. A dispatcher that owns a
-                    // running conversation (the Doorbell, a Discord channel) resolved it before firing; without
+                    // running conversation (the Front Desk, a Discord channel) resolved it before firing; without
                     // carrying it here the approve route has nothing to resume and mints a fresh one.
                     ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
                     ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
@@ -343,7 +343,7 @@ const runFire = async (
         let runtimeSessionId: string | undefined;
         // Every fire lands in a CONVERSATION and therefore on a fleet card. Outside messages are isolated so the
         // user can open, follow live, and keep talking in after the wake ends. WHICH conversation is the
-        // dispatcher's call: a listener channel and a Doorbell visitor each own one for as long as they stay
+        // dispatcher's call: a listener channel and a Front Desk visitor each own one for as long as they stay
         // active (thread-sessions.ts), so a run of messages is one reviewable agent; a schedule or chore wake
         // has no thread and mints a fresh one below. Schedule and chore wakes work in the shared workspace but
         // keep the same registry, transcript and restart lifecycle; placement no longer decides whether a
@@ -457,7 +457,7 @@ const runFire = async (
                 ...(failure !== undefined ? { error: quarantined === undefined ? failure : `${failure}\n\n${quarantined}` } : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
-        // Handed back so a dispatcher owning a continuing thread (the Doorbell) can resume this exact session
+        // Handed back so a dispatcher owning a continuing thread (the Front Desk) can resume this exact session
         // on the visitor's next message. Everyone else ignores it.
         return runtimeSessionId !== undefined ? { sessionId: runtimeSessionId } : {};
     } finally {

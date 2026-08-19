@@ -1,6 +1,6 @@
 # @intentic/webchat-widget
 
-**Doorbell** — the embeddable chat bubble a website loads to talk to a sandbox agent. One IIFE bundle
+**Front Desk** — the embeddable chat bubble a website loads to talk to a sandbox agent. One IIFE bundle
 (~6 kB gzipped), no framework, served by the daemon at `/webchat/widget.js`.
 
 ```html

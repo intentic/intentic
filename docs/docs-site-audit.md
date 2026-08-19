@@ -226,8 +226,8 @@ Two habits worth softening rather than removing:
 ## P3 — Gaps
 
 - **No troubleshooting anywhere.** "troubleshoot" and "not working" return nothing. The only failure-mode
-  writing in the whole set is inside the Doorbell page, where it is excellent ("This is the single commonest
-  reason a freshly installed Doorbell stays silent…") and is the model the rest of the docs should copy.
+  writing in the whole set is inside the Front Desk page, where it is excellent ("This is the single commonest
+  reason a freshly installed Front Desk stays silent…") and is the model the rest of the docs should copy.
 - **Nothing about backups.** "backup" returns nothing, on a product whose central promise is that your files
   are yours and survive everything.
 - **No cost page in the docs.** "pricing" returns nothing; the only money in the docs is the creator pool's
@@ -249,7 +249,7 @@ Two habits worth softening rather than removing:
   so the docs never pretend to be a book you read front to back.
 - **Mobile is properly considered**: the rail collapses, search sits beside the menu button rather than inside
   it, and the section list becomes an accordion.
-- **The Doorbell page** is the best-structured page in the set: numbered steps, a check-that-it-worked step, the
+- **The Front Desk page** is the best-structured page in the set: numbered steps, a check-that-it-worked step, the
   commonest failure called out where it happens, then the reference detail.
 - **The honesty.** "Available today, and next", "What exists today, honestly", "Honest about the seams",
   "Trust, stated honestly". Very few products write this down.
@@ -268,7 +268,7 @@ Two habits worth softening rather than removing:
 | 6 | Pull the seven orphaned intros under a real heading — starting with Automations | small | Done — all seven. The Automations distinction table is now "Automation, workflow or loop?", first in its own table of contents and linkable. The two reference pages that open with an index table are left alone on purpose. |
 | 7 | Define *daemon*, *land*, *worktree*, *slug*, *harness* once, early, and link to them | medium | Done. A **Glossary** page on the first shelf, 23 terms in four families, each ending at the page that owns it. First uses of daemon, worktree, harness, landing and fleet link to it; chore, guard and slug were already defined where they first appear, so they were left. |
 | 8 | Split the 69 sentences over 40 words; retire the "Next" sections that duplicate the footer | medium | Done. Zero prose sentences over 40 words. The ten `## Next` lists became a `DocsRelated` component — kept, because they are curated cross-links with reasons, but renamed "Related pages" (the automatic footer already says "next") and excluded from the section rail. |
-| 9 | Add a troubleshooting page, modelled on the Doorbell page's failure-mode writing | medium | Done. **Troubleshooting**, last on "Run a sandbox": symptom as the heading in the reader's own words, then cause, fix, and where the product already says so. Every entry is a failure this product's own docs or run contract describe. |
+| 9 | Add a troubleshooting page, modelled on the Front Desk page's failure-mode writing | medium | Done. **Troubleshooting**, last on "Run a sandbox": symptom as the heading in the reader's own words, then cause, fix, and where the product already says so. Every entry is a failure this product's own docs or run contract describe. |
 
 Two P3 gaps were closed while nearby: **backups** now have a section on Docker setup (the honest version — they are
 ordinary named volumes and there is no intentic backup service to describe), and **what intentic costs** now opens

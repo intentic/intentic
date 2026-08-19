@@ -167,7 +167,7 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual({ ...automation, prompt: `Handle the deploy carefully.` });
     });
 
-    it(`round-trips a secured Doorbell including settings the form does not render`, () => {
+    it(`round-trips a secured Front Desk including settings the form does not render`, () => {
         const automation: Automation = {
             id: `support`,
             trigger: { kind: `listener`, provider: `webchat`, eventType: `message`, allowedOrigins: [`https://example.com`] },
@@ -199,10 +199,10 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build()).toEqual(automation);
     });
 
-    /* A Doorbell is driven by a stranger with nobody watching, so it is the one automation that must never end
+    /* A Front Desk is driven by a stranger with nobody watching, so it is the one automation that must never end
      * up unbounded. Naming no persona means the full toolbox everywhere else in the product — here it is filled
      * in with the front desk, the read-only card the daemon writes on save. */
-    it(`gives a Doorbell that names no persona the front desk`, () => {
+    it(`gives a Front Desk that names no persona the front desk`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;
@@ -212,9 +212,9 @@ describe(`editing preserves fields outside the changed control`, () => {
         expect(build().actsAs).toBe(`front-desk`);
     });
 
-    // ...and the owner's own choice stands. A Doorbell deliberately pointed at a card with more powers is a
+    // ...and the owner's own choice stands. A Front Desk deliberately pointed at a card with more powers is a
     // decision they made on a visible field, not something to quietly overwrite on every save.
-    it(`leaves a Doorbell's chosen persona alone`, () => {
+    it(`leaves a Front Desk's chosen persona alone`, () => {
         const { form, build } = formState();
         form.kind = `listener`;
         form.provider = `webchat`;

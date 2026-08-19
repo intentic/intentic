@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 // widget can't know before it has parsed its own script tag.
 export default defineConfig({
     build: {
-        lib: { entry: "src/main.ts", formats: ["iife"], name: "IntenticDoorbell", fileName: () => "widget.js" },
+        lib: { entry: "src/main.ts", formats: ["iife"], name: "IntenticFrontDesk", fileName: () => "widget.js" },
         outDir: "dist",
         emptyOutDir: true,
         // The floor for the APIs the widget uses unguarded (crypto.randomUUID, ReadableStream iteration via

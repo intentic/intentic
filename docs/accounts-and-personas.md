@@ -166,7 +166,7 @@ folders its file tools may touch; the copy it works in is not up for discussion.
 from the workspace's own tree rather than typed, because a fence naming a folder that does not exist refuses
 everything, and it does so silently.
 
-The one exception is the desk a Doorbell answers through, whose manner is the product's rather than any
+The one exception is the desk a Front Desk answers through, whose manner is the product's rather than any
 workspace's: that wording lives in the daemon beside the card the daemon writes, not on the card.
 
 **A persona is not a security boundary, and does not claim to be.** Its card holds no secret, which is exactly

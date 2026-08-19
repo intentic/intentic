@@ -127,7 +127,7 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
 // bearer middleware and authenticated by the automation's own token instead (see the route).
 const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 
-/* The Doorbell's public surface — its callers are anonymous website visitors (no Google token), so these are
+/* The Front Desk's public surface — its callers are anonymous website visitors (no Google token), so these are
  * exempt from the bearer middleware and gated by the automation's origin allowlist + rate limit + bot check
  * instead (see webchat/webchat.routes.ts).
  *
@@ -142,7 +142,7 @@ const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.j
 const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
 
 // The release gate — its callers are pipeline runners (no Google token, and no Origin either, which is why it
-// cannot ride the Doorbell's allowlist), so it's exempt from the bearer middleware and gated by the workflow's
+// cannot ride the Front Desk's allowlist), so it's exempt from the bearer middleware and gated by the workflow's
 // own minted gate token instead (see workflows/gate.routes.ts).
 const gatePath = /^\/workflows\/[^/]+\/gate$/;
 
@@ -248,7 +248,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      *
      * Cross-Origin-Resource-Policy is the one default that has to go: /webchat/widget.js is loaded as a plain
      * <script> from arbitrary third-party sites, which is precisely the no-cors request CORP blocks — leaving
-     * it on would take every embedded Doorbell down. (COEP is off for the same family of reasons.) */
+     * it on would take every embedded Front Desk down. (COEP is off for the same family of reasons.) */
     app.use("*", secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false }));
 
     /* Outermost: what the BROWSER waited for. Every other measurement in this daemon times a piece of the
@@ -790,7 +790,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * daemon that holds a request open for the work it started — see workflows/gate.routes.ts for why. */
     app.post("/workflows/:id/gate", createGateRoute(services));
 
-    /* The Doorbell: the embeddable widget bundle, the per-automation config it renders itself from, its bot
+    /* The Front Desk: the embeddable widget bundle, the per-automation config it renders itself from, its bot
      * challenge, and the message ingest whose reply streams back as SSE. All four are exempt from the bearer
      * middleware (visitors have no Google token) and gated instead by the automation's origin allowlist, a
      * per-conversation rate limit and the configured bot check. Registered before the oRPC catch-all, like
@@ -800,7 +800,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/webchat/:id/config", webchat.config);
     app.get("/webchat/:id/challenge", webchat.challenge);
     app.post("/webchat/:id/message", webchat.message);
-    // NOT public (absent from webchatPublicPath above): which sites have loaded this Doorbell's widget is the
+    // NOT public (absent from webchatPublicPath above): which sites have loaded this Front Desk's widget is the
     // owner's install diagnostic, so it takes the ordinary bearer middleware like every other app route.
     app.get("/webchat/:id/installs", webchat.installs);
 

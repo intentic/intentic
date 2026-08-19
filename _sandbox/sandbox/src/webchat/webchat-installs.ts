@@ -52,7 +52,7 @@ export const fileWebchatInstallsStore = (root: string): WebchatInstallsStore => 
         fallback: () => ({}),
     });
 
-    // undefined until the first read/record pulls the file in — so a daemon whose Doorbells nobody visits never
+    // undefined until the first read/record pulls the file in — so a daemon whose Front Desks nobody visits never
     // touches this file at all.
     let memory: InstallsFile | undefined;
     let timer: NodeJS.Timeout | undefined;

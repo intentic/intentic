@@ -88,27 +88,27 @@ interface Shot {
     /** Scroll the main column before shooting — for the tabs whose story is below the fold. */
     scrollTo?: number;
     /* Serve `path` straight off the harness origin instead of under the demo's `/demo` base — for the one shot
-     * whose subject is NOT the app: the Doorbell widget as a visitor meets it, on a page that is not ours. */
+     * whose subject is NOT the app: the Front Desk widget as a visitor meets it, on a page that is not ours. */
     raw?: true;
     /** Type into a field once the surface is up, for a shot whose story is a conversation. */
     type?: { target: string; text: string; settleMs?: number };
 }
 
 const SHOTS: Shot[] = [
-    /* The Doorbell, from the visitor's side — the REAL built widget bundle on a page that is not ours, which is
+    /* The Front Desk, from the visitor's side — the REAL built widget bundle on a page that is not ours, which is
      * the only honest way to show a surface that by definition lives on someone else's site. The page and the
      * endpoints behind it are the harness's own (below); the widget is `_sandbox/webchat-widget/dist/widget.js`
      * exactly as a customer's browser would load it, so what the shot shows is what it renders. */
     {
-        name: "doorbell",
-        path: "/doorbell/",
+        name: "front-desk",
+        path: "/front-desk/",
         raw: true,
         // Keeps the old window: this shot's subject is a CUSTOMER's website, and that page is a 54rem column.
         // Widening it for our app's sake would only add margin either side of someone else's design.
         viewport: { width: 1440, height: 900 },
-        waitFor: "intentic-doorbell",
-        click: ["intentic-doorbell .launcher"],
-        type: { target: "intentic-doorbell textarea", text: "Do these arms work outdoors?", settleMs: 2600 },
+        waitFor: "intentic-front-desk",
+        click: ["intentic-front-desk .launcher"],
+        type: { target: "intentic-front-desk textarea", text: "Do these arms work outdoors?", settleMs: 2600 },
         settleMs: 900,
     },
     // Run agents
@@ -230,7 +230,7 @@ const TYPES: Record<string, string> = {
  * files, so anything that isn't a real file on disk is served index.html — the same rule its dev server and the
  * site's worker use. The base is stripped first: on disk the build IS the `/demo/` directory, so its own
  * `/demo/assets/…` requests would otherwise look for `public/demo/demo/assets/…`. */
-/* ---- the Doorbell shot's world: a site that is not ours, and just enough daemon behind it ----
+/* ---- the Front Desk shot's world: a site that is not ours, and just enough daemon behind it ----
  *
  * The widget derives the daemon to call from its own <script> src, so serving both from this origin is all it
  * takes. The endpoints are stubs because the shot's subject is the WIDGET — what it renders, on someone else's
@@ -238,12 +238,12 @@ const TYPES: Record<string, string> = {
  * built artifact, so a regression in the widget's own rendering shows up here as a wrong screenshot. */
 const WIDGET_BUNDLE = join(repoRoot(import.meta.url), "_sandbox/webchat-widget/dist/widget.js");
 
-const DOORBELL_CONFIG = {
-    automationId: "website-concierge",
+const FRONT_DESK_CONFIG = {
+    automationId: "front-desk",
     title: "Ask Northwind",
     greeting: "Hi! I'm the agent that builds this site. Ask me anything about the arms.",
     // Left as the daemon's own default (webchat-config.ts) rather than a colour picked for the shot: the
-    // marketing image must show what an unconfigured Doorbell actually looks like.
+    // marketing image must show what an unconfigured Front Desk actually looks like.
     accent: "#e47100",
     position: "bottom-right",
     access: "public",
@@ -253,11 +253,11 @@ const DOORBELL_CONFIG = {
 
 // Written in the deliberate voice of the thing being sold: an answer with a real detail in it, not "Hello! How
 // may I assist you today?" — the sentence is doing the same job as the rest of the page's copy.
-const DOORBELL_REPLY =
+const FRONT_DESK_REPLY =
     "Yes — the RX-4 is rated IP66, so rain and dust are fine. Below -10°C you'll want the cold-weather grease kit, " +
     "which is a five-minute swap.\n\nWant me to open a ticket with our hardware team for your specific setup?";
 
-const DOORBELL_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
+const FRONT_DESK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
 <style>
   :root{color-scheme:dark}
   body{margin:0;background:#0b0d10;color:#e6e8eb;font:16px/1.65 ui-serif,Georgia,serif}
@@ -281,19 +281,19 @@ const DOORBELL_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8
   <div class="card"><h3>-30°C to 55°C</h3><p>Cold-store rated with the winter grease kit.</p></div>
   <div class="card"><h3>One controller</h3><p>Every arm in the range speaks the same protocol.</p></div>
 </div></main>
-<script src="/webchat/widget.js" data-automation="website-concierge" defer></script>
+<script src="/webchat/widget.js" data-automation="front-desk" defer></script>
 </body></html>`;
 
 // The three widget routes, answered inline. Returns true when it handled the request.
-const serveDoorbell = (path: string, response: import("node:http").ServerResponse): boolean => {
-    if (path === "/doorbell/") {
+const serveFrontDesk = (path: string, response: import("node:http").ServerResponse): boolean => {
+    if (path === "/front-desk/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-        response.end(DOORBELL_PAGE);
+        response.end(FRONT_DESK_PAGE);
         return true;
     }
     if (path === "/webchat/widget.js") {
         if (!existsSync(WIDGET_BUNDLE)) {
-            throw new Error(`the Doorbell shot needs the widget built first: pnpm --filter @intentic/webchat-widget build`);
+            throw new Error(`the Front Desk shot needs the widget built first: pnpm --filter @intentic/webchat-widget build`);
         }
         response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
         createReadStream(WIDGET_BUNDLE).pipe(response);
@@ -301,7 +301,7 @@ const serveDoorbell = (path: string, response: import("node:http").ServerRespons
     }
     if (path.endsWith("/config")) {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        response.end(JSON.stringify(DOORBELL_CONFIG));
+        response.end(JSON.stringify(FRONT_DESK_CONFIG));
         return true;
     }
     if (path.endsWith("/message")) {
@@ -309,7 +309,7 @@ const serveDoorbell = (path: string, response: import("node:http").ServerRespons
         // Streamed in pieces, like the real thing, so the shot can be taken mid- or post-stream either way.
         let at = 0;
         const tick = setInterval(() => {
-            const chunk = DOORBELL_REPLY.slice(at, at + 14);
+            const chunk = FRONT_DESK_REPLY.slice(at, at + 14);
             at += 14;
             if (chunk === "") {
                 clearInterval(tick);
@@ -332,7 +332,7 @@ const serveDoorbell = (path: string, response: import("node:http").ServerRespons
 const serveDemo = (): Server => {
     const server = createServer((request, response) => {
         const path = new URL(request.url ?? "/", ORIGIN).pathname;
-        if ((path === "/doorbell/" || path.startsWith("/webchat/")) && serveDoorbell(path, response)) {
+        if ((path === "/front-desk/" || path.startsWith("/webchat/")) && serveFrontDesk(path, response)) {
             return;
         }
         const routed = path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path;
@@ -477,7 +477,7 @@ const run = async (): Promise<void> => {
         throw new Error(`No shot matches ${only.join(", ")} — known: ${SHOTS.map((shot) => shot.name).join(", ")}`);
     }
     // Only the app shots need the demo build; a `raw` one brings its own world, so re-shooting just the
-    // Doorbell shouldn't cost a full SPA build.
+    // Front Desk shouldn't cost a full SPA build.
     if (wanted.some((shot) => shot.raw !== true) && !existsSync(join(DEMO_DIR, "index.html"))) {
         throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic-dev/demo build`);
     }

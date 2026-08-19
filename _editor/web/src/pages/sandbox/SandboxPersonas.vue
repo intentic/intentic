@@ -423,7 +423,7 @@ const confirmRemove = async (): Promise<void> => {
                         </span>
                         <!-- A card that has been bounded says so on its row. Which shelf is off is the form's
                              business; what the LIST owes a reader scanning six cards is which of them are
-                             limited at all — that is the difference between "my Doorbell is safe" being a
+                             limited at all — that is the difference between "my Front Desk is safe" being a
                              belief and being something they can see. -->
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                         <StatusBadge v-if="persona.capabilities.length > 0 && !ready(persona)" variant="neutral" size="xs" dot>

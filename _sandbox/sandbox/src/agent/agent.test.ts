@@ -1657,7 +1657,7 @@ test("a failing supportedCommands never breaks the turn", async () => {
  *
  * `fastModePerSessionOptIn` is the half that keeps the bill honest. Without it the harness persists the choice
  * to the settings file — which in this container is shared by every conversation, every automation and every
- * doorbell turn — so one chat's toggle would quietly move all of them onto fast-mode pricing. */
+ * front desk turn — so one chat's toggle would quietly move all of them onto fast-mode pricing. */
 test("fast speed is asked for per session, and only by the turn that wanted it", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
