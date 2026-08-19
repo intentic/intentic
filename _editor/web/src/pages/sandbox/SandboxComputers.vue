@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { type Computer, type MachineSandboxOp, watcherStalled } from "@intentic/sandbox-contract";
 import {
+    groupNeedsAttention,
     InfoHint,
     MachineDetail,
     MachineRunLog,
@@ -8,17 +9,21 @@ import {
     Notice,
     type NoticeModel,
     RowGroup,
+    sandboxGroups,
     type SandboxVerb,
     SandboxVerbs,
     sandboxVerbPrompt,
+    SearchBar,
     SkeletonRows,
     StatusBadge,
+    StatusTally,
     type StatusVariant,
+    type TallyItem,
     timeAgo,
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { type RouteLocationRaw, useRoute, useRouter } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import {
@@ -160,6 +165,157 @@ const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quie
 
 const sorted = computed(() => computers.value.toSorted((a, b) => (RANK[label(a)] ?? 9) - (RANK[label(b)] ?? 9) || a.label.localeCompare(b.label)));
 
+/* --- ONE ROW PER COMPUTER, DERIVED ONCE ------------------------------------------------------------------
+ *
+ * The tab used to draw every fact about every sandbox on every machine at once. One laptop running four of them
+ * filled the screen with four folders, four port stacks, four image lines and twenty-four buttons, and the row
+ * somebody came for was somewhere in the middle of it. Three machines was a page nobody could scan.
+ *
+ * So a machine is a LINE that says what is under it, and the list under it opens when it is asked for. That
+ * turns "what does this row say" into a real derivation — how many sandboxes, how many running, how many want
+ * something — and it is done once here rather than four times in the template, because the same grouping the
+ * view is about to draw has to be counted to say any of it. */
+const machineGroups = (computer: Computer): MachineSandboxGroup[] =>
+    computer.report === undefined ? [] : sandboxGroups(computer.report.pairings, computer.report.ports, computer.report.sandboxes);
+
+const has = (needle: string, ...fields: (string | undefined)[]): boolean =>
+    fields.some((field) => field !== undefined && field.toLowerCase().includes(needle));
+
+// What one sandbox answers to. The port numbers are in here because "which machine has 8788" is the single most
+// common thing anybody comes to this tab to find out, and it was previously answerable only by reading.
+const groupMatches = (group: MachineSandboxGroup, needle: string): boolean =>
+    has(needle, group.title, group.subtitle, group.sandboxId, group.sandbox?.slug, group.sandbox?.image, group.folder?.localDir) ||
+    group.ports.some((port) => String(port.port).includes(needle));
+
+interface ComputerRow {
+    readonly computer: Computer;
+    readonly groups: readonly MachineSandboxGroup[];
+    /** The folded line's counts, uncoloured. */
+    readonly facts: readonly string[];
+    /** The folded line's reasons to open it. */
+    readonly warnings: readonly string[];
+    /** Sandbox ids this machine should unfold on arrival — the one you are using, and anything the filter hit. */
+    readonly open: readonly string[];
+}
+
+/* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
+ * daemon's own hostname — the same derivation the sandbox switcher uses for its teardown command, and the same
+ * one the setup CLI applies when it names the container.
+ *
+ * It matters because this view can stop and delete the very sandbox serving it. That is a legitimate thing to
+ * want and a terrible thing to do by accident, so the row says so and the confirmation names it. */
+const { daemonUrl } = useSandbox();
+const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
+const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
+
+// What the reader typed. Lower-cased once here rather than per comparison, and blank until they type — an empty
+// filter must never narrow anything.
+const query = ref(``);
+const needle = computed(() => query.value.trim().toLowerCase());
+
+const rows = computed<ComputerRow[]>(() =>
+    sorted.value.map((computer) => {
+        const groups = machineGroups(computer);
+        const running = groups.filter((group) => group.sandbox?.running === true).length;
+        const attention = groups.filter(groupNeedsAttention).length;
+        const facts: string[] = [];
+        const warnings: string[] = [];
+        if (groups.length > 0) {
+            facts.push(groups.length === 1 ? `1 sandbox` : `${groups.length} sandboxes`);
+        }
+        if (running > 0) {
+            facts.push(`${running} running`);
+        }
+        if (attention > 0) {
+            warnings.push(attention === 1 ? `1 needs attention` : `${attention} need attention`);
+        }
+        /* The watcher is a fact about the MACHINE rather than any row under it, so it belongs on the machine's
+         * own line — and it is the failure this whole area exists to surface: a dead watcher leaves every row
+         * beneath it reading exactly as it did the moment before. */
+        if (computer.report !== undefined && (computer.report.watcher.running === false || watcherHalted(computer))) {
+            warnings.push(`sync agent stopped`);
+        }
+        return {
+            computer,
+            groups,
+            facts,
+            warnings,
+            open: groups
+                .filter((group) => isSelf(computer, group) || (needle.value !== `` && groupMatches(group, needle.value)))
+                .map((group) => group.sandboxId),
+        };
+    }),
+);
+
+/* THE FILTER NARROWS MACHINES AND UNFOLDS ROWS — it does not hide rows inside a machine.
+ *
+ * A port that did not reach localhost is explained by naming the sandbox that took it, and that sentence links
+ * to the taker's own row. Filtering rows out from under a machine would cut exactly those links, so a search for
+ * "8788" would answer with a row whose explanation points at something no longer on screen. Narrowing the list
+ * of machines and opening what matched keeps every cross-reference intact and still puts the answer in front of
+ * the reader. */
+const shown = computed<ComputerRow[]>(() => {
+    const text = needle.value;
+    if (text === ``) {
+        return rows.value;
+    }
+    return rows.value.filter(
+        (row) =>
+            has(text, row.computer.label, row.computer.key, osLabel(row.computer), row.computer.hostId, row.computer.report?.hostname) ||
+            row.groups.some((group) => groupMatches(group, text)),
+    );
+});
+
+/* Only once there is something to hunt through. A search box over two rows is a control that costs more to
+ * notice than the reading it saves; over a dozen it is the fastest way to the one you want. */
+const FILTER_FLOOR = 3;
+const showFilter = computed(() => rows.value.length > 2 || rows.value.reduce((total, row) => total + row.groups.length, 0) > FILTER_FLOOR);
+
+/* THE ORIENTATION LINE — "is anything wrong right now", answered before a single row is parsed. One measure
+ * (sandboxes) split by state, which is what this component is for; the machine count is the group's own, beside
+ * its label. Running is `always` because a board that renders as nothing at all reads as broken. */
+const tally = computed<TallyItem[]>(() => {
+    const groups = rows.value.flatMap((row) => row.groups);
+    return [
+        { label: `running`, value: groups.filter((group) => group.sandbox?.running === true).length, variant: `success`, always: true },
+        { label: `stopped`, value: groups.filter((group) => group.sandbox?.running === false).length, variant: `neutral` },
+        { label: `need attention`, value: groups.filter(groupNeedsAttention).length, variant: `warning` },
+    ];
+});
+
+/* WHICH MACHINES ARE UNFOLDED. The same two-set rule the sandbox rows use, for the same reason: this list
+ * re-derives itself every ten seconds and must not move under the pointer.
+ *
+ * What opens itself is the machine running the sandbox you are reading this in — failing that, the first one
+ * with anything to show — plus anything the filter matched. Deliberately not "every machine with a warning": the
+ * folded line already states the warning, and opening three machines to say so is the wall again. */
+const openMachines = ref(new Set<string>());
+const foldedMachines = ref(new Set<string>());
+const expandable = (row: ComputerRow): boolean => row.computer.report !== undefined;
+const autoOpenMachine = computed(() => {
+    const withReport = rows.value.filter(expandable);
+    const self = withReport.find((row) => row.groups.some((group) => isSelf(row.computer, group)));
+    const matched = needle.value === `` ? [] : shown.value.filter(expandable).map((row) => row.computer.key);
+    return new Set([...(self === undefined ? withReport.slice(0, 1) : [self]).map((row) => row.computer.key), ...matched]);
+});
+const machineOpen = (row: ComputerRow): boolean =>
+    expandable(row) &&
+    (openMachines.value.has(row.computer.key) || (autoOpenMachine.value.has(row.computer.key) && !foldedMachines.value.has(row.computer.key)));
+const toggleMachine = (row: ComputerRow): void => {
+    const key = row.computer.key;
+    const shutting = machineOpen(row);
+    openMachines.value = new Set([...openMachines.value].filter((seen) => seen !== key));
+    foldedMachines.value = new Set([...foldedMachines.value].filter((seen) => seen !== key));
+    const target = shutting ? foldedMachines : openMachines;
+    target.value = new Set([...target.value, key]);
+};
+// A machine the filter newly matched opens even if the reader folded it earlier, for the same reason a matched
+// sandbox row does: a filter that narrows to one machine and leaves it shut reads as a filter that found nothing.
+watch(
+    () => [...autoOpenMachine.value].join(`|`),
+    (keys) => (foldedMachines.value = new Set([...foldedMachines.value].filter((key) => !keys.split(`|`).includes(key)))),
+);
+
 /* The management buttons, shown only where they can work: the machine is reachable as a connected computer right
  * now, and the row in front of us is a container rather than a pairing nothing on that machine answers for. The
  * daemon adds no judgement and neither does this — a click travels to the machine, and the machine's own refusal
@@ -258,16 +414,6 @@ const runningVerb = (computer: Computer, group: MachineSandboxGroup): SandboxVer
     return busy.value?.startsWith(prefix) === true ? (busy.value.slice(prefix.length) as SandboxVerb) : undefined;
 };
 
-/* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
- * daemon's own hostname — the same derivation the sandbox switcher uses for its teardown command, and the same
- * one the setup CLI applies when it names the container.
- *
- * It matters because this view can stop and delete the very sandbox serving it. That is a legitimate thing to
- * want and a terrible thing to do by accident, so the row says so and the confirmation names it. */
-const { daemonUrl } = useSandbox();
-const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
-const isSelf = (computer: Computer, group: MachineSandboxGroup): boolean => computer.hostId !== undefined && group.sandbox?.slug === ownSlug.value;
-
 // The ops that end this browser's own connection when they are aimed at the sandbox serving it. Not `start`,
 // which can only ever help, and not `logs`, which changes nothing at all.
 const SEVERING = new Set<MachineSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
@@ -281,6 +427,9 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
     // again rather than a second control beside it.
     if (op === `logs` && openLog.value === key) {
         openLog.value = undefined;
+        // The result line goes with the pane it described. Left behind, `The last 200 lines from "…"` floats
+        // under a row with no lines anywhere near it, which reads as something the view failed to finish.
+        actionDone.value = undefined;
         return;
     }
     const slug = group.sandbox.slug;
@@ -302,7 +451,9 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
         const message = await manageMachineSandbox(computer.hostId, slug, op, {
             onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
         });
-        actionDone.value = { key, message };
+        // A log tail's own result line only restates what the pane above it already is ("the last 200 lines
+        // from X"), so the pane is left to be the answer. Every other op ends with something worth reading.
+        actionDone.value = op === `logs` ? undefined : { key, message };
     } catch (failure) {
         actionError.value = { key, notice: noticeFrom(failure, `That didn't work on this computer.`) };
         if (op === `logs`) {
@@ -348,6 +499,22 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                 <Icon name="desktop" class="mt-0.5 shrink-0" />
                 <span>This computer's own sandboxes are also in <b>This computer</b>, from the Intentic icon in your tray.</span>
             </p>
+            <!-- IS ANYTHING WRONG RIGHT NOW — answered before a single row is parsed, which is what this view
+                 had no way of saying. One measure split by state; the machine count is the group's own label. -->
+            <template #actions>
+                <StatusTally v-if="!isLoading && sorted.length > 0" :items="tally" />
+            </template>
+            <!-- Only once there is something to hunt through. Ports are matched too, because "which machine has
+                 8788" is the question this tab is opened for and it used to be answerable only by reading. -->
+            <div v-if="!isLoading && showFilter" class="border-b border-line px-4 py-2.5">
+                <SearchBar
+                    v-model="query"
+                    variant="field"
+                    placeholder="Filter by computer, sandbox, folder or port"
+                    aria-label="Filter computers"
+                    :clearable="true"
+                />
+            </div>
             <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
             <div v-else-if="isLoading" role="status" aria-busy="true">
                 <template v-if="outline">
@@ -362,91 +529,129 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             <!-- ONE GUTTER PER COMPUTER. The glyph sits in a column of its own and everything else — the name,
                  the facts, the machine's whole sandbox list — starts at the same x underneath it, so three
                  computers read as three entries rather than as nine indents. -->
-            <div v-for="computer in sorted" :key="computer.key" class="flex items-start gap-3 border-b border-line px-4 py-4 last:border-b-0">
-                <Icon name="desktop" class="mt-0.5 shrink-0 text-base text-muted" />
-                <div class="flex min-w-0 flex-1 flex-col gap-3">
-                    <!-- WHO THIS IS — the name, what kind of computer it is, and whether it is here. -->
-                    <div class="flex min-w-0 flex-col gap-1.5">
-                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="truncate text-sm font-semibold text-content">{{ computer.label }}</span>
-                            <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line
-                                 because it is the fact that tells two rows apart at a glance, and the one the
-                                 rows were missing: three machines used to differ only by the word somebody typed
-                                 when they added them. -->
-                            <span v-if="osLabel(computer)" class="truncate text-xs text-muted" :title="osTitle(computer)">{{
-                                osLabel(computer)
-                            }}</span>
-                            <StatusBadge :variant="tone(computer)" size="xs" :dot="true" :label="label(computer)" class="ml-auto shrink-0" />
-                        </div>
-                        <!-- WHAT IT IS AND HOW THIS SANDBOX REACHES IT, on one line. Two facts of two kinds, so
-                             the doors keep a shape of their own: they are the difference between a machine that
-                             syncs your files and one the agent can run commands on, and a reader scanning three
-                             computers is usually looking for exactly that.
-                             A newer release rides INSIDE the tag it is about, right after the version it
-                             supersedes, rather than at the end of a line the reader would have to match back up
-                             to a door. -->
-                        <div
-                            v-if="machineFacts(computer).length > 0 || computerDoors(computer, latest).length > 0 || lastSeenNote(computer)"
-                            class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5"
-                        >
-                            <p v-if="machineFacts(computer).length > 0" class="min-w-0 truncate text-xs text-muted">
-                                {{ machineFacts(computer).join(` · `) }}
-                            </p>
-                            <span v-for="door in computerDoors(computer, latest)" :key="door.name" :class="DOOR">
-                                <Icon :name="door.name === `desktop sync` ? `sync` : `terminal`" class="text-2xs text-subtle" />
-                                {{ door.name }}
-                                <span v-if="door.version" class="font-mono text-subtle">{{ door.version }}</span>
-                                <span v-if="door.available" class="font-mono text-warning">{{ door.available }} available</span>
-                            </span>
-                            <span v-if="lastSeenNote(computer)" class="text-xs text-subtle">{{ lastSeenNote(computer) }}</span>
-                        </div>
+            <div v-for="row in shown" :key="row.computer.key" class="border-b border-line last:border-b-0">
+                <!-- WHO THIS IS, AND WHETHER ANYTHING UNDER IT WANTS YOU — the whole of a machine until it is
+                     asked for. An offline computer used to cost a full block, a gutter and a 14px name to say
+                     nothing was there; three of them pushed the machine you came for off the screen.
+                     The name and the chevron are one hit area, so the disclosure is the row rather than a 12px
+                     glyph beside it. A machine with no report never expands: there is nothing behind it. -->
+                <component
+                    :is="expandable(row) ? `button` : `div`"
+                    :type="expandable(row) ? `button` : undefined"
+                    :aria-expanded="expandable(row) ? machineOpen(row) : undefined"
+                    class="flex w-full items-center gap-2.5 px-4 py-3 text-left"
+                    :class="expandable(row) ? `group/machine cursor-pointer` : ``"
+                    @click="expandable(row) ? toggleMachine(row) : undefined"
+                >
+                    <Icon
+                        v-if="expandable(row)"
+                        name="chevron-right"
+                        class="shrink-0 text-2xs text-subtle transition-transform group-hover/machine:text-muted"
+                        :class="machineOpen(row) ? `rotate-90` : undefined"
+                        aria-hidden="true"
+                    />
+                    <!-- The glyph keeps the chevron's column on a row that has no chevron, so a list of live and
+                         offline machines reads down one edge rather than two. -->
+                    <span v-else class="w-[0.6rem] shrink-0"></span>
+                    <Icon name="desktop" class="shrink-0 text-base text-muted" />
+                    <span class="min-w-0 truncate text-sm font-semibold text-content">{{ row.computer.label }}</span>
+                    <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line because it
+                         is the fact that tells two rows apart at a glance, and the one the rows were missing:
+                         three machines used to differ only by the word somebody typed when they added them —
+                         and two of them can genuinely carry the same name. -->
+                    <span v-if="osLabel(row.computer)" class="shrink-0 truncate text-xs text-muted" :title="osTitle(row.computer)">
+                        {{ osLabel(row.computer) }}
+                    </span>
+                    <!-- WHAT THE FOLDED LINE STILL ANSWERS: how much is under here, and whether any of it wants
+                         something. Hidden while the machine is open, where every row states its own. -->
+                    <span v-if="!machineOpen(row)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
+                        <span v-for="fact in row.facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
+                        <span v-for="warning in row.warnings" :key="warning" class="truncate text-2xs text-warning">{{ warning }}</span>
+                        <span v-if="lastSeenNote(row.computer)" class="shrink-0 text-2xs text-subtle">{{ lastSeenNote(row.computer) }}</span>
+                    </span>
+                    <StatusBadge
+                        :variant="tone(row.computer)"
+                        size="xs"
+                        :dot="true"
+                        :label="label(row.computer)"
+                        class="shrink-0"
+                        :class="machineOpen(row) ? `ml-auto` : ``"
+                    />
+                </component>
+
+                <!-- Everything else about this machine, aligned under its name rather than under its chevron. -->
+                <div v-if="machineOpen(row) || !expandable(row)" class="flex min-w-0 flex-col gap-3 px-4 pb-4 pl-11">
+                    <!-- WHAT IT IS AND HOW THIS SANDBOX REACHES IT, on one line. Two facts of two kinds, so the
+                         doors keep a shape of their own: they are the difference between a machine that syncs
+                         your files and one the agent can run commands on, and a reader scanning three computers
+                         is usually looking for exactly that.
+                         A newer release rides INSIDE the tag it is about, right after the version it supersedes,
+                         rather than at the end of a line the reader would have to match back up to a door. -->
+                    <div
+                        v-if="machineFacts(row.computer).length > 0 || computerDoors(row.computer, latest).length > 0"
+                        class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5"
+                    >
+                        <p v-if="machineFacts(row.computer).length > 0" class="min-w-0 truncate text-xs text-muted">
+                            {{ machineFacts(row.computer).join(` · `) }}
+                        </p>
+                        <span v-for="door in computerDoors(row.computer, latest)" :key="door.name" :class="DOOR">
+                            <Icon :name="door.name === `desktop sync` ? `sync` : `terminal`" class="text-2xs text-subtle" />
+                            {{ door.name }}
+                            <span v-if="door.version" class="font-mono text-subtle">{{ door.version }}</span>
+                            <span v-if="door.available" class="font-mono text-warning">{{ door.available }} available</span>
+                        </span>
                     </div>
 
                     <!-- WHAT THE ROW WANTS FROM YOU, if anything — each on its own line, in the tone it earns. -->
                     <div
                         v-if="
-                            syncAgentBehind(computer, latest) || (computer.report && reportStale(computer, now)) || computer.gap || blockOf(computer)
+                            syncAgentBehind(row.computer, latest) ||
+                            (row.computer.report && reportStale(row.computer, now)) ||
+                            row.computer.gap ||
+                            blockText(row.computer)
                         "
                         class="flex flex-col gap-1"
                     >
                         <!-- An agent that has fallen behind is not an error — sync keeps working — so this is a
                              quiet line rather than a warning, and it names the one command that fixes it instead
                              of sending anyone to the browser for a pairing token. -->
-                        <p v-if="syncAgentBehind(computer, latest)" class="text-xs text-subtle">
+                        <p v-if="syncAgentBehind(row.computer, latest)" class="text-xs text-subtle">
                             Run <span class="font-mono text-content">intentic-sync upgrade</span> on that computer to update its sync agent.
                         </p>
                         <!-- The reading's own age, not its arrival's: a report is a snapshot of a computer that
                              may since have closed its lid, so it is presented as of when the machine took it. -->
-                        <p v-if="computer.report && reportStale(computer, now)" class="text-xs text-warning">
-                            Last heard from {{ timeAgo(computer.report.capturedAt) }} — what follows is what it looked like then.
+                        <p v-if="row.computer.report && reportStale(row.computer, now)" class="text-xs text-warning">
+                            Last heard from {{ timeAgo(row.computer.report.capturedAt) }} — what follows is what it looked like then.
                         </p>
-                        <p v-if="computer.gap" class="text-xs text-muted">{{ GAP_TEXT[computer.gap] }}</p>
+                        <p v-if="row.computer.gap" class="text-xs text-muted">{{ GAP_TEXT[row.computer.gap] }}</p>
                         <!-- WHY THE SANDBOX LIST BELOW HAS NO BUTTONS, and the one click that changes it. Quiet
                              ink, because none of these is a fault: a machine syncing files perfectly is the row
                              this reaches most often, and the desktop app has managed its containers all along. -->
-                        <div v-if="blockText(computer)" class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <p class="min-w-0 text-xs text-muted">{{ blockText(computer) }}</p>
+                        <div v-if="blockText(row.computer)" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p class="min-w-0 text-xs text-muted">{{ blockText(row.computer) }}</p>
                             <Button
-                                v-if="blockAction(computer)"
+                                v-if="blockAction(row.computer)"
                                 size="small"
                                 severity="secondary"
                                 :text="true"
-                                :label="blockAction(computer)"
-                                @click="goFix(computer)"
+                                :label="blockAction(row.computer)"
+                                @click="goFix(row.computer)"
                             >
                                 <template #icon><Icon name="arrow-up-right" /></template>
                             </Button>
                         </div>
                     </div>
 
-                    <!-- WHAT IT IS RUNNING FOR YOU: one row per sandbox, carrying its folder, its ports, its
-                         image and its verbs. Only a machine that reported can say any of it. -->
-                    <div v-if="computer.report" class="border-t border-line pt-3">
+                    <!-- WHAT IT IS RUNNING FOR YOU: one row per sandbox, folded to a line that says whether it
+                         is fine, and carrying its folder, its ports, its image and its verbs when opened. Only
+                         a machine that reported can say any of it. -->
+                    <div v-if="row.computer.report" class="border-t border-line pt-3">
                         <MachineDetail
-                            :pairings="computer.report.pairings"
-                            :ports="computer.report.ports"
-                            :sandboxes="computer.report.sandboxes"
-                            :watcher="{ ...computer.report.watcher, stalled: watcherStalled(computer.report.watcher, now) }"
+                            :pairings="row.computer.report.pairings"
+                            :ports="row.computer.report.ports"
+                            :sandboxes="row.computer.report.sandboxes"
+                            :watcher="{ ...row.computer.report.watcher, stalled: watcherStalled(row.computer.report.watcher, now) }"
+                            :open="row.open"
                         >
                             <!-- What the list is, and the state of the agent behind it, on one line — the
                                  watcher is a fact about the MACHINE rather than about any row under it. -->
@@ -454,19 +659,19 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                             <!-- The one row on this page that can close the page. Said beside the name rather
                                  than in the confirmation alone, so it is known before anything is clicked. -->
                             <template #badges="{ group }">
-                                <StatusBadge v-if="isSelf(computer, group)" variant="info" size="xs" label="the one you're using" />
+                                <StatusBadge v-if="isSelf(row.computer, group)" variant="info" size="xs" label="the one you're using" />
                             </template>
                             <!-- The verbs themselves are the kit's, so this tab and the desktop app's manager
                                  window offer the same row rather than two sets that drifted. What stays here is
                                  which rows may act at all, and what a click does. -->
                             <template #actions="{ group }">
                                 <SandboxVerbs
-                                    v-if="manageable(computer, group)"
+                                    v-if="manageable(row.computer, group)"
                                     :running="group.sandbox?.running === true"
-                                    :busy="runningVerb(computer, group)"
+                                    :busy="runningVerb(row.computer, group)"
                                     :disabled="busy !== undefined"
-                                    :logs-open="logShown(computer, group)"
-                                    @act="(verb) => act(computer, group, verb)"
+                                    :logs-open="logShown(row.computer, group)"
+                                    @act="(verb) => act(row.computer, group, verb)"
                                 />
                             </template>
                             <!-- The machine's own output: while a row works, and afterwards for as long as a log
@@ -474,18 +679,25 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                                  result line by the time it ends. -->
                             <template #footer="{ group }">
                                 <MachineRunLog
-                                    v-if="busy?.startsWith(`${rowKey(computer, group)}:`) || logShown(computer, group)"
-                                    :lines="runLines[rowKey(computer, group)] ?? []"
-                                    :running="busy?.startsWith(`${rowKey(computer, group)}:`) === true"
+                                    v-if="busy?.startsWith(`${rowKey(row.computer, group)}:`) || logShown(row.computer, group)"
+                                    :lines="runLines[rowKey(row.computer, group)] ?? []"
+                                    :running="busy?.startsWith(`${rowKey(row.computer, group)}:`) === true"
                                     empty="Starting on that computer…"
                                     note="Running on that computer — it keeps going even if you leave this page."
                                 />
-                                <Notice v-if="actionError?.key === rowKey(computer, group)" :of="actionError.notice" />
-                                <p v-else-if="actionDone?.key === rowKey(computer, group)" class="text-xs text-muted">{{ actionDone.message }}</p>
+                                <Notice v-if="actionError?.key === rowKey(row.computer, group)" :of="actionError.notice" />
+                                <p v-else-if="actionDone?.key === rowKey(row.computer, group)" class="text-xs text-muted">
+                                    {{ actionDone.message }}
+                                </p>
                             </template>
                         </MachineDetail>
                     </div>
                 </div>
+            </div>
+            <!-- A filter that matched nothing says so where the rows would have been, rather than leaving a
+                 group that looks like it has lost its contents. -->
+            <div v-if="shown.length === 0 && sorted.length > 0" class="px-4 py-6 text-center text-xs text-muted">
+                No computer or sandbox here matches “{{ query }}”.
             </div>
         </RowGroup>
 

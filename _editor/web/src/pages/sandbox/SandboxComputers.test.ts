@@ -6,8 +6,9 @@
 // derivation (computerFacts.test.ts has that) but that the row actually PUTS it on screen, next to the name, for a
 // computer that has nothing else to show.
 import type { Computer } from "@intentic/sandbox-contract";
+import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice). jsdom plus these two is the whole of it — see daemonRestart.test.ts, which
@@ -76,6 +77,16 @@ const mount = (rows: Computer[]): HTMLElement => {
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
+};
+
+/* UNFOLDING A ROW. Both a computer and a sandbox are drawn as one line with a disclosure over the whole of it —
+ * the name IS the button — so a test opens one the way a reader does: by pressing the line that says its name. */
+const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
+const openRow = async (el: HTMLElement, name: string): Promise<void> => {
+    disclosures(el)
+        .find((button) => (button.textContent ?? ``).includes(name))
+        ?.click();
+    await nextTick();
 };
 
 afterEach(() => {
@@ -168,9 +179,10 @@ it(`puts the machines worth reading first`, () => {
     expect(at(`b-quiet`)).toBeLessThan(at(`a-offline`));
 });
 
-// The image is what Update changes, and one sandbox on a machine running something older than its neighbour was
-// invisible on a list that named only the container.
-it(`names the image each sandbox on the machine is running`, () => {
+/* The image is what Update changes, and one sandbox on a machine running something older than its neighbour was
+ * invisible on a list that named only the container. It is now BEHIND the fold — the longest string on the row
+ * and the least often read — so this pins that opening the row still reaches it. */
+it(`names the image each sandbox on the machine is running, once the row is open`, async () => {
     const el = mount([
         {
             key: `laptop`,
@@ -189,6 +201,8 @@ it(`names the image each sandbox on the machine is running`, () => {
             },
         },
     ]);
+    expect(el.textContent ?? ``).not.toContain(`ghcr.io/intentic/sandbox:2.3.1`);
+    await openRow(el, `work`);
     expect(el.textContent ?? ``).toContain(`ghcr.io/intentic/sandbox:2.3.1`);
 });
 
@@ -227,19 +241,43 @@ const granted = (): void => {
     capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
 };
 
-it(`offers the same verbs a running sandbox has in the desktop app`, () => {
+/* ONE BUTTON ON THE ROW, AND THE REST BEHIND A MENU. All six used to sit on the line: four sandboxes on one
+ * machine meant twenty-four controls in one weight, and the row's own NAME — the thing anybody scans for — was
+ * the quietest object on the line it titled. The power verb is what people reach for, so it is what stays. */
+it(`puts one verb on the row and everything else behind a menu`, () => {
     granted();
-    expect(labels(mount([managed(true)]))).toEqual(expect.arrayContaining([`Restart`, `Stop`, `Update`, `Roll back`, `Logs`, `Remove`]));
+    const el = mount([managed(true)]);
+    const found = labels(el);
+    expect(found).toContain(`Stop`);
+    // The overflow is a glyph, so it is named for assistive tech rather than in words on the row.
+    expect(el.querySelector(`button[aria-label="More actions"]`)).not.toBeNull();
+    // The other five are one deliberate click away rather than sitting on the line.
+    for (const verb of [`Restart`, `Update`, `Roll back`, `Logs`, `Remove`]) {
+        expect(found).not.toContain(verb);
+    }
 });
 
-// Start replaces Restart and Stop rather than joining them: a stopped sandbox has nothing to restart, and Update
-// is still offered — a stopped one is exactly what somebody wants on a newer image before starting it again.
+// Start replaces Stop rather than joining it: a stopped sandbox has nothing to stop, and a running one is not
+// started twice.
 it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
     granted();
     const found = labels(mount([managed(false)]));
-    expect(found).toEqual(expect.arrayContaining([`Start`, `Update`, `Roll back`, `Logs`, `Remove`]));
+    expect(found).toContain(`Start`);
     expect(found).not.toContain(`Stop`);
-    expect(found).not.toContain(`Restart`);
+});
+
+/* WHAT IS IN THAT MENU, pinned as vocabulary rather than through PrimeVue's teleported overlay: the model is
+ * what both apps read, and asserting it here is what stops the desktop window and this tab drifting into two
+ * different sets again — the failure the shared kit exists to prevent.
+ *
+ * Restart is absent on a stopped sandbox for the same reason Stop is; removal is separate from the rest because
+ * it is the one thing here that nothing undoes, and the row draws it under a divider. */
+it(`keeps the menu's vocabulary the same for both apps`, () => {
+    expect(primaryVerb(true)).toBe(`stop`);
+    expect(primaryVerb(false)).toBe(`start`);
+    expect(menuVerbs(true)).toEqual([`restart`, `logs`, `update`, `rollback`]);
+    expect(menuVerbs(false)).toEqual([`logs`, `update`, `rollback`]);
+    expect(DESTRUCTIVE_VERB).toBe(`remove`);
 });
 
 // A fully connected and permitted machine says nothing at all about connecting or permissions — the whole point
@@ -308,6 +346,113 @@ it(`names the removal switch on a machine that may do everything else`, () => {
     const text = mount([managed(true)]).textContent ?? ``;
     expect(text).toContain(`Remove sandboxes from this computer`);
     expect(text).not.toContain(`Turn on "Manage sandboxes on this computer"`);
+});
+
+/* --- FOLDING, AND WHAT A FOLDED LINE STILL HAS TO ANSWER ---------------------------------------------------
+ *
+ * The view drew every fact about every sandbox at once: one laptop with four of them filled the screen, and
+ * three machines was a page nobody could scan. Folding is only an improvement if the closed line still answers
+ * "is this one fine", so these pin both halves — what disappears, and what must not. */
+const busyMachine = (): Computer => ({
+    key: `rog`,
+    label: `radarsu-rog`,
+    syncEnrolled: true,
+    platform: `linux`,
+    hostId: `host-1`,
+    online: true,
+    report: {
+        hostname: `radarsu-rog`,
+        os: `linux`,
+        agents: { sync: `1.183.0` },
+        sandboxes: [
+            { slug: `sandbox-bce57bb9fe3b`, container: `c1`, running: true, image: `img:a` },
+            { slug: `sandbox-0738cd6b5027`, container: `c2`, running: true, image: `img:b` },
+            { slug: `sandbox-4c64429cade7`, container: `c3`, running: false, image: `img:c` },
+        ],
+        pairings: [
+            { sandboxId: `sandbox-bce57bb9fe3b`, mode: `sync`, localDir: `/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b` },
+            { sandboxId: `sandbox-0738cd6b5027`, mode: `sync`, localDir: `/home/radarsu/intentic/radarsu-local-0738cd6b5027` },
+        ],
+        ports: [
+            { port: 8788, host: `127.0.0.1`, sandboxId: `sandbox-bce57bb9fe3b`, state: `mirrored` },
+            { port: 33177, host: `127.0.0.1`, sandboxId: `sandbox-bce57bb9fe3b`, state: `mirrored` },
+            { port: 5440, host: `127.0.0.1`, sandboxId: `sandbox-0738cd6b5027`, state: `busy` },
+        ],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+/* THE NAME. Three sandboxes on this machine differ only by a blob of hex, and the readable name was sitting in
+ * the folder path underneath the whole time. The exact id stays on the line beside it: it is the string somebody
+ * types into a terminal, and a view that shows only the friendly name makes it unfindable. */
+it(`titles a sandbox by its folder rather than by a blob of hex`, () => {
+    const text = mount([busyMachine()]).textContent ?? ``;
+    expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
+    expect(text).toContain(`radarsu-local-0738cd6b5027`);
+    expect(text).toContain(`sandbox-bce57bb9fe3b`);
+});
+
+// A folded row costs one line and still says how much is under it. The detail it hides is genuinely hidden,
+// which is the whole of the saving.
+it(`folds a sandbox to a line that still says what is under it`, () => {
+    granted();
+    const text = mount([busyMachine()]).textContent ?? ``;
+    expect(text).toContain(`2 ports`);
+    // The rows that are fine keep their paths and images behind the fold.
+    expect(text).not.toContain(`/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
+    expect(text).not.toContain(`img:a`);
+});
+
+/* WHICH ROWS OPEN THEMSELVES: the ones somebody has to act on. Not merely stopped — plenty of sandboxes are
+ * stopped on purpose, and unfolding every one of them hands back the wall this is folding away. */
+it(`opens the sandbox that wants something and leaves the rest folded`, () => {
+    granted();
+    const text = mount([busyMachine()]).textContent ?? ``;
+    // The contended port's row is open, so its folder and the sentence about the port are both on screen.
+    expect(text).toContain(`/home/radarsu/intentic/radarsu-local-0738cd6b5027`);
+    expect(text).toContain(`not on localhost`);
+    // The stopped one is not: being stopped is not an errand.
+    expect(text).not.toContain(`img:c`);
+});
+
+// The machine's own line carries the same idea one level up, so a folded computer still says how much is under
+// it and whether anything there wants attention.
+it(`folds a computer to a line that counts what is under it`, async () => {
+    const el = mount([busyMachine()]);
+    await openRow(el, `radarsu-rog`);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`3 sandboxes`);
+    expect(text).toContain(`2 running`);
+    expect(text).toContain(`1 needs attention`);
+});
+
+/* THE FILTER. Twelve rows and no search meant looking for a port number was reading. It narrows MACHINES and
+ * unfolds what matched rather than hiding rows inside a machine — a contended port is explained by naming the
+ * sandbox that took it, and filtering that sandbox away would cut the link the explanation depends on. */
+it(`finds a machine by a port number and opens what matched`, async () => {
+    const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
+    const field = el.querySelector(`input`);
+    expect(field).not.toBeNull();
+    field!.value = `8788`;
+    field!.dispatchEvent(new Event(`input`));
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`radarsu-rog`);
+    expect(text).not.toContain(`other-pc`);
+    // The row that holds the port is unfolded, so the answer is on screen rather than one more click away.
+    expect(text).toContain(`localhost:8788`);
+});
+
+// A filter that matched nothing says so where the rows would have been, rather than leaving a group that looks
+// like it has lost its contents.
+it(`says when a filter matched nothing`, async () => {
+    const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
+    const field = el.querySelector(`input`);
+    field!.value = `zzzz`;
+    field!.dispatchEvent(new Event(`input`));
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`matches`);
 });
 
 /* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,

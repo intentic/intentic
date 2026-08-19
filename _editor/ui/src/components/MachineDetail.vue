@@ -25,11 +25,14 @@
      Derivations live in machineDetail.ts, including the prop shapes: they are STRUCTURAL rather than the sandbox
      contract's own types (`@intentic/ui` carries no domain dependency) and a MachineReport satisfies them. -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from "vue";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import CopyButton from "./CopyButton.vue";
+import Icon from "./Icon.vue";
 import {
     folderState,
     folderTone,
+    groupNeedsAttention,
+    groupSummary,
     type MachineFolderRow,
     type MachinePortRow,
     type MachineSandboxGroup,
@@ -47,6 +50,7 @@ const {
     ports = [],
     sandboxes = [],
     watcher,
+    open = [],
 } = defineProps<{
     pairings?: readonly MachineFolderRow[];
     ports?: readonly MachinePortRow[];
@@ -55,6 +59,11 @@ const {
      * what this component drew before a container was ever passed to it. */
     sandboxes?: readonly MachineSandboxRow[];
     watcher?: MachineWatcherState | undefined;
+    /* Sandbox ids the CALLER wants unfolded on arrival — the sandbox this page is being read from, a row a
+     * search just matched. Everything the component can work out for itself (a port that never reached
+     * localhost, a file conflict, a dead tunnel) it unfolds without being told; this is for the facts it cannot
+     * know. Reactive: a filter that narrows to one row opens it as it lands. */
+    open?: readonly string[];
 }>();
 
 defineSlots<{
@@ -69,6 +78,40 @@ defineSlots<{
 }>();
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
+
+/* WHICH ROWS ARE UNFOLDED — the change this view most needed.
+ *
+ * Every fact about every sandbox used to be on screen at once: a machine running four of them drew four folders,
+ * four port stacks and four image lines, and three machines was a page nobody could scan. So a row is a LINE
+ * until it is asked for, and the line still carries what a reader is checking (`groupSummary`).
+ *
+ * What opens itself is what somebody has to act on (a port that never reached localhost, a file conflict, a dead
+ * tunnel) plus whatever the caller named. Deliberately not "stopped": plenty of sandboxes are stopped on
+ * purpose, and unfolding every one of them hands back the wall this is folding away. */
+const autoOpen = computed(() => new Set([...open, ...groups.value.filter(groupNeedsAttention).map((group) => group.sandboxId)]));
+
+/* TWO SETS, NOT ONE, and the pair is what keeps this list still under the pointer. A single "open" set has to be
+ * re-seeded from the rule on every poll, which either re-opens a row the reader just folded or freezes the rule
+ * out entirely. Recording the reader's own GESTURES instead lets the rule decide only where they made none, and
+ * this list re-derives itself every ten seconds, so anything less is a page that moves while it is read. */
+const opened = ref(new Set<string>());
+const folded = ref(new Set<string>());
+const isOpen = (group: MachineSandboxGroup): boolean =>
+    opened.value.has(group.sandboxId) || (autoOpen.value.has(group.sandboxId) && !folded.value.has(group.sandboxId));
+const toggle = (group: MachineSandboxGroup): void => {
+    const id = group.sandboxId;
+    const shutting = isOpen(group);
+    opened.value = new Set([...opened.value].filter((seen) => seen !== id));
+    folded.value = new Set([...folded.value].filter((seen) => seen !== id));
+    const target = shutting ? folded : opened;
+    target.value = new Set([...target.value, id]);
+};
+/* A row the caller newly named — a search hit — must OPEN, not flip. Without this, a row the reader had folded
+ * by hand stays folded when the filter narrows to it alone, which reads as a filter that found nothing. */
+watch(
+    () => [...open].join(`|`),
+    () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
+);
 
 /* A PORT IS AN ADDRESS, NOT A STATUS, so it wears a chip of its own rather than a StatusBadge: monospaced, so
  * numbers line up down the column and 8788 cannot be misread as 8788o, and square, because the pill shape is
@@ -118,6 +161,11 @@ let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
 const showHolder = (holder: MachineSandboxGroup): void => {
     const id = blockId(holder);
+    // Opened before it is jumped to: the holder's row is folded like every other, and scrolling somebody to a
+    // closed line is the same dead end the note had before it became a link.
+    if (!isOpen(holder)) {
+        toggle(holder);
+    }
     document.getElementById(id)?.scrollIntoView({ behavior: `smooth`, block: `center` });
     clearTimeout(flashTimer);
     flashing.value = id;
@@ -168,40 +216,78 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 v-for="group in groups"
                 :key="group.sandboxId"
                 :id="blockId(group)"
-                class="flex flex-col gap-2 border-t border-line py-3 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
+                class="flex flex-col gap-2 border-t border-line py-2 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
                 :class="flashing === blockId(group) ? `bg-warning/10` : ``"
             >
-                <!-- WHICH SANDBOX THIS IS, and what can be done to it — one line, so a machine's list is read
-                     down its names rather than down the boxes those names used to sit in. -->
-                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-                    <!-- Running is a dot and nothing else — it is the resting state of every row on a healthy
-                         machine, and a word for it on all of them is a word that stops being read. The state
-                         still reaches a screen reader, and stopped keeps its word below. -->
-                    <span
-                        v-if="group.sandbox"
-                        class="h-1.5 w-1.5 shrink-0 rounded-full"
-                        :class="group.sandbox.running ? `bg-success` : `bg-subtle`"
-                        role="img"
-                        :aria-label="group.sandbox.running ? `running` : `stopped`"
-                        :title="group.sandbox.running ? `running` : `stopped`"
-                    ></span>
-                    <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
-                    <span class="truncate text-xs text-content" :class="group.sandbox ? `font-semibold` : `font-mono font-medium`">
-                        {{ group.title }}
-                    </span>
-                    <!-- Running is said by the dot; stopped is said in words, because it is the state somebody
-                         has to notice and a grey dot is what "nothing to see" looks like. -->
-                    <span v-if="group.sandbox && !group.sandbox.running" class="text-2xs text-muted">stopped</span>
-                    <!-- Absent tunnel and stopped tunnel are different facts; only the second is a warning. -->
-                    <StatusBadge v-if="group.sandbox?.tunnelRunning === false" variant="warning" size="xs" label="tunnel off" />
-                    <slot name="badges" :group="group" />
-                    <span v-if="$slots[`actions`]" class="ml-auto flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
+                <!-- WHICH SANDBOX THIS IS, WHETHER IT IS FINE, and what can be done to it — all on the one line
+                     that is the whole row until somebody asks for more.
+                     The chevron and the name are ONE button. A disclosure whose only hit area is a 12px glyph is
+                     a disclosure nobody finds; the verbs keep their own hit areas outside it, so opening a row
+                     and acting on one are never the same click. -->
+                <div class="flex min-w-0 items-center gap-x-2">
+                    <button
+                        type="button"
+                        class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-0.5 text-left"
+                        :aria-expanded="isOpen(group)"
+                        :aria-controls="`${blockId(group)}-detail`"
+                        @click="toggle(group)"
+                    >
+                        <Icon
+                            name="chevron-right"
+                            class="shrink-0 text-2xs text-subtle transition-transform group-hover/row:text-muted"
+                            :class="isOpen(group) ? `rotate-90` : undefined"
+                            aria-hidden="true"
+                        />
+                        <!-- Running is a dot and nothing else — it is the resting state of every row on a healthy
+                             machine, and a word for it on all of them is a word that stops being read. The state
+                             still reaches a screen reader, and stopped keeps its word beside it. -->
+                        <span
+                            v-if="group.sandbox"
+                            class="h-1.5 w-1.5 shrink-0 rounded-full"
+                            :class="group.sandbox.running ? `bg-success` : `bg-subtle`"
+                            role="img"
+                            :aria-label="group.sandbox.running ? `running` : `stopped`"
+                            :title="group.sandbox.running ? `running` : `stopped`"
+                        ></span>
+                        <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
+                        <span class="min-w-0 truncate text-xs font-semibold text-content">{{ group.title }}</span>
+                        <!-- THE EXACT ID, kept and demoted. The title is now the most human name this sandbox
+                             has (machineDetail.ts), and this is the string somebody types into a terminal — a
+                             view that showed only the friendly one would make it unfindable. -->
+                        <span v-if="group.subtitle" class="hidden shrink-0 truncate font-mono text-2xs text-subtle sm:inline">
+                            {{ group.subtitle }}
+                        </span>
+                        <!-- Running is said by the dot; stopped is said in words, because it is the state
+                             somebody has to notice and a grey dot is what "nothing to see" looks like. -->
+                        <span v-if="group.sandbox && !group.sandbox.running" class="shrink-0 text-2xs text-muted">stopped</span>
+                        <!-- A PAIRING WITH NO CONTAINER. It rendered as a row with a different glyph, no state
+                             and no verbs, and nothing said why — so it read as a sandbox the view had failed to
+                             finish drawing. -->
+                        <span v-else-if="!group.sandbox" class="shrink-0 text-2xs text-muted">not running here</span>
+                        <slot name="badges" :group="group" />
+                        <!-- WHAT THE CLOSED LINE STILL ANSWERS. Facts are counted and uncoloured; a warning is
+                             the reason this row unfolded itself, in the ink that says so. Hidden while the row
+                             is open, where every one of them is stated in full a few pixels below. -->
+                        <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
+                            <span v-for="fact in groupSummary(group).facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
+                            <span v-for="warning in groupSummary(group).warnings" :key="warning" class="truncate text-2xs text-warning">
+                                {{ warning }}
+                            </span>
+                        </span>
+                    </button>
+                    <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
                 </div>
 
                 <!-- The label column is what the old rows never had: facts of three kinds, each starting at the
                      same x, so a folder, a stack of ports and an image read as one block rather than as loose
-                     lines that happen to sit near each other. -->
-                <div class="grid grid-cols-[3.25rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5">
+                     lines that happen to sit near each other.
+                     Indented to the chevron's own column, so an open row reads as belonging to the line above
+                     it rather than as the next thing in the list. -->
+                <div
+                    v-if="isOpen(group)"
+                    :id="`${blockId(group)}-detail`"
+                    class="grid grid-cols-[3.25rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 pl-5"
+                >
                     <template v-if="group.folder">
                         <span class="text-2xs text-subtle">Folder</span>
                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -314,7 +400,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     </template>
                 </div>
 
-                <slot name="footer" :group="group" />
+                <!-- The machine's own output, and whatever else the caller says about this row. Outside the
+                     disclosure on purpose: a verb pressed on a folded row must show what it is doing, and a
+                     reader who folds a row mid-update is not asking for the update to go quiet. -->
+                <div v-if="$slots[`footer`]" class="empty:hidden pl-5"><slot name="footer" :group="group" /></div>
             </div>
         </div>
 

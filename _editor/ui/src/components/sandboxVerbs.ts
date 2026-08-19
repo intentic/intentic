@@ -9,23 +9,30 @@
  * verb that fails on click. Both apps reach a rebuild from the same place, and neither offers it here. */
 export type SandboxVerb = `start` | `stop` | `restart` | `update` | `rollback` | `logs` | `remove`;
 
-/* THE ROW, IN READING ORDER, decided once for both apps.
+/* ONE BUTTON ON THE ROW, AND THE REST BEHIND A MENU — decided once for both apps.
  *
- * Power first, because it is what the row's own dot is about; then the two that move the container onto another
- * image, newest-first (`update`) then backwards (`rollback`); then the one that only reads; then, last and alone
- * in red, the one that cannot be undone.
+ * All six used to sit on the row as equal text buttons. On a machine running four sandboxes that is twenty-four
+ * controls on one screen, in one weight, and the row's own NAME lost to them: the thing a reader scans for was
+ * the quietest object on the line it titled. Worse, the one verb nothing undoes sat a few pixels from the one
+ * that rolls an image back, in a cluster where every other neighbour is harmless.
  *
- * Start and Stop/Restart are the same slot in two states — a stopped sandbox has nothing to restart, and a
- * running one is not started twice — which is why this is computed from `running` rather than filtered by the
- * template. Red means exactly one thing on this row: everything but removal is secondary, so the eye finds the
- * machine's own state before it finds a verb. */
-export const sandboxVerbs = (running: boolean): readonly SandboxVerb[] => [
-    ...(running ? ([`restart`, `stop`] as const) : ([`start`] as const)),
-    `update`,
-    `rollback`,
-    `logs`,
-    `remove`,
-];
+ * So the row keeps the verb people actually reach for — the container's power state, which is what the row's own
+ * dot is about — and everything else moves one deliberate click away. Start and Stop are the same slot in two
+ * states: a stopped sandbox has nothing to stop, and a running one is not started twice. */
+export const primaryVerb = (running: boolean): Extract<SandboxVerb, `start` | `stop`> => (running ? `stop` : `start`);
+
+/* THE MENU, IN READING ORDER. Restart belongs beside the power button it is a variant of; the log tail is the
+ * one that only READS and is reached most; then the two that move the container onto another image, newest-first
+ * (`update`) then backwards (`rollback`). Removal is last, alone, and the caller draws the divider — it is the
+ * only irreversible thing here and it should never be the neighbour of anything.
+ *
+ * Restart is absent on a stopped sandbox because Start already covers it, which is the same reasoning that keeps
+ * Stop off that row. */
+export const menuVerbs = (running: boolean): readonly SandboxVerb[] => [...(running ? ([`restart`] as const) : []), `logs`, `update`, `rollback`];
+
+// The one that stands apart, named rather than sliced off the list above so a reader of either app can see why
+// it is drawn where it is.
+export const DESTRUCTIVE_VERB = `remove` satisfies SandboxVerb;
 
 // What each one is called on the button. `logs` says which way the toggle goes, so it is labelled by its caller.
 export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {

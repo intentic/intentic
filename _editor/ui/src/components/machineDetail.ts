@@ -54,8 +54,11 @@ export interface MachineSandboxRow {
 /* ONE SANDBOX'S SHARE OF THE MACHINE — its container, its folder if it syncs one, and every port it asked for. */
 export interface MachineSandboxGroup {
     sandboxId: string;
-    /** What to call it: the container's display name where there is one, else the id the sync agent knows. */
+    /** What to call it — see `titled`: the most human of the names this sandbox goes by. */
     title: string;
+    /** The exact id, when the title is NOT it. Rendered small beside the title, so the row is scannable and
+     *  the string you would actually type is still on screen. */
+    subtitle?: string | undefined;
     sandbox?: MachineSandboxRow | undefined;
     folder?: MachineFolderRow | undefined;
     ports: MachinePortRow[];
@@ -84,6 +87,32 @@ const twinKey = (port: MachinePortRow): string => `${port.port}:${port.state}:${
  * as two rows, which is what every surface did before this. */
 const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
 
+/* WHAT TO CALL A SANDBOX, when every name it has is a machine's.
+ *
+ * A row used to be titled `sandbox-bce57bb9fe3b`, and a machine running four of them drew four titles that
+ * differed only in a blob of hex — so the list could not be scanned at all, and the reader fell through to the
+ * folder path underneath to work out which was which. That path is where the readable name was the whole time:
+ * its last segment is what the user called the project (`radarsu-web-platform-bce57bb9fe3b`).
+ *
+ * So the order is most-human-first: the display name a machine recorded, then the folder's own leaf, then the
+ * ids. The exact id survives as `subtitle` rather than being replaced — it is the string somebody types into a
+ * terminal, and a view that shows only a friendly name makes that string unfindable. */
+const leafOf = (dir: string | undefined): string | undefined => {
+    const trimmed = (dir ?? ``).replace(/[/\\]+$/, ``);
+    const leaf = trimmed.slice(Math.max(trimmed.lastIndexOf(`/`), trimmed.lastIndexOf(`\\`)) + 1);
+    // A drive root ("C:\") leaves something shaped like a name and meaning nothing about this sandbox.
+    return leaf === `` || leaf.endsWith(`:`) ? undefined : leaf;
+};
+
+const titled = (
+    exact: string,
+    sandbox: MachineSandboxRow | undefined,
+    folder: MachineFolderRow | undefined,
+): Pick<MachineSandboxGroup, `title` | `subtitle`> => {
+    const title = sandbox?.name ?? leafOf(folder?.localDir) ?? exact;
+    return { title, ...(title === exact ? {} : { subtitle: exact }) };
+};
+
 /* The report's lists, folded into one block per sandbox.
  *
  * Driven by the PAIRINGS, in their own order: a pairing is what the user set up, and it stays on screen through
@@ -107,17 +136,25 @@ export const sandboxGroups = (
             }
         }
         const sandbox = sandboxes.find((box) => isSameSandbox(sandboxId, box.slug));
+        const folder = pairings.find((entry) => entry.sandboxId === sandboxId);
         return {
             sandboxId,
-            title: sandbox?.name ?? sandbox?.slug ?? sandboxId,
+            ...titled(sandbox?.slug ?? sandboxId, sandbox, folder),
             ...(sandbox === undefined ? {} : { sandbox }),
-            folder: pairings.find((folder) => folder.sandboxId === sandboxId),
+            folder,
             ports: mine.toSorted(byOutcomeThenNumber),
         };
     });
     const unpaired = sandboxes
         .filter((box) => !ids.some((sandboxId) => isSameSandbox(sandboxId, box.slug)))
-        .map((sandbox): MachineSandboxGroup => ({ sandboxId: sandbox.slug, title: sandbox.name ?? sandbox.slug, sandbox, ports: [] }));
+        .map((sandbox): MachineSandboxGroup => {
+            const { title, subtitle } = titled(sandbox.slug, sandbox, undefined);
+            const group: MachineSandboxGroup = { sandboxId: sandbox.slug, title, sandbox, ports: [] };
+            if (subtitle !== undefined) {
+                group.subtitle = subtitle;
+            }
+            return group;
+        });
     return [...paired, ...unpaired];
 };
 
@@ -143,6 +180,62 @@ export const folderState = (folder: MachineFolderRow): string | undefined => {
  * word a later Mutagen invents) stays neutral rather than being guessed at. */
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
+
+/* WHAT A FOLDED ROW SAYS ABOUT ITSELF — the whole reason folding is safe at all.
+ *
+ * A list that hides four sandboxes behind four chevrons only beats the wall it replaced if the CLOSED line still
+ * answers "is this one fine". So each row carries two kinds of thing, kept apart because they are read
+ * differently: FACTS are counted at a glance and never coloured, WARNINGS are the reason to open the row and
+ * keep their ink.
+ *
+ * The warnings are also the open-by-default rule (`groupNeedsAttention`), which is why both live here rather
+ * than in a template: "what is wrong with this sandbox" and "which rows start open" have to be ONE answer, or a
+ * row warns in its summary and stays shut. */
+export interface GroupSummary {
+    /** Counted, uncoloured — "3 ports", "ports only". */
+    readonly facts: readonly string[];
+    /** The reasons to open this row, in the ink of a warning. */
+    readonly warnings: readonly string[];
+}
+
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
+    const facts: string[] = [];
+    const warnings: string[] = [];
+    const reached = group.ports.filter((port) => port.state === `mirrored`).length;
+    const missed = group.ports.length - reached;
+    if (reached > 0) {
+        facts.push(plural(reached, `port`, `ports`));
+    }
+    // A pairing that syncs nothing is a fact about how it was SET UP, not a fault — one word on the closed line
+    // rather than an opened row whose Folder line says the same thing in eight.
+    if (group.folder?.mode === `mirror`) {
+        facts.push(`ports only`);
+    }
+    if (missed > 0) {
+        warnings.push(`${plural(missed, `port`, `ports`)} not on localhost`);
+    }
+    if (group.folder?.conflicts) {
+        warnings.push(plural(group.folder.conflicts, `conflict`, `conflicts`));
+    }
+    // A sandbox reached over the user's own proxy has no sidecar AT ALL, which is not the same fact as one that
+    // is down — see the field's own note. Only the second is worth a word.
+    if (group.sandbox?.tunnelRunning === false) {
+        warnings.push(`tunnel off`);
+    }
+    const sync = group.folder === undefined ? undefined : folderState(group.folder);
+    if (sync !== undefined && folderTone(sync) === `warning`) {
+        warnings.push(sync);
+    }
+    return { facts, warnings };
+};
+
+/* WHICH ROWS OPEN THEMSELVES. Deliberately NOT "stopped": plenty of sandboxes are stopped on purpose, and a rule
+ * that unfolds every one of them hands back the wall this view exists to fold away. What opens is what somebody
+ * has to go and DO something about — and it is the same list the closed line just showed, so a row can never
+ * warn and stay shut. */
+export const groupNeedsAttention = (group: MachineSandboxGroup): boolean => groupSummary(group).warnings.length > 0;
 
 /* WHO TOOK THE PORT, as a row on this same card.
  *

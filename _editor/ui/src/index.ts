@@ -55,16 +55,22 @@ export { default as MachineDetail } from "./components/MachineDetail.vue";
 // it is — both apps drive the same containers and had grown their own.
 export { default as MachineRunLog } from "./components/MachineRunLog.vue";
 export {
+    type GroupSummary,
+    groupNeedsAttention,
+    groupSummary,
     type MachineFolderRow,
     type MachinePortRow,
     type MachineSandboxGroup,
     type MachineSandboxRow,
     type MachineWatcherState,
+    // The same grouping the view draws, for a caller that has to COUNT what it is about to draw — the
+    // Computers tab's folded machine line says how many sandboxes are under it and how many want attention.
+    sandboxGroups,
 } from "./components/machineDetail.js";
 // The verb row on one sandbox's line — which buttons exist, their order, their words, and which one is red.
 // Here because the desktop manager and the web Computers tab render the same row and had drifted apart.
 export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
-export { type SandboxVerb, sandboxVerbPrompt, sandboxVerbs, VERB_LABEL } from "./components/sandboxVerbs.js";
+export { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, sandboxVerbPrompt, VERB_LABEL } from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
