@@ -307,16 +307,15 @@ quiet in a terminal: its one long step is a Docker install that can run ten minu
 | 6 | Questions bracketed so nothing repaints over them | 10 | **done** |
 | 7 | Shim and binary share one voice in a terminal | 6 | **done** |
 | 8 | Emit the plan on the wire; the desktop app reads it instead of its own copy | drift hazard | **not done** |
-| 9 | The two piped agent installers speak the same vocabulary | 6 | **not done** |
+| 9 | The two piped agent installers speak the same vocabulary | 6 | **done** — see §12 |
 | 10 | Stamp a real version into `ic` | 12 | **not done** |
 
 **8** is the one worth doing next. `setupPlan.ts` and `connect.rs` now hold the same plan in two languages and
 nothing checks that they agree; a step added to one is a desktop progress bar that silently stops moving.
 Neither is wrong today, and both were verified by hand against each other while this was written.
 
-**9** leaves `intentic.dev/sync` and `intentic.dev/computer` printing in their own voice at the end of a
-setup. They are bracketed by `suspend`/`resume`, so they no longer collide with the live line — they simply
-look like different programs, because they are.
+**9** shipped after the language question in §11 was settled — the answer to that question was the cheap way
+to do it. See §12.
 
 **10** stays open because `ic`'s Cargo version is never stamped by the release pipeline (`set-versions.sh`
 does not touch it), so the header would read `ic 0.0.0`. The header prints the version only when it is not
@@ -356,3 +355,174 @@ part of this that has not executed.
   app and with every CI run. It must stay boring.
 - **Do not widen the pull filter.** It refuses layer reports, a bare token, and `X: Pulling from Y`. Every
   other line docker emits is a sentence, and one of those sentences is why a failed pull failed.
+
+---
+
+## 11. Should the setup and sync CLIs all be rewritten in Rust?
+
+Asked after the work above landed, and worth answering here because the answer turns on facts this document
+already gathered. **No — but the goal behind the question is reachable for about a twentieth of the cost.**
+
+### 11.1 A version of this was already tried, and shelved
+
+`_editor/desktop-app/src-tauri/src/scripts.rs` opens with the verdict:
+
+> The first attempt at this app reimplemented the machine work in Rust: an environment probe engine, a
+> reconcile plan, a docker-run builder, the `/setup/claim` call, tunnel provisioning, the sandbox lifecycle.
+> That is ~1400 lines whose ONLY job is to stay bit-identical to `connect.sh` — a lockstep that has never held
+> anywhere in this repo, and the reason the experiment was shelved.
+
+Read carefully, that is not a verdict against Rust. It is a verdict against **two implementations of one
+flow**. The failure mode was duplication; the language was incidental. And the fix that stuck was not "write
+less Rust" — it was `ic`, which is Rust, and which absorbed the flow so there is only one of it.
+
+So the honest framing is: **this migration is already chosen and roughly two thirds done.** `connect.sh` used
+to be the whole installer and is now a 299-line bootstrap that gets Docker onto the machine and hands over.
+The question is not whether to start; it is how much further to go, and in which direction.
+
+### 11.2 The actual map — two ecosystems, not five
+
+| CLI | Language | Lines (non-test) | Ships as | Runs |
+| --- | --- | --- | --- | --- |
+| `ic` | Rust | 10,742 | 3.65 MB static binary | on the user's machine, **re-downloaded every run** |
+| `_sandbox/sync` | TypeScript | 3,076 | `bun --compile` binary | on the user's machine, installed once |
+| `_computers/host` | TypeScript | 1,991 | `bun --compile` binary | on the user's machine, installed once |
+| `_deploy/cli` | TypeScript | 3,957 | node | inside the sandbox |
+| served shims | sh + PowerShell | 1,930 | HTTP | once, then hand over |
+
+The three TypeScript CLIs are not three ecosystems. They already share a CLI framework (`@stricli/core`) and
+the platform's own typed contract (`@intentic/sandbox-contract`); `_computers/host` additionally shares
+`@intentic/browser` and `@intentic/desktop`. They are one ecosystem with three entry points.
+
+### 11.3 Why "all Rust" is the wrong trade
+
+**The agents are not setup tools.** `sync` wraps Mutagen and `host` serves an oRPC surface the sandbox calls
+back into. Both are long-lived daemons whose main job is to speak a Zod-typed contract shared with the sandbox
+and the web app. Porting them to Rust means re-deriving that contract in a second language — which is
+*exactly* the lockstep the desktop-app header says has never held in this repo. The expensive part of the port
+has nothing to do with UX.
+
+**The one axis where Rust genuinely wins does not apply to them.** `ic` is Rust because it is fetched over the
+network on *every* invocation of the one-liner, so its size sits in the user's critical path: 3.65 MB stripped
+and LTO'd, against roughly 60 MB for a Bun-compiled equivalent. That argument is decisive for `ic` and
+irrelevant for `sync` and `host`, which are installed once and then just sit there.
+
+**The prize is small.** What a rewrite would share is the rendering — the module built above is about 500
+lines. Rewriting ~5,000 lines of working agent logic to share 500 lines of presentation is upside-down.
+
+**And it would not even finish the job.** `_deploy/cli` runs inside the sandbox against the graph/engine
+libraries; it is not going to Rust. So "one language" is unreachable from this direction — and from the other
+direction too, since `ic` cannot become TypeScript for the size reason above.
+
+### 11.4 What to do instead — share the contract, not the code
+
+The three moves below get one voice across every CLI without moving a single line between languages.
+
+**1 · Write the phase protocol down as a contract.** `intentic: [phase] message` is already a wire format with
+two independent parsers (`setupPlan.ts`, and now `ui.rs`). It is documented only in comments. Promote it to a
+named spec with the phase vocabulary in it, and it becomes the seam every CLI can render behind — which is the
+same reason the split in section 7 was safe to make at all.
+
+**2 · Give the TypeScript side the renderer it already has a seam for.** `_deploy/cli/src/lib/output.ts`
+defines an `Output` with `text` / `json` / `ndjson` modes and a single `Sink`. That is structurally the same
+seam as `ui.rs`, minus the rich path. Port the *design* — plan, live line, wrapping, ranked ending, the
+`is_terminal` split — into that abstraction and have `sync` and `host` render through it. Roughly 400 lines of
+TypeScript, and it retires the hand-rolled `process.stdout.write` calls those two agents use today.
+
+**3 · Have the agents emit phases.** They emit none right now, which is why the two installers this work had
+to bracket with `suspend`/`resume` still look like different programs at the end of a setup. Once they emit
+the protocol, they render in the same checklist, *and* the desktop app gets progress bars for sync and
+computer enrolment for free — from the parser it already ships.
+
+Rough cost: about 400 lines of new TypeScript and a spec, against roughly 7,000 lines of Rust rewrite. Same
+user-visible result.
+
+### 11.5 Where more Rust IS right
+
+Not nowhere — just not in the agents.
+
+- **Keep shrinking the shims into `ic`.** 1,930 lines of sh and PowerShell is still the least testable surface
+  in the install, and the two families drift by hand. The irreducible remainder is small and known: you cannot
+  download the binary with the binary, and installing Docker needs root before anything of ours exists.
+- **Finish item 8 of section 8** — emit the plan on the wire so `setupPlan.ts` stops holding a second copy.
+  That is the one live duplication this work introduced, and it is a dozen lines to close.
+
+---
+
+## 12. The shared renderer — built
+
+§11 said the goal behind "rewrite everything in Rust" was reachable for about a twentieth of the cost, by
+sharing the **contract** rather than the code. That is what shipped. No agent logic moved between languages.
+
+### 12.1 What was added
+
+| | |
+| --- | --- |
+| `docs/cli-output-protocol.md` | The line format, the three modes, the row vocabulary and the rules for adding a phase — promoted from comments in two languages to one normative page both implementations point at. |
+| `_computers/local-agent/src/ui.ts` | The renderer, ~460 lines. The TypeScript twin of `ui.rs`, in the package whose stated job is "the plumbing every intentic CLI that lives on a user's own computer needs". |
+| `_sandbox/sync`, `_computers/host` | Both `setup` commands render through it, declare a plan, and emit phases. Their hand-rolled `out()` closures are gone. |
+| `_sandbox/ic` | Sets `INTENTIC_UI=nested` on the agent installers it spawns. |
+
+`@intentic/local-agent` was the right home and not a new package: `sync`, `host` and `acp-bridge` already
+depend on it, it carries no dependencies of its own (these ship as single-file compiled binaries), and its
+`text.ts` already held the sibling lesson — *what a failing agent says to the person running it*.
+
+### 12.2 The third mode, and why it exists
+
+`plain` and `rich` are `ic`'s split, unchanged. The new one is `nested`, and it is the difference between an
+install that reads as one program and one that reads as three.
+
+`ic sandbox connect` runs these agents *inside* its own checklist. Left alone each would see a terminal, decide
+it owned the screen, and open a second banner with a second plan in the middle of somebody's setup. `nested`
+says "you are detail under somebody else's step": no banner, no numbering, no ending block — just indented
+narration, and one line carrying the verdict up.
+
+A piped parent sets nothing. The child inherits the pipe and reaches the same conclusion on its own, which is
+one fewer place for the two to disagree.
+
+The same flow, all three ways:
+
+```
+rich                                   nested                                  plain
+──────────────────────────────────     ─────────────────────────────────────   ─────────────────────────────
+  intentic · desktop sync                    Enrolling this machine…           intentic: [sync-enrolling] …
+                                             enrolled SSH key with …           intentic: enrolled SSH key …
+  3 steps, roughly 1 minute.                 Linking the folder…               intentic: [sync-linking] …
+                                             Starting the sync engine…         intentic: [sync-starting] …
+        enrolled SSH key with …           ✓  Desktop sync is running.          Desktop sync is running.
+  ✓   1  Enrol this machine    1.3s          /home/ada/intentic/5253…          /home/ada/intentic/5253…
+  ✓   2  Link the folder       0.5s
+  ✓   3  Start syncing         0.9s
+  ✓  Desktop sync is running.  2.7s
+     /home/ada/intentic/5253…
+```
+
+### 12.3 Phases the agents now emit
+
+`sync-enrolling`, `sync-linking`, `sync-starting`, `computer-enrolling`, `computer-starting`.
+
+None are in `setupPlan.ts`, deliberately. Rule 3 of the protocol makes an unknown phase narration under
+whichever step is running — which is exactly what sync is when it runs inside `ic sandbox connect`. Adding
+them to the desktop plan later is a data change with no code behind it, and the desktop app then gets progress
+for sync and computer enrolment from the parser it already ships.
+
+### 12.4 Verification
+
+- 38 new tests on the renderer, covering the property the rest rests on: **a pipe gets the marker stream and
+  nothing else** — asserted as an exact string, plus "no escape byte reaches either stream in `plain`".
+- The repainted line is asserted never to reach the last column at a 60-column width. One character over and
+  the terminal wraps it, after which every carriage return lands a row late.
+- The ordering of the ending block (address, then instruction, then footnotes) is asserted rather than
+  eyeballed, because ranking it *was* the fix.
+- All three modes were run and read, not reasoned about.
+- 251 TypeScript tests and 131 Rust tests pass; `oxlint --deny-warnings`, `prettier --check`, `tsgo --noEmit`
+  and `knip` are clean on the touched packages.
+
+### 12.5 Still open
+
+- **The plan is still held twice** — in `connect.rs` and in `setupPlan.ts`, in two languages, with nothing
+  checking that they agree. Item 8 of §8, and now the only live duplication in this area.
+- **`_deploy/cli` was left alone.** It runs *inside* the sandbox against the engine libraries, not on the
+  user's machine, and its `Output` already has `text`/`json`/`ndjson` modes driven by engine events. Giving it
+  the rich path is the same port again, against a different event source, and it is not part of the install a
+  new user meets.

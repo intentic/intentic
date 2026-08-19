@@ -11,6 +11,8 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
 HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation
 ~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent
 ~/.config/autostart/         registerAutostart()  — Linux desktop session
+
+stdout                       createUi(process)    — the one renderer every agent speaks through
 ```
 
 ## Why it exists
@@ -20,8 +22,8 @@ Three agents ship to a user's machine and have nothing in common except how they
 
 | | what it does | uses |
 | --- | --- | --- |
-| [`@intentic/host`](../../_computers/host) | lets the sandbox's agent work on this computer | home, launcher, autostart, detached |
-| [`@intentic/sync`](../../_sandbox/sync) | mirrors files and ports between machine and sandbox | home, launcher, autostart, detached |
+| [`@intentic/host`](../../_computers/host) | lets the sandbox's agent work on this computer | home, launcher, autostart, detached, ui |
+| [`@intentic/sync`](../../_sandbox/sync) | mirrors files and ports between machine and sandbox | home, launcher, autostart, detached, ui |
 | [`@intentic/acp-bridge`](../../_sandbox/acp-bridge) | lets an editor talk to the sandbox | home |
 
 They were written months apart, and each copy of that plumbing was made from the last one — a shape with a known
@@ -35,10 +37,13 @@ only one of them. It already had:
 - **The Windows console rule, the compiled-binary argv rule and "report what the tool actually said"** were each
   written out at length in two files, in prose, cross-referencing the other agent by name — including in
   ARCHITECTURE.md, which said host's spawns behave "for the reason `@intentic/sync` documents".
+- **Each agent grew its own `out()` closure** writing straight to stdout, so every improvement to how one of
+  them reads landed in exactly one of them — while the install a user actually experiences is `ic` and these
+  agents in sequence, three voices deep.
 
 This package is those lessons as code, so the fourth agent inherits them by importing rather than by reading.
 
-## The four pieces
+## The five pieces
 
 **`home.ts`** — `agentHome(name)` gives `{ dir, configPath }` under `~/.intentic/<name>`; `writeSecretFile`
 writes through a 0700 directory to a 0600 file. Both modes are re-applied on every write, because `mkdir` does
@@ -68,6 +73,20 @@ every spawn inside a loop — git and ssh in sync's bridge, docker and PowerShel
 otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
 user their machine is now doing something.
 
+**`ui.ts`** — `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
+`ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the
+`intentic: [phase] message` marker stream and nothing else, because the desktop app parses it into a progress
+bar and CI reads it out of a log — that shape is a contract, written down in
+[docs/cli-output-protocol.md](../../docs/cli-output-protocol.md). A **terminal** gets a banner, a numbered
+checklist with durations, one repainting status line and a ranked ending. And a third mode, **nested**, is what
+makes an install read as one program rather than three: `ic` runs these agents inside its own checklist and
+sets `INTENTIC_UI=nested`, so their output lands as detail under its step instead of opening a second banner in
+the middle of somebody's setup.
+
+The live region is deliberately **one line**, repainted with a carriage return. Redrawing a whole checklist in
+place needs the cursor moved up N lines, which needs to know when a line wrapped — and these run under
+`curl | sh` on terminals of unknown width. Everything already settled scrolls above it.
+
 ## What this package is not
 
 It knows nothing about sandboxes, tunnels, enrollment or MCP. It takes a name, a launcher and a spec, and makes a
@@ -81,3 +100,4 @@ business — which is why host's scopes and sync's Mutagen sessions are nowhere 
 - [src/autostart.ts](src/autostart.ts) — login autostart, per platform.
 - [src/detached.ts](src/detached.ts) — the background loop, and surviving a closed terminal.
 - [src/launcher.ts](src/launcher.ts) — `cliLauncher()`, including the compiled-binary argv case.
+- [src/ui.ts](src/ui.ts) — the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.

@@ -1,5 +1,16 @@
 import { rm } from "node:fs/promises";
-import { cliLauncher, livePid, type Log, registerAutostart, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
+import {
+    cliLauncher,
+    createUi,
+    livePid,
+    type Log,
+    type PlanStep,
+    registerAutostart,
+    spawnDetached,
+    type Ui,
+    unregisterAutostart,
+    writeSecretFile,
+} from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { HOST_AUTOSTART } from "./autostart.js";
 import { auditPath, baseDir, configPath, type HostConfigFile, readHostConfig, runLogPath, runPidPath, writeHostConfig } from "./config.js";
@@ -88,30 +99,58 @@ const setup = buildCommand<SetupFlags>({
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const { id, hostToken } = await enroll(flags.url, flags.pair);
-        /* The cached grant starts at NOTHING. The sandbox pushes the real scopes within a second of connecting,
-         * so this only governs the window before that — and an agent that assumed "allowed" for that window
-         * would be deciding on somebody's computer using a default nobody chose. Refusing until told is the only
-         * defensible starting state. */
-        const config: HostConfigFile = {
-            sandboxUrl: flags.url,
-            id,
-            token: hostToken,
-            scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off" },
-        };
-        await writeHostConfig(config);
-        // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a
-        // process started from an older binary quietly adopts this pairing and every fix since stays inert.
-        await stopDetached(() => {});
-        // registerAutostart answers true when the OS mechanism also started this session — a systemd user unit
-        // does (`enable --now`). Where it doesn't, or where there is no mechanism at all, we cover the session.
-        if (!(await registerAutostart(HOST_AUTOSTART, cliLauncher("intentic-host"), out))) {
-            await startDetached(out);
+        /* Rendered through the shared renderer (@intentic/local-agent) — the same one `ic` and the sync agent
+         * render through, so a person meeting two of them in one install meets one program. `ic` runs this
+         * command inside its own checklist and sets INTENTIC_UI=nested, which turns everything below into
+         * detail under ITS step rather than a second banner in the middle of somebody's setup. */
+        const ui = createUi(this.process);
+        const out: Log = ui.note;
+        ui.begin("intentic · connect this computer", SETUP_PLAN);
+        try {
+            await runSetup(ui, out, flags);
+        } finally {
+            ui.close();
         }
-        out(`This computer is connected as "${id}". Its permissions are set in the sandbox, on the same card you got this command from.`);
     },
 });
+
+/* Two steps, and the second is the one that can be slow — registering an autostart entry touches systemd,
+ * launchd or the Windows Task Scheduler, and starting the resident agent waits on a detached process. Phases
+ * are this agent's own vocabulary and deliberately absent from the desktop app's plan (setupPlan.ts), where an
+ * unknown phase reads as narration under whichever step is running. */
+const SETUP_PLAN: readonly PlanStep[] = [
+    { phase: "computer-enrolling", label: "Enrol this computer", weight: 10 },
+    { phase: "computer-starting", label: "Start the agent", weight: 15 },
+];
+
+const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
+    ui.step("computer-enrolling", "enrolling this computer with your sandbox…");
+    const { id, hostToken } = await enroll(flags.url, flags.pair);
+    /* The cached grant starts at NOTHING. The sandbox pushes the real scopes within a second of connecting,
+     * so this only governs the window before that — and an agent that assumed "allowed" for that window
+     * would be deciding on somebody's computer using a default nobody chose. Refusing until told is the only
+     * defensible starting state. */
+    const config: HostConfigFile = {
+        sandboxUrl: flags.url,
+        id,
+        token: hostToken,
+        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off" },
+    };
+    await writeHostConfig(config);
+    ui.step("computer-starting", "starting the agent on this computer…");
+    // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a
+    // process started from an older binary quietly adopts this pairing and every fix since stays inert.
+    await stopDetached(() => {});
+    // registerAutostart answers true when the OS mechanism also started this session — a systemd user unit
+    // does (`enable --now`). Where it doesn't, or where there is no mechanism at all, we cover the session.
+    if (!(await registerAutostart(HOST_AUTOSTART, cliLauncher("intentic-host"), out))) {
+        await startDetached(out);
+    }
+    ui.finished("This computer is connected.", id, "Its permissions are set in the sandbox, on the same card you got this command from.", [
+        ["check it", "intentic-host status"],
+        ["disconnect", "intentic-host uninstall"],
+    ]);
+};
 
 interface RunFlags {
     readonly foreground: boolean;

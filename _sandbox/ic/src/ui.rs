@@ -5,6 +5,10 @@ use std::time::{Duration, Instant};
 
 /* EVERY BYTE THIS BINARY SHOWS A PERSON, IN ONE PLACE — and the reason it can be pretty at all.
  *
+ * The shapes below are a CONTRACT, not house style: docs/cli-output-protocol.md writes down the line format,
+ * the three modes and the row vocabulary, and _computers/local-agent/src/ui.ts is this module's TypeScript
+ * twin — the sync and computer agents render through it, so an install reads as one program.
+ *
  * The install output is read by two audiences that want opposite things. The desktop app spawns this binary
  * with piped stdio (desktop-app/src-tauri/src/scripts.rs) and turns `intentic: [phase] …` markers into a
  * progress bar; a CI step does the same with a log file. Those readers need output that never changes shape.
@@ -120,11 +124,15 @@ fn ui() -> MutexGuard<'static, State> {
 impl State {
     fn detect() -> State {
         let terminal = std::io::stdout().is_terminal();
-        let forced_plain = std::env::var("INTENTIC_PLAIN").as_deref() == Ok("1");
-        let mode = if terminal && !forced_plain {
-            Mode::Rich
-        } else {
-            Mode::Plain
+        // The protocol's override, honoured by both renderers (docs/cli-output-protocol.md). `nested` is a
+        // CHILD's mode — this binary is the one that sets it on the agents it spawns, never the one that runs
+        // inside somebody else's checklist — so it is not a value this reads.
+        let mode = match std::env::var("INTENTIC_UI").as_deref() {
+            Ok("plain") => Mode::Plain,
+            Ok("rich") => Mode::Rich,
+            _ if std::env::var("INTENTIC_PLAIN").as_deref() == Ok("1") => Mode::Plain,
+            _ if terminal => Mode::Rich,
+            _ => Mode::Plain,
         };
         // Windows consoles need virtual-terminal processing switched on before any escape means anything, and
         // a console old enough to refuse is also one we should not send box-drawing to.

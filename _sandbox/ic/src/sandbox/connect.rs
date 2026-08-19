@@ -737,12 +737,34 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
             agent.unix_url
         },
     );
-    // These installers inherit stdout and speak with their own voice. Hand them the terminal outright rather
-    // than let the live step line be repainted through whatever they print.
+    /* These installers inherit stdout, so two things have to be arranged before they get it.
+     *
+     * The terminal is handed over outright — they write whenever they like, and the live step line cannot be
+     * repainted through somebody else's output.
+     *
+     * And they are told WHERE they are running. Both agents render through the same shared renderer this
+     * binary does (@intentic/local-agent's ui.ts), which would otherwise see a terminal, decide it owns the
+     * screen, and open a second banner with a second checklist in the middle of this one. `nested` is the mode
+     * that says "you are detail under somebody else's step". A piped run needs no override: the child inherits
+     * the pipe and reaches the same conclusion on its own. */
+    let child_vars = agent_env(vars, ui::is_rich());
     ui::suspend();
-    let finished = run_agent_script(&url, agent.what, vars);
+    let finished = run_agent_script(&url, agent.what, &child_vars);
     ui::resume();
     finished
+}
+
+/// The environment a spawned agent installer runs with: its own variables, plus the mode it should render in.
+///
+/// Pure so the one decision here is tested rather than reasoned about. `nested` is set only when THIS run is
+/// drawing a checklist — a piped run hands the child the same pipe, and the child's own `is stdout a terminal`
+/// test reaches the right answer without being told (docs/cli-output-protocol.md §2).
+fn agent_env<'a>(vars: &[(&'a str, &'a str)], rich: bool) -> Vec<(&'a str, &'a str)> {
+    let mut child = vars.to_vec();
+    if rich {
+        child.push(("INTENTIC_UI", "nested"));
+    }
+    child
 }
 
 // `what` names the agent in the one refusal only the unix path can reach (root with no invoking user).
@@ -922,6 +944,23 @@ mod tests {
         assert!(is_registryless("alpine"));
         // A bare namespaced name is still Docker Hub's — `library/alpine` has no registry host.
         assert!(is_registryless("library/alpine:3"));
+    }
+
+    #[test]
+    fn a_spawned_agent_is_told_it_is_running_inside_this_checklist() {
+        let vars = [("SANDBOX_URL", "https://x.test"), ("PAIR_TOKEN", "tok")];
+        // Drawing a checklist: the child must NOT open a second banner in the middle of it. Without this the
+        // agents render their own header, plan and ending inside somebody else's install.
+        let nested = agent_env(&vars, true);
+        assert_eq!(nested.len(), 3);
+        assert_eq!(nested[2], ("INTENTIC_UI", "nested"));
+        // Piped: the child inherits the same pipe and decides for itself. Forcing a mode here would only be a
+        // second place for the two to disagree.
+        let piped = agent_env(&vars, false);
+        assert_eq!(piped.len(), 2);
+        assert!(piped.iter().all(|(name, _)| *name != "INTENTIC_UI"));
+        // The agent's own variables ride through untouched either way — they are what it is being run FOR.
+        assert_eq!(&nested[..2], &vars[..]);
     }
 
     #[test]

@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { cliLauncher, type Log, registerAutostart, unregisterAutostart } from "@intentic/local-agent";
+import { cliLauncher, createUi, type Log, type PlanStep, registerAutostart, type Ui, unregisterAutostart } from "@intentic/local-agent";
 import { type MachinePort, type MachineReport, sandboxIdFromUrl, watcherStalled } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { MIRROR_AUTOSTART } from "./autostart.js";
@@ -150,123 +150,162 @@ const setup = buildCommand<SetupFlags>({
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const publicKey = await ensureSshKey();
-        // Enrollment can retry for ~30s while the sandbox tunnel warms — overlap it with the two binary
-        // downloads (independent: distinct endpoints, distinct install paths).
-        const [{ syncToken, mode }, mutagen] = await Promise.all([
-            enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
-            ensureMutagen(),
-        ]);
-        out(`enrolled SSH key with ${flags.url}`);
-
-        const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
-        const alias = sshAlias(sandboxId);
-
-        // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
-        // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
-        // the claim payload — no shell expands it), so expand it here where every entry path converges.
-        // The default folder is named for the id in the sandbox's own URL (the browser's SYNC_DIR prefixes that
-        // with the sandbox's name), never the whole sanitized host — so `~/intentic/<id>` and
-        // `https://sandbox-<id>.<zone>` are visibly the same sandbox.
-        const localDir =
-            mode === "sync"
-                ? resolve(
-                      flags.dir === undefined
-                          ? join(homedir(), "intentic", sandboxIdFromUrl(flags.url) ?? sandboxId)
-                          : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()),
-                  )
-                : undefined;
-        if (localDir !== undefined) {
-            // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.
-            await mkdir(localDir, { recursive: true });
-        }
-
-        const pairing: Pairing = {
-            sandboxUrl: flags.url,
-            sandboxId,
-            mode,
-            syncToken,
-            ...(localDir === undefined ? {} : { localDir }),
-        };
-
-        // Stop the resident watcher before touching state or sessions — and ONLY the watcher. It is running the
-        // agent binary this very run just replaced, so every fix shipped since the day it started stays inert
-        // until it restarts (and `setup` would report "already running (pid …)" as if that were the same thing);
-        // on Windows it also holds that binary open. Its forwards stay up throughout — Mutagen's daemon holds
-        // them, so no live connection drops, and the pairings it was serving are untouched.
-        const stoppedPid = await stopWatcher();
-        if (stoppedPid !== undefined) {
-            out(`stopped the mirror watcher (pid ${stoppedPid}) — it was running the agent binary this run replaced; restarting it below.`);
-        }
-        // ADD this pairing to whatever this machine already holds. Pairing a second sandbox used to overwrite the
-        // first — dropping its ssh alias, its folder and its file-sync session — which is how installing the
-        // desktop app beside a CLI-started sandbox silently stopped syncing the folder the user was working in.
-        await upsertPairing(pairing);
-        const pairings = (await readState()).pairings;
-
-        // The ssh fragment is regenerated from the WHOLE pairing list, so every paired sandbox keeps its alias.
-        await writeManagedSshConfig(pairingSshConfig(pairings));
-
-        /* THE TRANSPORT COMES UP BEFORE ANYTHING DIALS IT, and that reorders this command.
-         *
-         * The sandbox's sshd is reached through a listener on this machine (tunnel.ts) rather than a hostname
-         * somebody's fabric resolves, and the process that holds it is the mirror watcher — the resident half of
-         * this agent, restarted just above. So mirroring is started HERE, before the probe and before Mutagen,
-         * where it used to be the last thing setup did: every step under it now depends on the port being open.
-         *
-         * The wait is what makes that honest rather than racy — the watcher is a detached process, so the port
-         * appears some hundreds of milliseconds after it is asked to start. Not fatal on timeout: Mutagen retries
-         * a session forever, and the watcher keeps trying to bind, so a slow start costs a warning rather than a
-         * failed setup. */
-        await enableMirroring(out);
-        const port = syncSshPort(sandboxId);
-        if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
-            out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet — syncing starts as soon as it is.`);
-        }
-
-        // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
-        // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
-        const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
-        assertSshConfigVisible(ssh, alias, port);
-        await probeSshTransport(ssh, alias, out);
-
-        // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
-        // this version's rules, leave it exactly as it is rather than paying a full rescan for nothing. Every
-        // other pairing's session keeps running; only sessions no pairing claims any more are swept.
-        ensureSyncSession(mutagen, pairing, out);
-        retireOrphanSessions(mutagen, pairings, out);
-        // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
-        // the first minute rather than waiting out the watcher's cadence.
-        runGitBridge(realBridgeExec, pairing, out, undefined);
-        // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
-        // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
-        // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
-        if (process.platform !== "linux") {
-            try {
-                runMutagen(mutagen, ["daemon", "register"]);
-            } catch (error) {
-                out(
-                    `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
-                );
-            }
-        }
-        out(
-            mode === "sync"
-                ? `Sync started: ${localDir} ↔ ${flags.url} /work. Check it with \`intentic-sync status\`.`
-                : `Enrolled for port mirroring on ${flags.url} (mirror-only — no file sync). Check it with \`intentic-sync status\`.`,
-        );
-        // Say the fleet out loud. Pairing a sandbox on a machine that already had one is the exact moment the
-        // user needs to know the others are still syncing — the silence there is what made a lost pairing take
-        // days to notice.
-        if (pairings.length > 1) {
-            out(`This machine now syncs ${pairings.length} sandboxes:`);
-            for (const held of pairings) {
-                out(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
-            }
+        /* Rendered through the shared renderer (@intentic/local-agent), which is also what `ic` renders
+         * through — so this reads as the same program whether it is pasted on its own or run by `ic` in the
+         * middle of its install. Three modes and this command cares about none of them: a pipe still gets the
+         * historical marker stream, a terminal gets the checklist, and `ic` sets INTENTIC_UI=nested so these
+         * lines land as detail under ITS step rather than opening a second banner inside somebody's setup. */
+        const ui = createUi(this.process);
+        // Every helper below takes a `Log` and narrates through it — routing that at the renderer means the
+        // whole command's prose is placed, wrapped and coloured without any of them knowing.
+        const out: Log = ui.note;
+        ui.begin("intentic · desktop sync", SETUP_PLAN);
+        try {
+            await runSetup(ui, out, flags);
+        } finally {
+            // The spinner is an interval; a CLI that leaves one running is a CLI that does not exit.
+            ui.close();
         }
     },
 });
+
+/* What `setup` is going to do, said before it does it. Phases are this agent's own vocabulary and deliberately
+ * NOT in the desktop app's setup plan (setupPlan.ts): a phase that plan does not carry is narration under
+ * whichever step is running, which is exactly what sync is when it runs inside `ic sandbox connect`. */
+const SETUP_PLAN: readonly PlanStep[] = [
+    { phase: "sync-enrolling", label: "Enrol this machine", weight: 25 },
+    { phase: "sync-linking", label: "Link the folder", weight: 5 },
+    { phase: "sync-starting", label: "Start syncing", weight: 20 },
+];
+
+const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
+    ui.step("sync-enrolling", "enrolling this machine with your sandbox…");
+    const publicKey = await ensureSshKey();
+    // Enrollment can retry for ~30s while the sandbox tunnel warms — overlap it with the two binary
+    // downloads (independent: distinct endpoints, distinct install paths).
+    const [{ syncToken, mode }, mutagen] = await Promise.all([
+        enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
+        ensureMutagen(),
+    ]);
+    out(`enrolled SSH key with ${flags.url}`);
+
+    const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
+    const alias = sshAlias(sandboxId);
+
+    // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
+    // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
+    // the claim payload — no shell expands it), so expand it here where every entry path converges.
+    // The default folder is named for the id in the sandbox's own URL (the browser's SYNC_DIR prefixes that
+    // with the sandbox's name), never the whole sanitized host — so `~/intentic/<id>` and
+    // `https://sandbox-<id>.<zone>` are visibly the same sandbox.
+    const localDir =
+        mode === "sync"
+            ? resolve(
+                  flags.dir === undefined
+                      ? join(homedir(), "intentic", sandboxIdFromUrl(flags.url) ?? sandboxId)
+                      : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()),
+              )
+            : undefined;
+    if (localDir !== undefined) {
+        // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.
+        await mkdir(localDir, { recursive: true });
+    }
+
+    const pairing: Pairing = {
+        sandboxUrl: flags.url,
+        sandboxId,
+        mode,
+        syncToken,
+        ...(localDir === undefined ? {} : { localDir }),
+    };
+
+    ui.step("sync-linking", "linking the folder to your sandbox…");
+    // Stop the resident watcher before touching state or sessions — and ONLY the watcher. It is running the
+    // agent binary this very run just replaced, so every fix shipped since the day it started stays inert
+    // until it restarts (and `setup` would report "already running (pid …)" as if that were the same thing);
+    // on Windows it also holds that binary open. Its forwards stay up throughout — Mutagen's daemon holds
+    // them, so no live connection drops, and the pairings it was serving are untouched.
+    const stoppedPid = await stopWatcher();
+    if (stoppedPid !== undefined) {
+        out(`stopped the mirror watcher (pid ${stoppedPid}) — it was running the agent binary this run replaced; restarting it below.`);
+    }
+    // ADD this pairing to whatever this machine already holds. Pairing a second sandbox used to overwrite the
+    // first — dropping its ssh alias, its folder and its file-sync session — which is how installing the
+    // desktop app beside a CLI-started sandbox silently stopped syncing the folder the user was working in.
+    await upsertPairing(pairing);
+    const pairings = (await readState()).pairings;
+
+    // The ssh fragment is regenerated from the WHOLE pairing list, so every paired sandbox keeps its alias.
+    await writeManagedSshConfig(pairingSshConfig(pairings));
+
+    /* THE TRANSPORT COMES UP BEFORE ANYTHING DIALS IT, and that reorders this command.
+     *
+     * The sandbox's sshd is reached through a listener on this machine (tunnel.ts) rather than a hostname
+     * somebody's fabric resolves, and the process that holds it is the mirror watcher — the resident half of
+     * this agent, restarted just above. So mirroring is started HERE, before the probe and before Mutagen,
+     * where it used to be the last thing setup did: every step under it now depends on the port being open.
+     *
+     * The wait is what makes that honest rather than racy — the watcher is a detached process, so the port
+     * appears some hundreds of milliseconds after it is asked to start. Not fatal on timeout: Mutagen retries
+     * a session forever, and the watcher keeps trying to bind, so a slow start costs a warning rather than a
+     * failed setup. */
+    ui.step("sync-starting", "starting the sync engine…");
+    await enableMirroring(out);
+    const port = syncSshPort(sandboxId);
+    if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
+        out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet — syncing starts as soon as it is.`);
+    }
+
+    // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
+    // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
+    const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
+    assertSshConfigVisible(ssh, alias, port);
+    await probeSshTransport(ssh, alias, out);
+
+    // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
+    // this version's rules, leave it exactly as it is rather than paying a full rescan for nothing. Every
+    // other pairing's session keeps running; only sessions no pairing claims any more are swept.
+    ensureSyncSession(mutagen, pairing, out);
+    retireOrphanSessions(mutagen, pairings, out);
+    // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
+    // the first minute rather than waiting out the watcher's cadence.
+    runGitBridge(realBridgeExec, pairing, out, undefined);
+    // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
+    // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
+    // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
+    if (process.platform !== "linux") {
+        try {
+            runMutagen(mutagen, ["daemon", "register"]);
+        } catch (error) {
+            out(
+                `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
+            );
+        }
+    }
+    // Say the fleet out loud, BEFORE the ending block. Pairing a sandbox on a machine that already had one
+    // is the exact moment the user needs to know the others are still syncing — the silence there is what
+    // made a lost pairing take days to notice — and it is detail under this step, not part of the verdict.
+    if (pairings.length > 1) {
+        ui.note(`This machine now syncs ${pairings.length} sandboxes:`);
+        for (const held of pairings) {
+            ui.note(`  ${held.sandboxId}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
+        }
+    }
+    ui.finished(
+        mode === "sync" ? "Desktop sync is running." : "Enrolled for port mirroring.",
+        // The address a person acts on. For file sync that is the FOLDER — it is the thing they open, and
+        // an immediately-visible path is the anchor that setup worked.
+        mode === "sync" ? localDir : undefined,
+        mode === "sync"
+            ? "That folder and your sandbox's /work are now the same files."
+            : `Ports from ${flags.url} now answer on this machine's localhost (mirror-only — no file sync).`,
+        [
+            ["check it", "intentic-sync status"],
+            ["its logs", `intentic-sync status --sandbox ${sandboxId}`],
+            ["remove it", "intentic-sync uninstall"],
+        ],
+    );
+};
 
 /* How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
  * startup on a busy machine, not by any work the watcher does — it binds before its first poll. */

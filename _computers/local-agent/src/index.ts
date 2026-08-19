@@ -28,3 +28,17 @@ export {
 } from "./autostart.js";
 export { isProcessAlive, livePid, spawnDetached } from "./detached.js";
 export { agentException } from "./text.js";
+export {
+    asLabel,
+    createUi,
+    estimate,
+    humanDuration,
+    truncate,
+    wrap,
+    type Footnote,
+    type PlanStep,
+    type RowOutcome,
+    type Ui,
+    type UiMode,
+    type UiProcess,
+} from "./ui.js";
