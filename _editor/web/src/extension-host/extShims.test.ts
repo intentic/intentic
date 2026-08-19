@@ -12,9 +12,18 @@ import { extShims, shimsDir } from "../../scripts/generate-ext-shims.mjs";
  * Comparing whole file text rather than name lists is deliberate: the header and the `default` re-export are
  * part of what the browser loads, and a test that checked only names would pass on a shim pointing at the
  * wrong module. Failure means one command: `node scripts/generate-ext-shims.mjs`. */
+
+/* Generated during COLLECTION, not inside the test body. extShims() imports every package it shims — vue,
+ * @tanstack/vue-query and first-party source pulled through the alias map — so it carries a module graph, not
+ * a function call: ~300ms on an idle box. Left inside the test that cost sat on the TEST's clock, and a full
+ * repo run (turbo starts every package's vitest at once, tens of forks over 16 cores) stretched it past the
+ * 20s budget — reported here, as a stale-shim failure, with the contention that caused it nowhere in sight.
+ * A top-level await costs exactly the same and is paid where the run bounds it. See vitest.config.ts. */
+const shims = await extShims();
+
 test("every committed ext-shim matches what the generator produces", async () => {
     const stale: string[] = [];
-    for (const shim of await extShims()) {
+    for (const shim of shims) {
         const onDisk = await readFile(join(shimsDir, shim.file), "utf8").catch(() => undefined);
         if (onDisk !== shim.content) {
             stale.push(shim.file);

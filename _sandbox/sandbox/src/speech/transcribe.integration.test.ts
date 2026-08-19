@@ -135,7 +135,13 @@ test("a failed download does not poison later polls — the next status retries 
 });
 
 test("transcribe serializes whisper runs, passes the language explicitly, and answers silence as empty text", async () => {
-    const outputs = ["first words", "[BLANK_AUDIO]"];
+    /* Keyed by each utterance's OWN bytes rather than by the order whisper happens to be handed them. Both
+     * calls clear their pre-flight checks — an independent `stat` for the model each — before reaching the
+     * queue, so which one enters it first is the scheduler's business; on a loaded box that order flips.
+     * Order-keyed outputs turned that into a failure here, pointing at speech rather than at contention.
+     * Content-keyed ones also pin what order never could: that each caller gets ITS OWN utterance's text
+     * rather than merely whichever run finished in its place. */
+    const outputs: Record<string, string> = { RIFF1: "first words", RIFF2: "[BLANK_AUDIO]" };
     const wavPaths: string[] = [];
     const wavBytes: string[] = [];
     let active = 0;
@@ -153,12 +159,13 @@ test("transcribe serializes whisper runs, passes the language explicitly, and an
             throw new Error("whisper-cli was not given an utterance path");
         }
         wavPaths.push(wavPath);
-        wavBytes.push(readFileSync(wavPath, "utf8"));
+        const spoken = readFileSync(wavPath, "utf8");
+        wavBytes.push(spoken);
         active += 1;
         maxActive = Math.max(maxActive, active);
         await new Promise((resolve) => setTimeout(resolve, 10));
         active -= 1;
-        return { stdout: outputs.shift() as string };
+        return { stdout: outputs[spoken] as string };
     };
     const speech = createSpeech({ workspaceRoot: rootWith(true), log: () => {}, exec, fetchModel: noFetch });
     const [first, second] = await Promise.all([speech.transcribe(Buffer.from("RIFF1"), "pl-PL"), speech.transcribe(Buffer.from("RIFF2"), "pl-PL")]);
