@@ -33,9 +33,13 @@ pub(crate) use bail;
  * So a step carries its phase id in front of the sentence, and the id is the same vocabulary the platform's
  * setup report uses (SetupReportSchema.stage) — the browser's wait screen and the app's bar name the same
  * phase because they read the same word. Anything printed WITHOUT one is ordinary narration: detail under
- * whichever step is running, never a step of its own. */
+ * whichever step is running, never a step of its own.
+ *
+ * HOW it reaches each audience is ui.rs's, and only that part differs: a pipe still gets this exact line,
+ * a terminal gets the step drawn into a checklist with the id left off (there it says the same thing twice,
+ * in a shape that reads like an error code). */
 pub fn step(phase: &str, message: &str) {
-    println!("intentic: [{phase}] {message}");
+    crate::ui::step(phase, message);
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {

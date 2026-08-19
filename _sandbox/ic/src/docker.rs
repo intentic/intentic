@@ -218,6 +218,71 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write) {
     }
 }
 
+/* `stream`, but the terminal sees LINES and gets to refuse them — the pull's shape when a person is watching.
+ *
+ * Spawned without a terminal of its own, `docker pull` cannot draw its bars and prints one line per layer per
+ * state change instead: forty-odd `6e3729cf69e0: Extracting` during the longest step of the install, which is
+ * both the least readable thing on the screen and, counted, the only REAL progress the install has. So the
+ * lines are offered to `keep`, which folds the layer reports into the live progress line and returns false to
+ * swallow them; everything else — the digest, a warning, an "unauthorized" that is the whole diagnosis of a
+ * failed pull — is printed, above the live line, exactly as it arrived.
+ *
+ * The log still gets every byte either way: it is the postmortem, and it is not the thing being decluttered. */
+pub fn stream_lines(
+    args: &[&str],
+    log: &Log,
+    keep: fn(&str) -> bool,
+    show: fn(&str),
+) -> Result<bool> {
+    let mut child = docker(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| Fail(format!("could not run docker: {err}")))?;
+    let stdout = child.stdout.take().expect("stdout was piped");
+    let stderr = child.stderr.take().expect("stderr was piped");
+    let out_log = log.clone();
+    let err_log = log.clone();
+    let out_thread = std::thread::spawn(move || sift(stdout, &out_log, keep, show));
+    let err_thread = std::thread::spawn(move || sift(stderr, &err_log, keep, show));
+    let status = child
+        .wait()
+        .map_err(|err| Fail(format!("docker did not finish: {err}")))?;
+    let _ = out_thread.join();
+    let _ = err_thread.join();
+    Ok(status.success())
+}
+
+/// Line-buffered because the decision is per LINE and the kernel's read sizes are not: a chunk boundary
+/// through the middle of `6e3729cf69e0: Extracting` would leak half a layer report onto the screen and hide
+/// the other half. Docker also rewrites its status lines with a carriage return, so those split too.
+fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str)) {
+    let mut reader = std::io::BufReader::new(from);
+    let mut pending = Vec::new();
+    let mut buf = [0u8; 8192];
+    while let Ok(read) = reader.read(&mut buf) {
+        if read == 0 {
+            break;
+        }
+        log.write(&buf[..read]);
+        pending.extend_from_slice(&buf[..read]);
+        while let Some(at) = pending
+            .iter()
+            .position(|byte| *byte == b'\n' || *byte == b'\r')
+        {
+            let line = String::from_utf8_lossy(&pending[..at]).into_owned();
+            pending.drain(..=at);
+            if !line.trim().is_empty() && keep(&line) {
+                show(&line);
+            }
+        }
+    }
+    let tail = String::from_utf8_lossy(&pending).into_owned();
+    if !tail.trim().is_empty() && keep(&tail) {
+        show(&tail);
+    }
+}
+
 /// Execute an argv the run contract printed (`--format json`), all output into the log — the launch itself
 /// is silent on success, exactly as `sh "$run_command" >/dev/null 2>>"$LOG"` was.
 ///
@@ -347,21 +412,35 @@ pub fn logs_into(container: &str, tail: &str, log: &Log) {
 /// the older wording sent users hunting through their own Docker config for a fault that was ours.
 pub fn pull(image: &str, log: &Log) -> Result<()> {
     log.section(&format!("docker pull {image}"));
-    if stream(&["pull", image], log)? {
+    if pull_once(image, log)? {
         return Ok(());
     }
     if image_exists(image) {
-        eprintln!("intentic: pull failed but the image exists locally — using the local copy.");
+        crate::ui::warn("pull failed but the image exists locally — using the local copy.");
         return Ok(());
     }
-    eprintln!("intentic: pull failed — clearing a stale ghcr.io login and retrying anonymously…");
+    crate::ui::warn("pull failed — clearing a stale ghcr.io login and retrying anonymously…");
     quiet(&["logout", "ghcr.io"]);
-    if stream(&["pull", image], log)? {
+    if pull_once(image, log)? {
         return Ok(());
     }
     bail!(
         "{image} could not be pulled without a login. An \"unauthorized\" or \"denied\" above means the image's registry package is not public — that is a packaging fault on our side, not a problem with your machine. Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run."
     );
+}
+
+/// One attempt. A pipe gets docker's own output byte for byte — it is what an install log has always held,
+/// and the desktop app counts those same layer lines for its bar. A terminal gets the count instead.
+fn pull_once(image: &str, log: &Log) -> Result<bool> {
+    if !crate::ui::is_rich() {
+        return stream(&["pull", image], log);
+    }
+    stream_lines(
+        &["pull", image],
+        log,
+        |line| !crate::ui::pull_line(line),
+        crate::ui::note,
+    )
 }
 
 #[cfg(test)]

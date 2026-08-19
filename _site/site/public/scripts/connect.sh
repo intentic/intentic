@@ -36,8 +36,20 @@ fi
 # started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
 # ic's util::step, and the same vocabulary — anything echoed WITHOUT a phase is detail under the step that is
 # running, never a step of its own.
+#
+# The two audiences are split the same way ic splits them (its ui.rs): a PIPE gets the marker, unchanged and
+# forever, because something is parsing it. A TERMINAL gets the sentence alone — the bracketed id there says
+# the same thing twice in a shape that reads like an error code, and these two lines sit directly above the
+# checklist ic is about to draw, where they would otherwise look like a different program's output.
+#
+# This shim keeps NARRATING either way. Going quiet in a terminal would be silence across a Docker install
+# that can run ten minutes, which is the one stretch of this script that most needs to say something.
 step() {
-    echo "intentic: [$1] $2"
+    if [ -t 1 ]; then
+        printf '  ·  %s\n' "$2"
+    else
+        echo "intentic: [$1] $2"
+    fi
 }
 
 # Peek at the args only as far as the failure messages need (the first non-flag positional is the setup

@@ -61,18 +61,20 @@ fn announce(requirement: &plan::Requirement) {
 /// both in one run should not have to learn two.
 #[cfg(windows)]
 fn draw(facts: &plan::Facts) {
-    println!("  {}", plan::summary(facts));
+    use crate::ui::{self, RowOutcome};
+
+    ui::note(&plan::summary(facts));
     for row in plan::checklist(facts) {
         match row.state {
-            plan::RowState::Ok => println!("  ok    {}", row.area),
-            plan::RowState::Failed(problem) => println!("  FAIL  {} - {problem}", row.area),
-            plan::RowState::Unjudged => {
-                println!("  ...   {} - not checked yet", row.area)
-            }
+            plan::RowState::Ok => ui::row(RowOutcome::Pass, row.area, ""),
+            // The row vocabulary is shared with checks::print_row on purpose — a Windows user meets both
+            // checklists in one run and should not have to learn two.
+            plan::RowState::Failed(problem) => ui::row(RowOutcome::Fail, row.area, &problem),
+            plan::RowState::Unjudged => ui::row(RowOutcome::Skip, row.area, "not checked yet"),
         }
     }
     for note in plan::advisories(facts) {
-        println!("  warn  {note}");
+        ui::row(RowOutcome::Warn, &note, "");
     }
 }
 
@@ -115,7 +117,7 @@ pub fn run(args: Args) -> Result<()> {
 
     let unmet = plan::requirements(&facts);
     if unmet.is_empty() {
-        println!("  Docker is ready on this PC.");
+        crate::ui::note("Docker is ready on this PC.");
         return Ok(());
     }
     for requirement in &unmet {
@@ -267,7 +269,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
 
     match outcome {
         Ok(fix::Done::Now) => {
-            println!("  ok    {}", requirement.title);
+            crate::ui::row(crate::ui::RowOutcome::Pass, requirement.title, "");
             Ok(Outcome::Continue)
         }
         Ok(fix::Done::AfterRestart) => Ok(Outcome::Restart),
@@ -296,6 +298,9 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     use crate::tty;
 
     let again = rerun_command();
+    // A restart request owns the screen: the live step line is erased and the spinner stopped, or it repaints
+    // over the one command the reader has to copy before rebooting.
+    crate::ui::suspend();
     println!();
     println!("{}", explain(unmet));
     println!("Windows has to restart before Docker can run.");
@@ -340,6 +345,8 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     if pre_consented {
         return Ok(());
     }
+    // Same handover as the restart below — a question is not narration and must not be repainted over.
+    crate::ui::suspend();
     println!();
     println!("To run a sandbox here, this needs to happen:");
     for requirement in unmet {
@@ -359,6 +366,8 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     if !tty::confirm("Go ahead?", false) {
         bail!("nothing was changed.");
     }
+    println!();
+    crate::ui::resume();
     Ok(())
 }
 

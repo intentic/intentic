@@ -40,8 +40,20 @@ $PSNativeCommandUseErrorActionPreference = $false
 # started; recognising the sentence would mean every rewording silently moved somebody's bar. Same contract as
 # connect.sh's step() and ic's util::step, and the same vocabulary - anything written WITHOUT a phase is
 # detail under the step that is running, never a step of its own.
+# Split the same way ic splits them (its ui.rs): a PIPE gets the marker, unchanged and forever, because
+# something is parsing it - the desktop app spawns this with redirected stdio. A TERMINAL gets the sentence
+# alone; there the bracketed id says the same thing twice in a shape that reads like an error code, and these
+# lines sit directly above the checklist ic is about to draw, where they would otherwise look like a different
+# program's output. IsOutputRedirected is the same question ic's IsTerminal asks, and 5.1 has it.
+#
+# This shim keeps NARRATING either way. Going quiet in a terminal would be silence across a Docker install
+# that can run ten minutes, which is the one stretch of this script that most needs to say something.
 function Write-Step($Phase, $Message) {
-    Write-Host "intentic: [$Phase] $Message"
+    if ([Console]::IsOutputRedirected) {
+        Write-Host "intentic: [$Phase] $Message"
+    } else {
+        Write-Host "  - $Message"
+    }
 }
 
 # Explicit params (direct file invocation) win; else the env vars the `irm | iex` one-liner carries. The env

@@ -174,6 +174,17 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
             // Anything still unsettled had its Pending outcome forced by settle(); one more pass writes them.
             continue;
         }
+        /* WHAT IT IS STILL WAITING FOR. A new name propagating and an in-box agent still coming up are
+         * ordinary states of a fresh setup, so this loop is patient by design — but two minutes of a step
+         * that says only "verifying" is indistinguishable from a hang, and the user has no way to learn
+         * that the four settled links already passed. Naming the outstanding ones costs nothing. */
+        let waiting: Vec<&str> = LINKS
+            .iter()
+            .zip(settled.iter())
+            .filter(|(_, outcome)| outcome.is_none())
+            .map(|(name, _)| *name)
+            .collect();
+        crate::ui::detail(&format!("waiting on {}", waiting.join(", ").to_lowercase()));
         std::thread::sleep(Duration::from_secs(5));
     }
 

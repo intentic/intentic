@@ -7,6 +7,7 @@ use crate::logfile::Log;
 use crate::platform;
 use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX};
 use crate::tty;
+use crate::ui;
 use crate::util::{bail, kv_lines, slug_from_token, step, Result};
 
 /* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's
@@ -84,6 +85,72 @@ fn connect(
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
+    /* WHAT THIS RUN IS GOING TO DO, DRAWN BEFORE IT DOES ANY OF IT.
+     *
+     * Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts),
+     * which has had this since the window existed while the terminal had nothing: no count, no position, and
+     * a four-minute image pull in the middle that a person cannot distinguish from a hang. The weights are
+     * seconds and they are guesses; they exist so the estimate is about TIME left rather than STEPS left.
+     *
+     * Steps that will not happen on this machine are left out rather than drawn and skipped — the plan is a
+     * promise about how long this takes, and dead entries make it a worse one. `connecting-machine` is the
+     * exception: it needs a pairing token the claim has not fetched yet, and the plan has to exist before the
+     * claim, so it is listed on the strength of every code-carrying setup getting one. */
+    let mut plan = vec![ui::PlanStep {
+        phase: "preflight",
+        label: "Check this computer",
+        weight: 10,
+    }];
+    if setup_code.is_some() {
+        plan.push(ui::PlanStep {
+            phase: "claiming-code",
+            label: "Redeem your setup code",
+            weight: 5,
+        });
+    }
+    plan.push(ui::PlanStep {
+        phase: "pulling-image",
+        label: "Download the sandbox image",
+        weight: 240,
+    });
+    if self_host && cfg!(unix) {
+        plan.push(ui::PlanStep {
+            phase: "creating-tunnel",
+            label: "Publish this machine's SSH",
+            weight: 30,
+        });
+    }
+    plan.extend([
+        ui::PlanStep {
+            phase: "starting-sandbox",
+            label: "Start your sandbox",
+            weight: 25,
+        },
+        ui::PlanStep {
+            phase: "waiting-health",
+            label: "Wait for it to come up",
+            weight: 40,
+        },
+        ui::PlanStep {
+            phase: "verifying",
+            label: "Check it answers",
+            weight: 20,
+        },
+    ]);
+    if sync_dir.is_some() {
+        plan.push(ui::PlanStep {
+            phase: "desktop-sync",
+            label: "Set up folder sync",
+            weight: 45,
+        });
+    }
+    plan.push(ui::PlanStep {
+        phase: "connecting-machine",
+        label: "Connect this computer",
+        weight: 20,
+    });
+    ui::begin("intentic · setting up your sandbox", plan);
+
     /* PREFLIGHT — every prerequisite verified read-only, every failure reported at once, before anything is
      * mutated and before the claim burns time against the setup code's TTL. This used to answer one problem
      * per run (Docker, fix, re-run, token, fix, re-run…); now one run is one complete diagnosis, and the
@@ -155,8 +222,11 @@ fn connect(
             .filter(|existing| *existing != slug)
             .collect();
         if !others.is_empty() {
+            // A question owns the screen while it is asked: the live step line is erased first and redrawn
+            // after, or the spinner repaints straight over what the user is being asked to read.
+            ui::suspend();
             println!(
-                "intentic: you already have {} other sandbox(es) on this machine:",
+                "\nintentic: you already have {} other sandbox(es) on this machine:",
                 others.len()
             );
             for other in &others {
@@ -187,6 +257,8 @@ fn connect(
             } else {
                 eprintln!("intentic: no terminal to prompt — starting alongside them (pass -y to silence this, or run cleanup first).");
             }
+            println!();
+            ui::resume();
         }
     }
 
@@ -201,8 +273,9 @@ fn connect(
      * used to be a hard refusal, and that refusal took the update-survival drill (and every no-tunnel start)
      * down with it: the sandbox it was drilling had never asked to be public. */
     if !provided_tunnel {
-        eprintln!("intentic: no reachability grant — this sandbox will answer on this machine only (loopback).");
-        eprintln!("          Re-open its setup screen for a command that carries one, or publish it behind your own domain.");
+        ui::warn(
+            "no reachability grant — this sandbox will answer on this machine only (loopback).\nRe-open its setup screen for a command that carries one, or publish it behind your own domain.",
+        );
     }
     // SELF_HOST still wants the user's OWN Cloudflare token: it publishes THIS machine's sshd so the sandbox
     // can deploy to it, which is the deploy engine's fabric — not the sandbox's, which the hub now serves.
@@ -234,9 +307,9 @@ fn connect(
         };
         host_ssh_key = crate::selfhost::setup_service_user(&root, &user, "intentic-self-host")?;
         self_host_user = user;
-        println!(
-            "intentic: this server is registered as a deploy target (user '{self_host_user}')."
-        );
+        ui::note(&format!(
+            "this server is registered as a deploy target (user '{self_host_user}')."
+        ));
     }
 
     // Resolve the image up front (a slow first pull shouldn't look like a hang) — and the tunnel step below,
@@ -289,9 +362,9 @@ fn connect(
         let cloudflared_version = env_or("CLOUDFLARED_VERSION", "2026.7.2");
         crate::selfhost::install_cloudflared(&root, &cloudflared_version)?;
         crate::selfhost::run_ssh_connector(&root, &host_tunnel_token, "the connect one-liner")?;
-        println!(
-            "intentic: this host's SSH is reachable through the tunnel at {self_host_address}."
-        );
+        ui::note(&format!(
+            "this host's SSH is reachable through the tunnel at {self_host_address}."
+        ));
     }
 
     step("starting-sandbox", "starting sandbox…");
@@ -382,7 +455,7 @@ fn connect(
                 log.path.display()
             );
         }
-        println!("intentic: started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
+        ui::note("started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
     }
 
     // No connector container: the sandbox's own entrypoint enables against the hub with the grant below and
@@ -426,30 +499,25 @@ fn connect(
             reporter.findings_failed("verifying", checks::wire_failures(&findings));
             bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
         }
-        println!("intentic: the sandbox is running, but the links above are not reachable from this machine — re-check any time with: ic sandbox doctor {slug}");
+        ui::warn(&format!("the sandbox is running, but the links above are not reachable from this machine — re-check any time with: ic sandbox doctor {slug}"));
     }
 
-    println!("intentic sandbox started.");
     reporter.stage("done");
-    if sandbox_public_url.is_empty() {
-        println!("Your sandbox answers on this machine only — open it from the platform on this computer.");
-    } else {
-        println!("Your sandbox will be reachable at {sandbox_public_url} (DNS may take a few seconds to propagate).");
-        println!(
-            "Return to the platform — your sandbox announces itself and setup continues automatically."
-        );
-    }
 
-    // Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command
-    // carried. Runs after the "return to the platform" lines — the wizard's live gate flips on the sandbox
-    // itself, independent of this stage — and never fails the setup.
+    /* Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command
+     * carried. Never fails the setup.
+     *
+     * This and the machine connection below run BEFORE the closing block, where the "return to the platform"
+     * lines used to sit above them. The wizard's live gate flips on the sandbox itself and does not depend on
+     * either, so the only thing the old order bought was a summary with two more steps printing underneath
+     * it — the reader was told to leave, and then given more output. One ending, once, at the end. */
     if let (Some(dir), false, false) = (
         sync_dir,
         sync_pair_token.is_empty(),
         sandbox_public_url.is_empty(),
     ) {
         if !run_desktop_sync(&container, &sandbox_public_url, &sync_pair_token, &dir) {
-            eprintln!("intentic: warning — desktop sync didn't finish. Your sandbox is fine; enable sync any time from the workspace's Desktop sync card.");
+            ui::warn("desktop sync didn't finish. Your sandbox is fine; enable sync any time from the workspace's Desktop sync card.");
         }
     }
 
@@ -464,9 +532,69 @@ fn connect(
         && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
     {
-        eprintln!("intentic: warning — this computer wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
+        ui::warn("this computer wasn't connected, so its sandboxes won't be manageable from your browser. Add it any time from Capabilities.");
     }
 
+    ending(&slug, &container, &sandbox_public_url, self_host);
+    Ok(())
+}
+
+/* THE ENDING, RANKED — because the old one was seven lines of equal weight and the reader had to find the
+ * two that mattered among them.
+ *
+ * A finished setup has exactly one address and exactly one next action, and every other line here is
+ * something the reader wants in a week rather than in five seconds: how to stop it, how to reset it, where
+ * the logs are, and (when nobody asked for a deploy target) that this machine is not one. Those are
+ * footnotes, and rendering them as footnotes is the whole change. */
+fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
+    let mut footnotes: Vec<(String, String)> = vec![
+        (
+            "its logs".to_string(),
+            format!("docker logs -f {container}"),
+        ),
+        ("stop it".to_string(), format!("docker stop {container}")),
+        (
+            "reset it".to_string(),
+            format!("ic sandbox remove {slug} -y"),
+        ),
+        (
+            "setup log".to_string(),
+            crate::logfile::log_dir().display().to_string(),
+        ),
+    ];
+    if !self_host {
+        footnotes.push((
+            "deploy here".to_string(),
+            "re-run with SELF_HOST=1 (needs sudo)".to_string(),
+        ));
+    }
+    if ui::is_rich() {
+        let (address, instruction) = if public_url.is_empty() {
+            (
+                None,
+                "Your sandbox answers on this machine only — open it from the platform on this computer.",
+            )
+        } else {
+            (
+                Some(public_url),
+                "Go back to your browser — your sandbox announces itself and setup continues there.",
+            )
+        };
+        ui::finished("Your sandbox is running.", address, instruction, &footnotes);
+        return;
+    }
+    // Piped: the historical prose, in the historical shape. Nothing parses it (desktop.ts reads only the
+    // `intentic: [phase]` markers and treats everything else as detail), but it IS what a saved install log
+    // has always looked like, and a log that reads differently for no reason is a log people re-learn.
+    println!("intentic sandbox started.");
+    if public_url.is_empty() {
+        println!("Your sandbox answers on this machine only — open it from the platform on this computer.");
+    } else {
+        println!("Your sandbox will be reachable at {public_url} (DNS may take a few seconds to propagate).");
+        println!(
+            "Return to the platform — your sandbox announces itself and setup continues automatically."
+        );
+    }
     if !self_host {
         println!("Reachable only — no deploy target. To deploy an app onto this machine later, re-run with SELF_HOST=1 (needs sudo).");
     }
@@ -476,7 +604,6 @@ fn connect(
     );
     println!("Stop (keeps your /work): docker stop {container}");
     println!("Reset this sandbox (also removes its /work volume): ic sandbox remove {slug} -y");
-    Ok(())
 }
 
 /// Does this reference carry an explicit registry host? The part before the first `/` counts as one when it
@@ -610,10 +737,21 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
             agent.unix_url
         },
     );
+    // These installers inherit stdout and speak with their own voice. Hand them the terminal outright rather
+    // than let the live step line be repainted through whatever they print.
+    ui::suspend();
+    let finished = run_agent_script(&url, agent.what, vars);
+    ui::resume();
+    finished
+}
+
+// `what` names the agent in the one refusal only the unix path can reach (root with no invoking user).
+#[cfg_attr(windows, allow(unused_variables))]
+fn run_agent_script(url: &str, what: &str, vars: &[(&str, &str)]) -> bool {
     #[cfg(unix)]
     {
         // Fetch before piping — a failed fetch must fail the bootstrap, not feed sh half a script.
-        let Ok(mut response) = ureq::get(&url).call() else {
+        let Ok(mut response) = ureq::get(url).call() else {
             return false;
         };
         let Ok(script) = response.body_mut().read_to_string() else {
@@ -631,10 +769,9 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
                 sudo
             }
             (true, None) => {
-                eprintln!(
-                    "intentic: skipping {} — running as root with no invoking user to install it for.",
-                    agent.what
-                );
+                ui::warn(&format!(
+                    "skipping {what} — running as root with no invoking user to install it for."
+                ));
                 return false;
             }
             _ => std::process::Command::new("sh"),
@@ -715,7 +852,7 @@ fn start_dind_target(slug: &str, network: &str, log: &Log) -> Result<(String, St
     let dind_container = format!("{DIND_PREFIX}{slug}");
     let dind_image = env_or("DIND_IMAGE", "ghcr.io/intentic/dind-host:latest");
     let dind_volume = format!("intentic-dind-docker-{slug}");
-    println!("intentic: starting the Docker-in-Docker deploy target…");
+    ui::note("starting the Docker-in-Docker deploy target…");
     docker::quiet(&["rm", "-f", &dind_container]);
     let run = [
         "run",
@@ -765,7 +902,7 @@ fn start_dind_target(slug: &str, network: &str, log: &Log) -> Result<(String, St
         .ok_or_else(|| {
             crate::util::Fail("could not read the deploy target's SSH key".to_string())
         })?;
-    println!("intentic: deploy target '{dind_container}' is ready (the sandbox reaches it over SSH on the shared network).");
+    ui::note(&format!("deploy target '{dind_container}' is ready (the sandbox reaches it over SSH on the shared network)."));
     Ok((key, "root".to_string(), dind_container))
 }
 

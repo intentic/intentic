@@ -62,13 +62,16 @@ impl Check {
 }
 
 /// One finding as a report row — shared by the preflight runner and the doctor's chain so every diagnosis
-/// in this binary reads the same.
+/// in this binary reads the same. A failing row deliberately carries no detail: the composed summary that
+/// ends the run names every failure WITH its fix, and saying it twice buries the copy that is actionable.
 pub fn print_row(finding: &Finding) {
     match &finding.outcome {
-        Outcome::Pass => println!("  ok    {}", finding.name),
-        Outcome::Warn { problem } => println!("  warn  {} — {problem}", finding.name),
-        Outcome::Fail { .. } => println!("  FAIL  {}", finding.name),
-        Outcome::Skip { why } => println!("  skip  {} — {why}", finding.name),
+        Outcome::Pass => crate::ui::row(crate::ui::RowOutcome::Pass, finding.name, ""),
+        Outcome::Warn { problem } => {
+            crate::ui::row(crate::ui::RowOutcome::Warn, finding.name, problem)
+        }
+        Outcome::Fail { .. } => crate::ui::row(crate::ui::RowOutcome::Fail, finding.name, ""),
+        Outcome::Skip { why } => crate::ui::row(crate::ui::RowOutcome::Skip, finding.name, why),
     }
 }
 

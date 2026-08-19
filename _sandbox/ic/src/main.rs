@@ -13,6 +13,7 @@ mod sandbox;
 #[cfg(unix)]
 mod selfhost;
 mod tty;
+mod ui;
 mod util;
 
 use clap::{Parser, Subcommand};
@@ -189,7 +190,7 @@ fn main() {
         }),
     };
     if let Err(util::Fail(message)) = result {
-        eprintln!("error: {message}");
+        ui::error(&message);
         std::process::exit(1);
     }
 }

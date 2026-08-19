@@ -73,7 +73,7 @@ struct Zone {
 /// clear choice here instead of a bare "multiple zones" crash deep inside the CLI: one zone auto-picks, more
 /// prompt on the terminal, and a non-interactive run gets the exact remedy (set ZONE) with the options named.
 pub fn resolve_zone(token: &str, subject: &str) -> Result<String> {
-    println!("intentic: resolving the Cloudflare zone…");
+    crate::ui::note("resolving the Cloudflare zone…");
     let mut response = agent()
         .get(format!("{API}/zones?per_page=50"))
         .header("Authorization", &format!("Bearer {token}"))
@@ -88,14 +88,16 @@ pub fn resolve_zone(token: &str, subject: &str) -> Result<String> {
         bail!("the Cloudflare API token sees no zones — add a domain to the account, or broaden the token's Zone:Read scope, at https://dash.cloudflare.com/profile/api-tokens, then re-run.");
     }
     if zones.len() == 1 {
-        println!(
-            "intentic: using the only zone the token sees — {}.",
+        crate::ui::note(&format!(
+            "using the only zone the token sees — {}.",
             zones[0]
-        );
+        ));
         return Ok(zones[0].clone());
     }
     if tty::have_tty() {
-        eprintln!("intentic: this Cloudflare token can use several zones — pick the one {subject} should use:");
+        // A question owns the screen while it is asked — see the same handover in sandbox/connect.rs.
+        crate::ui::suspend();
+        eprintln!("\nintentic: this Cloudflare token can use several zones — pick the one {subject} should use:");
         for (i, zone) in zones.iter().enumerate() {
             eprintln!("  {}) {zone}", i + 1);
         }
@@ -111,7 +113,9 @@ pub fn resolve_zone(token: &str, subject: &str) -> Result<String> {
         let zone = zones
             .get(index.wrapping_sub(1))
             .ok_or_else(|| crate::util::Fail(format!("'{choice}' is out of range.")))?;
-        println!("intentic: using zone {zone}.");
+        println!();
+        crate::ui::resume();
+        crate::ui::note(&format!("using zone {zone}."));
         return Ok(zone.clone());
     }
     let listing: String = zones.iter().map(|zone| format!("  - {zone}\n")).collect();

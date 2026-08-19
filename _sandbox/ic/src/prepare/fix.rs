@@ -159,7 +159,9 @@ pub fn install_docker_desktop(facts: &Facts) -> Fixed {
     if let Err(problem) = download(INSTALLER_URL, &installer) {
         return Err(Trouble::Failed(problem));
     }
-    println!("      running Docker's installer (this takes a few minutes, and it says nothing while it works)");
+    crate::ui::progress(
+        "running Docker's installer (this takes a few minutes, and it says nothing while it works)",
+    );
     let path = installer.to_string_lossy().replace('\'', "''");
     // `install` (not the bare exe) is the unattended entry point; --accept-license is what the interactive
     // installer's first screen asks, and --backend=wsl-2 stops it choosing Hyper-V on a Pro machine, which
@@ -224,13 +226,13 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
         if written - announced >= ANNOUNCE_EVERY {
             announced = written;
             if total > 0 {
-                println!(
-                    "      downloaded {} MB of {} MB",
+                crate::ui::progress(&format!(
+                    "downloaded {} MB of {} MB",
                     written / (1024 * 1024),
                     total / (1024 * 1024)
-                );
+                ));
             } else {
-                println!("      downloaded {} MB", written / (1024 * 1024));
+                crate::ui::progress(&format!("downloaded {} MB", written / (1024 * 1024)));
             }
         }
     }
@@ -351,7 +353,9 @@ pub fn wait_for_daemon() -> Fixed {
         if said.elapsed() >= Duration::from_secs(20) {
             said = Instant::now();
             let left = deadline.saturating_duration_since(Instant::now()).as_secs();
-            println!("      still waiting for Docker's engine ({left}s before we give up)");
+            crate::ui::progress(&format!(
+                "still waiting for Docker's engine ({left}s before we give up)"
+            ));
         }
         std::thread::sleep(Duration::from_secs(3));
     }

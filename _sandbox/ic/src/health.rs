@@ -48,14 +48,20 @@ pub fn wait_ready(container: &str) {
         }
         if let Some(step) = running_step(&parsed) {
             if step != last_step {
-                println!("intentic:   {step}…");
+                // The boot chain names its own steps; they are detail under the wait, never steps of their
+                // own — a terminal shows the newest beside the spinner, a pipe gets one line each as before.
+                crate::ui::detail(&step);
+                if !crate::ui::is_rich() {
+                    println!("intentic:   {step}…");
+                }
                 last_step = step;
             }
         }
         std::thread::sleep(Duration::from_secs(1));
     }
-    println!("intentic: the daemon is still warming up after 2 minutes — it keeps going in the background.");
-    println!("          Watch it with: docker logs -f {container}");
+    crate::ui::warn(&format!(
+        "the daemon is still warming up after 2 minutes — it keeps going in the background.\nWatch it with: docker logs -f {container}"
+    ));
 }
 
 /// The label of any object in the health document with `"state":"running"` — a tree walk rather than a
