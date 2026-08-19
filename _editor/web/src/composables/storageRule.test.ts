@@ -3,8 +3,15 @@
 // jsdom because the subject is the app's real key builders, and reaching them pulls in composables that touch
 // browser globals at import time. The rule itself is one predicate; what is worth pinning is that the three
 // heavy reads actually carry the mark, which can only be asserted against the builders themselves.
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mirrors, UNPERSISTED } from "./queryPersistence";
+// Statically imported, not awaited inside a hook: these builders' graph is app-wide, and compiling it cold on a
+// runner with every core busy takes longer than a hook is allowed to (vitest's hookTimeout) — the same work at
+// import time is simply the file's load, paid during collection. The globals below still land first; vi.hoisted
+// runs above every import in the transformed module, which is exactly what it is for.
+import { agentTranscriptKey } from "./chat/agentTranscript";
+import { agentFileDiffKey } from "./agents/useAgentChanges";
+import { changesKey, fileDiffKey } from "./workspace/useChanges";
 
 // The key builders' import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -38,26 +45,12 @@ vi.hoisted(() => {
  * user, the volume is no longer bounded by what someone clicked — which is what makes this worth a test rather
  * than a comment. */
 
-let keys: {
-    workingDiff: readonly unknown[];
-    agentDiff: readonly unknown[];
-    transcript: readonly unknown[];
-    changes: readonly unknown[];
+const keys = {
+    workingDiff: fileDiffKey(`root`, `src/app.ts`, `unstaged`),
+    agentDiff: agentFileDiffKey(`agent-1`, `root`, `src/app.ts`),
+    transcript: agentTranscriptKey(`agent-1`),
+    changes: changesKey(),
 };
-
-beforeAll(async () => {
-    const [{ changesKey, fileDiffKey }, { agentFileDiffKey }, { agentTranscriptKey }] = await Promise.all([
-        import(`./workspace/useChanges`),
-        import(`./agents/useAgentChanges`),
-        import(`./chat/agentTranscript`),
-    ]);
-    keys = {
-        workingDiff: fileDiffKey(`root`, `src/app.ts`, `unstaged`),
-        agentDiff: agentFileDiffKey(`agent-1`, `root`, `src/app.ts`),
-        transcript: agentTranscriptKey(`agent-1`),
-        changes: changesKey(),
-    };
-});
 
 describe(`what may go to disk`, () => {
     it(`keeps a working-tree file diff out — two whole file texts, one per changed file`, () => {
