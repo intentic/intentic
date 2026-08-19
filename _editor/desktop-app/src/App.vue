@@ -143,6 +143,20 @@ const running = computed(() => activeRun.value !== undefined);
 // includes having failed, because a failure is the one state the user most needs undivided.
 const setupMode = computed(() => pending.value !== undefined || activeRun.value === `setup`);
 
+/* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS — and the reason the frame below waits for it.
+ *
+ * `setupMode` is derived from a handed-over setup that is READ, asynchronously, after this component mounts
+ * (`loadPending`). Until that read lands it is `false`, which is not "the manager is up" but "nobody has
+ * looked yet". Acting on that guess is what made an arriving setup flicker: Rust opens the window already
+ * wearing the setup frame (windows.rs), this effect then fired on the pre-read `false` and asked for the
+ * MANAGER frame — a full-sized window, with the manager's much larger minimum — and the read landing a
+ * moment later asked for the dialog frame all over again. What the user saw was a window snapping to one
+ * size and back, and for as long as the read took, a second full-sized window over the one they were reading.
+ *
+ * So the frame is only ever CHANGED here, never asserted from an unknown state. Rust has already set the
+ * right one for whichever way this window opened; this file takes over on the first real transition. */
+const faceKnown = ref(false);
+
 /* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs), so the title is not
  * decoration: it is the taskbar entry, the alt-tab label, and the only thing outside this process that can
  * say which screen is up — which is what the desktop smoke tier asserts against, having deliberately no test
@@ -152,6 +166,9 @@ const setupMode = computed(() => pending.value !== undefined || activeRun.value 
  * front of the workspace and the manager fills the frame the workspace was in, and which of the two is up is
  * this file's state — a setup can arrive at a manager window, and a finished one hands the window back. */
 watchEffect(() => {
+    if (!faceKnown.value) {
+        return;
+    }
     void getCurrentWindow().setTitle(setupMode.value ? `Intentic — Setting up your sandbox` : `Intentic — This computer`);
     void setupFrame(setupMode.value);
 });
@@ -547,6 +564,10 @@ onMounted(async () => {
     // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
     // exactly once — by the event above or by these, whichever finds the request still there.
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
+    /* THE FIRST READ HAS LANDED, so this screen may now say which face it is. Before this line `setupMode`
+     * was the absence of an answer rather than an answer, and the frame effect stands down for exactly that
+     * window — see `faceKnown`. After it, every change is a real transition and drives the frame. */
+    faceKnown.value = true;
     // Only when nothing was handed over: a fresh link is about a setup the user is starting right now, and it
     // outranks one this app restarted the machine for at some point in the past.
     if (pending.value === undefined) {

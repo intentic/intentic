@@ -33,9 +33,66 @@ pub const LAUNCHER: &str = "launcher";
 /// and gone the moment it is answered.
 pub const CONFIRM_CLOSE: &str = "confirm-close";
 
-/// The frame both faces share when neither has one to inherit — a cold start, on either face.
+/// The frame both faces share when neither has one to inherit — a cold start, on either face. A PREFERENCE
+/// rather than a size: what a window actually opens at is this fitted to the screen, see `opening_bounds`.
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (900.0, 600.0);
+
+/* WHAT THE FRAME COSTS OUTSIDE THE SIZE THAT IS ASKED FOR. Every size here is an INNER one — the client area
+ * — and the title bar and border are added back OUTSIDE it. So a window asked for exactly the work area's
+ * height opens exactly a title bar taller than the screen can show.
+ *
+ * Logical units, and deliberately generous. The real figure varies by platform, theme and display scale, and
+ * the cost of over-reserving is a few unused pixels at the edge of a window nobody has resized yet — against
+ * a first impression that reads as broken. */
+const FRAME_ALLOWANCE: (f64, f64) = (16.0, 48.0);
+
+/* THE SIZE TO OPEN AT, given what this screen can actually show — and the other half of the display-scale
+ * problem `SETUP_SIZE` below describes.
+ *
+ * That one was solved by giving the setup face a small frame of its own. This is the same arithmetic biting
+ * the window it opens in FRONT of: `DEFAULT_SIZE` is 1440×900 and was treated as if it always fits. It is
+ * LOGICAL, so at the 150% scale most laptops are sold at it is 2160×1350 physical — on a panel with 1080
+ * physical rows. The first window a new user ever sees opened a third taller than their display, with its
+ * bottom edge and everything near it off the screen entirely.
+ *
+ * Pure and separate from the monitor lookup so it can be tested against the numbers that actually break, and
+ * fitted rather than merely capped: the preference wins whenever it fits, the screen wins whenever it does
+ * not. A screen smaller than `MIN_SIZE` is not a reason to open something bigger than the screen — the
+ * minimum comes down too, because a floor above the ceiling is a window that cannot be resized onto its own
+ * display. */
+fn fit_to_screen(preferred: (f64, f64), available: (f64, f64)) -> (f64, f64) {
+    let room = |available: f64, allowance: f64| (available - allowance).max(1.0);
+    (
+        preferred.0.min(room(available.0, FRAME_ALLOWANCE.0)),
+        preferred.1.min(room(available.1, FRAME_ALLOWANCE.1)),
+    )
+}
+
+/// The opening size and the minimum that goes with it — the minimum fitted to the same screen, so it can
+/// never be the thing that holds a window bigger than the display it is on.
+fn opening_bounds(available: Option<(f64, f64)>) -> ((f64, f64), (f64, f64)) {
+    let Some(available) = available else {
+        return (DEFAULT_SIZE, MIN_SIZE);
+    };
+    let size = fit_to_screen(DEFAULT_SIZE, available);
+    (size, (MIN_SIZE.0.min(size.0), MIN_SIZE.1.min(size.1)))
+}
+
+/* The screen a window is about to open on, in LOGICAL units — its WORK AREA rather than its full size, so a
+ * taskbar, a dock or a panel is space this app does not try to open into.
+ *
+ * `None` when the platform will not say, which is a real answer on a headless or freshly-plugged display and
+ * is read as "no reason to shrink the preference". */
+fn available_logical(app: &AppHandle) -> Option<(f64, f64)> {
+    let monitor = app.primary_monitor().ok().flatten()?;
+    let scale = monitor.scale_factor();
+    if !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let area = monitor.work_area().size;
+    Some((area.width as f64 / scale, area.height as f64 / scale))
+}
 
 /* THE SETUP WINDOW'S OWN FRAME — a dialog, sized to the card in it rather than to the screen.
  *
@@ -146,10 +203,11 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             .expect("static app url parses"),
     };
     let link_handler = app.clone();
+    let (size, min) = opening_bounds(available_logical(app));
     let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
         .title("Intentic")
-        .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
-        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+        .inner_size(size.0, size.1)
+        .min_inner_size(min.0, min.1)
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false)
@@ -343,10 +401,11 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
         return Some(window);
     }
+    let (size, min) = opening_bounds(available_logical(app));
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("Intentic")
-        .inner_size(DEFAULT_SIZE.0, DEFAULT_SIZE.1)
-        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+        .inner_size(size.0, size.1)
+        .min_inner_size(min.0, min.1)
         /* The frame between "window mapped" and "webview painted", which is white by default and reads as a
          * flash on a dark screen. Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css),
          * which index.html pins — the same colour the confirmation dialog paints for the same reason.
@@ -416,13 +475,17 @@ pub fn set_setup_frame(app: &AppHandle, setup: bool) {
     // Before the frame moves, so anything reading it while this runs already sees which one it is wearing.
     state.mark_setup_frame(setup);
     if !setup {
-        let _ = window.set_min_size(Some(LogicalSize::new(MIN_SIZE.0, MIN_SIZE.1)));
+        // Fitted to the screen, exactly as the opening frame is: this is the same full-window size, and the
+        // manager face restoring it unfitted would put the oversized window back on a scaled display the
+        // moment an install finished.
+        let (full, min) = opening_bounds(available_logical(app));
+        let _ = window.set_min_size(Some(LogicalSize::new(min.0, min.1)));
         /* And a full window's SIZE back, when this is a setup frame being taken off. `show_launcher` swaps in
          * the workspace's frame straight after and would make this redundant — but only when there is a
          * workspace on screen to take one from, and the tray's Manager item reaches here with no promise of
          * that. Without it the manager face draws in a 620-wide window, under its own 900 minimum. */
         if was_setup {
-            let _ = window.set_size(LogicalSize::new(DEFAULT_SIZE.0, DEFAULT_SIZE.1));
+            let _ = window.set_size(LogicalSize::new(full.0, full.1));
         }
         return;
     }
@@ -542,6 +605,59 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
 mod frame_tests {
     use super::*;
     use tauri::PhysicalPosition;
+
+    /// THE BUG THIS SHIPPED WITH, in the numbers that caused it: a 1080p panel at the 150% scale most laptops
+    /// are sold with leaves 1080 physical rows, which is 720 logical — and the preference is 900. The first
+    /// window a new user ever saw opened a third taller than the display and hung off the bottom of it.
+    #[test]
+    fn a_scaled_laptop_panel_does_not_get_a_window_taller_than_itself() {
+        // 1920×1080 at 150%, less a 48px taskbar: what the platform reports as the work area, logical.
+        let available = (1280.0, 688.0);
+        let (size, min) = opening_bounds(Some(available));
+
+        assert!(size.1 < available.1, "opened {size:?} into {available:?}");
+        assert!(size.0 < available.0, "opened {size:?} into {available:?}");
+        // And the floor cannot be what puts it back over the edge.
+        assert!(
+            min.1 <= size.1 && min.0 <= size.0,
+            "min {min:?} over size {size:?}"
+        );
+    }
+
+    /// A screen with room to spare gets the preference untouched — the fit is a ceiling, not a resize.
+    #[test]
+    fn a_large_display_still_opens_at_the_preferred_size() {
+        assert_eq!(
+            opening_bounds(Some((2560.0, 1400.0))),
+            (DEFAULT_SIZE, MIN_SIZE)
+        );
+    }
+
+    /// No monitor to ask is a real answer on a headless or freshly-plugged display, and is not a reason to
+    /// shrink anything.
+    #[test]
+    fn an_unknown_screen_changes_nothing() {
+        assert_eq!(opening_bounds(None), (DEFAULT_SIZE, MIN_SIZE));
+    }
+
+    /// A screen smaller than the minimum is still a screen the window has to fit on: the floor comes down
+    /// with it, because a floor above the ceiling is a window that cannot be resized onto its own display.
+    #[test]
+    fn a_screen_below_the_minimum_lowers_the_minimum_too() {
+        let (size, min) = opening_bounds(Some((800.0, 500.0)));
+
+        assert!(size.0 < 800.0 && size.1 < 500.0, "opened {size:?}");
+        assert_eq!(min, size);
+    }
+
+    /// Never zero or negative, whatever a desktop reports — a monitor unplugged mid-session can answer with
+    /// an area smaller than the frame allowance, and a window asked for 0×0 is one nobody can grab.
+    #[test]
+    fn an_absurd_screen_still_asks_for_a_window() {
+        let (size, _) = opening_bounds(Some((4.0, 4.0)));
+
+        assert!(size.0 >= 1.0 && size.1 >= 1.0, "opened {size:?}");
+    }
 
     /// The setup window opens in the MIDDLE of the workspace, not on its corner — which is what says it is
     /// about that window. Asserted on the arithmetic because the windows themselves exist only in a running
