@@ -537,7 +537,11 @@ const git = (...args) => {
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
     return result.status === 0 ? result.stdout : undefined;
 };
-const shrunk = (base, head, at, out) => {
+/* The JSON Schema keywords whose value is a map of NAME to schema — inside one a key is a field the wire
+ * carries, everywhere else a key is a keyword. The lock's own root is one too (its keys are the exported
+ * schema names), which is why the walk starts `named`. It exists for the `description` rule below. */
+const NAME_MAPS = new Set(["properties", "patternProperties", "$defs", "definitions"]);
+const shrunk = (base, head, at, out, named = true) => {
     /* Arrays are the schema's COLLECTIONS — `oneOf` alternatives, `enum` values, `required` names — and
      * contract-lock.ts keeps them in the order zod declared them rather than sorting, so a position means
      * nothing on its own. Compared as one blob they made growth look like a break: a union that gained a
@@ -555,7 +559,7 @@ const shrunk = (base, head, at, out) => {
             const itemAt = typeof item === "object" && item !== null ? `${at}[${index}]` : `${at} ${JSON.stringify(item)}`;
             const offered = head.some((candidate) => {
                 const missing = [];
-                shrunk(item, candidate, itemAt, missing);
+                shrunk(item, candidate, itemAt, missing, false);
                 return missing.length === 0;
             });
             if (!offered) {
@@ -570,9 +574,18 @@ const shrunk = (base, head, at, out) => {
         }
         return;
     }
+    /* `description` AS A KEYWORD IS PROSE, AND PROSE IS NOT A PROMISE — skipped, so re-wording a help sentence
+     * (or refreshing the example paths inside one) stops demanding a `!` commit for a change no client can
+     * observe. Skipped ONLY as a keyword: 78 schemas in this lock carry a real field NAMED `description`, and
+     * losing one of those is a genuine break, which is what `named` distinguishes. Kept in lockstep with
+     * git/contract-shrink.ts in _sandbox/sandbox — the two copies are one judgment, and a change to either
+     * owes the other a look. */
     for (const key of Object.keys(base)) {
+        if (!named && key === "description") {
+            continue;
+        }
         if (key in head) {
-            shrunk(base[key], head[key], `${at}.${key}`, out);
+            shrunk(base[key], head[key], `${at}.${key}`, out, !named && NAME_MAPS.has(key));
         } else {
             out.push(`${at}.${key} (removed)`);
         }
