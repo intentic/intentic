@@ -14,8 +14,28 @@ const PREMIUM_STATUSES = new Set([`active`, `trialing`]);
 
 export const isPremium = (membership: { status: string } | null): boolean => membership !== null && PREMIUM_STATUSES.has(membership.status);
 
-export const premiumOf = async (prisma: PrismaClient, userId: string): Promise<boolean> =>
-    isPremium(await prisma.membership.findUnique({ where: { userId }, select: { status: true } }));
+// The comp list, parsed at ask time — case-folded because an email's case is presentation, not identity.
+const compEmails = (config: Config): readonly string[] =>
+    config.pool.compEmails
+        .split(`,`)
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email !== ``);
+
+/* Premium = a live subscription, or an email on the operator's comp list (config.pool.compEmails). The comp
+ * check runs only when no membership row answered and the list is non-empty, so the paying path costs what it
+ * always did; a comped user's premium reverts the moment the email leaves the list, because nothing was ever
+ * written down. */
+export const premiumOf = async (prisma: PrismaClient, config: Config, userId: string): Promise<boolean> => {
+    if (isPremium(await prisma.membership.findUnique({ where: { userId }, select: { status: true } }))) {
+        return true;
+    }
+    const comped = compEmails(config);
+    if (comped.length === 0) {
+        return false;
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    return user !== null && comped.includes(user.email.toLowerCase());
+};
 
 /* Mirror one subscription state into the membership table. `userId` is known on the checkout-completed path
  * (the session's client_reference_id) and absent on later lifecycle events, where the customer id is the only

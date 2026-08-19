@@ -1,0 +1,39 @@
+{
+    "name": "@intentic-app/example-provider",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/provider.js",
+    "types": "dist/provider.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/provider.d.ts",
+            "import": {
+                "@intentic-app/src": "./src/provider.ts",
+                "types": "./dist/provider.d.ts",
+                "default": "./dist/provider.js"
+            },
+            "require": {
+                "types": "./dist/provider.d.ts",
+                "default": "./dist/provider.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "dev": "bun --watch ./src/main.ts",
+        "start": "bun ./src/main.ts",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

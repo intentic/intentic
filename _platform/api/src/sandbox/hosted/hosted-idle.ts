@@ -82,7 +82,7 @@ export const reapIdleHosted = async (prisma: PrismaClient, config: Config, logge
         }
         try {
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-            if (await premiumOf(prisma, machine.sandbox.ownerId)) {
+            if (await premiumOf(prisma, config, machine.sandbox.ownerId)) {
                 continue;
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API

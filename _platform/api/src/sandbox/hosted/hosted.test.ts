@@ -34,6 +34,7 @@ const config = (over?: Record<string, unknown>): Config =>
             idleWarnDays: 14,
             poolSize: 1,
         },
+        pool: { compEmails: `` },
         ...over,
     }) as unknown as Config;
 

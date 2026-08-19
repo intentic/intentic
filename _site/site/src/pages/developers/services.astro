@@ -1,7 +1,7 @@
 ---
 import { apiBook } from "@intentic-dev/site-content/api";
 import { admission, creatorSharePct, maxRefundPct } from "@intentic-dev/site-content/pool";
-import { discordUrl } from "@intentic-dev/site-content/site";
+import { discordUrl, githubUrl } from "@intentic-dev/site-content/site";
 import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
@@ -340,7 +340,13 @@ const runSteps = [
     </ol>
     <p class="mt-5">
         The catalog's own <code>demo-research</code> service is the living reference: its upstream is run by the platform and verifies
-        exactly the signature on this page, so what this page documents is what the forward actually sends.
+        exactly the signature on this page, so what this page documents is what the forward actually sends. Its request also picks the
+        outcome, test-card style — <code>scenario</code> of <code>ok</code>, <code>slow</code>, <code>refuse</code> (a paid 4xx),
+        <code>fail</code> (a refunded 5xx) or <code>broken</code> (a stream that dies without its result, refunded), with
+        <code>paceMs</code> setting the stream's tempo — so every settlement a member's card can show is reproducible on demand. And
+        there is runnable starter code: <a href={`${githubUrl}/tree/HEAD/_platform/example-provider`}>the example provider</a> is this
+        whole page as one dependency-free file, kept honest by the platform's own conformance suite, which drives the real admission
+        probe and the real metered forward against it.
     </p>
     <p>
         A listing publishes a <strong>sample request</strong> — a body your service really answers. It does double duty: it is what the

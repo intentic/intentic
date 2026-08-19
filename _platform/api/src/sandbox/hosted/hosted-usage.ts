@@ -47,7 +47,7 @@ const unmetered: HostedBudget = { metered: false, allowanceMinutes: 0, usedMinut
  * month, which is the only reading under which sharing cannot be used to launder machine time. */
 export const hostedBudgetOf = async (prisma: PrismaClient, config: Config, userId: string): Promise<HostedBudget> => {
     const allowanceMinutes = config.hosted.monthlyHours * 60;
-    if (allowanceMinutes === 0 || (await premiumOf(prisma, userId))) {
+    if (allowanceMinutes === 0 || (await premiumOf(prisma, config, userId))) {
         return unmetered;
     }
     const row = await prisma.hostedUsage.findUnique({

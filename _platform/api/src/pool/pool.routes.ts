@@ -8,7 +8,7 @@ import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { LIVE_STATUSES, type ServiceStatus } from "./pool-admission.js";
 import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
-import { DEMO_SLUG, demoStream } from "./pool-demo.js";
+import { DEMO_SLUG, demoRespond, parseDemoRequest } from "./pool-demo.js";
 import { buildLedger } from "./pool-ledger.js";
 import { applySubscription, poolEnabled, premiumOf } from "./pool-membership.js";
 import { forwardToService, verifyServiceSignature } from "./pool-services.js";
@@ -78,7 +78,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (!parsed.success) {
             return c.json({ error: `malformed donation` }, 400);
         }
-        if (!(await premiumOf(prisma, ownerId))) {
+        if (!(await premiumOf(prisma, config, ownerId))) {
             return c.json({ error: { type: `membership_required`, message: `Installing a premium extension needs an intentic membership.` } }, 403);
         }
         const at = now();
@@ -123,7 +123,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        return c.json({ premium: await premiumOf(prisma, ownerId) });
+        return c.json({ premium: await premiumOf(prisma, config, ownerId) });
     });
 
     /* The services catalog, plus where the caller's allowance stands — the read behind every "this run costs
@@ -144,7 +144,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
                 select: { slug: true, publisher: true, name: true, description: true, creditsPerRun: true, status: true, sampleRequest: true },
                 orderBy: { slug: `asc` },
             }),
-            premiumOf(prisma, ownerId),
+            premiumOf(prisma, config, ownerId),
         ]);
         /* `probation` is flattened to one boolean here rather than leaking the status vocabulary to every
          * reader: what a member's card needs to say is "this listing is new", and what an agent needs to know
@@ -176,7 +176,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (service === null || !LIVE_STATUSES.includes(service.status as ServiceStatus)) {
             return c.json({ error: `no such service` }, 404);
         }
-        if (!(await premiumOf(prisma, ownerId))) {
+        if (!(await premiumOf(prisma, config, ownerId))) {
             return c.json({ error: { type: `membership_required`, message: `Running ${service.name} needs an intentic membership.` } }, 403);
         }
         const body = await c.req.text();
@@ -198,7 +198,17 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
                 429,
             );
         }
-        const forward = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, fetchFn, () => at);
+        /* The demo's upstream is this very app, so its forward dispatches in-process instead of over a
+         * socket — same signing, same verification, same stream validation, minus the network hop back to
+         * ourselves. Not an optimization: the platform's own https address is not reliably reachable FROM the
+         * platform (dev's minted certificate fails Bun's TLS stack outright; prod would loop out through the
+         * proxy), and a demo that refunds every run wherever the loopback is awkward demonstrates nothing. */
+        const dispatch =
+            service.slug === DEMO_SLUG
+                ? ((async (url: string | URL | Request, init?: RequestInit) =>
+                      app.request(new URL(String(url)).pathname.replace(/^\/pool/, ``), init)) as typeof fetch)
+                : fetchFn;
+        const forward = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, dispatch, () => at);
         if (forward.kind === `failed`) {
             await prisma.serviceRun.create({
                 data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `refunded` },
@@ -293,8 +303,11 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (!verified) {
             return c.json({ error: `bad signature — only calls forwarded by the platform are served` }, 401);
         }
-        const query = (JSON.parse(body || `{}`) as { query?: unknown }).query;
-        return c.newResponse(demoStream(typeof query === `string` ? query : `(no query)`), 200, { "content-type": `application/x-ndjson` });
+        const answer = demoRespond(parseDemoRequest(body));
+        if (answer.kind === `answer`) {
+            return c.json(JSON.parse(answer.body), answer.status);
+        }
+        return c.newResponse(answer.stream, 200, { "content-type": `application/x-ndjson` });
     });
 
     /* The public ledger (pool-ledger.ts): the month in progress computed live and marked open, then every

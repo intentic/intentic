@@ -10,8 +10,8 @@ import { poolHttpRoutes } from "./pool.routes.js";
 
 /* THE POOL IS THE ROUTE FAMILY THE CREATOR PROMISE RESTS ON, so what is pinned here is what a creator or a
  * member would call betrayal if it drifted: the ledger only accepting what a real sandbox reported, premium
- * meaning a paid row and nothing less, the public numbers adding up, and the webhook refusing an unsigned
- * event. */
+ * meaning a paid row (or the operator's own comp list) and nothing less, the public numbers adding up, and
+ * the webhook refusing an unsigned event. */
 
 const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
 
@@ -49,6 +49,7 @@ const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`h
 
 interface Stored {
     donations: { userId: string; extensionId: string; month: string; credits: number }[];
+    users: { id: string; email: string }[];
     memberships: { userId: string; stripeCustomerId: string; stripeSubscriptionId: string; status: string; currentPeriodEnd: Date }[];
     services: {
         id: string;
@@ -71,6 +72,7 @@ interface Stored {
 const fakePrisma = (seed?: Partial<Stored>) => {
     const stored: Stored = {
         donations: seed?.donations ?? [],
+        users: seed?.users ?? [],
         memberships: seed?.memberships ?? [],
         services: seed?.services ?? [],
         creditSpends: seed?.creditSpends ?? new Map(),
@@ -81,6 +83,9 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) =>
                 where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
             ),
+        },
+        user: {
+            findUnique: vi.fn(async ({ where }: { where: { id: string } }) => stored.users.find((user) => user.id === where.id) ?? null),
         },
         donation: {
             findUnique: vi.fn(async ({ where }: { where: { userId_extensionId_month: { userId: string; extensionId: string; month: string } } }) => {
@@ -299,6 +304,14 @@ describe(`the creator pool`, () => {
 
         const nobody = fakePrisma();
         expect(await (await call(baseConfig, nobody.prisma, `/pool/status`)).json()).toEqual({ premium: false });
+    });
+
+    it(`answers premium for an email on the comp list, with no membership row at all`, async () => {
+        const comped = configWith({ compEmails: ` Dev@Example.com , other@example.com` });
+        const { prisma } = fakePrisma({ users: [{ id: `user-1`, email: `dev@example.com` }] });
+        expect(await (await call(comped, prisma, `/pool/status`)).json()).toEqual({ premium: true });
+        // Off the list, back to the paid rule — nothing was ever written down.
+        expect(await (await call(baseConfig, prisma, `/pool/status`)).json()).toEqual({ premium: false });
     });
 
     it(`publishes the ledger without a login, paying what the donations actually carried`, async () => {
@@ -564,7 +577,10 @@ describe(`metered service runs`, () => {
         expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(80);
     });
 
-    it(`serves the demo service end to end: seeded, signed, verified, answered, metered`, async () => {
+    /* The demo service, seeded. No fetch is injected on purpose: the route dispatches a demo forward into
+     * its own app (its upstream IS this app), and these suites prove that production path — spend → sign →
+     * verify → answer → relay with the meter on it — with no seam standing in for any of it. */
+    const demoSetup = async () => {
         const demoConfig = configWith({ demoService: true });
         const { prisma, stored } = fakePrisma({ memberships: [MEMBER] });
         // Give the fake enough of `service.create`/`update` for the seeder.
@@ -584,30 +600,31 @@ describe(`metered service runs`, () => {
             return row;
         };
         await seedDemoService(prisma, demoConfig);
-        expect(stored.services).toMatchObject([{ slug: `demo-research`, publisher: `intentic`, creditsPerRun: 5, status: `listed` }]);
+        const app = poolHttpRoutes({ config: demoConfig, prisma, now: () => NOW });
+        const runDemo = async (body: object) => {
+            const response = await app.request(`/services/demo-research/run`, {
+                method: `POST`,
+                body: JSON.stringify(body),
+                headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
+            });
+            return response;
+        };
+        return { app, stored, runDemo };
+    };
 
-        // The forward's fetch dispatched back into the same app — the demo upstream verifies the signature
-        // exactly as an external provider would, so this drives the WHOLE path: spend → sign → verify →
-        // answer → relay with the meter on it.
-        const app = poolHttpRoutes({
-            config: demoConfig,
-            prisma,
-            // The sub-app under test has no `/pool` mount prefix (app.ts adds it); strip it when dispatching
-            // the forward back in.
-            fetchFn: (async (url: string | URL | Request, init?: RequestInit) =>
-                app.request(new URL(String(url)).pathname.replace(/^\/pool/, ``), init)) as typeof fetch,
-            now: () => NOW,
-        });
-        const response = await app.request(`/services/demo-research/run`, {
-            method: `POST`,
-            body: `{"query":"launch on reddit"}`,
-            headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
-        });
-        expect(response.status).toBe(200);
-        const lines = (await response.text())
+    const linesOf = async (response: Response) =>
+        (await response.text())
             .trim()
             .split(`\n`)
-            .map((line) => JSON.parse(line) as { event: string; data?: { demo?: boolean; query?: string }; remaining?: number });
+            .map((line) => JSON.parse(line) as { event: string; text?: string; data?: { demo?: boolean; query?: string }; remaining?: number });
+
+    it(`serves the demo service end to end: seeded, signed, verified, answered, metered`, async () => {
+        const { app, stored, runDemo } = await demoSetup();
+        expect(stored.services).toMatchObject([{ slug: `demo-research`, publisher: `intentic`, creditsPerRun: 5, status: `listed` }]);
+
+        const response = await runDemo({ query: `launch on reddit`, paceMs: 0 });
+        expect(response.status).toBe(200);
+        const lines = await linesOf(response);
         // The demo streams like any provider: status lines, its result, then the platform's receipt.
         expect(lines.map((line) => line.event)).toEqual([`status`, `status`, `result`, `receipt`]);
         expect(lines[2]?.data?.demo).toBe(true);
@@ -618,6 +635,47 @@ describe(`metered service runs`, () => {
         // And the intermediary promise holds: an unsigned call straight at the upstream is refused.
         const unsigned = await app.request(`/demo/upstream`, { method: `POST`, body: `{"query":"x"}` });
         expect(unsigned.status).toBe(401);
+    });
+
+    /* The demo's scenarios — every way a metered run can settle, reproducible on demand (pool-demo.ts). Each
+     * one exists so the spend card's every look (paid refusal, refunded failure, refunded broken stream, the
+     * long run) can be produced deliberately instead of waiting for a provider to fail interestingly. */
+    it(`demo "refuse" is a provider 4xx: a complete answer, paid for, relayed verbatim`, async () => {
+        const { stored, runDemo } = await demoSetup();
+        const response = await runDemo({ query: `x`, scenario: `refuse` });
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as { error: { type: string } }).error.type).toBe(`demo_refusal`);
+        expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(5);
+        expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `ok` }]);
+    });
+
+    it(`demo "fail" is a provider 5xx: nothing served, the run refunded`, async () => {
+        const { stored, runDemo } = await demoSetup();
+        const response = await runDemo({ query: `x`, scenario: `fail` });
+        expect(response.status).toBe(502);
+        expect(((await response.json()) as { error: { type: string } }).error.type).toBe(`service_unavailable`);
+        expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(0);
+        expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `refunded` }]);
+    });
+
+    it(`demo "broken" streams then dies without a result: refunded via the trailer`, async () => {
+        const { stored, runDemo } = await demoSetup();
+        const response = await runDemo({ query: `x`, scenario: `broken`, paceMs: 0 });
+        expect(response.status).toBe(200);
+        const lines = await linesOf(response);
+        expect(lines.map((line) => line.event)).toEqual([`status`, `status`, `receipt`]);
+        expect(lines.at(-1)).toMatchObject({ event: `receipt`, outcome: `refunded`, credits: 5 });
+        expect(stored.creditSpends.get(`user-1:2026-08-10`)).toBe(0);
+        expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `refunded` }]);
+    });
+
+    it(`demo "slow" is the long run: more status lines, same served ending`, async () => {
+        const { stored, runDemo } = await demoSetup();
+        const response = await runDemo({ query: `x`, scenario: `slow`, paceMs: 0 });
+        const lines = await linesOf(response);
+        expect(lines.filter((line) => line.event === `status`).length).toBeGreaterThan(4);
+        expect(lines.at(-1)).toMatchObject({ event: `receipt`, outcome: `ok`, credits: 5 });
+        expect(stored.serviceRuns).toMatchObject([{ credits: 5, status: `ok` }]);
     });
 
     it(`publishes service earnings beside donations, refunded runs earning nothing`, async () => {

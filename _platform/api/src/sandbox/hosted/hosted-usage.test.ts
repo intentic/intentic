@@ -5,7 +5,7 @@ import { hostedBudgetOf, openHostedStretch, settleHostedStretch, usageMonth } fr
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
-const config = (monthlyHours = 40): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours } }) as unknown as Config;
+const config = (monthlyHours = 40): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours }, pool: { compEmails: `` } }) as unknown as Config;
 
 const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({

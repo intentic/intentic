@@ -13,6 +13,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         email: { apiKey: ``, from: `` },
         zrok: { apiEndpoint: `https://zrok2.sbx.test`, adminToken: `hub-admin` },
         hosted: { flyApiToken: `fly`, flyOrg: `intentic`, appPrefix: `intentic-sbx`, idleDays: 21, idleWarnDays: 14, ...over },
+        pool: { compEmails: `` },
     }) as unknown as Config;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
