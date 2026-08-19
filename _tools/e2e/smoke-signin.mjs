@@ -80,9 +80,19 @@ try {
             "",
             `Google said: ${refused[0]}`,
             "",
-            "Fix: in the Google Cloud console, open the OAuth client the deployment uses and make sure",
-            `this exact origin is listed under Authorized JavaScript origins: ${origin}`,
-            "It can take Google minutes to hours to apply a change there.",
+            "Google names the console, but there are TWO causes and the message cannot tell them apart,",
+            "because both reach Google as an origin it cannot match. Check the cheap one first:",
+            "",
+            `  1. WE STOPPED SENDING THE ORIGIN. Google reads it off the Referer of the browser's request`,
+            `     for accounts.google.com/gsi/button, so a Referrer-Policy of no-referrer on our own`,
+            `     responses refuses every origin, including a correctly-listed one. Check it with:`,
+            `         curl -sSI ${origin}/login | grep -i referrer-policy`,
+            `     Anything sending the origin cross-origin is fine (strict-origin-when-cross-origin);`,
+            `     no-referrer is the bug, and it is ours — see _editor/web/nginx.conf.`,
+            "",
+            `  2. GOOGLE STOPPED ACCEPTING IT. In the Google Cloud console, open the OAuth client the`,
+            `     deployment uses and make sure this exact origin is listed under Authorized JavaScript`,
+            `     origins: ${origin}. It can take Google minutes to hours to apply a change there.`,
         ]);
     } else if (!pressable) {
         fail("Google's sign-in button never became pressable (it stayed zero-sized).", [
