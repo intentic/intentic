@@ -269,7 +269,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
 
     match outcome {
         Ok(fix::Done::Now) => {
-            crate::ui::row(crate::ui::RowOutcome::Pass, requirement.title, "");
+            crate::ui::row(crate::ui::RowOutcome::Pass, &requirement.title, "");
             Ok(Outcome::Continue)
         }
         Ok(fix::Done::AfterRestart) => Ok(Outcome::Restart),

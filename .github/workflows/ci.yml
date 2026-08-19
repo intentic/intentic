@@ -300,8 +300,25 @@ jobs:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: app
           POSTGRES_DB: app
+          # `initdb` ends by fsyncing the whole new cluster, and that is the single slowest thing this job
+          # waits on. It measures a couple of seconds on an idle machine and MINUTES on these runners, where
+          # six runner processes and the image builds share one disk — 2026-08-19 the container was still
+          # inside that fsync when the health gate gave up, and the job died with a postgres that was
+          # perfectly healthy thirty seconds later. Nothing here outlives the job (the database is created
+          # empty, replayed into, and thrown away), so durability of a cluster that cannot survive its own
+          # container is a cost with no buyer.
+          POSTGRES_INITDB_ARGS: --no-sync
+        # `-h 127.0.0.1`, because the socket answers too early to mean anything. During `initdb` the entrypoint
+        # runs a TEMPORARY server on the unix socket alone (listen_addresses is empty) to create the database —
+        # a plain `pg_isready -U app` sees THAT and reports ready, while the port this job's DATABASE_URL dials
+        # is still closed. Asking over TCP is asking the question the job actually has.
+        #
+        # And a start period on top: with `--no-sync` the init is seconds, but a runner busy enough to have
+        # caused the failure above is busy enough to be slow again, and a first-minute refusal is a database
+        # still starting, not a broken one. Retries alone cannot say that — they count from the first probe.
         options: >-
-          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U app -d app -h 127.0.0.1" --health-interval 5s --health-timeout 5s
+          --health-retries 10 --health-start-period 60s
     env:
       MIGRATION_CHECK_DATABASE_URL: postgresql://app:app@postgres:5432/app
     steps:
@@ -573,6 +590,8 @@ jobs:
       CARGO_HOME: /ci-cache/cargo
       # Its own target dir, for the same lock-and-fingerprint reasons desktop-check has its own.
       CARGO_TARGET_DIR: /ci-cache/ic-check-target
+      # For the Windows half below (cargo-xwin) — the same shared MSVC splat every other cross-build uses.
+      XWIN_CACHE_DIR: /ci-cache/xwin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -580,6 +599,19 @@ jobs:
           clean: false
       - run: cargo fmt --manifest-path _sandbox/ic/Cargo.toml --all --check
       - run: cargo clippy --manifest-path _sandbox/ic/Cargo.toml --all-targets -- -D warnings
+      # THE WINDOWS TARGET, because half of what this crate does for Windows is not compiled on Linux at all.
+      # `prepare/` — the WSL2 + Docker Desktop setup, the largest single thing ic does on the platform it does
+      # the most for — is one `#[cfg(windows)]` block, so the three steps above type-check straight past it. On
+      # 2026-08-19 a `String` passed where a `&str` was wanted sat inside that block: fmt, clippy and the tests
+      # were all green, the commit landed on main, and the FIRST thing that ever compiled the line was the
+      # release's own cross-build — which failed, so the release did not happen. A gate that cannot see the code
+      # is a gate the release is standing in for, and the release is the worst possible place to find out.
+      #
+      # `check`, not `clippy -D warnings`: this target carries warnings the Linux one does not (code that is
+      # dead on Windows and live on unix, and vice versa), and silencing each with a cfg attribute would be a
+      # steady tax for no defect caught. The compile error is what this is here for, and check catches it in
+      # about the time clippy took.
+      - run: cargo xwin check --manifest-path _sandbox/ic/Cargo.toml --target x86_64-pc-windows-msvc
       - run: cargo test --manifest-path _sandbox/ic/Cargo.toml
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
