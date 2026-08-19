@@ -5,8 +5,8 @@ import { useTheme } from "@intentic/ui";
  *
  * The accent picker and the light/dark switch both answer "what colour"; a skin answers "what is this thing made
  * of". `none` is the app as designed. `hud` is the heads-up display in skins/hud.css — deep cool glass over a
- * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css — carved warm stone, gilded
- * ornament along every panel edge, and inscriptional capitals.
+ * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css — flat carved stone, a gilded
+ * hairline and an inner moulding round every plate, and inscriptional capitals.
  *
  * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
  * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone — it is the

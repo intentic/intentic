@@ -72,7 +72,7 @@ const themeOptions = [
     {
         label: `Sanctum`,
         value: `sanctum` as const,
-        title: `Carved warm stone with gilded ornament along every panel edge, gilt in the colour you picked below.`,
+        title: `Carved warm stone, with a gilded edge round every panel, gilt in the colour you picked below.`,
     },
 ];
 // The row's lead glyph names the look rather than the light level, which is what the row now chooses.

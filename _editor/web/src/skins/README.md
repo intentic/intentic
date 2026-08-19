@@ -8,14 +8,30 @@ There are two, and they are deliberately opposite materials:
 
 - **HUD** (`hud.css`) — a heads-up display. Deep cool glass over a survey grid, hairlines that glow, corner
   brackets instead of soft rounding, angular geometry, and an angular technical face on headings.
-- **Sanctum** (`sanctum.css`) — carved warm stone. A basalt ground with mineral grain in it, panels sunk into that
-  stone, gilded ornament running the edge of every one of them, and Roman inscriptional capitals. A temple stands
-  on the floor of the window wherever the app has put nothing in front of it.
+- **Sanctum** (`sanctum.css`) — carved warm stone. A basalt ground with mineral grain in it, flat stone plates
+  standing on that ground, a gilded hairline and an inner moulding round each one, and Roman inscriptional
+  capitals. A small distant temple stands on the floor of the window where the app has put nothing in front of it.
 
 Both follow the accent the user picked. Each keeps its own ground fixed — cool blue-teal, warm basalt — because
 that is what holds the text contrast, but every glow, edge, focus ring and piece of gilding is mixed from
 `--color-primary-*`. Lagoon gives the HUD its cyan and the Sanctum jade inlay; Brass gilds the Sanctum properly
 and lights the HUD amber.
+
+## The rule both of them keep
+
+**Every surface a word sits on is flat and opaque.** Texture and gradient live on the *wall*, never on a plate;
+overlays that cover live text are solid, never translucent. A wash down the top of a card puts the first line of
+a paragraph on a different ground from the last — nothing is unreadable and everything is slightly worse, which
+is the expensive kind of wrong because it never announces itself.
+
+Sanctum's first cut broke that rule and paid for it twice, and the notes are kept at the top of the file:
+
+- **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
+  dithered edge at 14px — and every panel in an app is a 14px edge. Character has to come from the material, the
+  line weights and the type, because those survive being shrunk.
+- **A decorative layer that scales with the viewport will eventually fill the screen.** The temple was sized as a
+  share of window width; at 1900px it became a lit mountain range across the bottom third. It is capped in
+  absolute pixels now.
 
 ## How it works
 
@@ -31,8 +47,10 @@ Each stylesheet overrides three tiers and then names a handful of components:
 | `--role-*`            | `bg-card`, `border-line`, `text-muted` and their thousand call sites                         |
 | `--radius-*`          | Every `rounded-*` utility — this is what makes a rounded app angular                         |
 
-Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border, shadow,
-background, mask. Never a width, a padding or a position. A skin that moves things breaks screens nobody looked at.
+Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border,
+shadow, background, outline. Never a width, a padding or a position. Sanctum draws its inner moulding with
+`outline` + `outline-offset: -5px`, which needs no pseudo-element, no `position` and no stacking context — an
+earlier version needed all three and broke a panel's z-order to get them.
 
 Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose — a caller who wrote
 `bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in each
@@ -41,18 +59,6 @@ file is the section-label rule, which is unlayered because the treatment it rest
 Both skins imply a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
 when a skin goes on. Each skin's display webfont is fetched only while that skin is active, and switching between
 them re-points the single `<link>` rather than stacking a second one.
-
-### Ornament, and how it stays accent-coloured
-
-Sanctum draws its carvings as hand-authored SVGs carried inline as data URIs, used as `mask-image` rather than as
-pictures. That is the whole trick: an SVG in a `background-image` has its colours baked where it is written and can
-never see a custom property, but an SVG in a mask is a *shape*, and the colour showing through it is the
-pseudo-element's own background — a gradient mixed from the accent. One set of motifs, thirteen materials.
-
-Two structural properties come with that and are documented at length in the file: the ornament hosts take
-`position: relative` (a containing block for the layer) and `isolation: isolate` (a stacking context, without
-which `z-index: -1` paints the carving *behind* the panel instead of *into* it). Both are safe here only because
-every floating surface in this app is teleported to `<body>` before it is positioned.
 
 ## Removing skins entirely
 
@@ -79,6 +85,6 @@ where that lives.
 Two selectors are worth copying rather than re-deriving, because both were bugs first:
 
 - a grouped-list slab is `section > .bg-card.divide-y`, **not** `section > .bg-card` — the workspace's file-tab
-  strip is also a card-painted direct child of a `<section>`;
+  strip is also a card-painted direct child of a `<section>`, and it wore a full panel frame across a bar of tabs;
 - the route element is `#app > :first-child`, **not** `#app > *` — `#app` also holds a screen-reader live region
   and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app.
