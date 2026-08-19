@@ -51,8 +51,8 @@ const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
  */
 const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
 const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-const appSizes = "(min-width: 80rem) 1300px, (min-width: 64rem) 1020px, (min-width: 40rem) 870px, calc((100vw - 3rem) * 1.94)";
-const chatSizes = "(min-width: 80rem) 880px, (min-width: 64rem) 700px, (min-width: 40rem) 660px, calc((100vw - 3rem) * 1.92)";
+const appSizes = "(min-width: 80rem) 1000px, (min-width: 64rem) 760px, (min-width: 40rem) 870px, calc((100vw - 3rem) * 1.94)";
+const chatSizes = "(min-width: 80rem) 700px, (min-width: 64rem) 560px, (min-width: 40rem) 500px, calc((100vw - 3rem) * 1.55)";
 
 // The tour leads with the first verb (Orchestrate) at full width; the rest are the compact cards.
 const [leadVerb, ...verbCards] = content.verbs.items;
@@ -95,17 +95,26 @@ const [leadVerb, ...verbCards] = content.verbs.items;
 
             <div class="grid-overlay" aria-hidden="true"></div>
 
-            <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-6 pt-32 pb-20 lg:grid-cols-2 lg:pt-40 lg:pb-28">
+            {/* THE COLUMNS ARE NOT EVEN, and the wide one is the picture. A 50/50 split gave the copy 592px it
+                did not need — the paragraphs are capped at their own measure well short of it — and gave the
+                two windows the same 592px, which is where "the app is unreadable in the hero" came from. The
+                copy takes 26rem, which is wider than the measure it actually sets, and the rest is the
+                visual's. */}
+            <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-6 pt-32 pb-20 lg:grid-cols-[minmax(0,26rem)_1fr] lg:pt-40 lg:pb-28">
                 <div class="animate-fade-in-up">
                     {/* One authored line per block, not one <br>-joined run: a line that has to wrap then
-                        wraps inside its own box, and the balanced heading wrap splits it evenly instead of
-                        leaving the last word alone under a full line. The display step is 44px rather than
-                        48px because the column is 592px at every width from xl up (max-w-7xl caps the
-                        container, so it never grows) and the longest line measures 629px at 48px: it
-                        wrapped on desktop. */}
-                    <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-[2.75rem]">
+                        wraps inside its own box, and `text-balance` splits it evenly instead of leaving the
+                        last word alone under a full line.
+
+                        In this column the first line WRAPS, and that is the point of balancing it: at 26rem
+                        "You delegate. Agents work." does not fit on one line at display size, and an even
+                        split lands the break exactly on the full stop — so the heading reads as three short
+                        sentences rather than as a line that ran out of room. Keeping the type at 44px and
+                        letting it wrap beats dropping it to 30px to fit: this is the brand line, and the
+                        column was widened for the screenshots beside it, not to shrink the words. */}
+                    <h1 class="text-4xl leading-tight font-semibold tracking-tight text-balance xl:text-[2.75rem]">
                         {content.hero.headlineLines.map((line) => (
-                            <span class="block">{line}</span>
+                            <span class="block text-balance">{line}</span>
                         ))}
                     </h1>
                     <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -152,19 +161,22 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                      width more than the gutter does, and the copy beside it is capped at its own measure
                      anyway. It stays a single stacked block below that, where there is no column to lean out
                      of and the chat window tucks into the app window's bottom corner instead. -->
-                <!-- It LEANS OUT of the container on the widest screens — `640px - 50vw` is exactly the distance
-                     from this column's right edge to a 24px gutter at the window's own edge, so the pair grows
-                     with the monitor instead of staying inside a 1232px measure that exists for prose. Nothing
-                     to correct below 80rem, where that expression is zero or positive and the frame simply
-                     stops at the column. -->
+                <!-- It LEANS OUT of the container on the widest screens — `680px - 50vw` puts this column's
+                     right edge a 64px gutter short of the window's own, so the pair grows with the monitor
+                     instead of staying inside a 1232px measure that exists for prose. Sixty-four rather than
+                     the twenty-four it started at: the chat window is the rightmost thing on the page and it
+                     is a WINDOW, so parking its shadow against the edge of the screen read as a picture that
+                     had been cut off rather than as a panel floating over another one. Nothing to correct
+                     below 80rem, where that expression is zero or positive and the frame stops at the
+                     column. -->
                 <figure
-                    class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:w-auto lg:max-w-none xl:mr-[min(0px,calc(640px_-_50vw))]"
+                    class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:w-auto lg:max-w-none xl:mr-[min(0px,calc(680px_-_50vw))]"
                     style="animation-delay: 60ms"
                 >
                     <!-- Padded at the foot and the right so the chat window's overhang and both shadows have
                          somewhere to land: it is positioned OUTSIDE the app window's box, and a parent that
                          fitted the app window alone would clip it. -->
-                    <div class="relative pr-3 pb-24 sm:pb-28 lg:pr-6 lg:pb-32">
+                    <div class="relative pr-3 pb-24 sm:pb-28 lg:pr-6 lg:pb-40">
                         <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
                             <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
                                 <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
@@ -204,7 +216,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                                             fetchpriority={index === 0 ? "high" : undefined}
                                             decoding="async"
                                             class:list={[
-                                                "hero-screen absolute top-0 left-0 w-[200%] max-w-none sm:w-[162%] lg:w-[142%]",
+                                                "hero-screen absolute top-0 left-0 w-[200%] max-w-none sm:w-[162%] lg:w-[150%] xl:w-[112%]",
                                                 index === 0 && "is-on",
                                             ]}
                                             data-hero-screen="app"
@@ -224,7 +236,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                                     class="group absolute inset-0 flex items-start justify-end bg-canvas/10 p-3 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none sm:p-4"
                                 >
                                     <span
-                                        class="flex items-center gap-2.5 rounded-full border border-line bg-canvas/85 px-5 py-2.5 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500"
+                                        class="flex items-center gap-2 rounded-full border border-line bg-canvas/85 px-3.5 py-2 text-xs font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500 sm:gap-2.5 sm:px-5 sm:py-2.5 sm:text-sm"
                                     >
                                         <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 5v14l11-7z" /></svg>
                                         {content.hero.demo.playLabel}
@@ -234,10 +246,11 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                         </div>
 
                         <!-- The chat, in the window the product pops it out into. Absolutely placed over the app
-                             window's bottom-right corner, at 58% of the composition's width — small enough to
-                             read as a second, lesser window, large enough that a persona card is still a face
-                             and a name. Inert to the pointer: the press underneath is the page's one call, and a
-                             second target stacked on it would only make that one harder to hit. -->
+                             window's bottom-right corner, at 66% of the composition's width and in the app
+                             window's own proportions — it is a second WINDOW, and a strip two thirds as wide as
+                             it is tall reads as a cropped panel instead. Inert to the pointer: the press
+                             underneath is the page's one call, and a second target stacked on it would only
+                             make that one harder to hit. -->
                         <div
                             class="pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card shadow-2xl shadow-black/60"
                             aria-hidden="true"
@@ -253,7 +266,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                                     ))
                                 }
                             </div>
-                            <div class="relative aspect-3/2 overflow-hidden">
+                            <div class="relative aspect-4/3 overflow-hidden">
                                 {
                                     chatScreens.map((screen, index) => (
                                         <Image
@@ -263,7 +276,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                                             sizes={chatSizes}
                                             loading="lazy"
                                             decoding="async"
-                                            class:list={["hero-screen absolute top-0 left-0 w-[290%] max-w-none sm:w-[180%] lg:w-[150%]", index === 0 && "is-on"]}
+                                            class:list={["hero-screen absolute top-0 left-0 w-[220%] max-w-none sm:w-[135%] lg:w-[155%] xl:w-[100%]", index === 0 && "is-on"]}
                                             data-hero-screen="chat"
                                             data-index={index}
                                         />
@@ -743,11 +756,16 @@ const [leadVerb, ...verbCards] = content.verbs.items;
         const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
         const labelsOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-label="${frame}"]`);
 
-        // Only where there is something to rotate, and only for a reader who has not asked the page to hold
-        // still: this is decoration on a screenshot, which is exactly what "prefers reduced motion" means.
-        const rotates = screensOf("app").length > 1 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-        if (rotates) {
+        /* REDUCED MOTION CHANGES THE TRANSITION, NOT WHETHER THE FRAMES TURN.
+         *
+         * It used to skip the rotation outright, and that was the wrong reading of the preference twice over.
+         * What these frames carry is CONTENT — three surfaces of the product and two cuts of its chat, which
+         * exist nowhere else above the fold — so holding them still does not calm the page down, it hides two
+         * thirds of what the page is showing, and on a machine with the setting on the hero silently became a
+         * single screenshot with no way to tell it was meant to be more. The thing the preference is actually
+         * about is the animation, and that is the cross-fade: under reduced motion the CSS makes each change a
+         * cut instead (see `.hero-screen` in global.css), so nothing moves and everything is still seen. */
+        if (screensOf("app").length > 1) {
             let tick = 0;
             setInterval(() => {
                 const frame = frames[tick % frames.length]!;

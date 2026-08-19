@@ -644,8 +644,10 @@
  * and stays correct if none ever does.
  *
  * The fade is the only motion here and it is bounded: opacity alone, no transform, so nothing reflows and the
- * image behind is composited rather than repainted. Under reduced motion the change is instant — the script
- * stops rotating there anyway, and this is the belt to that brace. */
+ * image behind is composited rather than repainted. Under reduced motion it becomes a CUT — and that is the
+ * whole of what the preference costs this hero, because the frames keep turning either way: what they hold is
+ * three surfaces of the product, not decoration, and a reader who asked the page to stop moving has not asked
+ * to be shown a third of it (Landing.astro's rotator says the same at more length). */
 .hero-screen {
     opacity: 0;
     transition: opacity 0.7s ease;

@@ -181,8 +181,24 @@ is in `about.ts` because `/about/` shares it.
    is editorial and the FIRST of each is what a stranger sees — the board, and the conversation its
    cards lead to. Each frame **crops from the top-left** rather than fitting its screen, which is
    what lets captures of very different lengths share one frame and what keeps the app's own 13px
-   type readable in a column this narrow. Under `prefers-reduced-motion` nothing rotates and the
-   first screen of each frame stands; the same is true if the script never runs at all.
+   type readable in a column this narrow.
+
+   **`prefers-reduced-motion` changes the transition, not whether the frames turn.** It first skipped
+   the rotation outright, and that was the wrong reading twice over: what the frames carry is content
+   that exists nowhere else above the fold, so holding them still hid two thirds of the first screen
+   rather than calming it — and on a machine with the setting on, the hero silently became a single
+   screenshot with no sign it was meant to be more. The animation is the cross-fade, and that is what
+   the preference turns off (`.hero-screen` in global.css cuts instead of fading). If the script never
+   runs at all, the first screen of each frame stands.
+
+   **The columns are uneven and the wide one is the picture** (2026-08-19). The hero was a 50/50 grid,
+   which gave the copy 592px it does not use — the paragraphs are capped at their own measure well
+   short of it — and gave the two windows the same 592px, which is where "the app is unreadable in the
+   hero" came from. The copy now takes 26rem and the visual the rest, leaning out of the container on
+   the widest screens to a 64px gutter at the window's edge. The brand line **wraps to three balanced
+   lines** at that width rather than dropping to 30px to stay on two: `text-balance` puts the break on
+   the full stop, so it reads as three short sentences. The buttons wrap to two rows, which is where
+   the download belonged anyway.
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,

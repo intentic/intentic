@@ -67,22 +67,32 @@ const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 /* THE POPPED-OUT CHAT'S WINDOW, shared by both shots that take one — they alternate inside a single frame on
  * the landing page, so a difference between them would show up as the frame changing shape mid-rotation.
  *
- * 1060 × 700 is chosen against the CONTENT rather than against a device: the rail is a fixed width, so the
- * remaining ~690px is the conversation, wide enough that a paragraph is two lines rather than five, and the
- * height is where these two transcripts END — a taller window would be a third of a frame of empty canvas
+ * Sized against the FRAME THAT SHOWS IT, which is the one thing a marketing capture of a window has to be:
+ * the landing page paints this at roughly 600px, and a 1060px window painted there is 57% scale — a picture
+ * of a conversation rather than a conversation. At 800 the rail keeps its fixed ~370 and the transcript gets
+ * the rest, and the whole window fits its frame at four fifths size, which is the difference between reading
+ * the names on the persona cards and recognising that there are some.
+ *
+ * The height is where these two transcripts END. A taller window would be a third of a frame of empty canvas
  * under the last message, which is the thing the trim below spends its whole existence preventing elsewhere. */
-const POPOUT_WINDOW = { width: 1_060, height: 700 } as const;
+const POPOUT_WINDOW = { width: 800, height: 660 } as const;
 
 /* THE BIG FRAME'S WINDOW — the app window the landing page's three rotating surfaces are all shot in.
  *
- * Same width as every other desktop shot, so these downsample into the page's column rather than stretch (see
- * DESKTOP above), and ONE height for all three, because they take turns inside a single frame and a frame that
- * changed shape every four seconds would be the only thing anybody noticed about it.
+ * ONE size for all three, because they take turns inside a single frame and a frame that changed shape every
+ * four seconds would be the only thing anybody noticed about it.
  *
- * Deliberately TALLER than the frame that shows them. The frame crops from the top, the way the hero's old
- * single shot already did, and that is what lets three surfaces of very different lengths share it: the board
- * is a few cards and stops, the pipelines list runs past the fold, and the crop — not the capture — decides
- * where the picture ends. Shooting them to fit instead would mean a frame as short as the emptiest surface. */
+ * The shared desktop width, deliberately, after trying to narrow it. The frame is ~840px and the workspace
+ * pane is 1270, so a narrower capture is tempting: at 1440 the pane is ~950 and would fit across the frame
+ * whole. It also makes the board elide its own card titles — "Add Stripe che…", "Migrate th…" — because the
+ * lanes lose 110px each, and a hero whose every card ends in an ellipsis is a worse picture of the product
+ * than one whose third lane runs past the edge. So the width stays and the frame crops, which is what a frame
+ * is for.
+ *
+ * The height is likewise taller than the frame shows. It crops from the top, the way the hero's old single
+ * shot already did, and that is what lets three surfaces of very different lengths share it: the board is a
+ * few cards and stops, the pipelines list runs past the fold, and the crop — not the capture — decides where
+ * the picture ends. */
 const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
 
 interface Shot {
@@ -222,8 +232,12 @@ const SHOTS: Shot[] = [
         viewport: HERO_WINDOW,
         fullHeight: true,
     },
-    // The CI board, flattened across the two hosts acme-shop's repos live on. Mostly green with one broken
-    // run, which is what the fixture now records (_site/demo/src/fixture/ci.ts).
+    /* The CI board, flattened across the two hosts acme-shop's repos live on. Mostly green with one broken run,
+     * which is what the fixture now records (_site/demo/src/fixture/ci.ts).
+     *
+     * Its heading is skipped by the FRAME rather than by scrolling here: at this window height the whole list
+     * fits, so there is nothing to scroll, and the 140px this view spends on a title and a sentence is exactly
+     * the band the hero has to spend on runs (`lift` in landing.ts). */
     {
         name: "hero-pipelines",
         path: "/ext/pipelines",
@@ -589,6 +603,42 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
     }
 };
 
+/* SCROLL THE PANE THE SHOT IS OF, by finding the box that actually scrolls.
+ *
+ * This used to be a wheel event at a fixed point, and a wheel goes to whatever is under the pointer: on a
+ * surface whose left third is a list of repositories in a column of its own, the scroll landed on a box with
+ * nothing to scroll and the shot came back exactly as it was. Nothing announced that — a wheel over an
+ * unscrollable element is not an error, it is a no-op — so the shot was simply wrong and looked deliberate.
+ *
+ * So the pane is ASKED which of its boxes scrolls, and the tallest one wins: on every surface here that is the
+ * main column, because the columns beside it are as tall as the window and hold less than that. Bounded to the
+ * clip's own half of the screen, so a shot of the workspace never scrolls the docked chat. */
+const scrollPane = async (page: Page, shot: Shot, by: number): Promise<void> => {
+    const width = (shot.viewport ?? DESKTOP).width;
+    const split = shot.clip === undefined ? width : await composerLeft(page, width);
+    const [from, to] = shot.clip === "chat" ? [split - 26, width] : [0, shot.clip === "area" ? split - 26 : width];
+    // Named apart from the outer three on purpose: the page's copy of them lives in another realm, and one
+    // spelling for both is the kind of shadowing that reads as the same variable when it never can be.
+    await page.evaluate(
+        ({ pixels, left, right }) => {
+            const scrollers = [...document.querySelectorAll<HTMLElement>(`body *`)].filter((element) => {
+                const box = element.getBoundingClientRect();
+                // Judged on its CENTRE, not on being contained: the scroller of a full-bleed surface runs under
+                // the docked chat's gutter, and a containment test rejects the very box every shot means.
+                const centre = box.left + box.width / 2;
+                if (centre < left || centre > right || box.width < 160 || box.height < 160) {
+                    return false;
+                }
+                const style = getComputedStyle(element);
+                return /(auto|scroll)/.test(`${style.overflowY}`) && element.scrollHeight > element.clientHeight + 8;
+            });
+            const tallest = scrollers.toSorted((a, b) => b.clientHeight - a.clientHeight)[0];
+            (tallest ?? document.scrollingElement ?? document.documentElement)?.scrollBy(0, pixels);
+        },
+        { pixels: by, left: from, right: to },
+    );
+};
+
 const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
     const context = await browser.newContext({
         viewport: shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP),
@@ -628,8 +678,7 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         }
         await page.waitForTimeout(shot.settleMs ?? 800);
         if (shot.scrollTo !== undefined) {
-            await page.mouse.move(300, 400);
-            await page.mouse.wheel(0, shot.scrollTo);
+            await scrollPane(page, shot, shot.scrollTo);
             await page.waitForTimeout(600);
         }
         if (shot.popout !== undefined) {
