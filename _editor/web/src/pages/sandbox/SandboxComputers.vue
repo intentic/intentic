@@ -17,15 +17,28 @@ import {
     timeAgo,
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
+import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { type RouteLocationRaw, useRoute, useRouter } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
-import { computerDoors, lastSeenNote, machineFacts, osLabel, osTitle, syncAgentBehind } from "./computerFacts";
+import {
+    type ComputerScopes,
+    computerDoors,
+    lastSeenNote,
+    machineFacts,
+    type ManageBlock,
+    manageBlock,
+    osLabel,
+    osTitle,
+    syncAgentBehind,
+} from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
+import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
+import { desktopApp } from "../../environments/desktop";
 
 /* The Sandbox hub's "Computers" tab — what is on the other end of this sandbox.
  *
@@ -108,8 +121,7 @@ const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0
 // Whether this computer's watcher is up but no longer making rounds. Both the badge and the detail block below
 // ask it, off the one rule the terminal uses (watcherStalled), so a row and `intentic-sync status` cannot
 // disagree about the same machine.
-const watcherHalted = (computer: Computer): boolean =>
-    computer.report !== undefined && watcherStalled(computer.report.watcher, now.value);
+const watcherHalted = (computer: Computer): boolean => computer.report !== undefined && watcherStalled(computer.report.watcher, now.value);
 
 const tone = (computer: Computer): StatusVariant => {
     if (computer.gap !== undefined) {
@@ -154,6 +166,77 @@ const sorted = computed(() => computers.value.toSorted((a, b) => (RANK[label(a)]
  * (the "Manage sandboxes on this computer" switch is off, say) is shown under the row verbatim. */
 const manageable = (computer: Computer, group: MachineSandboxGroup): boolean =>
     computer.hostId !== undefined && computer.online === true && group.sandbox !== undefined;
+
+/* WHY A ROW HAS NO BUTTONS, SAID BEFORE ANYONE GOES LOOKING FOR THEM (computerFacts.ts holds the rule).
+ *
+ * This tab and the desktop app's manager window draw the same containers with the same verbs from the same kit,
+ * and a reader with a machine paired by the desktop app still saw none of it here: desktop sync never reports a
+ * box's containers, so the row arrived with folders, ports, and an empty list where the sandboxes should be. The
+ * remedy — connect the machine as a computer, grant it the sandbox switch — was already built and nowhere named,
+ * which is the whole of the gap between the two apps.
+ *
+ * The switches are read from the capability the daemon already put an id on, so "Manage sandboxes is off" is said
+ * BEFORE the click rather than arriving as the machine's refusal after one. The machine still has the last word;
+ * this only stops the page being silent about a no it could see coming. */
+const { capabilities } = useCapabilities();
+const scopesOf = (computer: Computer): ComputerScopes | undefined =>
+    computer.hostId === undefined ? undefined : capabilities.value.find((capability) => capability.id === computer.hostId)?.config;
+// Derived once per list rather than per mention: the template asks a row's block four times (whether to draw the
+// line, its words, whether it has a destination, and where), and each answer is a scan of the capability list.
+const blocks = computed(() => new Map(sorted.value.map((computer) => [computer.key, manageBlock(computer, scopesOf(computer))])));
+const blockOf = (computer: Computer): ManageBlock | undefined => blocks.value.get(computer.key);
+
+/* Each block is a different errand, so each gets its own sentence — the same rule GAP_TEXT follows above. The
+ * first names what desktop sync IS rather than what is broken, because nothing is: a machine syncing files
+ * perfectly well is exactly the row this reaches. */
+const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
+    connect: `Desktop sync carries folders and ports, never containers — so its sandboxes can't be started, updated or removed from here. Connect it as a computer for the same buttons the desktop app's own window has.`,
+    "sandboxes-off": `Turn on "Manage sandboxes on this computer" in this computer's capability card to use the buttons below.`,
+    "remove-off": `Removing a sandbox needs "Remove sandboxes from this computer" on this computer's capability card. Everything else below already works.`,
+};
+const BLOCK_ACTION: Record<ManageBlock[`kind`], string> = {
+    connect: `Connect this computer`,
+    "sandboxes-off": `Open its permissions`,
+    "remove-off": `Open its permissions`,
+};
+
+/* WHERE THE FIX IS. A `connect` block opens the card that ADDS a computer of this kind; the other two open the
+ * connection that already exists, at its own form. Undefined when this build has no card for the machine's
+ * platform (a Mac, today) — the sentence is still worth saying, and a button pointing nowhere is not. */
+const router = useRouter();
+const blockTarget = (block: ManageBlock | undefined): RouteLocationRaw | undefined => {
+    if (block?.card === undefined) {
+        return undefined;
+    }
+    const card = { name: `capabilities`, params: { card: block.card } };
+    return block.kind === `connect` ? card : { ...card, query: { edit: block.connection } };
+};
+
+// What the row says and what its button offers, both keyed off the row rather than off a block the template
+// would have to hold — a Vue template narrows nothing across elements, and four non-null assertions on one
+// `v-if` is the kind of thing that stays correct only until somebody moves a line.
+const blockText = (computer: Computer): string | undefined => {
+    const block = blockOf(computer);
+    return block === undefined ? undefined : BLOCK_TEXT[block.kind];
+};
+// Undefined when there is nowhere to send anyone: a Mac has no card to connect it with, so the sentence runs
+// alone rather than beside a control that would do nothing.
+const blockAction = (computer: Computer): string | undefined => {
+    const block = blockOf(computer);
+    return block === undefined || blockTarget(block) === undefined ? undefined : BLOCK_ACTION[block.kind];
+};
+const goFix = (computer: Computer): void => {
+    const target = blockTarget(blockOf(computer));
+    if (target !== undefined) {
+        void router.push(target);
+    }
+};
+
+/* THE OTHER HALF OF THE CROSS-LINK. Read inside the desktop app, this page is one of two screens showing the same
+ * machines — and the app's own is the one that needs no capability at all, because it is ON the computer it
+ * manages. It cannot be linked to per row (nothing here knows which of these machines the reader is sitting at),
+ * so it is said once, where the list is named. */
+const inDesktopApp = desktopApp() !== undefined;
 
 const rowKey = (computer: Computer, group: MachineSandboxGroup): string => `${computer.key}:${group.sandboxId}`;
 const busy = ref<string | undefined>();
@@ -257,6 +340,14 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                     </span>
                 </InfoHint>
             </template>
+            <!-- READ INSIDE THE DESKTOP APP, this is one of two screens showing the same machines — and the
+                 app's own is the one that needs no capability at all, because it runs ON the computer it
+                 manages. Said once rather than per row: nothing here knows which of these machines the reader
+                 is actually sitting at. -->
+            <p v-if="inDesktopApp" class="flex items-start gap-2 px-4 py-3 text-xs text-muted">
+                <Icon name="desktop" class="mt-0.5 shrink-0" />
+                <span>This computer's own sandboxes are also in <b>This computer</b>, from the Intentic icon in your tray.</span>
+            </p>
             <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
             <div v-else-if="isLoading" role="status" aria-busy="true">
                 <template v-if="outline">
@@ -313,7 +404,9 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
 
                     <!-- WHAT THE ROW WANTS FROM YOU, if anything — each on its own line, in the tone it earns. -->
                     <div
-                        v-if="syncAgentBehind(computer, latest) || (computer.report && reportStale(computer, now)) || computer.gap"
+                        v-if="
+                            syncAgentBehind(computer, latest) || (computer.report && reportStale(computer, now)) || computer.gap || blockOf(computer)
+                        "
                         class="flex flex-col gap-1"
                     >
                         <!-- An agent that has fallen behind is not an error — sync keeps working — so this is a
@@ -328,6 +421,22 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                             Last heard from {{ timeAgo(computer.report.capturedAt) }} — what follows is what it looked like then.
                         </p>
                         <p v-if="computer.gap" class="text-xs text-muted">{{ GAP_TEXT[computer.gap] }}</p>
+                        <!-- WHY THE SANDBOX LIST BELOW HAS NO BUTTONS, and the one click that changes it. Quiet
+                             ink, because none of these is a fault: a machine syncing files perfectly is the row
+                             this reaches most often, and the desktop app has managed its containers all along. -->
+                        <div v-if="blockText(computer)" class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p class="min-w-0 text-xs text-muted">{{ blockText(computer) }}</p>
+                            <Button
+                                v-if="blockAction(computer)"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :label="blockAction(computer)"
+                                @click="goFix(computer)"
+                            >
+                                <template #icon><Icon name="arrow-up-right" /></template>
+                            </Button>
+                        </div>
                     </div>
 
                     <!-- WHAT IT IS RUNNING FOR YOU: one row per sandbox, carrying its folder, its ports, its

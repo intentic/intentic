@@ -54,10 +54,15 @@ vi.mock(`../../composables/sandbox/useSandbox`, () => ({
  * can set it to undefined and pin the case where the yardstick is missing. */
 const latest = ref<string | undefined>(`1.183.0`);
 vi.mock(`../../composables/sandbox/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
+/* The owner's switches for each connected computer, which the row now reads so it can say "Manage sandboxes is
+ * off" BEFORE a click rather than after the machine refuses one. Mocked because the real hook reaches for
+ * vue-query's injected client, which this bare `createApp` has no plugin to provide. */
+const capabilities = ref<{ id: string; config: Record<string, string> }[]>([]);
+vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // The two cards below the list have their own daemon calls; this mounts the list and nothing else.
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./BridgeTokensCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`vue-router`, () => ({ useRoute: () => ({ query: {} }) }));
+vi.mock(`vue-router`, () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: () => {} }) }));
 
 const { default: SandboxComputers } = await import("./SandboxComputers.vue");
 
@@ -76,6 +81,7 @@ const mount = (rows: Computer[]): HTMLElement => {
 afterEach(() => {
     latest.value = `1.183.0`;
     computersLoading.value = false;
+    capabilities.value = [];
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -215,17 +221,93 @@ const managed = (running: boolean): Computer => ({
 
 const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim() ?? ``);
 
+// Every switch granted — the state a row reaches once its computer is connected AND permitted, which is what the
+// verb tests below are about. Without it the row correctly says which grant is missing instead.
+const granted = (): void => {
+    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
+};
+
 it(`offers the same verbs a running sandbox has in the desktop app`, () => {
+    granted();
     expect(labels(mount([managed(true)]))).toEqual(expect.arrayContaining([`Restart`, `Stop`, `Update`, `Roll back`, `Logs`, `Remove`]));
 });
 
 // Start replaces Restart and Stop rather than joining them: a stopped sandbox has nothing to restart, and Update
 // is still offered — a stopped one is exactly what somebody wants on a newer image before starting it again.
 it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
+    granted();
     const found = labels(mount([managed(false)]));
     expect(found).toEqual(expect.arrayContaining([`Start`, `Update`, `Roll back`, `Logs`, `Remove`]));
     expect(found).not.toContain(`Stop`);
     expect(found).not.toContain(`Restart`);
+});
+
+// A fully connected and permitted machine says nothing at all about connecting or permissions — the whole point
+// of the three lines below is that they are absent once there is nothing in the way.
+it(`says nothing about connecting a computer that is already managing its sandboxes`, () => {
+    granted();
+    const text = mount([managed(true)]).textContent ?? ``;
+    expect(text).not.toContain(`Connect it as a computer`);
+    expect(text).not.toContain(`Manage sandboxes on this computer`);
+    expect(text).not.toContain(`Remove sandboxes from this computer`);
+});
+
+/* THE ROW THE PARITY COMPLAINT WAS ABOUT. A machine paired by the desktop app is enrolled for desktop sync
+ * alone, and that door never reports containers — so this tab drew folders and ports and an empty sandbox list
+ * with no buttons on it, beside a desktop window managing those very containers. It said none of that, and
+ * offered nothing. Now it says both, and the button goes to the card that closes the gap. */
+const syncOnly = (): Computer => ({
+    key: `laptop`,
+    label: `laptop`,
+    syncEnrolled: true,
+    platform: `windows`,
+    report: {
+        hostname: `laptop`,
+        os: `win32`,
+        agents: { sync: `1.183.0` },
+        // Empty because the sync agent never fills it — the fact this whole message exists to explain.
+        sandboxes: [],
+        pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `C:\\Users\\ada\\work`, mutagenStatus: `watching` }],
+        ports: [],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+it(`explains why a sync-only computer has no sandbox buttons, and offers the fix`, () => {
+    const el = mount([syncOnly()]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Desktop sync carries folders and ports, never containers`);
+    expect(labels(el)).toContain(`Connect this computer`);
+    // No verbs, because there is no container to aim one at — the state being explained, not worked around.
+    expect(labels(el)).not.toContain(`Restart`);
+});
+
+// A Mac is the hole this leaves: there is no card to connect one as a computer, so the sentence still runs and
+// the button that would point nowhere does not.
+it(`explains the gap without a button when there is no card to connect the machine`, () => {
+    const el = mount([{ ...syncOnly(), platform: `macos` }]);
+    expect(el.textContent ?? ``).toContain(`Desktop sync carries folders and ports, never containers`);
+    expect(labels(el)).not.toContain(`Connect this computer`);
+});
+
+/* CONNECTED, AND STILL REFUSED. "Run commands" is enough to LIST a machine's containers, so the buttons appeared
+ * on a row where every one of them would be turned down by the machine — a no the page could see coming and
+ * said nothing about until it had already been clicked. */
+it(`names the switch a connected computer is missing before anything is clicked`, () => {
+    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on` } }];
+    const el = mount([managed(true)]);
+    expect(el.textContent ?? ``).toContain(`Manage sandboxes on this computer`);
+    expect(labels(el)).toContain(`Open its permissions`);
+});
+
+// Removal has a grant of its own, because nothing undoes it. A machine that can do everything else still says
+// which single button will not work.
+it(`names the removal switch on a machine that may do everything else`, () => {
+    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
+    const text = mount([managed(true)]).textContent ?? ``;
+    expect(text).toContain(`Remove sandboxes from this computer`);
+    expect(text).not.toContain(`Turn on "Manage sandboxes on this computer"`);
 });
 
 /* THE SIGNAL THIS ROW WAS MISSING. A machine ran an agent five days behind a fix for the very bug it was hitting,

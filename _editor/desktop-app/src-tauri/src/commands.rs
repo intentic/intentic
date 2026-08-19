@@ -507,9 +507,15 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
     .map_err(|error| error.to_string())?
 }
 
+/// Hand the window back to the workspace — at the app's root, or at a path under it.
+///
+/// The path is what makes the manager's own screen reachable from the product: this window and the SPA's
+/// Computers tab manage the same containers on the same machine through two different doors, and until now
+/// neither said the other existed. `show_workspace_at` already navigates an open workspace window, so
+/// "Open in Intentic" is the same swap the footer's other button does, one URL further along.
 #[tauri::command]
-pub fn workspace_open(app: AppHandle) {
-    crate::windows::show_workspace(&app);
+pub fn workspace_open(app: AppHandle, path: Option<String>) {
+    crate::windows::show_workspace_at(&app, path.as_deref());
 }
 
 /// Which face this window is wearing: the setup window, or the ordinary manager one. App.vue calls it

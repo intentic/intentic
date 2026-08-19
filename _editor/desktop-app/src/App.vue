@@ -127,6 +127,16 @@ const consented = ref(false);
 const resuming = ref(false);
 const expired = ref(false);
 
+/* WHERE THE OTHER HALF OF THIS SCREEN LIVES. The SPA's Computers tab manages the same containers on the same
+ * machine — through the machine's own connection rather than natively — and it shows every computer the sandbox
+ * can see, not only this one. Linked rather than duplicated, which is the same argument the manager makes for
+ * handing its rows to <MachineDetail>: one screen per subject, reachable from wherever the reader started. */
+const COMPUTERS_PATH = `/sandbox/computers`;
+
+/* Wrapped rather than bound straight to a click: `workspaceOpen` takes an optional path now, and a bare
+ * `@click="workspaceOpen"` would hand it a MouseEvent to navigate to. */
+const openWorkspace = (path?: string): void => void workspaceOpen(path);
+
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
 // A handed-over setup owns the window from the moment it arrives until it hands the window back — which
@@ -697,9 +707,16 @@ onUnmounted(() => {
                 </MachineDetail>
             </section>
 
-            <footer class="mt-auto flex items-center gap-2 pt-2">
-                <Button size="small" severity="secondary" label="Open workspace" @click="workspaceOpen">
+            <footer class="mt-auto flex flex-wrap items-center gap-2 pt-2">
+                <Button size="small" severity="secondary" label="Open workspace" @click="openWorkspace()">
                     <template #icon><Icon name="arrow-up-right" /></template>
+                </Button>
+                <!-- THE OTHER SCREEN THAT MANAGES THESE SAME CONTAINERS. This window reaches them natively and
+                     the SPA's Computers tab reaches them through the machine's own connection, and until now
+                     neither admitted the other existed — so a reader who found one concluded the product had
+                     only that one. Secondary and text: the workspace is still the way out of here. -->
+                <Button size="small" severity="secondary" :text="true" label="See all your computers" @click="openWorkspace(COMPUTERS_PATH)">
+                    <template #icon><Icon name="desktop" /></template>
                 </Button>
                 <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
             </footer>

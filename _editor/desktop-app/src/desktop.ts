@@ -98,7 +98,10 @@ export const machineReport = async (): Promise<MachineReport | undefined> => {
     const raw = await invoke<string | null>(`machine_report`);
     return raw === null ? undefined : (JSON.parse(raw) as MachineReport);
 };
-export const workspaceOpen = (): Promise<void> => invoke(`workspace_open`);
+/* Hand the window back to the workspace, at the app's root or at a path under it. The path is how this window
+ * reaches the SPA's Computers tab — the same machine's containers through the other door — so the two screens
+ * that manage them are one click apart instead of each pretending to be the only one. */
+export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
 /* Which face this window is wearing. The setup screen is a small window of its own, centred on the workspace
  * and movable like any other; the manager fills the frame the workspace was in. windows.rs does the moving,
  * this says which is up. */

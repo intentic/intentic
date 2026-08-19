@@ -108,3 +108,81 @@ export const syncAgentBehind = (computer: Computer, latest?: string): boolean =>
  * "gone since April" are different situations wearing the same grey badge. */
 export const lastSeenNote = (computer: Computer): string | undefined =>
     computer.online === false && computer.lastSeen !== undefined ? `last seen ${timeAgo(computer.lastSeen)}` : undefined;
+
+/* WHY THIS COMPUTER'S SANDBOXES HAVE NO BUTTONS, and the one thing that would give them some.
+ *
+ * The tab drew half a row and said nothing about the other half. A machine paired by the desktop app is enrolled
+ * for desktop sync ALONE, and a sync agent never reports a machine's containers — deliberately, because
+ * volunteering the list of a box's other sandboxes to one of them is the disclosure that design avoids by
+ * construction (see the sync agent's report). So the row arrived with folders and ports, an empty container list,
+ * and therefore no image, no running dot and none of the verbs the desktop app's own manager window has had all
+ * along. Nothing on screen connected those two facts, which is exactly how "we were supposed to have parity"
+ * turns into "I cannot find it in the browser".
+ *
+ * The remedy is real and already built: add the machine as a CONNECTED COMPUTER and the daemon may ask it
+ * directly — same containers, same verbs, over the machine's own socket with no agent or model in the loop. That
+ * is a switch and a one-liner, so it is worth a sentence and a button rather than a silence.
+ *
+ * Two things can be in the way, and they are different errands:
+ *
+ *   • there is no computer connection at all — the common case, and the only one that needs a NEW card
+ *   • there is one, and the owner has not granted it the sandbox switches, which are off by default
+ *
+ * Everything else that stops a row (asleep, no sync agent, "Run commands" blocked) is already a `gap` the row
+ * states in its own line, so this stays quiet about those rather than saying the same thing twice. */
+
+// The cards that connect a computer, keyed by the platform slug the row already carries — they ARE their card's
+// id (the `computers` extension contributes `windows` and `linux`). A machine whose platform has no card still
+// gets the sentence; it just gets no button beside it, because there is nothing honest to point at.
+const HOST_CARD: Record<string, string> = { windows: `windows`, linux: `linux` };
+
+export const hostCard = (platform: string | undefined): string | undefined => (platform === undefined ? undefined : HOST_CARD[platform]);
+
+/* What stands between this row and its buttons. `card` is where the fix is, and it is OPTIONAL throughout: a Mac
+ * has no card to connect it with, and a connection whose stored platform this build does not recognise still has
+ * a switch to describe even when the link to it cannot be built. */
+export type ManageBlock =
+    // No computer connection at all — the row can never show a container until one exists.
+    | { readonly kind: `connect`; readonly card?: string | undefined }
+    // Connected, but "Manage sandboxes on this computer" is off, so every verb here would be refused.
+    | { readonly kind: `sandboxes-off`; readonly connection: string; readonly card?: string | undefined }
+    // Everything works except the one that cannot be undone, which has a switch of its own.
+    | { readonly kind: `remove-off`; readonly connection: string; readonly card?: string | undefined };
+
+/* The switches, as the capability stores them. A host card's config is a flat record of the owner's answers, and
+ * the two that matter here default to "off" — so a freshly connected computer lists its containers (listing rides
+ * "Run commands") and refuses every button on them, which is the state this exists to stop being a surprise. */
+export type ComputerScopes = Readonly<Record<string, string | number | boolean>>;
+
+// The card an EXISTING connection came from: host cards pin their own id into `platform`, which is what lets one
+// card's connections be told from another's. Falls back to the row's platform, which is the same fact read off
+// the machine rather than off the card.
+const cardOf = (computer: Computer, scopes: ComputerScopes | undefined): string | undefined => {
+    const pinned = scopes?.[`platform`];
+    return typeof pinned === `string` && pinned !== `` ? pinned : hostCard(computer.platform);
+};
+
+export const manageBlock = (computer: Computer, scopes: ComputerScopes | undefined): ManageBlock | undefined => {
+    if (computer.hostId === undefined) {
+        /* Only where there is a list to explain. A machine that has not reported at all draws no sandbox block —
+         * the row already says it is enrolled and silent — and telling that reader what desktop sync does not
+         * carry is the second sentence of a paragraph whose first one is "we have not heard from this computer". */
+        if (computer.report === undefined) {
+            return undefined;
+        }
+        const card = hostCard(computer.platform);
+        return { kind: `connect`, ...(card === undefined ? {} : { card }) };
+    }
+    /* A machine that is asleep, or that would not answer, already says so in its own line. Repeating "and also
+     * your switches" under it would be advice about a computer nobody can reach — and the switches may well be
+     * on, since a gap is the reason nothing could be read to find out. */
+    if (computer.online !== true || computer.gap !== undefined) {
+        return undefined;
+    }
+    const card = cardOf(computer, scopes);
+    const link = { connection: computer.hostId, ...(card === undefined ? {} : { card }) };
+    if (scopes?.[`sandboxes`] !== `on`) {
+        return { kind: `sandboxes-off`, ...link };
+    }
+    return scopes[`sandboxRemove`] === `on` ? undefined : { kind: `remove-off`, ...link };
+};
