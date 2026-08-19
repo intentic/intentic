@@ -883,12 +883,18 @@ export type Deployment = z.infer<typeof DeploymentSchema>;
  *
  * `payouts` is present whenever the pool is on, connected or not: "you have not started" is an answer the
  * screen must render, not an absence it has to infer. */
-/* A publisher name as the manifest spells it — the same shape the extension manifest enforces, so a claim can
- * never be filed against a string that could not be a publisher in the first place. Mirrored rather than
- * imported because the manifest lives in the sandbox packages and this contract is the platform's own. */
+/* A publisher name, in either of its two provable forms. Dotless is a name as the extension manifest spells
+ * it (mirrored rather than imported because the manifest lives in the sandbox packages and this contract is
+ * the platform's own) — proved by push access to a registry-listed repository. Dotted is a DOMAIN — proved by
+ * serving the challenge token at its well-known path, the lane for a business with a service to sell and no
+ * extension to ship.
+ *
+ * The dot is the entire discriminator, and it is safe by construction: registry publisher names are the
+ * prefix of an extension id before its first dot, so a registry-provable name can never contain one, and a
+ * domain always does. Nothing else anywhere needs to record which lane a name came through. */
 export const PublisherSlugSchema = z
     .string()
-    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*$/)
     .max(64);
 
 export const PublisherClaimSchema = z.object({

@@ -16,6 +16,7 @@ answer**.
 services list                                # every service, its price, and the credits left today
 services run <slug> '{"query":"…"}' \
     --why "one line on why this helps"       # ask for one metered run — request JSON inline or on stdin
+services wanted "<capability, one line>"     # the catalog had nothing for this — tell providers
 ```
 
 `list` prints a worked **example request** under any service that published one — the provider's own body,
@@ -43,3 +44,7 @@ What that leaves you:
    today" are sentences to act on — continue without the service rather than retrying. (A refunded provider
    failure may be retried once — nothing was charged, and the retry raises a fresh card.)
 4. **Quote outcomes.** After a served run, say what it cost and what's left — the numbers are on stderr.
+5. **File a want when the catalog comes up empty.** If no listed service answers a need a paid service
+   plausibly could, run `services wanted "<one plain line>"` once, then continue with free tools. It spends
+   nothing and raises no card; the platform publishes only the aggregate. Describe the *capability*
+   ("flight price lookups with dates"), never the task's specifics, names, or anything personal.

@@ -65,6 +65,7 @@ interface Stored {
     }[];
     creditSpends: Map<string, number>;
     serviceRuns: { userId: string; serviceId: string; credits: number; status: string; createdAt: Date }[];
+    serviceWants: { userId: string; text: string; normalized: string; createdAt: Date }[];
 }
 
 // Enough Prisma for these routes: the sandbox token lookup, membership reads/writes, and the donation
@@ -77,6 +78,7 @@ const fakePrisma = (seed?: Partial<Stored>) => {
         services: seed?.services ?? [],
         creditSpends: seed?.creditSpends ?? new Map(),
         serviceRuns: seed?.serviceRuns ?? [],
+        serviceWants: seed?.serviceWants ?? [],
     };
     const prisma = {
         sandbox: {
@@ -150,18 +152,12 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             findUnique: vi.fn(
                 async ({ where }: { where: { slug: string } }) => stored.services.find((service) => service.slug === where.slug) ?? null,
             ),
-            findMany: vi.fn(async () =>
+            // Honors the caller's own `where.status.in` and `select`, because two routes read listings in
+            // different shapes now: the sandbox catalog (/services) and the public one (/catalog).
+            findMany: vi.fn(async ({ where, select }: { where: { status: { in: string[] } }; select: Record<string, true | undefined> }) =>
                 stored.services
-                    .filter((service) => service.status === `probation` || service.status === `listed`)
-                    .map(({ slug, publisher, name, description, creditsPerRun, status, sampleRequest }) => ({
-                        slug,
-                        publisher,
-                        name,
-                        description,
-                        creditsPerRun,
-                        status,
-                        sampleRequest,
-                    })),
+                    .filter((service) => where.status.in.includes(service.status))
+                    .map((service) => Object.fromEntries(Object.entries(service).filter(([key]) => select[key] === true))),
             ),
         },
         creditSpend: {
@@ -202,6 +198,22 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                 },
             ),
         },
+        serviceWant: {
+            count: vi.fn(async ({ where }: { where: { userId: string; createdAt: { gte: Date } } }) =>
+                stored.serviceWants.filter((row) => row.userId === where.userId && row.createdAt >= where.createdAt.gte).length,
+            ),
+            create: vi.fn(async ({ data }: { data: { userId: string; text: string; normalized: string } }) => {
+                const row = { ...data, createdAt: NOW };
+                stored.serviceWants.push(row);
+                return row;
+            }),
+            findMany: vi.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) =>
+                stored.serviceWants
+                    .filter((row) => row.createdAt >= where.createdAt.gte)
+                    .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+                    .map(({ userId, text, normalized, createdAt }) => ({ userId, text, normalized, createdAt })),
+            ),
+        },
         serviceRun: {
             create: vi.fn(async ({ data }: { data: { userId: string; serviceId: string; credits: number; status: string } }) => {
                 const row = { ...data, createdAt: new Date() };
@@ -220,6 +232,18 @@ const fakePrisma = (seed?: Partial<Stored>) => {
                         };
                     }),
             ),
+            // The grouped lifetime counts behind creator-services.ts countsOf — which the public catalog reads.
+            groupBy: vi.fn(async ({ where }: { where: { serviceId: { in: string[] } } }) => {
+                const tally = new Map<string, number>();
+                for (const run of stored.serviceRuns.filter((run) => where.serviceId.in.includes(run.serviceId))) {
+                    const key = `${run.serviceId} ${run.status}`;
+                    tally.set(key, (tally.get(key) ?? 0) + 1);
+                }
+                return [...tally].map(([key, count]) => {
+                    const [serviceId = ``, status = ``] = key.split(` `);
+                    return { serviceId, status, _count: { _all: count } };
+                });
+            }),
         },
     };
     return { prisma: prisma as unknown as PrismaClient, stored };
@@ -710,5 +734,123 @@ describe(`metered service runs`, () => {
         // The infrastructure line is published, not merely subtracted: the pool figure beside it is checkable
         // only if a reader can see what came off the gross first.
         expect(current).toMatchObject({ estimatedGrossCents: 2000, estimatedInfraCents: 500, poolCents: 1350, earnedCents: 40 });
+    });
+});
+
+describe(`the public catalog`, () => {
+    it(`does not exist on a platform that sells nothing`, async () => {
+        const { prisma } = fakePrisma();
+        expect((await createApp(configWith({ stripeSecretKey: `` }), prisma, logger).app.request(`/pool/catalog`)).status).toBe(404);
+    });
+
+    it(`answers anyone — no token — with the live listings and their public run numbers`, async () => {
+        const { prisma } = fakePrisma({
+            services: [
+                RESEARCH,
+                { ...RESEARCH, id: `svc_2`, slug: `beta-lookup`, publisher: `beta`, name: `Beta Lookup`, status: `probation` },
+                { ...RESEARCH, id: `svc_3`, slug: `gone`, status: `draft` },
+            ],
+            serviceRuns: [
+                { userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `ok`, createdAt: NOW },
+                { userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `ok`, createdAt: NOW },
+                { userId: `user-1`, serviceId: `svc_1`, credits: 40, status: `refunded`, createdAt: NOW },
+            ],
+        });
+        // No x-intentic-connect header at all: the whole point of this surface is that it needs nothing.
+        const response = await createApp(baseConfig, prisma, logger).app.request(`/pool/catalog`);
+        expect(response.status).toBe(200);
+        // Cross-origin like the transparency ledger — the site reads it from a different host.
+        expect(response.headers.get(`access-control-allow-origin`)).toBe(`*`);
+        const body = (await response.json()) as { services: Record<string, unknown>[] };
+        // Drafts are invisible, probation is one boolean, and the refunded run is on the public record. What
+        // is NOT here matters as much: no sample request, no upstream URL, no ids, and nothing member-shaped.
+        expect(body.services).toEqual([
+            {
+                slug: `acme-research`,
+                publisher: `acme`,
+                name: `Acme Research`,
+                description: `Deep research runs.`,
+                creditsPerRun: 40,
+                probation: false,
+                servedRuns: 2,
+                refundedRuns: 1,
+            },
+            {
+                slug: `beta-lookup`,
+                publisher: `beta`,
+                name: `Beta Lookup`,
+                description: `Deep research runs.`,
+                creditsPerRun: 40,
+                probation: true,
+                servedRuns: 0,
+                refundedRuns: 0,
+            },
+        ]);
+    });
+});
+
+describe(`the wanted list`, () => {
+    const want = (prisma: PrismaClient, text: string) =>
+        poolHttpRoutes({ config: baseConfig, prisma, now: () => NOW }).request(`/wanted`, {
+            method: `POST`,
+            body: JSON.stringify({ text }),
+            headers: { "x-intentic-connect": `tok`, "content-type": `application/json` },
+        });
+
+    it(`records a want, normalized, and answers nothing about anyone`, async () => {
+        const { prisma, stored } = fakePrisma();
+        const response = await want(prisma, `  Watermark-free PDF  Invoice extraction `);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ recorded: true });
+        expect(stored.serviceWants).toMatchObject([
+            { userId: `user-1`, text: `Watermark-free PDF  Invoice extraction`, normalized: `watermark-free pdf invoice extraction` },
+        ]);
+    });
+
+    it(`bounds the text and the day — a sixth want is refused, charging nothing either way`, async () => {
+        const seed = Array.from({ length: 5 }, (_, index) => ({
+            userId: `user-1`,
+            text: `ask ${index} long enough`,
+            normalized: `ask ${index} long enough`,
+            createdAt: NOW,
+        }));
+        const { prisma, stored } = fakePrisma({ serviceWants: seed });
+        expect((await want(prisma, `short`)).status).toBe(400);
+        expect((await want(prisma, `a sixth perfectly reasonable ask`)).status).toBe(429);
+        expect(stored.serviceWants).toHaveLength(5);
+        // No membership required: a non-member's unmet need is future demand, and nothing is spent.
+        expect(stored.creditSpends.size).toBe(0);
+    });
+
+    it(`publishes the aggregate on the catalog — distinct owners, one row per normalized ask, newest last word`, async () => {
+        const at = (offsetDays: number) => new Date(NOW.getTime() + offsetDays * 86_400_000);
+        const { prisma } = fakePrisma({
+            serviceWants: [
+                { userId: `user-1`, text: `PDF invoice extraction`, normalized: `pdf invoice extraction`, createdAt: at(-2) },
+                // The same ask from the same owner twice is still ONE voice.
+                { userId: `user-1`, text: `pdf  Invoice   extraction`, normalized: `pdf invoice extraction`, createdAt: at(-1) },
+                { userId: `user-2`, text: `pdf invoice extraction`, normalized: `pdf invoice extraction`, createdAt: at(0) },
+                { userId: `user-2`, text: `flight price lookups`, normalized: `flight price lookups`, createdAt: at(0) },
+                // Outside the 90-day window: gone from the aggregate.
+                { userId: `user-3`, text: `pdf invoice extraction`, normalized: `pdf invoice extraction`, createdAt: at(-120) },
+            ],
+        });
+        const app = poolHttpRoutes({ config: baseConfig, prisma, now: () => NOW });
+        const body = (await (await app.request(`/catalog`)).json()) as { wanted: { text: string; count: number; lastAt: string }[] };
+        expect(body.wanted).toEqual([
+            { text: `pdf invoice extraction`, count: 2, lastAt: NOW.toISOString() },
+            { text: `flight price lookups`, count: 1, lastAt: NOW.toISOString() },
+        ]);
+    });
+
+    it(`refuses a token that belongs to no sandbox`, async () => {
+        const { prisma, stored } = fakePrisma();
+        const response = await poolHttpRoutes({ config: baseConfig, prisma, now: () => NOW }).request(`/wanted`, {
+            method: `POST`,
+            body: JSON.stringify({ text: `a perfectly reasonable ask` }),
+            headers: { "x-intentic-connect": `nope`, "content-type": `application/json` },
+        });
+        expect(response.status).toBe(404);
+        expect(stored.serviceWants).toEqual([]);
     });
 });

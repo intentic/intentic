@@ -18,6 +18,15 @@ export interface ClaimTarget {
     readonly repo?: string;
 }
 
+/* THE DOMAIN LANE, told apart by the dot — the platform's own discriminator (a registry publisher name is
+ * the prefix of an extension id before its first dot, so it can never contain one). A dotted challenge has
+ * no repositories at all: its proof is a file served from the domain itself. */
+export const isDomainChallenge = (challenge: ClaimChallenge): boolean => challenge.publisher.includes(`.`);
+
+// Where the domain lane's proof must be readable — spelled out whole because "the well-known path" is
+// exactly the kind of sentence that used to make the repo lane feel like homework.
+export const domainClaimUrl = (challenge: ClaimChallenge): string => `https://${challenge.publisher}/${challenge.path}`;
+
 /* Every repository the claim can be proved from, each marked with the workspace repo it is open as. Order is
  * the registry's, EXCEPT that ones open here float to the front: the first entry is what the screen offers by
  * default, and an offer the creator can accept with one click beats one that sends them to a terminal.

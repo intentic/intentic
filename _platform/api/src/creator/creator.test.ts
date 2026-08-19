@@ -3,7 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import type { StripeGateway } from "../pool/pool-stripe.js";
-import { CLAIM_PATH, checkClaim, claimFailureReason, claimToken, registryReader, type RegistryReader } from "./creator-claim.js";
+import type { lookup } from "node:dns/promises";
+import {
+    CLAIM_PATH,
+    DOMAIN_CLAIM_PATH,
+    checkClaim,
+    checkDomainClaim,
+    claimFailureReason,
+    claimToken,
+    domainClaimFailureReason,
+    domainClaimProblem,
+    registryReader,
+    type RegistryReader,
+} from "./creator-claim.js";
 import { creatorRoutes } from "./creator.orpc.js";
 
 /* WHAT A CREATOR WOULD CALL THEFT IF IT DRIFTED. Phase one owns exactly two promises — a publisher name is
@@ -475,5 +487,113 @@ describe(`payout connection`, () => {
          * (expired back into the pool) and already settled. Listing either as an earning would double-count
          * against the receipts below it. */
         expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { publisher: { in: [`acme`] }, expiredAt: null, payoutId: null } }));
+    });
+});
+
+/* THE DOMAIN LANE — the same proof served from the name itself, for a business with a service to sell and no
+ * extension in the registry. What is pinned: the dot picks the lane, the well-known read is the whole check,
+ * a private-resolving name is never fetched, and the refusal names the URL that was read. */
+describe(`domain claims`, () => {
+    const wellKnown = (domain: string) => `https://${domain}/${DOMAIN_CLAIM_PATH}`;
+    const publicLookup = vi.fn(async () => [{ address: `203.0.113.7`, family: 4 }]) as unknown as typeof lookup;
+    const privateLookup = vi.fn(async () => [{ address: `127.0.0.1`, family: 4 }]) as unknown as typeof lookup;
+
+    it(`accepts a domain serving THIS user's token at the well-known path`, async () => {
+        const token = claimToken(baseConfig, user.id, `acme.dev`);
+        const report = await checkDomainClaim(baseConfig, user.id, `acme.dev`, servingFetch({ [wellKnown(`acme.dev`)]: `${token}\n` }), publicLookup);
+        expect(report.repo).toBe(`acme.dev`);
+        expect(report.attempts).toEqual([{ repo: `acme.dev`, outcome: `matched` }]);
+    });
+
+    it(`tells apart a wrong token, a missing file, and an unreadable domain`, async () => {
+        const someoneElses = claimToken(baseConfig, `u2`, `acme.dev`);
+        const mismatched = await checkDomainClaim(baseConfig, user.id, `acme.dev`, servingFetch({ [wellKnown(`acme.dev`)]: someoneElses }), publicLookup);
+        expect(mismatched.attempts).toEqual([{ repo: `acme.dev`, outcome: `mismatched` }]);
+
+        const absent = await checkDomainClaim(baseConfig, user.id, `acme.dev`, servingFetch({}), publicLookup);
+        expect(absent.attempts).toEqual([{ repo: `acme.dev`, outcome: `absent` }]);
+
+        const dead = vi.fn(async () => Promise.reject(new Error(`connection refused`))) as unknown as typeof fetch;
+        const unreadable = await checkDomainClaim(baseConfig, user.id, `acme.dev`, dead, publicLookup);
+        expect(unreadable.attempts).toEqual([{ repo: `acme.dev`, outcome: `unreadable` }]);
+    });
+
+    it(`never fetches a domain that resolves privately`, async () => {
+        const fetchFn = vi.fn() as unknown as typeof fetch;
+        const report = await checkDomainClaim(baseConfig, user.id, `internal.corp`, fetchFn, privateLookup);
+        expect(report.repo).toBeUndefined();
+        expect(report.attempts).toEqual([{ repo: `internal.corp`, outcome: `unreadable` }]);
+        expect(fetchFn).not.toHaveBeenCalled();
+    });
+
+    it(`refuses IPs and reserved words before any network is touched`, () => {
+        expect(domainClaimProblem(`192.168.0.1`)).toContain(`not an IP address`);
+        expect(domainClaimProblem(`not-intentic.dev`)).toContain(`reserved`);
+        expect(domainClaimProblem(`acme.dev`)).toBeUndefined();
+    });
+
+    it(`explains a failed domain claim in terms of the URL that was read`, () => {
+        const at = wellKnown(`acme.dev`);
+        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `mismatched` }] })).toContain(
+            `${at} serves a token, but not the line minted for your account`,
+        );
+        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `absent` }] })).toContain(
+            `Serve the line shown here as plain text`,
+        );
+        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `unreadable` }] })).toContain(
+            `must resolve publicly`,
+        );
+    });
+
+    it(`challenge for a dotted name answers the well-known path, with no registry read`, async () => {
+        const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null) } });
+        const broken: RegistryReader = {
+            reposOf: vi.fn(async () => Promise.reject(new Error(`must not be read`))),
+            publishersOf: vi.fn(async () => Promise.reject(new Error(`must not be read`))),
+        };
+
+        const result = await call(creatorRoutes({ reader: broken }).challenge, { publisher: `acme.dev` }, { context: context({ prisma }) });
+
+        expect(result).toEqual({
+            publisher: `acme.dev`,
+            repos: [],
+            path: DOMAIN_CLAIM_PATH,
+            token: claimToken(baseConfig, user.id, `acme.dev`),
+            claimedByYou: false,
+            claimedByOther: false,
+        });
+    });
+
+    it(`challenge refuses an unclaimable domain with the problem itself`, async () => {
+        const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null) } });
+        await expectOrpcCode(
+            call(creatorRoutes({ reader: reader([]) }).challenge, { publisher: `officially-verified.dev` }, { context: context({ prisma }) }),
+            `BAD_REQUEST`,
+        );
+    });
+
+    it(`claim records the domain that proved it`, async () => {
+        const token = claimToken(baseConfig, user.id, `acme.dev`);
+        const create = vi.fn().mockResolvedValue({ publisher: `acme.dev`, repo: `acme.dev`, createdAt: new Date(`2026-08-12T10:00:00Z`) });
+        const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null), create } });
+        const routes = creatorRoutes({
+            reader: reader([]),
+            fetchFn: servingFetch({ [wellKnown(`acme.dev`)]: token }),
+            lookupFn: publicLookup,
+        });
+
+        const result = await call(routes.claim, { publisher: `acme.dev` }, { context: context({ prisma }) });
+
+        expect(create).toHaveBeenCalledWith({ data: { publisher: `acme.dev`, userId: `u1`, repo: `acme.dev` } });
+        expect(result).toEqual({ publisher: `acme.dev`, repo: `acme.dev`, claimedAt: `2026-08-12T10:00:00.000Z` });
+    });
+
+    it(`claim refuses a domain with no readable proof, naming the URL, and writes nothing`, async () => {
+        const create = vi.fn();
+        const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null), create } });
+        const routes = creatorRoutes({ reader: reader([]), fetchFn: servingFetch({}), lookupFn: publicLookup });
+
+        await expectOrpcCode(call(routes.claim, { publisher: `acme.dev` }, { context: context({ prisma }) }), `FORBIDDEN`);
+        expect(create).not.toHaveBeenCalled();
     });
 });

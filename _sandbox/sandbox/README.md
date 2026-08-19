@@ -142,8 +142,12 @@ reports the profile.
   the skill's etiquette. While the approved run streams, its status lines land under that card as
   service_event frames, and the receipt frame is the platform's trailer verbatim. The agent reaches the
   priced catalog through the `services` CLI (bin/services + the baked services skill), scoped by the agent
-  token's grant; an extension backend's runs pass straight through the gate, because which services it may
-  spend the owner's credits on is a `permissions.daemon` glob approved at install.
+  token's grant; `services wanted` files a "the catalog had nothing for this" onto the platform's public
+  wanted list — no spend, no card, bounded platform-side — and the baked **provide** skill walks an owner
+  from an existing API to a listable wrapper endpoint (self-tested against the admission probe's three
+  checks) plus the exact values the listing screen asks for. An extension backend's runs pass straight
+  through the gate, because which services it may spend the owner's credits on is a `permissions.daemon`
+  glob approved at install.
 - Let an agent ask the owner, in chat, to connect a capability the task is missing — the same consent shape
   as the spend gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The agent's
   `capabilities request` (bin/capabilities + the baked capabilities skill) parks on a card titled with the

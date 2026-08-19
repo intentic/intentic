@@ -63,11 +63,13 @@ const agentReach = (method: string, path: string): boolean =>
     // the services gate below.
     (method === "GET" && path === "/capabilities/connectable") ||
     (method === "POST" && path === "/capabilities/ask") ||
-    // The premium-services surface the `services` CLI drives: the priced catalog, and one metered run. The
-    // spend is bounded by the owner's daily allowance platform-side, and the run itself parks on an
-    // owner-approval card before anything is forwarded (platform/service-offer.ts) — the consent is enforced
-    // at the route, not asked of the model; nothing here reads a secret.
+    // The premium-services surface the `services` CLI drives: the priced catalog, one metered run, and a
+    // note onto the platform's wanted list when the catalog had nothing that answered. The spend is bounded
+    // by the owner's daily allowance platform-side, and the run itself parks on an owner-approval card
+    // before anything is forwarded (platform/service-offer.ts) — the consent is enforced at the route, not
+    // asked of the model; nothing here reads a secret, and a want spends nothing (the platform caps it).
     (method === "GET" && path === "/pool/services") ||
+    (method === "POST" && path === "/pool/wanted") ||
     (method === "POST" && /^\/pool\/services\/[^/]+\/run$/.test(path));
 
 /* The WIDE grant — a panel's backend is server-side code running inside this container that legitimately acts

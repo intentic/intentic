@@ -34,6 +34,7 @@ model User {
     donations        Donation[]
     creditSpends     CreditSpend[]
     serviceRuns      ServiceRun[]
+    serviceWants     ServiceWant[]
     services         Service[]
     publisherClaims  PublisherClaim[]
     payoutAccount    PayoutAccount?
@@ -484,6 +485,27 @@ model ServiceRun {
     @@index([userId])
     @@index([createdAt])
     @@map("service_run")
+}
+
+/* ONE "THE CATALOG HAD NOTHING FOR THIS" — the platform's only demand signal, filed by an agent that read
+ * the catalog and found no service that answered. Published in aggregate (the public catalog groups by
+ * `normalized` and counts distinct owners), so providers build against measured asks instead of guesses.
+ * `userId` exists to bound the writer — a small daily cap per owner — and is never published. Swept by
+ * retention.ts well before the ledger window: a want is a lead, not a record anyone disputes. */
+model ServiceWant {
+    id         String   @id @default(cuid())
+    userId     String
+    user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // As typed by the agent (bounded at the route); the newest raw text is what the aggregate displays.
+    text       String
+    // Lowercased, whitespace-collapsed — the grouping key, so "PDF invoices" and "pdf  invoices" are one ask.
+    normalized String
+    createdAt  DateTime @default(now())
+
+    @@index([normalized, createdAt])
+    @@index([userId, createdAt])
+    @@index([createdAt])
+    @@map("service_want")
 }
 
 /* WHO A PUBLISHER NAME BELONGS TO — the join the pool has never had. Earnings accrue against the manifest's

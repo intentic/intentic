@@ -1,7 +1,7 @@
 import type { ClaimChallenge } from "@intentic-app/api-contract";
 import type { GitPublishFileResult } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { claimCommand, claimTargets, publishFailureNotice } from "./publisherClaim.js";
+import { claimCommand, claimTargets, domainClaimUrl, isDomainChallenge, publishFailureNotice } from "./publisherClaim.js";
 
 /* WHAT THE CLAIM STEP PROMISES A CREATOR. Two of these are the difference between the screen that shipped and
  * the one that reads as homework: the repository open in front of them is the one offered, and a publish that
@@ -72,5 +72,14 @@ describe(`the manual line`, () => {
         expect(line).toContain(`git add`);
         expect(line).toContain(`git commit`);
         expect(line).toContain(`git push`);
+    });
+});
+
+describe(`the domain lane`, () => {
+    it(`is told apart by the dot, and spells its URL out whole`, () => {
+        const domain: ClaimChallenge = { ...challenge([]), publisher: `acme.dev`, path: `.well-known/intentic-claim` };
+        expect(isDomainChallenge(domain)).toBe(true);
+        expect(isDomainChallenge(challenge([`acme/one`]))).toBe(false);
+        expect(domainClaimUrl(domain)).toBe(`https://acme.dev/.well-known/intentic-claim`);
     });
 });

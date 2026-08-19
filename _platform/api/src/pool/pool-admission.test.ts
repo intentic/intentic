@@ -101,6 +101,23 @@ describe(`the listing rules`, () => {
     it(`refuses a sample request that is not JSON, because it is the probe's body`, () => {
         expect(checkListingRules(config, { ...LISTING, sampleRequest: `not json` })).toContainEqual(expect.stringContaining(`valid JSON`));
     });
+
+    /* A dotted publisher is a domain-claimed one (creator-claim.ts), and the claim only means something if
+     * the endpoint serving the runs lives under the name on the card. Registry publishers host anywhere. */
+    it(`ties a domain publisher's endpoint to its own domain, and only theirs`, () => {
+        const domain = { ...LISTING, publisher: `acme.dev` };
+        expect(checkListingRules(config, { ...domain, upstreamUrl: `https://acme.dev/run` })).toEqual([]);
+        expect(checkListingRules(config, { ...domain, upstreamUrl: `https://api.acme.dev/run` })).toEqual([]);
+        expect(checkListingRules(config, { ...domain, upstreamUrl: `https://svc.other.test/run` })).toContainEqual(
+            expect.stringContaining(`must live under its own domain`),
+        );
+        // The suffix has to be a label boundary: notacme.dev is somebody else entirely.
+        expect(checkListingRules(config, { ...domain, upstreamUrl: `https://notacme.dev/run` })).toContainEqual(
+            expect.stringContaining(`must live under its own domain`),
+        );
+        // A registry (dotless) publisher keeps hosting wherever it likes.
+        expect(checkListingRules(config, { ...LISTING, upstreamUrl: `https://svc.other.test/run` })).toEqual([]);
+    });
 });
 
 describe(`the conformance probe`, () => {

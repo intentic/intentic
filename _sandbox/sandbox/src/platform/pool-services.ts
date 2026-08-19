@@ -86,6 +86,10 @@ const relay = (config: Config, method: "GET" | "POST", path: string, payload?: s
 // The catalog + the owner's meter, as the platform states them.
 export const relayServiceCatalog = (config: Config): Promise<RelayedAnswer> => relay(config, "GET", "/pool/services");
 
+// One "the catalog had nothing for this", filed onto the platform's wanted list. Spends nothing, parks on no
+// card — it is a note to providers, not a run — so it relays as plainly as the catalog read above.
+export const relayServiceWant = (config: Config, body: string): Promise<RelayedAnswer> => relay(config, "POST", "/pool/wanted", body);
+
 export interface RelayedRunAnswer extends RelayedAnswer {
     // The run reached the platform's stream — set even when the stream then broke, so a consumer can tell "a
     // stream without a receipt" (charge unknowable here) from a plain buffered refusal (charge as stated).

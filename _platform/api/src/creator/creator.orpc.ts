@@ -1,10 +1,23 @@
+import type { lookup } from "node:dns/promises";
 import { apiContract, type ClaimChallenge, type CreatorState, type PublisherClaim } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
 import { poolEnabled } from "../pool/pool-membership.js";
 import { type StripeGateway, stripeGateway } from "../pool/pool-stripe.js";
-import { CLAIM_PATH, checkClaim, claimFailureReason, claimToken, type RegistryReader, registryReader } from "./creator-claim.js";
+import {
+    CLAIM_PATH,
+    DOMAIN_CLAIM_PATH,
+    checkClaim,
+    checkDomainClaim,
+    claimFailureReason,
+    claimToken,
+    domainClaimFailureReason,
+    domainClaimProblem,
+    isDomainPublisher,
+    type RegistryReader,
+    registryReader,
+} from "./creator-claim.js";
 import { payoutState, startPayoutSetup } from "./creator-payouts.js";
 import {
     admissionRules,
@@ -49,9 +62,12 @@ export interface CreatorDeps {
     // Injectable so tests answer registry reads without the network.
     readonly reader?: RegistryReader;
     readonly fetchFn?: typeof fetch;
+    // Injectable so tests drive a domain claim against a name that was never meant to exist — the probe's
+    // seam (creator-services.ts), reused for the claim's public-resolution guard.
+    readonly lookupFn?: typeof lookup;
 }
 
-export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps = {}) => {
+export const creatorRoutes = ({ gateway, reader, fetchFn = fetch, lookupFn }: CreatorDeps = {}) => {
     const stripeOf = (context: OrpcContext): StripeGateway => gateway ?? stripeGateway(context.config.pool.stripeSecretKey);
     const readerOf = (context: OrpcContext): RegistryReader => reader ?? registryReader(context.config, fetchFn);
     // The service operations take the same two injectables the rest of this surface does, plus the fetch the
@@ -149,6 +165,25 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
         challenge: os.creator.challenge.handler(async ({ context, input }): Promise<ClaimChallenge> => {
             requirePool(context);
             const user = requireUser(context);
+            /* The domain lane: a dotted name is a domain (creator-claim.ts owns the discriminator), and its
+             * challenge is the same token at the domain's own well-known path — no registry, no repos. An
+             * unclaimable domain (an IP, a reserved word) is refused HERE, before anyone stands up a route
+             * that could never verify. */
+            if (isDomainPublisher(input.publisher)) {
+                const problem = domainClaimProblem(input.publisher);
+                if (problem !== undefined) {
+                    throw new ORPCError(`BAD_REQUEST`, { message: problem });
+                }
+                const held = await context.prisma.publisherClaim.findUnique({ where: { publisher: input.publisher }, select: { userId: true } });
+                return {
+                    publisher: input.publisher,
+                    repos: [],
+                    path: DOMAIN_CLAIM_PATH,
+                    token: claimToken(context.config, user.id, input.publisher),
+                    claimedByYou: held?.userId === user.id,
+                    claimedByOther: held !== null && held.userId !== user.id,
+                };
+            }
             const [existing, repos] = await Promise.all([
                 context.prisma.publisherClaim.findUnique({ where: { publisher: input.publisher }, select: { userId: true } }),
                 readerOf(context)
@@ -184,12 +219,23 @@ export const creatorRoutes = ({ gateway, reader, fetchFn = fetch }: CreatorDeps 
                 }
                 return { publisher: existing.publisher, repo: existing.repo, claimedAt: existing.createdAt.toISOString() };
             }
-            const report = await checkClaim(context.config, readerOf(context), user.id, input.publisher, fetchFn);
+            const domain = isDomainPublisher(input.publisher);
+            if (domain) {
+                const problem = domainClaimProblem(input.publisher);
+                if (problem !== undefined) {
+                    throw new ORPCError(`BAD_REQUEST`, { message: problem });
+                }
+            }
+            const report = domain
+                ? await checkDomainClaim(context.config, user.id, input.publisher, fetchFn, lookupFn)
+                : await checkClaim(context.config, readerOf(context), user.id, input.publisher, fetchFn);
             if (report.repo === undefined) {
-                // The report's own sentence, not a generic one: it names the repositories that were actually
-                // read and what they said, which is the difference between a creator who knows what to fix and
-                // one who presses the button again.
-                throw new ORPCError(`FORBIDDEN`, { message: claimFailureReason(input.publisher, report) });
+                // The report's own sentence, not a generic one: it names what was actually read (the
+                // repositories, or the domain's well-known URL) and what it said, which is the difference
+                // between a creator who knows what to fix and one who presses the button again.
+                throw new ORPCError(`FORBIDDEN`, {
+                    message: domain ? domainClaimFailureReason(input.publisher, report) : claimFailureReason(input.publisher, report),
+                });
             }
             try {
                 const claim = await context.prisma.publisherClaim.create({

@@ -33,6 +33,9 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
         // The hosted hour meter's month rows, on the same window and for the same reason: nothing reads a
         // past month, but a year of them is what lets someone dispute a limit they were told they hit.
         prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
+        // Wanted-list rows go far sooner than the ledgers: the public aggregate reads 90 days, and a want is
+        // a lead rather than a record anyone disputes — double the read window is all the history it needs.
+        prisma.serviceWant.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * DAY_MS) } } }),
     ]);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },

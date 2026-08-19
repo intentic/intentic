@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from "vue";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { apiClient } from "../../composables/useApi";
-import { claimCommand, claimTargets, publishFailureNotice } from "./publisherClaim";
+import { claimCommand, claimTargets, domainClaimUrl, isDomainChallenge, publishFailureNotice } from "./publisherClaim";
 
 /* PROVING A PUBLISHER NAME IS YOURS — rebuilt around what the creator actually has in front of them.
  *
@@ -81,6 +81,9 @@ onMounted(loadSuggestions);
 const targets = computed(() => (challenge.value === null ? [] : claimTargets(challenge.value, localRepos.value)));
 const target = computed(() => targets.value.find((entry) => entry.project === chosen.value) ?? targets.value[0]);
 const command = computed(() => (challenge.value === null || target.value === undefined ? `` : claimCommand(challenge.value, target.value.project)));
+// The domain lane: a dotted name proves itself from its own well-known path, and has no repositories at all.
+const domainLane = computed(() => challenge.value !== null && isDomainChallenge(challenge.value));
+const domainUrl = computed(() => (challenge.value === null ? `` : domainClaimUrl(challenge.value)));
 
 const reset = (): void => {
     proveNotice.value = undefined;
@@ -116,6 +119,12 @@ const copyCommand = async (): Promise<void> => {
     copied.value = true;
 };
 
+// The domain lane's copy: the bare token, because the "file" there is one line served over https.
+const copyToken = async (): Promise<void> => {
+    await navigator.clipboard?.writeText(challenge.value?.token ?? ``).catch(() => undefined);
+    copied.value = true;
+};
+
 const succeeded = async (): Promise<void> => {
     challenge.value = null;
     publisher.value = ``;
@@ -133,13 +142,15 @@ const succeeded = async (): Promise<void> => {
 const prove = async (): Promise<void> => {
     const active = challenge.value;
     const where = target.value;
-    if (proving.value || active === null || where === undefined) {
+    // The domain lane has no repository on purpose — its "push" is the creator serving a file, so the only
+    // step left here is the verify.
+    if (proving.value || active === null || (where === undefined && !domainLane.value)) {
         return;
     }
     proving.value = true;
     proveNotice.value = undefined;
     try {
-        if (!published.value && where.repo !== undefined) {
+        if (!published.value && where?.repo !== undefined) {
             step.value = `Pushing the proof to ${where.project}…`;
             const result = await sandboxJson<GitPublishFileResult>(
                 `/git/${encodeURIComponent(where.repo)}/publish-file`,
@@ -155,7 +166,7 @@ const prove = async (): Promise<void> => {
             }
             published.value = true;
         }
-        step.value = `Checking GitHub…`;
+        step.value = domainLane.value ? `Reading ${domainUrl.value}…` : `Checking GitHub…`;
         await apiClient.creator.claim({ publisher: active.publisher });
         await succeeded();
     } catch (caught) {
@@ -176,7 +187,8 @@ const prove = async (): Promise<void> => {
     <div class="flex flex-col gap-2">
         <h3 class="text-xs font-semibold">Claim a publisher name</h3>
         <p class="text-xs text-muted">
-            Earnings add up against the publisher name in your extension's manifest. Prove it's yours and they become payable to you.
+            Earnings add up against the publisher name in your extension's manifest — or, for a paid service with no extension, against your
+            domain. Prove it's yours and they become payable to you.
         </p>
 
         <!-- Names the creator's own repositories publish under. Absent rather than empty when there are none:
@@ -199,7 +211,7 @@ const prove = async (): Promise<void> => {
         <div class="flex gap-2">
             <input
                 v-model="publisher"
-                :placeholder="suggestions.length > 0 ? `or another name` : `your publisher name`"
+                :placeholder="suggestions.length > 0 ? `or another name, or your domain` : `your publisher name, or your domain`"
                 :class="ui.input('min-w-0 flex-1')"
                 @keyup.enter="look(publisher)"
             />
@@ -212,6 +224,32 @@ const prove = async (): Promise<void> => {
             <p v-else-if="challenge.claimedByOther" class="text-xs text-muted">
                 Another account already holds this name. If that's wrong, get in touch — a name is settled by who proved it first.
             </p>
+            <!-- THE DOMAIN LANE: a dotted name proves itself from its own well-known path — no registry, no
+                 repositories. The same why-before-what rule as the repo lane below. -->
+            <template v-else-if="domainLane">
+                <p class="text-xs text-muted">
+                    Only someone who controls <span class="font-medium text-content">{{ challenge.publisher }}</span> could serve a file at its
+                    well-known path — that's the proof. Serve this exact line as plain text at
+                    <span class="font-mono text-content break-all">{{ domainUrl }}</span
+                    >:
+                </p>
+                <div class="flex items-start gap-2">
+                    <pre class="min-w-0 flex-1 rounded bg-overlay/50 px-2 py-1 text-2xs leading-relaxed break-words whitespace-pre-wrap">{{
+                        challenge.token
+                    }}</pre>
+                    <Button :label="copied ? `Copied` : `Copy`" severity="secondary" size="small" @click="copyToken" />
+                </div>
+                <div class="flex items-center gap-2">
+                    <Button label="I'm serving it — verify" size="small" :loading="proving" @click="prove" />
+                    <span v-if="step" class="text-2xs text-muted">{{ step }}</span>
+                </div>
+                <p class="text-2xs text-muted">
+                    A static file works (most hosts serve <span class="font-mono">.well-known/</span> from the site root), and so does a route.
+                    Listings under a domain may only use endpoints on that domain or its subdomains.
+                </p>
+                <Notice v-if="proveNotice" :of="proveNotice" />
+            </template>
+
             <p v-else-if="targets.length === 0" class="text-xs text-muted">
                 The registry lists no GitHub-backed extension under this name, so there's nothing to prove ownership against yet.
             </p>

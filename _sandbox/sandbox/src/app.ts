@@ -49,7 +49,7 @@ import {
 } from "./platform/sync.js";
 import { createSyncSshRoute } from "./platform/sync-ssh.js";
 import { soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
-import { relayServiceCatalog, relayServiceRun } from "./platform/pool-services.js";
+import { relayServiceCatalog, relayServiceRun, relayServiceWant } from "./platform/pool-services.js";
 import { gatedServiceRun } from "./platform/service-offer.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
@@ -1188,6 +1188,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * declared in its manifest and was approved at install. A browser session is the owner acting directly. */
     app.get("/pool/services", async (c) => {
         const answer = await relayServiceCatalog(services.config);
+        return c.newResponse(answer.body, answer.status as 200, { "content-type": answer.contentType });
+    });
+    // The wanted list: an agent that read the catalog and found nothing that answers files what it looked
+    // for. No spend, no card — the platform bounds it (length, a daily cap per owner) and publishes only the
+    // aggregate, so this relays as plainly as the catalog read above.
+    app.post("/pool/wanted", async (c) => {
+        const answer = await relayServiceWant(services.config, await c.req.text());
         return c.newResponse(answer.body, answer.status as 200, { "content-type": answer.contentType });
     });
     app.post("/pool/services/:slug/run", async (c) => {

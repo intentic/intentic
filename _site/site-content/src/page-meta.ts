@@ -97,6 +97,13 @@ export const pageMeta: Record<string, PageMeta> = {
             "Every month of the creator pool, live from the platform: what came in, what processing cost, what reached creators, and what is still owed.",
         datePublished: "2026-08-12",
     },
+    // The listings themselves, plus the wanted list — the demand side of the same live read.
+    "/earn/catalog/": {
+        title: "The catalog · Earn · intentic",
+        description:
+            "Every paid service agents can run, live from the platform — price, publisher, and each listing's served and refunded runs — plus what agents asked for that nobody serves yet.",
+        datePublished: "2026-08-19",
+    },
     // The argued version of every promise /earn makes. Its own page so the short one stays scannable.
     "/earn/fine-print/": {
         title: "The fine print · Earn · intentic",

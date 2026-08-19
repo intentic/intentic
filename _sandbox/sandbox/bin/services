@@ -16,7 +16,8 @@
 // wait at five minutes with the card still up.
 //
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
-// two /pool/services routes (and its /vpn + /otp reach), never to anything credential-shaped.
+// three pool routes this command drives — the catalog, one run, one wanted-list note — (and its /vpn + /otp
+// reach), never to anything credential-shaped.
 
 import { readFileSync } from "node:fs";
 import { request } from "node:http";
@@ -33,12 +34,17 @@ const USAGE = `services — the platform's premium services, priced in the owner
   services list                             what exists, what a run costs, and what's left today
   services run <slug> [json] [--why "..."]  ask for one metered run; the request body is the JSON
                                             argument or stdin, --why is your one-line case for it
+  services wanted "<one line>"              the catalog had nothing for this — file the capability you
+                                            looked for onto the platform's public wanted list
 
 \`run\` raises an approval card in the owner's chat — price and remaining credits on it, straight from the
 platform — and waits. The owner's click is the only thing that releases the spend: a skip or an expired
 offer charges nothing and answers with a sentence to act on. One click covers one run; ask again to repeat.
 An approved run streams its progress onto that same card (up to five minutes — hold this command open) and
-prints its result here when it completes. Nothing is charged when a service fails to answer.`;
+prints its result here when it completes. Nothing is charged when a service fails to answer.
+
+\`wanted\` spends nothing and asks nobody: it is a note to providers, published only in aggregate. Describe
+the capability plainly (8–200 characters) — never the task's specifics, names, or anything personal.`;
 
 const die = (message) => {
     process.stderr.write(`${message}\n`);
@@ -167,6 +173,20 @@ const run = async (args) => {
     }
 };
 
+// One line onto the platform's wanted list. No card, no spend — the platform bounds the length and the
+// day's count, and its refusals arrive as sentences, so this stays as thin as `list`.
+const wanted = async (args) => {
+    const text = args.join(" ").trim();
+    if (text === "") {
+        return die(USAGE);
+    }
+    const { status, text: answer } = await call("POST", "/pool/wanted", JSON.stringify({ text }));
+    if (status < 200 || status >= 300) {
+        return die(`services: ${refusalOf(answer)}`);
+    }
+    process.stdout.write("Noted on the platform's public wanted list — providers build against these.\n");
+};
+
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     if (command === "list") {
@@ -174,6 +194,9 @@ const main = async () => {
     }
     if (command === "run") {
         return run(rest);
+    }
+    if (command === "wanted") {
+        return wanted(rest);
     }
     return die(USAGE);
 };

@@ -279,7 +279,7 @@ const runSteps = [
             <tr><th>Gate</th><th>What it checks</th></tr>
         </thead>
         <tbody>
-            <tr><td><strong>Identity</strong></td><td>You hold a proved <a href="/developers/publish/">publisher name</a> and payouts are connected. A listing has to be payable before it can be offered.</td></tr>
+            <tr><td><strong>Identity</strong></td><td>You hold a proved publisher name — a <a href="/developers/publish/">registry name</a> proved from one of its repositories, or <strong>your own domain</strong>, proved by serving a challenge at <code>/.well-known/intentic-claim</code> — and payouts are connected. A listing has to be payable before it can be offered. A domain publisher's endpoints must live on that domain or its subdomains, so the name on the card and the host serving the runs are the same party.</td></tr>
             <tr><td><strong>Conformance</strong></td><td>A live probe of your endpoint: one correctly signed call that must serve, plus a forged signature and an expired timestamp that must both be <em>refused</em>.</td></tr>
             <tr><td><strong>Listing rules</strong></td><td>A public https endpoint, a price inside {admission.minCredits}–{admission.maxCredits} credits, and bounded name and description carrying no reserved words.</td></tr>
         </tbody>
@@ -323,7 +323,7 @@ const runSteps = [
     <ol class="mt-5 flex list-none flex-col gap-2.5 pl-0">
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">1</span>
-            <div class="text-base leading-relaxed">Prove a publisher name and connect payouts, on <strong>Settings → Getting paid</strong>.</div>
+            <div class="text-base leading-relaxed">Prove a publisher name and connect payouts, on <strong>Settings → Getting paid</strong>. No extension in the registry? Claim your domain instead — the screen hands you one line to serve at its well-known path.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">2</span>

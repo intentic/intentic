@@ -78,8 +78,9 @@ const viewOf = (row: ServiceRow, served: number, refunded: number): ProviderServ
     createdAt: row.createdAt.toISOString(),
 });
 
-// Run counts for a set of listings in one grouped read rather than two queries per row.
-const countsOf = async (prisma: PrismaClient, serviceIds: readonly string[]): Promise<Map<string, { served: number; refunded: number }>> => {
+// Run counts for a set of listings in one grouped read rather than two queries per row. Exported because the
+// public catalog (pool.routes.ts /catalog) states the same numbers to everyone — one derivation, two readers.
+export const countsOf = async (prisma: PrismaClient, serviceIds: readonly string[]): Promise<Map<string, { served: number; refunded: number }>> => {
     const counts = new Map<string, { served: number; refunded: number }>();
     if (serviceIds.length === 0) {
         return counts;

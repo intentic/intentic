@@ -31,8 +31,10 @@ export const LIVE_STATUSES: readonly ServiceStatus[] = [`probation`, `listed`];
 /* ── Gate 3: the listing rules ────────────────────────────────────────────────────────────────────────── */
 
 // Words a listing may not wear unless the platform itself published it — the whole of what "impersonation"
-// means on a surface whose only prose is a name and one description.
-const RESERVED_WORDS = [`intentic`, `official`, `verified`];
+// means on a surface whose only prose is a name and one description. Exported because a domain claim
+// (creator/creator-claim.ts) refuses the same words for the same reason: a claimed domain becomes a
+// publisher name every card shows.
+export const RESERVED_WORDS = [`intentic`, `official`, `verified`];
 const PLATFORM_PUBLISHER = `intentic`;
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -96,6 +98,17 @@ export const checkListingRules = (config: Config, input: ListingInput): readonly
     if (urlProblem !== undefined) {
         problems.push(urlProblem);
     }
+    /* A DOTTED PUBLISHER IS A DOMAIN (the claim's discriminator — creator-claim.ts), and its endpoint must
+     * live under it. This is what makes a domain claim mean something for a listing: the name on the card
+     * and the host that serves the runs are provably the same party, checked here syntactically so the rule
+     * is readable in advance like every other one. Registry-claimed (dotless) publishers are untouched —
+     * their proof is a repository, and their endpoints host wherever they like. */
+    if (input.publisher.includes(`.`) && urlProblem === undefined) {
+        const host = new URL(input.upstreamUrl).hostname.toLowerCase();
+        if (host !== input.publisher && !host.endsWith(`.${input.publisher}`)) {
+            problems.push(`A domain publisher's endpoint must live under its own domain: ${input.publisher} may only list endpoints on ${input.publisher} or its subdomains.`);
+        }
+    }
     return problems;
 };
 
@@ -131,8 +144,9 @@ const checkUpstreamShape = (raw: string): string | undefined => {
  * canary rather than at forward time, so it is a LISTING rule and not an SSRF defence: a name that resolves
  * publicly now can point somewhere else in a second, and the honest mitigation for that is the platform's own
  * egress policy, not a check here. What this does buy is that a provider cannot list `internal.corp` and have
- * the platform quietly probing someone's private network on their behalf. */
-const resolvesPublicly = async (
+ * the platform quietly probing someone's private network on their behalf. Exported for the domain claim
+ * (creator/creator-claim.ts), whose well-known read is the same shape of platform-initiated fetch. */
+export const resolvesPublicly = async (
     upstreamUrl: string,
     lookupFn: typeof lookup,
 ): Promise<string | undefined> => {

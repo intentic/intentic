@@ -13,6 +13,7 @@ import { buildLedger } from "./pool-ledger.js";
 import { applySubscription, poolEnabled, premiumOf } from "./pool-membership.js";
 import { forwardToService, verifyServiceSignature } from "./pool-services.js";
 import { applyAccountEvent } from "../creator/creator-payouts.js";
+import { countsOf } from "../creator/creator-services.js";
 import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
 
 /* THE CREATOR POOL's sandbox-facing and public routes. The browser-facing half (membership state, checkout,
@@ -29,6 +30,20 @@ import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEv
 const EXTENSION_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,120}$/;
 
 const DonateSchema = z.object({ extensionId: z.string().regex(EXTENSION_ID_RE) });
+
+/* The wanted list's bounds. Short enough to stay a capability description rather than a task dump (the
+ * skill tells agents exactly that), long enough to say "watermark-free PDF invoice extraction with line
+ * items". The daily cap bounds one noisy sandbox; the public aggregate counts distinct owners for the same
+ * reason. */
+const WantSchema = z.object({ text: z.string() });
+const WANT_MIN = 8;
+const WANT_MAX = 200;
+const WANTS_PER_DAY = 5;
+const WANT_WINDOW_DAYS = 90;
+const WANT_TOP = 50;
+
+// The grouping key: "PDF invoices" and "pdf  invoices" are one ask, not two rows on the public list.
+const normalizedWant = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ` `);
 
 const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
 
@@ -153,6 +168,45 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         const services = rows.map(({ status, ...service }) => ({ ...service, probation: status === `probation` }));
         const credits = member ? await creditStatus(prisma, config, ownerId, now()) : undefined;
         return c.json({ member, services, ...(credits !== undefined ? { credits } : {}) });
+    });
+
+    /* THE WANTED LIST's write — an agent that read the catalog and found nothing that answers files what it
+     * was looking for. The single most valuable demand signal the platform has, and the cheapest: no
+     * membership required (a non-member's unmet need is future demand), nothing spent, nothing returned
+     * about anyone. The owner column only feeds the daily cap; the public read (GET /catalog) aggregates by
+     * normalized text and counts distinct owners, so neither one loud sandbox nor one eager agent can
+     * manufacture a trend.
+     *
+     * `/wanted`, NOT `/services/wanted`: a static path under `/services/` would sit beside the dynamic
+     * `/services/:slug/run`, which is exactly the static-inside-dynamic mix Hono's RegExpRouter cannot
+     * compile — SmartRouter then silently falls back for the WHOLE app, and the auth catch-all's pattern
+     * stops matching. The route's shape is load-bearing; app.test.ts pins the symptom (the one-tap mount). */
+    app.post(`/wanted`, async (c) => {
+        if (!poolEnabled(config)) {
+            return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
+        }
+        const ownerId = await ownerOf(c);
+        if (ownerId === undefined) {
+            return c.json({ error: `unknown sandbox` }, 404);
+        }
+        const parsed = WantSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ error: `malformed want` }, 400);
+        }
+        const text = parsed.data.text.trim();
+        if (text.length < WANT_MIN || text.length > WANT_MAX) {
+            return c.json(
+                { error: `A want is one plain line describing the capability, ${WANT_MIN}–${WANT_MAX} characters.` },
+                400,
+            );
+        }
+        const at = now();
+        const today = await prisma.serviceWant.count({ where: { userId: ownerId, createdAt: { gte: new Date(`${utcDay(at)}T00:00:00.000Z`) } } });
+        if (today >= WANTS_PER_DAY) {
+            return c.json({ error: `That's ${WANTS_PER_DAY} wants filed today — the daily bound. The list resets at UTC midnight.` }, 429);
+        }
+        await prisma.serviceWant.create({ data: { userId: ownerId, text, normalized: normalizedWant(text) } });
+        return c.json({ recorded: true });
     });
 
     /* ONE METERED RUN — the whole intermediary in one handler. Spend first (atomic, or two concurrent runs
@@ -308,6 +362,60 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
             return c.json(JSON.parse(answer.body), answer.status);
         }
         return c.newResponse(answer.stream, 200, { "content-type": `application/x-ndjson` });
+    });
+
+    /* THE PUBLIC CATALOG — the live listings as anyone may read them, login-free like the ledger below. Two
+     * jobs the sandbox-authed catalog above cannot do: let a prospective member see what membership buys
+     * before they hold a sandbox, and let a prospective provider see what already exists — and how it
+     * behaves — before they build. Lifetime run counts ride along because "a flaky service is visible in its
+     * own public numbers" is a promise that needs a public surface: served and refunded, from the same rows
+     * the ledger pays from. `sampleRequest` stays off — it is agent-facing documentation, and this is a
+     * browsing surface. */
+    app.get(`/catalog`, async (c) => {
+        if (!poolEnabled(config)) {
+            return c.json({ error: `the creator pool is not enabled on this platform` }, 404);
+        }
+        // Cross-origin for the transparency route's reason: the site renders this from a different host, and
+        // a public catalog only a server can read is not really public.
+        c.header(`access-control-allow-origin`, `*`);
+        const rows = await prisma.service.findMany({
+            where: { status: { in: [...LIVE_STATUSES] } },
+            select: { id: true, slug: true, publisher: true, name: true, description: true, creditsPerRun: true, status: true },
+            orderBy: { slug: `asc` },
+        });
+        const counts = await countsOf(
+            prisma,
+            rows.map((row) => row.id),
+        );
+        const services = rows.map(({ id, status, ...service }) => ({
+            ...service,
+            probation: status === `probation`,
+            servedRuns: counts.get(id)?.served ?? 0,
+            refundedRuns: counts.get(id)?.refunded ?? 0,
+        }));
+        /* The wanted list, beside what exists: what agents looked for and did not find, grouped by
+         * normalized text, counted by DISTINCT owners (one noisy sandbox is one voice), newest ask shown.
+         * Read whole and reduced here rather than via groupBy because distinct-owner counting is one pass in
+         * code and two grouped queries in SQL — revisit if the window's row count ever makes that wrong. */
+        const wantRows = await prisma.serviceWant.findMany({
+            where: { createdAt: { gte: new Date(now().getTime() - WANT_WINDOW_DAYS * 86_400_000) } },
+            select: { userId: true, text: true, normalized: true, createdAt: true },
+            orderBy: { createdAt: `asc` },
+        });
+        const asks = new Map<string, { text: string; owners: Set<string>; lastAt: Date }>();
+        for (const row of wantRows) {
+            const entry = asks.get(row.normalized) ?? { text: row.text, owners: new Set<string>(), lastAt: row.createdAt };
+            entry.owners.add(row.userId);
+            // Ascending order above makes the last write the newest phrasing and the newest timestamp.
+            entry.text = row.text;
+            entry.lastAt = row.createdAt;
+            asks.set(row.normalized, entry);
+        }
+        const wanted = [...asks.values()]
+            .map((entry) => ({ text: entry.text, count: entry.owners.size, lastAt: entry.lastAt.toISOString() }))
+            .toSorted((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt))
+            .slice(0, WANT_TOP);
+        return c.json({ services, wanted });
     });
 
     /* The public ledger (pool-ledger.ts): the month in progress computed live and marked open, then every

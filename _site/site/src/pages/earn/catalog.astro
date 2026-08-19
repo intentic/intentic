@@ -1,0 +1,126 @@
+---
+import { API_URL } from "@intentic-dev/site-content/site";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* THE CATALOG, FOR PEOPLE. Agents have always been able to read the live listings (`services list` inside a
+ * sandbox), which is honest and invisible: a prospective member deciding whether membership buys anything,
+ * and a prospective provider deciding whether to build, both stood outside the only window.
+ *
+ * The ledger page's rules apply verbatim. Fetched in the browser rather than at build time — a static build
+ * would freeze a catalog that changes whenever a listing publishes or suspends — and every figure comes from
+ * the platform's own public endpoint, including each listing's served and refunded run counts: "a flaky
+ * service is visible in its own public numbers" is a promise, and this page is where the public can hold it.
+ * No fallback content: an unreachable endpoint says so instead of showing listings of unknown provenance. */
+
+const endpoint = `${API_URL}/pool/catalog`;
+---
+
+<BaseLayout>
+    <Nav />
+    <main class="flex-1">
+        <section class="relative overflow-hidden border-b border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-12 lg:pt-32">
+                <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The catalog</div>
+                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every service, listed.</h1>
+                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    These are the metered services a member's agent can ask to run — each run individually approved by its owner, priced in
+                    credits, and refunded automatically when a service fails to answer. Every listing's served and refunded runs are public,
+                    because behaviour is the only review a service ever gets.
+                </p>
+                <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
+                    Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a>, which is public and needs
+                    no login. Your browser is fetching it now; nothing on this page is typed by hand. Run something worth
+                    selling? <a href="/developers/services/">Listing it is self-serve.</a>
+                </p>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-7xl px-6 py-14 lg:py-16">
+            <div id="catalog-loading" class="text-sm text-muted">Reading the catalog…</div>
+            <div id="catalog-error" class="hidden text-sm text-danger"></div>
+            <div id="catalog-empty" class="hidden text-sm text-muted"></div>
+            <div id="catalog-services" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+
+            <!-- What agents looked for and did not find — the leads. Hidden until the fetch says there are
+                 any: an empty "wanted" section is a promise the page just failed to keep. -->
+            <div id="catalog-wanted" class="hidden mt-14 flex flex-col gap-4">
+                <h2 class="text-lg font-semibold tracking-tight text-content">Asked for, and unserved.</h2>
+                <p class="max-w-copy text-sm leading-relaxed text-muted">
+                    When an agent reads this catalog and finds nothing that answers, it can file what it was looking for. This is that list —
+                    the last 90 days, counted by distinct members, most asked first. Each row is measured demand nobody is serving yet.
+                </p>
+                <div id="catalog-wants" class="flex flex-col gap-1.5"></div>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+</BaseLayout>
+
+<script is:inline define:vars={{ endpoint }}>
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    };
+
+    const serviceCard = (service) => {
+        const card = el(`article`, `card flex flex-col gap-3 p-6`);
+        const header = el(`header`, `flex flex-wrap items-center gap-2`);
+        header.append(el(`h2`, `text-base font-semibold tracking-tight text-content`, service.name));
+        // The probation badge, said here exactly as the spend card says it: this listing passed the published
+        // admission gates but has not served enough runs to graduate.
+        if (service.probation) header.append(el(`span`, `chip border border-primary-600/35 bg-primary-600/12 text-primary-300`, `New`));
+        card.append(header);
+        card.append(el(`p`, `text-xs text-subtle`, `by ${service.publisher}`));
+        card.append(el(`p`, `text-sm leading-relaxed text-muted`, service.description));
+        const foot = el(`div`, `mt-auto flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line pt-3 text-xs`);
+        foot.append(el(`span`, `font-mono font-semibold text-content`, `${service.creditsPerRun} credits/run`));
+        foot.append(el(`span`, `text-subtle`, `${service.servedRuns.toLocaleString(`en-GB`)} served`));
+        // A refund means a run that failed to answer and charged nothing — the number a flaky service cannot hide.
+        if (service.refundedRuns > 0) foot.append(el(`span`, `text-subtle`, `${service.refundedRuns.toLocaleString(`en-GB`)} refunded`));
+        card.append(foot);
+        return card;
+    };
+
+    const render = (data) => {
+        document.getElementById(`catalog-loading`).classList.add(`hidden`);
+        if (!Array.isArray(data.services) || data.services.length === 0) {
+            const empty = document.getElementById(`catalog-empty`);
+            empty.textContent = `No services are listed yet. Listing one is self-serve — the first provider changes this page.`;
+            empty.classList.remove(`hidden`);
+        } else {
+            const grid = document.getElementById(`catalog-services`);
+            for (const service of data.services) grid.append(serviceCard(service));
+        }
+        // The wanted list renders even when the catalog is empty — on a young platform it IS the page.
+        if (Array.isArray(data.wanted) && data.wanted.length > 0) {
+            const list = document.getElementById(`catalog-wants`);
+            for (const ask of data.wanted) {
+                const line = el(`p`, `flex flex-wrap items-baseline gap-x-3 border-t border-line pt-1.5 text-sm text-muted`);
+                line.append(el(`span`, `text-content`, ask.text));
+                line.append(el(`span`, `text-xs text-subtle`, `asked by ${ask.count} ${ask.count === 1 ? `member` : `members`}`));
+                list.append(line);
+            }
+            document.getElementById(`catalog-wanted`).classList.remove(`hidden`);
+        }
+    };
+
+    fetch(endpoint, { headers: { accept: `application/json` } })
+        .then((response) => {
+            if (!response.ok) throw new Error(`the platform answered ${response.status}`);
+            return response.json();
+        })
+        .then(render)
+        .catch((error) => {
+            document.getElementById(`catalog-loading`).classList.add(`hidden`);
+            const box = document.getElementById(`catalog-error`);
+            // No cached listings, no placeholder: a catalog a reader cannot trace is worse than none.
+            box.textContent = `The catalog couldn't be read just now (${error.message}). It is served live, so there is nothing cached to show. Please try again shortly.`;
+            box.classList.remove(`hidden`);
+        });
+</script>

@@ -1,6 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { z } from "zod";
 import type { Config } from "../config.js";
+import { RESERVED_WORDS, resolvesPublicly } from "../pool/pool-admission.js";
 
 /* PROVING A PUBLISHER NAME IS YOURS — the one question standing between "this listing earned $128" and "pay
  * this person $128".
@@ -46,6 +49,32 @@ const RegistrySchema = z.object({
 
 // The file a claimant commits, at the repository root of any repo the registry lists under their publisher.
 export const CLAIM_PATH = `.intentic-claim`;
+
+/* THE DOMAIN LANE's file: the same derived token, served as plain text at the domain's well-known path over
+ * https. A business with a service to sell has no extension in the registry and nothing there to claim; what
+ * it does own is a domain, and control of a domain's well-known path proves ownership to the same standard
+ * push access to a listed repository does. */
+export const DOMAIN_CLAIM_PATH = `.well-known/intentic-claim`;
+
+/* The two lanes' discriminator, and the whole of it. Registry publisher names are the prefix of an extension
+ * id before its FIRST dot (publisherOf below), so a registry-provable name can never contain one — and a
+ * domain always does. Nothing anywhere records which lane a claim came through; the name itself says. */
+export const isDomainPublisher = (publisher: string): boolean => publisher.includes(`.`);
+
+/* What disqualifies a string from being claimed as a domain at all, answered synchronously so both the
+ * challenge and the claim can refuse with the same sentence before any network is touched. The contract's
+ * schema already constrains the characters; what is left is the IP shape (all-digit labels parse as labels)
+ * and the reserved words, refused for the listing rules' reason — a claimed domain becomes a publisher name
+ * every card shows. */
+export const domainClaimProblem = (domain: string): string | undefined => {
+    if (isIP(domain) !== 0) {
+        return `A publisher domain must be a name, not an IP address.`;
+    }
+    if (RESERVED_WORDS.some((word) => domain.includes(word))) {
+        return `A publisher domain may not contain ${RESERVED_WORDS.join(`, `)} — those words are reserved for the platform's own listings.`;
+    }
+    return undefined;
+};
 
 // `publisher.name` → `publisher`. The registry's key is the full extension id; claims are per publisher.
 const publisherOf = (entryName: string): string => entryName.split(`.`)[0] ?? ``;
@@ -237,5 +266,51 @@ export const claimFailureReason = (publisher: string, report: ClaimReport): stri
     return (
         `${looked} — no ${CLAIM_PATH} on the default branch yet. ` +
         `A push that landed on another branch does not count: the file has to be on the branch GitHub shows first.`
+    );
+};
+
+/* Read the challenge from the domain's well-known path. One attempt, reported in the registry lane's
+ * vocabulary so the two proofs stay one story: `absent` is "nothing served there yet", `mismatched` is a
+ * token minted for a different account, `unreadable` is a domain that could not be fetched — including one
+ * that does not resolve publicly, which is refused for the conformance probe's reason: the platform must not
+ * be talked into fetching from someone's private network. */
+export const checkDomainClaim = async (
+    config: Config,
+    userId: string,
+    domain: string,
+    fetchFn: typeof fetch = fetch,
+    lookupFn: typeof lookup = lookup,
+): Promise<ClaimReport> => {
+    const problem = domainClaimProblem(domain) ?? (await resolvesPublicly(`https://${domain}/`, lookupFn));
+    if (problem !== undefined) {
+        return { attempts: [{ repo: domain, outcome: `unreadable` }] };
+    }
+    const expected = claimToken(config, userId, domain);
+    try {
+        const response = await fetchFn(`https://${domain}/${DOMAIN_CLAIM_PATH}`, { signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) {
+            return { attempts: [{ repo: domain, outcome: `absent` }] };
+        }
+        const outcome = tokenMatches(await response.text(), expected) ? (`matched` as const) : (`mismatched` as const);
+        return { ...(outcome === `matched` ? { repo: domain } : {}), attempts: [{ repo: domain, outcome }] };
+    } catch {
+        return { attempts: [{ repo: domain, outcome: `unreadable` }] };
+    }
+};
+
+// The domain lane's failure sentences — same job as claimFailureReason above, phrased for a URL rather than
+// a repository, because "push to the default branch" is the wrong next move for every one of these.
+export const domainClaimFailureReason = (domain: string, report: ClaimReport): string => {
+    const at = `https://${domain}/${DOMAIN_CLAIM_PATH}`;
+    const outcome = report.attempts[0]?.outcome;
+    if (outcome === `mismatched`) {
+        return `${at} serves a token, but not the line minted for your account. Replace its contents with the line shown here and try again.`;
+    }
+    if (outcome === `absent`) {
+        return `${at} answered nothing readable yet. Serve the line shown here as plain text at exactly that path, over https, and try again.`;
+    }
+    return (
+        `${at} could not be read just now — the domain must resolve publicly and answer over https. ` +
+        `If the DNS record or the route is new, give it a moment and try again.`
     );
 };
