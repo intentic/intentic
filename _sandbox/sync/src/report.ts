@@ -3,7 +3,7 @@ import { hostname, platform } from "node:os";
 import { livePid } from "@intentic/local-agent";
 import type { MachinePairing, MachinePort, MachineReport } from "@intentic/sandbox-contract";
 import { mirrorHeartbeatPath, mirrorPidPath, type Pairing, readState, type SyncState } from "./config.js";
-import { readSessionState, sessionName } from "./mutagen.js";
+import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 import { SYNC_VERSION } from "./version.js";
 
 /* THE MACHINE REPORT — everything this agent knows about the computer it runs on, in one shape.
@@ -56,6 +56,9 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePa
      * the watcher rows say. Every reader renders that one way (see pairingLine) instead of each inventing a
      * default. A session that exists always has a status — readSessionState resolves Mutagen's omitted zero. */
     const session = readSessionState(mutagen, sessionName(pairing.sandboxId));
+    // The state backup rides beside it and is read the same way. Its absence is carried the same way too: no
+    // word means no session, which for this one means the sandbox is the only copy of its own state.
+    const backup = readSessionState(mutagen, backupSessionName(pairing.sandboxId));
     return {
         sandboxId: pairing.sandboxId,
         mode: pairing.mode,
@@ -63,6 +66,7 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePa
         mutagenStatus: session.status,
         conflicts: session.conflicts,
         paused: session.paused,
+        backupStatus: backup.status,
     };
 };
 

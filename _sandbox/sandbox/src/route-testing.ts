@@ -487,7 +487,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
             ...cliProxy,
         }),
-        codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/auth/", "codex")}`,
+        codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/secrets/auth/", "codex")}`,
         codexThreadExists: async () => true,
         providerCatalogs: testProviderCatalogs,
         // Held directly too, exactly as in composition — the native Codex turn's model resolution and its

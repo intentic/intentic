@@ -13,7 +13,7 @@ import { parseSkillFile, skillDocument } from "./skill-file.js";
  * prompt otherwise. Which are present is driven by the settings `skills` array (SandboxSettings) — adding a new
  * baked tool is one registry entry here plus its name in that array, with no settings-contract change.
  *
- * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/skills/<name>/`
+ * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/config/skills/<name>/`
  * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder and its per-runtime
  * projections), for one reason: switching a skill off must not delete what you wrote. The loaded folder holds
  * only what is currently on, so the durable copy has to sit beside the daemon's other state — and then "off" is
@@ -64,7 +64,7 @@ export const isBakedSkill = (name: string): boolean => name in SKILLS;
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
 // Where the owner's own skills are kept, switched on or off.
-const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/skills/");
+const ownSkillsRoot = (root: string): string => statePath(root, ".intentic/config/skills/");
 export const ownSkillDir = (root: string, name: string): string => join(ownSkillsRoot(root), name);
 const ownSkillFile = (root: string, name: string): string => join(ownSkillDir(root, name), "SKILL.md");
 

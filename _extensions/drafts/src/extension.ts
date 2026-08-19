@@ -11,7 +11,7 @@ import { draftsQuery, owedOf } from "./useDrafts";
  *
  * THE BADGE POLLS FROM MODULE STATE, not from the view: a count that only updated while the owner was already
  * reading the queue could never tell them anything. The poll and the view name the SAME HostQuery, so the
- * badge's read is also the view's first paint, and the manifest's `.intentic/drafts/` file binding invalidates
+ * badge's read is also the view's first paint, and the manifest's `.intentic/config/drafts/` file binding invalidates
  * both the moment the agent writes a proposal. */
 
 // The queue as a badge, kept current while the view is closed (background.ts). Sandbox-scoped, because a

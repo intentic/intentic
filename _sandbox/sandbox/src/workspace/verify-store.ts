@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 
-/* The dependency verifier's memory (<workspace>/.intentic/verify.json): the last check outcome per project,
+/* The dependency verifier's memory (<workspace>/.intentic/records/verify.json): the last check outcome per project,
  * and how many consecutive reds it is into. What this buys, across daemon restarts:
  *
  * - `deps.fixed` is an EDGE, and an edge needs the previous colour — green after red is news, green after

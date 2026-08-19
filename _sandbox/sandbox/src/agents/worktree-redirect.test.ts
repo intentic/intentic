@@ -35,7 +35,9 @@ test("a main-root path becomes the same path inside the conversation's worktree"
 test("the subtrees that mean the main checkout on both sides survive the redirect", () => {
     // Daemon state: chat transcripts live here and ~/.claude/projects symlinks into it, so a per-worktree copy
     // is a lost transcript.
-    expect(inWorktree("/work/.intentic/sessions/claude/projects/x.jsonl", plan)).toBe("/work/.intentic/sessions/claude/projects/x.jsonl");
+    expect(inWorktree("/work/.intentic/records/sessions/claude/projects/x.jsonl", plan)).toBe(
+        "/work/.intentic/records/sessions/claude/projects/x.jsonl",
+    );
     // Every installed dependency tree, at each depth the plan recorded.
     expect(inWorktree("/work/node_modules/.bin/tsgo", plan)).toBe("/work/node_modules/.bin/tsgo");
     expect(inWorktree("/work/intentic/node_modules/vue/index.js", plan)).toBe("/work/intentic/node_modules/vue/index.js");

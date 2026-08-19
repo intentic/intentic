@@ -158,11 +158,11 @@ it(`draws a prompt's images at the card's full width, past its padding`, async (
     const { card, text } = await mount();
     card.show(anchorEvent(), {
         title: `Fix the tab strip`,
-        messages: [{ text: `Fix the tab strip`, attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }] }],
+        messages: [{ text: `Fix the tab strip`, attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }] }],
     });
     await nextTick();
     const image = document.body.querySelector(`img`)!;
-    expect(image.getAttribute(`src`)).toBe(`blob:.intentic/artifacts/attachments/u1/shot.png`);
+    expect(image.getAttribute(`src`)).toBe(`blob:.intentic/records/artifacts/attachments/u1/shot.png`);
     expect(image.className).toContain(`w-full`);
     expect(image.parentElement?.className).toContain(`-mx-3`);
     expect(text()).toBe(`Fix the tab strip`); // the repeated line still goes; only the picture is new

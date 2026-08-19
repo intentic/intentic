@@ -45,9 +45,9 @@ test("a credential is masked to its reference whichever tool fetched it — the 
     const bash = `TOKEN=${TOKEN}`;
     expect(shown(await fire(linear, "Bash", bash), bash)).toBe("TOKEN={{secret:linear/token}}");
 
-    const read = { file: { filePath: "/work/.intentic/capabilities.json", content: `{"token":"${TOKEN}"}` } };
+    const read = { file: { filePath: "/work/.intentic/config/capabilities.json", content: `{"token":"${TOKEN}"}` } };
     expect(shown(await fire(linear, "Read", read), read)).toEqual({
-        file: { filePath: "/work/.intentic/capabilities.json", content: '{"token":"{{secret:linear/token}}"}' },
+        file: { filePath: "/work/.intentic/config/capabilities.json", content: '{"token":"{{secret:linear/token}}"}' },
     });
 
     const mcp = { content: [{ type: "text", text: `authorized with ${TOKEN}` }] };

@@ -154,13 +154,13 @@ describe(`renderTranscript`, () => {
 describe(`synthesisPrompt`, () => {
     it(`names every source and carries the ground rules`, () => {
         const prompt = synthesisPrompt([
-            { label: `A`, title: `Approach one`, path: `${STATE_DIR}/artifacts/attachments/u1/source-A-approach-one.md` },
-            { label: `B`, title: `Approach two`, path: `${STATE_DIR}/artifacts/attachments/u2/source-B-approach-two.md` },
+            { label: `A`, title: `Approach one`, path: `${STATE_DIR}/records/artifacts/attachments/u1/source-A-approach-one.md` },
+            { label: `B`, title: `Approach two`, path: `${STATE_DIR}/records/artifacts/attachments/u2/source-B-approach-two.md` },
         ]);
 
         expect(prompt).toContain(`Synthesize the 2 attached agent conversations`);
-        expect(prompt).toContain(`- Source A — "Approach one" — .intentic/artifacts/attachments/u1/source-A-approach-one.md`);
-        expect(prompt).toContain(`- Source B — "Approach two" — .intentic/artifacts/attachments/u2/source-B-approach-two.md`);
+        expect(prompt).toContain(`- Source A — "Approach one" — .intentic/records/artifacts/attachments/u1/source-A-approach-one.md`);
+        expect(prompt).toContain(`- Source B — "Approach two" — .intentic/records/artifacts/attachments/u2/source-B-approach-two.md`);
         // The quality instructions the feature exists for: whole-transcript reads, independent analysis first,
         // evidence-based reconciliation, one integrated result with checkable citations, visible uncertainty.
         expect(prompt).toContain(`Read every transcript completely`);
@@ -226,7 +226,7 @@ describe(`synthesizeSessions`, () => {
         // Both transcripts were written whole, each self-identifying as its labelled source.
         expect(sandboxUploadMock).toHaveBeenCalledTimes(2);
         const uploads = await Promise.all(sandboxUploadMock.mock.calls.map(async ([path, body]) => ({ path, text: await (body as Blob).text() })));
-        expect(uploads[0]!.path).toContain(encodeURIComponent(`.intentic/artifacts/attachments/`));
+        expect(uploads[0]!.path).toContain(encodeURIComponent(`.intentic/records/artifacts/attachments/`));
         expect(uploads[0]!.text).toContain(`# Source A — "Approach one"`);
         expect(uploads[0]!.text).toContain(`done it one way`);
         expect(uploads[1]!.text).toContain(`# Source B — "Approach two"`);

@@ -13,8 +13,8 @@ describe(`mapBrief`, () => {
     const brief = mapBrief({ repo: `intentic`, label: `intentic` });
 
     it(`sends the map to staging and explicitly away from the repository`, () => {
-        expect(brief).toContain(`.intentic/docs/intentic/repo.json`);
-        expect(brief).toContain(`.intentic/docs/intentic/repo.md`);
+        expect(brief).toContain(`.intentic/config/docs/intentic/repo.json`);
+        expect(brief).toContain(`.intentic/config/docs/intentic/repo.md`);
         expect(brief).toContain(`Do not create or edit anything under the repository itself`);
         // The published tree is the owner's to write, via Publish. A brief that named it would be publishing.
         expect(brief).not.toContain(`intentic/docs/architecture/`);
@@ -52,7 +52,7 @@ describe(`mapBrief`, () => {
         const root = mapBrief({ repo: ``, label: `the workspace root` });
         expect(root).toContain(`intentic-docs facts\n`);
         expect(root).not.toContain(`--repo `);
-        expect(root).toContain(`.intentic/docs/root/repo.json`);
+        expect(root).toContain(`.intentic/config/docs/root/repo.json`);
     });
 });
 
@@ -68,7 +68,7 @@ describe(`packageBrief`, () => {
 
     it(`names the one file it may write, staged under the package's own path`, () => {
         // The page IS the package's README. It still STAGES, though — publishing is what puts it in the package.
-        expect(brief).toContain(`.intentic/docs/intentic/_libs/contract/README.md`);
+        expect(brief).toContain(`.intentic/config/docs/intentic/_libs/contract/README.md`);
         expect(brief).toContain(`## Write exactly one file`);
     });
 

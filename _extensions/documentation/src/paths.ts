@@ -12,15 +12,15 @@ import { STATE_DIR } from "@intentic/sandbox-contract";
  * pages out of 69, one of them 203 commits behind. A README cannot be forgotten in the same way: it is in the
  * diff already.
  *
- * STAGING: `.intentic/docs/<repo>/`, mirroring the published tail exactly. Generation writes here first, for
+ * STAGING: `.intentic/config/docs/<repo>/`, mirroring the published tail exactly. Generation writes here first, for
  * three reasons that all matter:
  *   1. N isolated agents can write into it at once — `.intentic` is bound back SHARED for isolated turns, so
  *      every agent in a fan-out lands in the same tree the browser is reading.
- *   2. The browser sees it appear LIVE. `.intentic/docs/` is a workspace-root path, so it can ride the daemon's
+ *   2. The browser sees it appear LIVE. `.intentic/config/docs/` is a workspace-root path, so it can ride the daemon's
  *      file-change push (contributes.files) — an in-repo path cannot, because a manifest is static and repo
  *      names are not known when it is written.
  *   3. The owner reads it before it touches the repo. "Agent proposes, owner approves, it publishes" is already
- *      this workspace's shape for agent output (`.intentic/drafts/`), not a new idea.
+ *      this workspace's shape for agent output (`.intentic/config/drafts/`), not a new idea.
  *
  * The two trees share their TAIL (`repo.json`, `<pkg>/README.md`, …) so publishing is a copy per tail and never a
  * translation — and so a reviewer reading either tree is reading the same layout. */
@@ -31,7 +31,7 @@ export const DOCS_DIR = "docs/architecture";
 
 // Workspace-root-relative. One prefix for everything this extension stages, which is what makes a single
 // `contributes.files` entry able to cover it.
-export const STAGING_ROOT = `${STATE_DIR}/docs`;
+export const STAGING_ROOT = `${STATE_DIR}/config/docs`;
 
 /* The tails a document set is made of. The repo-level three are written once per repo; a package page is written
  * once per package, under the package's own dir.

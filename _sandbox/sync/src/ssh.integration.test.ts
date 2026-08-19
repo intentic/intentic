@@ -1,10 +1,11 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
 import {
+    BACKUP_IGNORES,
     IGNORES,
     INCLUDE_MARKER,
     mutagenSshPath,
@@ -171,7 +172,29 @@ describe("resolvedEndpoint", () => {
     });
 });
 
-const spec: SyncSessionSpec = { name: "intentic-x", localDir: "/home/u/proj", alias: "intentic-sync-x", remoteDir: WORKSPACE_ROOT };
+const spec: SyncSessionSpec = {
+    name: "intentic-x",
+    localDir: "/home/u/proj",
+    alias: "intentic-sync-x",
+    remoteDir: WORKSPACE_ROOT,
+    mode: "two-way-safe",
+    ignores: IGNORES,
+    from: "local",
+};
+
+/* The state backup, as the same shape with the three fields that differ. Every assertion about it below is really
+ * one assertion: this session runs DOWNHILL. Mutagen's one-way modes propagate alpha → beta and nothing warns
+ * about the order, so an endpoint pair the wrong way round would not fail — it would replicate the laptop's copy
+ * over the sandbox's live state, which is the single worst thing this feature could do. */
+const backup: SyncSessionSpec = {
+    name: "intentic-x-state",
+    localDir: "/home/u/proj/.intentic",
+    alias: "intentic-sync-x",
+    remoteDir: `${WORKSPACE_ROOT}/.intentic`,
+    mode: "one-way-replica",
+    ignores: BACKUP_IGNORES,
+    from: "sandbox",
+};
 
 describe("mutagenCreateArgs", () => {
     const args = mutagenCreateArgs(spec, false);
@@ -201,6 +224,52 @@ describe("mutagenCreateArgs", () => {
         const paused = mutagenCreateArgs(spec, true);
         expect(paused).toContain("--paused");
         expect(paused.indexOf("--paused")).toBeLessThan(paused.indexOf("/home/u/proj"));
+    });
+});
+
+describe("mutagenCreateArgs — the state backup", () => {
+    const args = mutagenCreateArgs(backup, false);
+
+    it("runs one-way from the SANDBOX, so the sandbox's state can never be overwritten by the laptop's copy", () => {
+        expect(args[args.indexOf("--sync-mode") + 1]).toBe("one-way-replica");
+        // Alpha is the source in a one-way session, and alpha is the first positional.
+        expect(args.indexOf(`intentic-sync-x:${WORKSPACE_ROOT}/.intentic`)).toBeLessThan(args.indexOf("/home/u/proj/.intentic"));
+    });
+
+    it("lands the copy inside the folder the user already has, not beside it", () => {
+        expect(args).toContain("/home/u/proj/.intentic");
+    });
+
+    it("carries the backup's own ignores, not the workspace session's", () => {
+        for (const pattern of BACKUP_IGNORES) {
+            expect(args[args.indexOf(pattern) - 1]).toBe("--ignore");
+        }
+        // The workspace list excludes the state dir wholesale — passing it here would sync nothing at all.
+        expect(args).not.toContain(STATE_DIR);
+    });
+
+    /* The two halves of the classification, checked as sentences rather than as a list: the rebuildable bulk and
+     * every credential stay in the sandbox, and everything a person wrote or that happened here comes down.
+     *
+     * Whole groups are excluded by FOLDER, which is the readable payoff of the regrouping — three patterns
+     * instead of thirteen, and each one a word rather than an inventory. */
+    it("leaves credentials and rebuildable bulk behind, a folder at a time", () => {
+        expect([...BACKUP_IGNORES].toSorted()).toEqual(["/identity/control-tokens.json", "/local", "/secrets"]);
+    });
+
+    /* The partial group is the one worth pinning. `identity` is split — the ownership records come down so the
+     * owner keeps a copy of their own access, the control tokens do not — so collapsing it to a folder like the
+     * two beside it would silently stop backing up the records. */
+    it("excludes the tokens from identity without excluding identity", () => {
+        expect(BACKUP_IGNORES).not.toContain("/identity");
+        expect(BACKUP_IGNORES).toContain("/identity/control-tokens.json");
+    });
+
+    it("copies down what the sandbox going away would otherwise take with it", () => {
+        // Nothing under the two authored/record folders may be excluded — those ARE the backup.
+        for (const pattern of BACKUP_IGNORES) {
+            expect([pattern, pattern.startsWith("/config") || pattern.startsWith("/records")]).toEqual([pattern, false]);
+        }
     });
 });
 

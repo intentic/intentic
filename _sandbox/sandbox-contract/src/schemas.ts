@@ -185,7 +185,7 @@ export const AgentTurnSchema = z
         // first turn keeps its user-chosen title); an existing entry's title always wins.
         title: z.string().max(80).optional(),
         // Workspace-relative paths of files the user attached, already uploaded via /workspace/upload
-        // (the browser puts them under .intentic/artifacts/attachments/<uuid>/<name>). The daemon hands them to the
+        // (the browser puts them under .intentic/records/artifacts/attachments/<uuid>/<name>). The daemon hands them to the
         // provider: Claude reads them from disk via its Read tool; Codex gets images as native inputs.
         attachments: z.array(z.string().min(1)).max(20).optional(),
         // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
@@ -505,13 +505,13 @@ export type Loop = z.infer<typeof LoopSchema>;
 // saved loop that cannot converge is a trap everyone who picks it afterwards pays a full run to discover.
 export const loopCanConverge = (loop: Pick<Loop, "output" | "checks">): boolean => loop.output.kind !== "none" || loop.checks.length > 0;
 
-/* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/artifacts/loops/<conversationId>/.
+/* Where a loop keeps what it must not lose between iterations: <workspace>/.intentic/records/artifacts/loops/<conversationId>/.
  *
  * Under `.intentic` for the reason the acceptance runs are — it is outside every repo and bound back SHARED
  * into an isolated turn's worktree, so the agent writes and the browser reads the same tree, with nothing to
  * land and no git noise. `progress.md` is the loop's memory in `fresh` mode and its audit trail in `continue`
  * mode; `iteration-<n>.json` is the verdict a `claim` stop reads. */
-export const LOOP_DIR = `${STATE_DIR}/artifacts/loops`;
+export const LOOP_DIR = `${STATE_DIR}/records/artifacts/loops`;
 
 // Why an iteration ended, which is not the same question as how the LOOP ended. `continue` is the ordinary
 // "not done yet"; `error` is a turn that surfaced an error frame, which does NOT end the loop by itself — a
@@ -1501,7 +1501,7 @@ export const SessionSummarySchema = z.object({
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
 
-// ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
+// ---- settings: per-sandbox agent settings (.intentic/config/settings.json) ----
 
 // Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
 // hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
@@ -1625,7 +1625,7 @@ export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
  * adding it.
  *
  *   builtin      this image ships it — a baked tool's cheatsheet, or a core feature's
- *   own          the owner wrote it (.intentic/skills/), and only these are editable here
+ *   own          the owner wrote it (.intentic/config/skills/), and only these are editable here
  *   capability   something connected brought it: a CLI tool, a machine, a browser account, a VPN
  *   extension    an installed extension ships it inside its checkout
  *   plugin       a plugin capability cloned a repo that holds it
@@ -3168,7 +3168,7 @@ export const EnrollHostInputSchema = z.object({
 });
 export type EnrollHostInput = z.infer<typeof EnrollHostInputSchema>;
 
-// ---- capabilities: the sandbox's unified capability manifest (.intentic/capabilities.json) ----
+// ---- capabilities: the sandbox's unified capability manifest (.intentic/config/capabilities.json) ----
 // Everything a user adds to a sandbox is a capability with an idempotent apply + a status check. The manifest is
 // the source of truth for what's active; `mcp`-kind entries also feed the agent's MCP servers each turn. DevOps
 // is the capability that scaffolds the intent/desired-state repos — until it's active the sandbox is empty.
@@ -3422,7 +3422,7 @@ export const DockerConfigSchema = z.object({
 });
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). The
-// session lives in a persisted Chromium profile under .intentic/browser/<id>, established through the guided-login
+// session lives in a persisted Chromium profile under .intentic/local/browser/<id>, established through the guided-login
 // WebSocket (/system/browser-login) or by the agent signing in itself. Chromium itself rides this kind's
 // Dockerfile fragment, applied on an owner rebuild.
 //
@@ -4211,10 +4211,10 @@ export const ExtensionSummarySchema = z.object({
     commit: z.string(),
     /* Where the code comes from — which is also what the web varies per row: `builtin` (image-baked, no git
      * checkout, not removable) hides the uninstall affordance, `installed` (a git capability) shows the pinned
-     * commit, `workspace` (a directory under .intentic/workspace-extensions/, created and edited in place —
+     * commit, `workspace` (a directory under .intentic/config/workspace-extensions/, created and edited in place —
      * typically by an agent) is "uninstalled" by deleting its directory. */
     source: z.enum(["builtin", "installed", "workspace"]),
-    // The owner's switch (.intentic/extension-enablement.json). A disabled extension is still listed — that's
+    // The owner's switch (.intentic/config/extension-enablement.json). A disabled extension is still listed — that's
     // what makes it switchable back on — but the daemon wires none of its contributions up and the web host
     // doesn't activate it.
     enabled: z.boolean(),
@@ -4268,7 +4268,7 @@ export const ExtensionsListSchema = z.object({
     // what lets the tab say "checked an hour ago" instead of presenting staleness as certainty.
     updatesCheckedAt: z.string().optional(),
 });
-// The extension's contributes.settings values, persisted daemon-side (.intentic/extension-settings.json) keyed
+// The extension's contributes.settings values, persisted daemon-side (.intentic/config/extension-settings.json) keyed
 // by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
 // Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,
 // so the UI renders "•••• (set)" without ever receiving the secret back.
@@ -4310,7 +4310,7 @@ export const ExtensionProcessStatusSchema = z.object({
 });
 export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema>;
 
-// ---- automations: scheduled agent wake-ups (.intentic/automations.json) ----
+// ---- automations: scheduled agent wake-ups (.intentic/config/automations.json) ----
 // An automation wakes the agent autonomously: the daemon's scheduler fires each enabled automation on its
 // trigger, runs the optional guard command (a shell command in the workspace; non-zero exit skips the wake),
 // then runs one agent turn with the prompt. The manifest is user config; run history is daemon-recorded.
@@ -4590,7 +4590,7 @@ export const AutomationSchema = z.object({
 });
 export type Automation = z.infer<typeof AutomationSchema>;
 
-// A wake held for owner approval (.intentic/approvals/<id>.json, one file per held wake). It snapshots the
+// A wake held for owner approval (.intentic/records/approvals/<id>.json, one file per held wake). It snapshots the
 // trigger payload so an approved run replays exactly what fired, even across a daemon restart. The id is minted
 // by the daemon (an entryId-safe filename).
 export const AutomationApprovalSchema = z.object({
@@ -5235,7 +5235,7 @@ export const PrepushRunSchema = z.object({
 });
 export type PrepushRun = z.infer<typeof PrepushRunSchema>;
 
-// ---- drafts: agent-proposed posts awaiting owner approval (.intentic/drafts/<id>.json) ----
+// ---- drafts: agent-proposed posts awaiting owner approval (.intentic/config/drafts/<id>.json) ----
 // One JSON file per draft. The AGENT creates drafts with its normal file tools — it can't call daemon routes,
 // the same split as the environment proposal — while the daemon edits/deletes them on the owner's behalf, so
 // the two writers never share a file. The id IS the filename (entryId charset ⇒ path-safe); the body never
@@ -5275,7 +5275,7 @@ export const DraftSchema = z.object({
      * address and one comment's permalink is the difference between talking to the room and answering the
      * person: the publisher opens exactly this and replies where it lands. */
     target: z.string().optional(),
-    // Workspace-relative attachment paths, e.g. ".intentic/drafts/media/chart.png".
+    // Workspace-relative attachment paths, e.g. ".intentic/config/drafts/media/chart.png".
     media: z.array(z.string()).optional(),
     // Suggested post time (epoch ms, the at/nextRun convention). Optional — the agent may propose without a
     // date and the owner sets one at approval; an approved draft with no date posts as soon as it's picked up.
@@ -5305,7 +5305,7 @@ export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 // draft would silently never post.
 export const DraftsListSchema = z.object({ drafts: z.array(DraftSummarySchema), invalid: z.array(z.string()) });
 export type DraftsList = z.infer<typeof DraftsListSchema>;
-// entryId, not a bare string: the id becomes a filename under .intentic/drafts/.
+// entryId, not a bare string: the id becomes a filename under .intentic/config/drafts/.
 export const DraftIdParamSchema = z.object({ id: entryId });
 
 // ---- panels: per-repository dev servers + the content facts extensions detect on ----
@@ -5505,6 +5505,12 @@ export const MachinePairingSchema = z.object({
     // product surfaces these, so a file edited on both ends stays stuck until someone runs the CLI.
     conflicts: z.number().int().nonnegative().optional(),
     paused: z.boolean().optional(),
+    /* The SECOND session's word — the one-way mirror carrying the sandbox's state dir down (sync's backupSpec).
+     * Reported separately rather than folded into the status above, because the two fail independently and mean
+     * different things: the first going quiet stops the owner's edits moving, the second going quiet stops their
+     * personas, skills, automations, drafts and transcripts from surviving the sandbox. A backup that is not
+     * running is only dangerous while nobody knows, so it gets its own word on the line. */
+    backupStatus: z.string().optional(),
 });
 export type MachinePairing = z.infer<typeof MachinePairingSchema>;
 
@@ -5942,9 +5948,9 @@ export const SubagentIdParamSchema = z.object({ id: z.string() });
 
 // ---- environment: the overlay Dockerfile extending the sandbox image ----
 // The approved file is DAEMON-COMPOSED: pinned FROM + capability fragments + the owner-approved custom section.
-// The agent drafts one file per thing it needs (.intentic/environment.d/<tool>.Dockerfile — custom-section
+// The agent drafts one file per thing it needs (.intentic/config/environment.d/<tool>.Dockerfile — custom-section
 // content only, no FROM) with its normal file tools, and the daemon folds those into the single proposal file
-// (.intentic/environment.Dockerfile) the owner reads. The owner approves it in the browser, which stores it as
+// (.intentic/config/environment.Dockerfile) the owner reads. The owner approves it in the browser, which stores it as
 // the custom file and recomposes the approved artifact whose sha256 the rebuild executor pins. Both composed
 // files are written only when the composition CHANGES — see writeComposed, and the read loop it exists to end.
 // Status is derived, never stored:
@@ -5954,7 +5960,7 @@ export const SubagentIdParamSchema = z.object({ id: z.string() });
 const environmentFileSchema = z.object({ content: z.string(), hash: z.string() });
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
-    // The owner-approved agent-written custom section (.intentic/environment.custom.Dockerfile).
+    // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).
     custom: environmentFileSchema.optional(),
     approved: environmentFileSchema.optional(),
     // sha256 of the overlay the running container was built from (SANDBOX_ENVIRONMENT_HASH); absent = stock image.
@@ -6334,7 +6340,7 @@ export const ManifestProblemSchema = z.object({
 });
 export type ManifestProblem = z.infer<typeof ManifestProblemSchema>;
 
-// Workspace-relative path (`.intentic/settings.json`) and everything currently wrong with that file. A file
+// Workspace-relative path (`.intentic/config/settings.json`) and everything currently wrong with that file. A file
 // with nothing wrong is absent from the list rather than present and empty.
 export const ManifestProblemReportSchema = z.object({ path: z.string(), problems: z.array(ManifestProblemSchema) });
 export type ManifestProblemReport = z.infer<typeof ManifestProblemReportSchema>;

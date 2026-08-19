@@ -7,7 +7,7 @@ import { auditBrief, extensionBrief, publishBrief, tightenBrief, updateBrief } f
 
 const brief = extensionBrief({
     id: `workspace.release-notes`,
-    dir: `${STATE_DIR}/workspace-extensions/release-notes`,
+    dir: `${STATE_DIR}/config/workspace-extensions/release-notes`,
     wish: `  a list of what shipped this week, from the git log  `,
 });
 
@@ -19,8 +19,8 @@ describe(`the brief handed to an authoring agent`, () => {
     });
 
     test(`names the two files by path, so nothing has to be searched for`, () => {
-        expect(brief).toContain(`.intentic/workspace-extensions/release-notes/extension.js`);
-        expect(brief).toContain(`.intentic/workspace-extensions/release-notes/intentic-extension.json`);
+        expect(brief).toContain(`.intentic/config/workspace-extensions/release-notes/extension.js`);
+        expect(brief).toContain(`.intentic/config/workspace-extensions/release-notes/intentic-extension.json`);
     });
 
     test(`states every constraint that is invisible from inside the directory`, () => {
@@ -43,7 +43,7 @@ describe(`the brief handed to an authoring agent`, () => {
 describe(`the brief for tightening permissions`, () => {
     const tighten = tightenBrief({
         id: `workspace.release-notes`,
-        dir: `${STATE_DIR}/workspace-extensions/release-notes`,
+        dir: `${STATE_DIR}/config/workspace-extensions/release-notes`,
         unused: [`POST /agent`, `GET /panels`],
         used: [{ route: `GET /workspace/file`, calls: 1240 }],
     });
@@ -71,7 +71,7 @@ describe(`the brief for tightening permissions`, () => {
 describe(`the brief for publishing`, () => {
     const publish = publishBrief({
         id: `workspace.release-notes`,
-        dir: `${STATE_DIR}/workspace-extensions/release-notes`,
+        dir: `${STATE_DIR}/config/workspace-extensions/release-notes`,
         name: `release-notes`,
     });
 

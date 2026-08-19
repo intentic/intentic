@@ -115,7 +115,7 @@ export interface GatewaySpec<TConfig extends { readonly provider: string }, THan
     readonly connectWithoutAutomations?: boolean;
     // Status cadence override (whatsapp: 5s — a fresh pairing code must not wait half a minute).
     readonly statusMs?: number;
-    // Write .intentic/runtime/extensions/<provider>/gateway.url so the agent's CLI can find the control surface
+    // Write .intentic/local/runtime/extensions/<provider>/gateway.url so the agent's CLI can find the control surface
     // (the daemon injects nothing provider-specific into the agent's environment).
     readonly publishGatewayUrl?: boolean;
     readonly create: (ctx: GatewayCtx<TConfig>, control: GatewayControl) => GatewayHooks<TConfig, THandle>;
@@ -325,7 +325,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
 
     // Publish the control address for the agent's CLI to read (the discord-voice pattern).
     if (spec.publishGatewayUrl === true) {
-        const urlFile = join(workspaceRoot, STATE_DIR, "runtime", "extensions", spec.provider, "gateway.url");
+        const urlFile = join(workspaceRoot, STATE_DIR, "local", "runtime", "extensions", spec.provider, "gateway.url");
         await mkdir(dirname(urlFile), { recursive: true });
         await writeFile(urlFile, `http://127.0.0.1:${port}`);
     }

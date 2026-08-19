@@ -135,7 +135,7 @@ describe(`matchesStoryRevision`, () => {
 
 describe(`storyDir`, () => {
     it(`sits under .intentic, outside every repo — no git noise, nothing to land`, () => {
-        expect(storyDir(`rabc`, `login`)).toBe(`.intentic/artifacts/acceptance/rabc/login`);
+        expect(storyDir(`rabc`, `login`)).toBe(`.intentic/records/artifacts/acceptance/rabc/login`);
     });
 });
 

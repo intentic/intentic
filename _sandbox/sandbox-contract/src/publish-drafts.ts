@@ -41,7 +41,7 @@ export const DIRECT_PUBLISH_PLATFORMS: ReadonlySet<string> = new Set(["discord"]
  * that went out without saying so is a post the owner sends twice. */
 export const publishTurnPrompt = (drafts: readonly { readonly id: string; readonly platform: string }[]): string =>
     [
-        `Publish these approved post drafts, which are due now. They live in .intentic/drafts/, one JSON file each:`,
+        `Publish these approved post drafts, which are due now. They live in .intentic/config/drafts/, one JSON file each:`,
         ``,
         ...drafts.map((draft) => `- ${draft.id}.json (${draft.platform})`),
         ``,

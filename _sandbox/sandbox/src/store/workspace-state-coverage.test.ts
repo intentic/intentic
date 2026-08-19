@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 
 /* THE GUARD THAT THE PREVIOUS TABLE DIDN'T HAVE — now only half a guard, because the compiler took the other half.
  *
- * `.intentic/drafts/` went missing from the browser's invalidation table for one reason: the test that covered
+ * `.intentic/config/drafts/` went missing from the browser's invalidation table for one reason: the test that covered
  * that table asserted the entries it already had. A list checked against itself can only ever confirm what
  * someone remembered to write down, which is the failure AGENTS.md names — "a hardcoded file list repeats the
  * miss it exists to prevent" — so this recognizes violations by their SHAPE instead.
@@ -49,7 +49,7 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
 
 /* `join(<root>, ".intentic"|STATE_DIR, …)` — the raw spellings `statePath` replaced. STATE_DIR is in the
  * pattern because it was the hole: the literal-only regex let `join(root, STATE_DIR, "whisper", …)` and a
- * `${STATE_DIR}/chores` template mint undeclared trees for months while this test passed. Segments may be
+ * `${STATE_DIR}/records/chores` template mint undeclared trees for months while this test passed. Segments may be
  * identifiers (`join(root, STATE_DIR, FILE)`), so the tail matches expressions, not just strings. A bare
  * `join(root, ".intentic")` (the AI-credential root, not a manifest) has no segments and is legitimately not a
  * table entry. */

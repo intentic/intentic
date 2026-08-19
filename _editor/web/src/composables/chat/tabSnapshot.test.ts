@@ -104,7 +104,7 @@ describe(`reading a tab snapshot`, () => {
                         harness: `claude-code`,
                         session: { id: `sess-1`, provider: `codex` },
                         title: `Fix the login handler`,
-                        attachments: [{ name: `pic.png`, path: `${STATE_DIR}/artifacts/attachments/u1/pic.png` }, { name: 42 }],
+                        attachments: [{ name: `pic.png`, path: `${STATE_DIR}/records/artifacts/attachments/u1/pic.png` }, { name: 42 }],
                         queued: [{ text: `also the tests`, attachments: [] }, { attachments: [] }],
                     },
                 ],
@@ -120,7 +120,7 @@ describe(`reading a tab snapshot`, () => {
             harness: `claude-code`,
             session: { id: `sess-1`, provider: `codex` },
             title: `Fix the login handler`,
-            attachments: [{ name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png` }],
+            attachments: [{ name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png` }],
             queued: [{ text: `also the tests`, attachments: [] }],
         });
     });

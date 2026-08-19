@@ -119,7 +119,7 @@ export interface SpeechDeps {
 export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchModel }: SpeechDeps): Speech => {
     // Under cache/ because that is what the model IS — 1.6 GB re-downloadable by content, exactly what the
     // cache entry's `derived` promises exports and the watcher. Its old top-level home is a retired dir.
-    const modelPath = statePath(workspaceRoot, ".intentic/cache/", "whisper", MODEL_FILE);
+    const modelPath = statePath(workspaceRoot, ".intentic/local/cache/", "whisper", MODEL_FILE);
     const download = fetchModel ?? ((file: string) => downloadFile({ repo: MODEL_REPO, path: file }));
 
     // The provisioning probe's answer, cached per process: the binary arrives via image rebuild, which

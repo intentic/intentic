@@ -4,7 +4,7 @@ import type { ResolvedContribution } from "./contributions.js";
 import { partitionSecretValues } from "./secret-fields.js";
 import type { SecretVault } from "./secret-vault.js";
 
-// The sandbox-owned manifest of active capabilities (<workspace>/.intentic/capabilities.json). Source of truth
+// The sandbox-owned manifest of active capabilities (<workspace>/.intentic/config/capabilities.json). Source of truth
 // for what's active; mcp entries also feed the agent's MCP servers. Off the daemon's file ROUTES (the
 // control-plane denylist), which is a bound on the browser and never was one on the agent — it holds a shell,
 // and this file is meant to be readable and editable by it. So the credential VALUES are not in here at all:
@@ -33,7 +33,7 @@ const rawId = (entry: unknown): string | undefined => {
     return typeof id === "string" ? id : undefined;
 };
 
-// A JSON file store, used in production at <workspace>/.intentic/capabilities.json. A skipped entry is
+// A JSON file store, used in production at <workspace>/.intentic/config/capabilities.json. A skipped entry is
 // reported twice over, because the two audiences are in different places: `onInvalid` puts it in the daemon
 // log for whoever is reading logs, and the manifest-problem registry puts it on the screen where the
 // capability went missing. Until the second one existed, "never silent" was only true of the log.
@@ -156,7 +156,7 @@ export const withSecretVault = (
  *
  * `upsert` above is the only thing that vaults, so the manifest holds the shape of a connection only for the
  * entries written since it did. Every OTHER entry — one saved before the split existed, one the agent pasted a
- * real token back into with its own file tools, one restored from an export — sits in .intentic/capabilities.json
+ * real token back into with its own file tools, one restored from an export — sits in .intentic/config/capabilities.json
  * with the credential still in it, and nothing rewrites it because nothing re-saves a service that is working.
  * The manifest is deliberately readable and deliberately editable, so "a credential is in there" is a state the
  * system can re-enter at any time, not a leftover of one version. Hence a sweep that runs on every boot and

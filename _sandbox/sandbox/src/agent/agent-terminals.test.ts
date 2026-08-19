@@ -163,7 +163,7 @@ test("the Bash rewrite leaves the shared subtrees and any path that merely start
     // Dependency trees and daemon state resolve to the main checkout on both sides — redirecting them would
     // aim at a path the worktree does not have.
     expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");
-    expect(await rewrite("cat /work/.intentic/settings.json")).toContain("/work/.intentic/settings.json");
+    expect(await rewrite("cat /work/.intentic/config/settings.json")).toContain("/work/.intentic/config/settings.json");
     // The deliberate main-tree door, and a look-alike that is not the root at all.
     expect(await rewrite("diff /mnt/intentic-main/x /work/x")).toContain("/mnt/intentic-main/x /wt/x");
     expect(await rewrite("ls ./workspace")).toContain("./workspace");

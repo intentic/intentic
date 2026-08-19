@@ -44,7 +44,7 @@ const fakeProcesses = (root: string, exitCode: number | undefined, started: stri
         start: async (key: string, _spec: ProcessSpec) => {
             started.push(key);
             live.add(key);
-            const artifacts = join(root, `${STATE_DIR}/verify`);
+            const artifacts = join(root, `${STATE_DIR}/local/verify`);
             await mkdir(artifacts, { recursive: true });
             await writeFile(join(artifacts, `${key}.log`), "1 test failed\n");
             if (exitCode !== undefined) {
@@ -67,7 +67,7 @@ const deps = (root: string, processes: ManagedProcesses, events: WorkspaceEvent[
     workspace: { root },
     processes,
     logger: silent,
-    verifyStore: fileVerifyStore(join(root, `${STATE_DIR}/verify.json`)),
+    verifyStore: fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`)),
     activity: {
         append: async (event) => {
             feed.push(event.type);
@@ -113,7 +113,7 @@ test("a green check after a red one announces deps.fixed; green after green anno
     await ready(root, { verify: "pnpm typecheck && pnpm test" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
-    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
     queueVerify(deps(root, fakeProcesses(root, 0, []), events, feed), context, ["app"]);
     await settle(() => events.length > 0);
@@ -133,7 +133,7 @@ test("a still-red check advances the attempt the guard caps on", async () => {
     const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
-    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
     const events: WorkspaceEvent[] = [];
     queueVerify(deps(root, fakeProcesses(root, 1, []), events, []), context, ["app"]);
@@ -231,11 +231,13 @@ test("the check command is the project's own word for it: verify first, then tes
 
 test("the verify store remembers red across restarts — its list is the closure re-check's worklist", async () => {
     const root = await workspace();
-    const store = fileVerifyStore(join(root, `${STATE_DIR}/verify.json`));
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
     await store.record("lib", "green", 2);
     // A fresh store over the same file: the daemon restarted.
-    expect(await fileVerifyStore(join(root, ".intentic/verify.json")).red()).toEqual(["app"]);
-    const status = JSON.parse(await readFile(join(root, ".intentic/verify.json"), "utf8")) as { projects: Record<string, { attempt: number }> };
+    expect(await fileVerifyStore(join(root, ".intentic/records/verify.json")).red()).toEqual(["app"]);
+    const status = JSON.parse(await readFile(join(root, ".intentic/records/verify.json"), "utf8")) as {
+        projects: Record<string, { attempt: number }>;
+    };
     expect(status.projects["app"]?.attempt).toBe(1);
 });

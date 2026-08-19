@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
  *
  * Like every other surface in this recording, the documents ARE the state: a published set is
  * `<repo>/docs/architecture/**` (in the repo, reviewable in the same diff as the code it describes) and a draft
- * is `.intentic/docs/<repo>/**` mirroring the same tails. So this module contributes files and nothing else, and
+ * is `.intentic/config/docs/<repo>/**` mirroring the same tails. So this module contributes files and nothing else, and
  * the extension reads them exactly as it would against a real sandbox.
  *
  * BOTH TREES ARE PRESENT ON PURPOSE. `web` is published — it is what the area looks like once a set has landed:
@@ -17,7 +17,7 @@ import { STATE_DIR } from "@intentic/constants";
  * documents are the finished artifact; the run that made them is over. */
 
 const ARCHITECTURE = `docs/architecture`;
-const STAGING = `${STATE_DIR}/docs`;
+const STAGING = `${STATE_DIR}/config/docs`;
 
 /* What a page carries before it becomes a README. Authored here only so the fixture can compose the page and the
  * index from ONE source; neither shape exists on disk in a real repository. */

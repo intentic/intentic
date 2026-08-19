@@ -4,7 +4,7 @@ The workspace attention filter: what the tree grays and lazy-loads, and what ord
 
 It combines a conservative junk denylist (`node_modules`, `.git`, build output), dedicated predicates for
 Chromium login profiles, agent worktrees and the reference shelf, and the accumulated `.gitignore` rules the
-repos themselves declare. Durable browser artifacts live separately at `.intentic/artifacts/browser/`, so they
+repos themselves declare. Durable browser artifacts live separately at `.intentic/records/artifacts/browser/`, so they
 remain ordinary visible files rather than being mistaken for profile churn.
 
 ## Responsibilities

@@ -47,9 +47,9 @@ test("an image-generation item becomes a completed tool card with a file-backed 
             kind: "tool_call_update",
             id: "ig-1",
             status: "completed",
-            content: [{ type: "image", path: ".intentic/artifacts/imagegen/ig-1.png" }],
+            content: [{ type: "image", path: ".intentic/records/artifacts/imagegen/ig-1.png" }],
         },
         { kind: "done" },
     ]);
-    expect(await readFile(join(workspaceRoot, ".intentic/artifacts/imagegen/ig-1.png"))).toEqual(PNG);
+    expect(await readFile(join(workspaceRoot, ".intentic/records/artifacts/imagegen/ig-1.png"))).toEqual(PNG);
 });

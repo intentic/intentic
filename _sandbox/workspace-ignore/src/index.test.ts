@@ -2,17 +2,17 @@ import { expect, test } from "vitest";
 import { createIgnoreScope, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./index.js";
 
 test("the browser-login profile subtree (auth cookies) is treated as ignored, but the rest of .intentic isn't", () => {
-    expect(isBrowserProfilePath(".intentic/browser/reddit/Default/Cookies")).toBe(true);
-    expect(isBrowserProfilePath(".intentic/browser/x.connected")).toBe(true);
-    expect(isBrowserProfilePath(".intentic/automations.json")).toBe(false);
-    expect(isBrowserProfilePath(".intentic/environment.Dockerfile")).toBe(false);
+    expect(isBrowserProfilePath(".intentic/local/browser/reddit/Default/Cookies")).toBe(true);
+    expect(isBrowserProfilePath(".intentic/local/browser/x.connected")).toBe(true);
+    expect(isBrowserProfilePath(".intentic/config/automations.json")).toBe(false);
+    expect(isBrowserProfilePath(".intentic/config/environment.Dockerfile")).toBe(false);
 });
 
 // What the browsing PRODUCED, as opposed to the profile it ran under: written once, meant to be opened, and
 // linked to from the chat's tool cards. Graying it out was collateral damage from sharing a parent directory.
 test("browser artifacts are ordinary files, not profile churn", () => {
-    expect(isBrowserProfilePath(".intentic/artifacts/browser")).toBe(false);
-    expect(isBrowserProfilePath(".intentic/artifacts/browser/page-2026-07-30T10-00-00.png")).toBe(false);
+    expect(isBrowserProfilePath(".intentic/records/artifacts/browser")).toBe(false);
+    expect(isBrowserProfilePath(".intentic/records/artifacts/browser/page-2026-07-30T10-00-00.png")).toBe(false);
 });
 
 test("agent worktrees (.claude/worktrees — throwaway full checkouts) are treated as ignored, but the rest of .claude isn't", () => {
@@ -39,12 +39,12 @@ test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; lea
     expect(scope.isIgnored("node_modules", "node_modules", true)).toBe(true);
     expect(scope.isIgnored(".pnpm-store", ".pnpm-store", true)).toBe(true);
     expect(scope.isIgnored("__pycache__", "app/__pycache__", true)).toBe(true);
-    expect(scope.isIgnored(".tmp", ".intentic/auth/codex/.tmp", true)).toBe(true);
+    expect(scope.isIgnored(".tmp", ".intentic/secrets/auth/codex/.tmp", true)).toBe(true);
     // `.git` is now a junk-ignored dir (grayed + lazy-loaded), not a security-floor secret.
     expect(scope.isIgnored(".git", "repo/.git", true)).toBe(true);
     // The browser-profile subtree is ignored (grayed + lazy) regardless of the inner file names.
-    expect(scope.isIgnored("browser", ".intentic/browser", true)).toBe(true);
-    expect(scope.isIgnored("Cookies", ".intentic/browser/reddit/Default/Cookies", false)).toBe(true);
+    expect(scope.isIgnored("browser", ".intentic/local/browser", true)).toBe(true);
+    expect(scope.isIgnored("Cookies", ".intentic/local/browser/reddit/Default/Cookies", false)).toBe(true);
     // The reference shelf is ignored as a subtree (grayed + lazy, skipped by default search); a repo's own
     // refs/ dir is not the shelf.
     expect(scope.isIgnored("refs", "refs", true)).toBe(true);

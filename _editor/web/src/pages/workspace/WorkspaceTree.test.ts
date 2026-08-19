@@ -292,9 +292,9 @@ describe(`the hide-tests toggle`, () => {
 describe(`the rows the sandbox keeps to itself`, () => {
     const LOCKED_TREE: WorkspaceTreeEntry[] = [
         dir(`.intentic`, [
-            file(`.intentic/capabilities.json`),
-            file(`.intentic/settings.json`),
-            { name: `auth`, path: `.intentic/auth`, type: `dir` },
+            file(`.intentic/config/capabilities.json`),
+            file(`.intentic/config/settings.json`),
+            { name: `auth`, path: `.intentic/secrets/auth`, type: `dir` },
         ]),
         file(`README.md`),
     ];
@@ -325,7 +325,7 @@ describe(`the rows the sandbox keeps to itself`, () => {
         authRow.click();
         await nextTick();
 
-        expect(opened).toEqual([`.intentic/auth`]);
+        expect(opened).toEqual([`.intentic/secrets/auth`]);
         expect(rows(el)).toEqual([`.intentic`, `capabilities.json`, `settings.json`, `auth`, `README.md`]);
     });
 });

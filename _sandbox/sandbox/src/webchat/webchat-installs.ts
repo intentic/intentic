@@ -47,7 +47,7 @@ export interface WebchatInstallsStore {
 }
 
 export const fileWebchatInstallsStore = (root: string): WebchatInstallsStore => {
-    const file = jsonFile<InstallsFile>(statePath(root, ".intentic/webchat-installs.json"), {
+    const file = jsonFile<InstallsFile>(statePath(root, ".intentic/records/webchat-installs.json"), {
         parse: (raw) => FileSchema.safeParse(raw).data,
         fallback: () => ({}),
     });

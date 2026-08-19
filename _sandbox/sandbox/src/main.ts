@@ -149,9 +149,9 @@ const requireAuthWhenReachable = (config: Config): void => {
 // A workspace-relative path that is extension SOURCE — the three places a backend extension's code or its
 // enablement can arrive from. Module scope so the watcher's callback doesn't rebuild it on every change batch.
 const extensionSource = (path: string): boolean =>
-    path.startsWith(`${stateRelPath(".intentic/workspace-extensions/")}/`) ||
-    path.startsWith(`${stateRelPath(".intentic/extensions/")}/`) ||
-    path === stateRelPath(".intentic/extension-enablement.json");
+    path.startsWith(`${stateRelPath(".intentic/config/workspace-extensions/")}/`) ||
+    path.startsWith(`${stateRelPath(".intentic/local/extensions/")}/`) ||
+    path === stateRelPath(".intentic/config/extension-enablement.json");
 
 const main = async (): Promise<void> => {
     const config = loadConfig();

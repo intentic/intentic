@@ -165,7 +165,7 @@ test("intentic ships its own prompt as the base, with the harness guidance after
         mode: "intentic",
         custom: undefined,
         append: "extra",
-        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
+        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
     });
     // A string, because Intentic's prompt is not the CLI's preset — the SDK has to be told to drop that.
     expect(typeof prompt).toBe("string");
@@ -195,7 +195,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
         mode: "claude",
         custom: undefined,
         append: "extra",
-        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
+        browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
     });
     expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
     const { append } = preset as { append: string };
@@ -205,7 +205,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     expect(append).toContain("`refs/`");
     // The browser guidance names the directory the redirect hook actually enforces, so the agent is told a fact
     // rather than a convention — a turn whose screenshots land elsewhere costs it a failed Read and a `find /`.
-    expect(append).toContain("/work/.intentic/artifacts/browser");
+    expect(append).toContain("/work/.intentic/records/artifacts/browser");
     expect(append.endsWith("extra")).toBe(true);
 });
 

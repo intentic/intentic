@@ -13,7 +13,7 @@ import { browserUrls, contributedSkill, contributionKey, contributionRegistry, h
 // SKILL.md into .agents/skills/<id> (loaded-skills.ts projects it to every runtime) and its `fragment` is the
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
-// The login lands in a Chromium profile under .intentic/browser/<id> by either of two hands: the owner's own,
+// The login lands in a Chromium profile under .intentic/local/browser/<id> by either of two hands: the owner's own,
 // over the /system/browser-profile WebSocket, or the AGENT's — its @playwright/mcp mounts over the same profile
 // while the account is still pending, signs in (or up) using the stored credentials the daemon types for it
 // (browser/accounts-tools.ts), and marks the account connected. Either way the owner can reopen that same

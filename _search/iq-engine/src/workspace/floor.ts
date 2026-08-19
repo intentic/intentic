@@ -2,7 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { SEARCHABLE_STATE_PATHS, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 
 // Where the index lives, root-relative. Inside the denied-by-default state dir, so it can never surface itself.
-export const IQ_DIR = `${STATE_DIR}/cache/iq`;
+export const IQ_DIR = `${STATE_DIR}/local/cache/iq`;
 
 /* THE AGENT PLANE IS OUT OF SCOPE BY DEFAULT — an allow-list over `.intentic`, not a deny-list.
  *

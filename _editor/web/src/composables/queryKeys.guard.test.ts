@@ -128,7 +128,7 @@ describe(`cache key registry`, () => {
         expect(stale, `drop these from EXEMPT — they no longer import sandboxKey`).toEqual([]);
     });
 
-    /* THE OTHER END OF THE WIRE. The daemon pushes staleness BY NAME: a write to `.intentic/personas.json`
+    /* THE OTHER END OF THE WIRE. The daemon pushes staleness BY NAME: a write to `.intentic/config/personas.json`
      * carries `invalidates: ["personas","capabilities","manifests"]` from the contract's WORKSPACE_STATE_FILES,
      * and systemEvents hands that bare name to invalidateQueries. A name on that list with no family here is a
      * push that lands on nothing — the file changes, the daemon reports it, and the screen does not move. It is

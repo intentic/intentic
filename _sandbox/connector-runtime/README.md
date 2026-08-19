@@ -9,7 +9,7 @@ that ext-discord, ext-slack, ext-telegram, ext-whatsapp and ext-imap used to eac
   30-second poll and on the daemon's `/reconcile` poke, so switching an integration on does not leave the bot
   deaf until the next tick — post liveness status, serve the loopback `/health` (and a connector's own control
   routes), die cleanly on signals.
-- Publish process-local discovery and watermark files beneath `.intentic/runtime/extensions/<provider>/`; the
+- Publish process-local discovery and watermark files beneath `.intentic/local/runtime/extensions/<provider>/`; the
   tree is derived state and is never included in a workspace export.
 - Speak the daemon's four listener routes once, typed against the contract's listener protocol — so a payload a
   connector sends is compile-checked against the schema the daemon parses with.

@@ -11,6 +11,6 @@
     },
     "contributes": {
         "views": [{ "id": "drafts", "label": "Drafts", "surface": "rail", "badge": true }],
-        "files": [{ "path": ".intentic/drafts/", "invalidates": ["drafts"] }]
+        "files": [{ "path": ".intentic/config/drafts/", "invalidates": ["drafts"] }]
     }
 }

@@ -9,7 +9,7 @@ import { filePersonasStore, type PersonasStore } from "./personas-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: PersonasStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "personas-")), `${STATE_DIR}`, "personas.json");
+    const path = join(mkdtempSync(join(tmpdir(), "personas-")), `${STATE_DIR}`, "config", "personas.json");
     return { store: filePersonasStore(path), path };
 };
 
@@ -37,7 +37,7 @@ test("remove returns true when present, false when absent", async () => {
 // One hand-edited card must not take the rest of the personas down with it — least of all on the turn path, where
 // the answer decides what an unattended wake may act through.
 test("an invalid card is skipped and reported; the rest survive", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "personas-")), `${STATE_DIR}`, "personas.json");
+    const path = join(mkdtempSync(join(tmpdir(), "personas-")), `${STATE_DIR}`, "config", "personas.json");
     const skipped: string[] = [];
     const store = filePersonasStore(path, (id) => skipped.push(id));
     await mkdir(dirname(path), { recursive: true });

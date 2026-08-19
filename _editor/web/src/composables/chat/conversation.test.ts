@@ -744,7 +744,12 @@ describe(`Conversation`, () => {
             sseResponse(
                 [
                     { kind: `delta`, text: `working` },
-                    { kind: `steer`, text: `look at this`, sentAt: 1_767_225_600_000, attachments: [`.intentic/artifacts/attachments/u1/shot.png`] },
+                    {
+                        kind: `steer`,
+                        text: `look at this`,
+                        sentAt: 1_767_225_600_000,
+                        attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
+                    },
                 ],
                 { stayOpen: true },
             ),
@@ -752,14 +757,14 @@ describe(`Conversation`, () => {
 
         const turn = conversation.send(`start`, settings);
         await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
-        await conversation.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }], {
+        await conversation.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
             file: `src/app.ts`,
         });
 
         const steer = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/steer`);
         expect(JSON.parse(steer![1]!.body as string)).toMatchObject({
             text: `look at this`,
-            attachments: [`.intentic/artifacts/attachments/u1/shot.png`],
+            attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
         // The bubble carries the files too — the transcript shows what was actually handed over. Its chip is
@@ -768,7 +773,7 @@ describe(`Conversation`, () => {
             expect(conversation.messages.value.at(-1)).toMatchObject({
                 role: `user`,
                 text: `look at this`,
-                attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }],
+                attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }],
             }),
         );
 
@@ -838,7 +843,7 @@ describe(`Conversation`, () => {
         });
 
         const turn = conversation.send(`start`, settings);
-        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/artifacts/attachments/u1/spec.md` }]);
+        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }]);
         await conversation.enqueue(`and the docs`);
         controller.enqueue(sseFrame({ kind: `end` }));
         controller.close();
@@ -848,7 +853,7 @@ describe(`Conversation`, () => {
         await vi.waitFor(() => expect(turnBodies()).toHaveLength(2));
         expect(turnBodies()[1]).toMatchObject({
             prompt: `also the tests\n\nand the docs`,
-            attachments: [`.intentic/artifacts/attachments/u1/spec.md`],
+            attachments: [`.intentic/records/artifacts/attachments/u1/spec.md`],
         });
     });
 
@@ -956,19 +961,19 @@ describe(`Conversation`, () => {
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
-            { name: `shot.png`, path: `${STATE_DIR}/artifacts/attachments/a1/shot.png` },
+            { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
         ]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
         expect(JSON.parse(String(body.body))).toMatchObject({
             kind: `plan`,
             approve: false,
-            feedback: `this bit is wrong\n@.intentic/artifacts/attachments/a1/shot.png`,
+            feedback: `this bit is wrong\n@.intentic/records/artifacts/attachments/a1/shot.png`,
         });
         expect(conversation.messages.value.at(-1)).toMatchObject({
             role: `user`,
             text: `this bit is wrong`,
-            attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/a1/shot.png` }],
+            attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/a1/shot.png` }],
         });
     });
 
@@ -980,10 +985,12 @@ describe(`Conversation`, () => {
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, false, ``, [{ name: `shot.png`, path: `${STATE_DIR}/artifacts/attachments/a1/shot.png` }]);
+        await conversation.decidePlan(planMessage!, false, ``, [
+            { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
+        ]);
 
         const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
-        expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/artifacts/attachments/a1/shot.png` });
+        expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/records/artifacts/attachments/a1/shot.png` });
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `user`, text: `` });
     });
 
@@ -2625,12 +2632,14 @@ describe(`Conversation`, () => {
     it(`redraws a restored message's attachments as chips`, () => {
         const conversation = new Conversation(`c1`);
 
-        conversation.restoreMessages([{ role: `user`, text: `analyze this`, attachments: [`${STATE_DIR}/artifacts/attachments/uuid-1/image.png`] }]);
+        conversation.restoreMessages([
+            { role: `user`, text: `analyze this`, attachments: [`${STATE_DIR}/records/artifacts/attachments/uuid-1/image.png`] },
+        ]);
 
         expect(conversation.messages.value[0]).toMatchObject({
             role: `user`,
             text: `analyze this`,
-            attachments: [{ name: `image.png`, path: `.intentic/artifacts/attachments/uuid-1/image.png` }],
+            attachments: [{ name: `image.png`, path: `.intentic/records/artifacts/attachments/uuid-1/image.png` }],
         });
     });
 

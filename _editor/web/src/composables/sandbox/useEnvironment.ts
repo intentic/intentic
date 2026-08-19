@@ -4,7 +4,7 @@ import { sandboxJson } from "./sandboxClient";
 import { ENVIRONMENT } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* The sandbox's composed environment overlay (.intentic/environment.approved.Dockerfile), read via the daemon's
+/* The sandbox's composed environment overlay (.intentic/local/environment.approved.Dockerfile), read via the daemon's
  * /environment route. Shared by the Environment card, the shell's rebuild banner, and the capabilities page so
  * "a rebuild is pending" / "a proposal awaits review" derives from ONE query (vue-query dedupes on the key). */
 

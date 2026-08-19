@@ -32,8 +32,8 @@ describe(`facetsOf`, () => {
     });
 
     it(`keeps wiring out of the one-line strip but not out of the record`, () => {
-        const [facet] = facetsOf(manifest({ files: [{ path: `${STATE_DIR}/docs/`, invalidates: [`documentation`] }] }));
-        expect(facet).toMatchObject({ label: `watched files`, names: [`.intentic/docs/`], surface: false });
+        const [facet] = facetsOf(manifest({ files: [{ path: `${STATE_DIR}/config/docs/`, invalidates: [`documentation`] }] }));
+        expect(facet).toMatchObject({ label: `watched files`, names: [`.intentic/config/docs/`], surface: false });
     });
 
     it(`skips a declared-but-empty array rather than saying "0 commands"`, () => {

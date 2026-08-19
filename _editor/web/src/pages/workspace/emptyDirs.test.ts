@@ -62,7 +62,7 @@ describe(`barrenDirs`, () => {
     // skill, and the tree walk lists no symlinks at all — so a folder full of skills arrives as `children: []`.
     it(`leaves the daemon's own folders alone — its state dir and the skill projections`, () => {
         const tree = [
-            dir(`.intentic`, [dir(`.intentic/cache`, [dir(`.intentic/cache/iq`, [dir(`.intentic/cache/iq/spool`, [])])])]),
+            dir(`.intentic`, [dir(`.intentic/local/cache`, [dir(`.intentic/local/cache/iq`, [dir(`.intentic/local/cache/iq/spool`, [])])])]),
             dir(`.claude`, [dir(`.claude/skills`, [])]),
             dir(`.agents`, [dir(`.agents/skills`, [])]),
         ];
@@ -75,7 +75,7 @@ describe(`barrenDirs`, () => {
         const tree = [
             dir(`.agents`, [dir(`.agents/skills`, [])]),
             dir(`.claude`, [dir(`.claude/skills`, [])]),
-            dir(`.intentic`, [dir(`.intentic/cache`, [dir(`.intentic/cache/iq`, [file(`.intentic/cache/iq/index.db`)])])]),
+            dir(`.intentic`, [dir(`.intentic/local/cache`, [dir(`.intentic/local/cache/iq`, [file(`.intentic/local/cache/iq/index.db`)])])]),
             dir(`refs`, []),
         ];
         expect(barrenRoots(tree, NO_LAZY, barrenDirs(tree, NO_LAZY))).toEqual([]);

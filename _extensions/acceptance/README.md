@@ -39,7 +39,7 @@ tested" is the honest evidence for offering the area.
   it owns the dev server. Each address carries the terminal it is actually served from, so the chip opens that
   one; an address served from outside the box's terminals says "no terminal" instead of offering one that has
   never existed. Only a start still installing points at the panel's own session, where by definition it is.
-- Runs are evidence, not documents: they are point-in-time and live under `.intentic/artifacts/acceptance/`,
+- Runs are evidence, not documents: they are point-in-time and live under `.intentic/records/artifacts/acceptance/`,
   unlike architecture pages, which are maintained artifacts that belong in the repo. A manifest keeps the exact story text and
   criteria, target addresses, project testing notes, provider and model that shaped its sessions. Editing a story
   therefore retires the old verdict from the current stories list without changing the historical report.

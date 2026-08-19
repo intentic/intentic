@@ -124,11 +124,39 @@ export const rootExcludes = (repoIds: readonly string[]): string[] => [
      * first write; an allowlist the contract owns inverts that — a new entry is ignored until someone marks it,
      * and the guard test refuses the mark on anything classed secret or identity. A DIRECTORY entry keeps its
      * trailing slash through the mapping, which is what lets git descend into it (environment.d/). */
-    "/.intentic/*",
-    ...VERSIONED_STATE_PATHS.map((path) => `!/${path}`),
+    ...trackedStateExcludes(),
     `/${REFERENCE_DIR}/`,
     ...COMMON_EXCLUDES,
 ];
+
+/* THE CARVE-OUT, LAYER BY LAYER — because git's "cannot re-include inside an excluded directory" rule bites once
+ * per level, and the state dir now has two.
+ *
+ * The single `/.intentic/*` above used to be enough: every tracked entry sat directly under it, so excluding the
+ * CONTENTS rather than the directory left the parent walkable and each `!` rule could reach its file. Grouping
+ * the state dir moved those entries down a level, and `/.intentic/*` matches `.intentic/config` — a DIRECTORY —
+ * so git stopped descending and every negation beneath it re-included nothing. The baseline commit came back
+ * empty: not one setting, persona, skill or draft tracked, silently, with the exclude file looking correct.
+ *
+ * So the same trick is applied at every level a tracked path passes through: un-ignore the directory, re-exclude
+ * its contents, and repeat. Derived from the paths themselves rather than written out, so a tracked entry that
+ * lands three levels deep tomorrow gets its ladder without anyone remembering this rule. */
+const trackedStateExcludes = (): string[] => {
+    const walkable = new Set<string>();
+    for (const path of VERSIONED_STATE_PATHS) {
+        const segments = path.replace(/\/$/, "").split("/");
+        // Every ancestor from the state dir down to (but not including) the entry itself.
+        for (let depth = 1; depth < segments.length; depth++) {
+            walkable.add(segments.slice(0, depth).join("/"));
+        }
+    }
+    // Shallowest first: a later rule wins in git, so each level must be opened before the next one is closed.
+    const ladder = [...walkable].toSorted((a, b) => a.split("/").length - b.split("/").length);
+    return [
+        ...ladder.flatMap((dir, index) => (index === 0 ? [`/${dir}/*`] : [`!/${dir}/`, `/${dir}/*`])),
+        ...VERSIONED_STATE_PATHS.map((path) => `!/${path}`),
+    ];
+};
 
 // Converge the root exclude list onto both consumers — the real /work repo's git dir (git/root-repo.ts; its
 // info/ is shared with every agent worktree) and the history root scope's — so history and the Changes review

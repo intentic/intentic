@@ -37,14 +37,14 @@ capability composes it automatically.
 Check with `command -v <tool>` before assuming something is missing. If a staple that belongs in that list is
 genuinely absent, it is worth proposing below — the list above grew from exactly that.
 
-The final overlay (`.intentic/environment.approved.Dockerfile`) is COMPOSED BY THE DAEMON from three parts:
+The final overlay (`.intentic/local/environment.approved.Dockerfile`) is COMPOSED BY THE DAEMON from three parts:
 the pinned `FROM`, the enabled capabilities' fragments (daemon-owned — never copy or touch these), and the
 owner-approved custom section. You propose ONLY custom-section content.
 
 ## How to propose
 
-1. Write your steps to `.intentic/environment.d/<tool>.Dockerfile` — one file per thing you need, named after
-   it (`ffmpeg.Dockerfile`, `rust.Dockerfile`). Do NOT write `.intentic/environment.Dockerfile`: the daemon
+1. Write your steps to `.intentic/config/environment.d/<tool>.Dockerfile` — one file per thing you need, named after
+   it (`ffmpeg.Dockerfile`, `rust.Dockerfile`). Do NOT write `.intentic/config/environment.Dockerfile`: the daemon
    composes that from your drafts plus the already-approved custom section, and writing it directly would
    clobber a parallel agent's request and drop steps the owner already approved. Naming the file after the
    tool also means another agent needing the same one converges on your entry instead of duplicating it.
@@ -97,6 +97,6 @@ running, so tell the user rather than assuming it's free. Say which parts of the
 
 For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
 in `intent/deploy.config.ts`, pass
-`dockerfile: readFileSync("/work/.intentic/environment.approved.Dockerfile", "utf8")` to the
+`dockerfile: readFileSync("/work/.intentic/local/environment.approved.Dockerfile", "utf8")` to the
 `i.want.workspace(…)` input — the content lands in the git-reviewed desired-state, which is the approval
 gate on that path.

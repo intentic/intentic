@@ -141,7 +141,7 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
     const key = verifyPanelKey(dir);
     // Under .intentic (the daemon's own state dir, outside every repo) so a running check never dirties the
     // tree it is checking; named through statePath so the state table and this writer cannot drift.
-    const artifacts = statePath(deps.workspace.root, ".intentic/verify/");
+    const artifacts = statePath(deps.workspace.root, ".intentic/local/verify/");
     const logPath = join(artifacts, `${key}.log`);
     const statusPath = join(artifacts, `${key}.status`);
     await deps.processes.start(key, {

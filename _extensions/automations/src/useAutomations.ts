@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
-/* The sandbox's automations manifest (.intentic/automations.json), read/written via the daemon's /automations
+/* The sandbox's automations manifest (.intentic/config/automations.json), read/written via the daemon's /automations
  * routes. `save` upserts by id; `setEnabled` has its own narrow route so switching a row cannot discard fields;
  * the daemon's
  * scheduler picks changes up on its next poll — nothing to provision, so no streamed apply. `pending` is the

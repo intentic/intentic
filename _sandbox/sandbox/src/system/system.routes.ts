@@ -285,7 +285,7 @@ export const createSystemRoutes = (services: Services) => {
          * anything reads them, which is what any feature touching them already does. What they do not get is
          * this pre-emptive re-read, because nobody hand-edits them and the reads are not free.
          *
-         * Paths come back workspace-relative, so the browser shows `.intentic/settings.json` rather than a
+         * Paths come back workspace-relative, so the browser shows `.intentic/config/settings.json` rather than a
          * container path nobody can act on. */
         manifestProblems: i.manifestProblems.handler(async () => {
             await Promise.all([services.sandboxSettings.get(), services.capabilities.list(), services.personas.list()]);

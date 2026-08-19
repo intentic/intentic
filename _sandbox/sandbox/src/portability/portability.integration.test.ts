@@ -125,18 +125,19 @@ test("every repo's real git dir travels, and its in-tree pointer is rewritten fo
 test("identity never travels and is refused on the way in even when a bundle carries it", async () => {
     const source = await makeRoots();
     await writeFile(join(source.history, "session-secret"), "signing-key");
-    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/owner.json`), `{"email":"owner@example.com"}`);
-    await writeFile(join(source.work, `${STATE_DIR}/settings.json`), `{"autoLand":true}`);
+    await mkdir(join(source.work, `${STATE_DIR}/identity`), { recursive: true });
+    await mkdir(join(source.work, `${STATE_DIR}/config`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/identity/owner.json`), `{"email":"owner@example.com"}`);
+    await writeFile(join(source.work, `${STATE_DIR}/config/settings.json`), `{"autoLand":true}`);
 
     const target = await makeRoots();
     const report = await restoreBundle(await bundleOf(source, true), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
     // Ordinary settings travel even with secrets on…
-    expect(await readFile(join(target.work, ".intentic/settings.json"), "utf8")).toBe(`{"autoLand":true}`);
+    expect(await readFile(join(target.work, ".intentic/config/settings.json"), "utf8")).toBe(`{"autoLand":true}`);
     // …the two identity files do not, and `secrets: true` does not buy them. Carrying owner.json would hand the
     // target's ownership to whoever holds the bundle.
-    await expect(readFile(join(target.work, ".intentic/owner.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(target.work, ".intentic/identity/owner.json"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.history, "session-secret"), "utf8")).rejects.toThrow();
     expect(report.refused).toEqual([]);
     await cleanup();
@@ -144,16 +145,16 @@ test("identity never travels and is refused on the way in even when a bundle car
 
 test("secrets obey the owner's export choice, in both directions", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/ci.json`), `{"secret":"webhook"}`);
+    await mkdir(join(source.work, `${STATE_DIR}/secrets`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/secrets/ci.json`), `{"secret":"webhook"}`);
 
     const withoutSecrets = await makeRoots();
     await restoreBundle(await bundleOf(source, false), { workspaceRoot: withoutSecrets.work, historyRoot: withoutSecrets.history }, LIMIT);
-    await expect(readFile(join(withoutSecrets.work, ".intentic/ci.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(withoutSecrets.work, ".intentic/secrets/ci.json"), "utf8")).rejects.toThrow();
 
     const withSecrets = await makeRoots();
     await restoreBundle(await bundleOf(source, true), { workspaceRoot: withSecrets.work, historyRoot: withSecrets.history }, LIMIT);
-    expect(await readFile(join(withSecrets.work, ".intentic/ci.json"), "utf8")).toContain("webhook");
+    expect(await readFile(join(withSecrets.work, ".intentic/secrets/ci.json"), "utf8")).toContain("webhook");
     await cleanup();
 });
 
@@ -171,15 +172,18 @@ test("secrets obey the owner's export choice, in both directions", async () => {
  * secrets carries one. */
 test("the capability manifest travels without its credentials, swept before the walk", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, `${STATE_DIR}`), { recursive: true });
-    const manifestPath = join(source.work, `${STATE_DIR}/capabilities.json`);
+    await mkdir(join(source.work, `${STATE_DIR}/config`), { recursive: true });
+    const manifestPath = join(source.work, `${STATE_DIR}/config/capabilities.json`);
     await writeFile(manifestPath, `[{"id":"mcp1","kind":"mcp","config":{"url":"https://mcp.example.com","token":"REAL-TOKEN"}}]`);
 
     const target = await makeRoots();
     await restoreBundle(
         await bundleOf(source, false, [], {
             vaultManifestSecrets: async () => {
-                await writeFile(manifestPath, `[{"id":"mcp1","kind":"mcp","config":{"url":"https://mcp.example.com","token":"__intentic_vaulted__"}}]`);
+                await writeFile(
+                    manifestPath,
+                    `[{"id":"mcp1","kind":"mcp","config":{"url":"https://mcp.example.com","token":"__intentic_vaulted__"}}]`,
+                );
                 return ["mcp1"];
             },
         }),
@@ -187,7 +191,7 @@ test("the capability manifest travels without its credentials, swept before the 
         LIMIT,
     );
 
-    const restored = await readFile(join(target.work, ".intentic/capabilities.json"), "utf8");
+    const restored = await readFile(join(target.work, ".intentic/config/capabilities.json"), "utf8");
     // The shape arrived — the id, the kind and the address the owner would otherwise have to remember.
     expect(restored).toContain("mcp1");
     expect(restored).toContain("https://mcp.example.com");
@@ -198,8 +202,8 @@ test("the capability manifest travels without its credentials, swept before the 
 
 test("conversation state travels while every provider runtime home stays secret", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, `${STATE_DIR}/sessions/claude/projects/-history-gits-root/memory`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/sessions/claude/projects/-history-gits-root/memory/MEMORY.md`), "# what I learned\n");
+    await mkdir(join(source.work, `${STATE_DIR}/records/sessions/claude/projects/-history-gits-root/memory`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/records/sessions/claude/projects/-history-gits-root/memory/MEMORY.md`), "# what I learned\n");
     const providerFiles = [
         ["claude", "default.json"],
         ["codex", "auth.json"],
@@ -207,8 +211,8 @@ test("conversation state travels while every provider runtime home stays secret"
         ["cliproxy", "config.yaml"],
     ] as const;
     for (const [provider, file] of providerFiles) {
-        await mkdir(join(source.work, `${STATE_DIR}/auth`, provider), { recursive: true });
-        await writeFile(join(source.work, `${STATE_DIR}/auth`, provider, file), "secret");
+        await mkdir(join(source.work, `${STATE_DIR}/secrets/auth`, provider), { recursive: true });
+        await writeFile(join(source.work, `${STATE_DIR}/secrets/auth`, provider, file), "secret");
     }
     for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
         await mkdir(join(source.work, `${STATE_DIR}`, provider), { recursive: true });
@@ -218,11 +222,11 @@ test("conversation state travels while every provider runtime home stays secret"
     const target = await makeRoots();
     await restoreBundle(await bundleOf(source, false), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
-    expect(await readFile(join(target.work, ".intentic/sessions/claude/projects/-history-gits-root/memory/MEMORY.md"), "utf8")).toBe(
+    expect(await readFile(join(target.work, ".intentic/records/sessions/claude/projects/-history-gits-root/memory/MEMORY.md"), "utf8")).toBe(
         "# what I learned\n",
     );
     for (const [provider, file] of providerFiles) {
-        await expect(readFile(join(target.work, ".intentic/auth", provider, file), "utf8")).rejects.toThrow();
+        await expect(readFile(join(target.work, ".intentic/secrets/auth", provider, file), "utf8")).rejects.toThrow();
     }
     for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
         await expect(readFile(join(target.work, ".intentic", provider, "retired-secret.json"), "utf8")).rejects.toThrow();
@@ -231,7 +235,7 @@ test("conversation state travels while every provider runtime home stays secret"
     const secretTarget = await makeRoots();
     await restoreBundle(await bundleOf(source, true), { workspaceRoot: secretTarget.work, historyRoot: secretTarget.history }, LIMIT);
     for (const [provider, file] of providerFiles) {
-        expect(await readFile(join(secretTarget.work, ".intentic/auth", provider, file), "utf8")).toBe("secret");
+        expect(await readFile(join(secretTarget.work, ".intentic/secrets/auth", provider, file), "utf8")).toBe("secret");
     }
     for (const provider of RETIRED_WORKSPACE_STATE_DIRS.secret) {
         expect(await readFile(join(secretTarget.work, ".intentic", provider, "retired-secret.json"), "utf8")).toBe("retired secret");
@@ -241,19 +245,20 @@ test("conversation state travels while every provider runtime home stays secret"
 
 test("the composed overlay is left for the target to recompose; its source section travels", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, `${STATE_DIR}/environment.d`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/environment.custom.Dockerfile`), "RUN apt-get install -y ffmpeg\n");
-    await writeFile(join(source.work, `${STATE_DIR}/environment.d/rust.Dockerfile`), "RUN rustup default stable\n");
+    await mkdir(join(source.work, `${STATE_DIR}/config/environment.d`), { recursive: true });
+    await mkdir(join(source.work, `${STATE_DIR}/local`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/config/environment.custom.Dockerfile`), "RUN apt-get install -y ffmpeg\n");
+    await writeFile(join(source.work, `${STATE_DIR}/config/environment.d/rust.Dockerfile`), "RUN rustup default stable\n");
     // Composed from a base image the target may not even be on — restoring it would pin the wrong FROM.
-    await writeFile(join(source.work, `${STATE_DIR}/environment.approved.Dockerfile`), "FROM registry.example/sandbox:old\n");
+    await writeFile(join(source.work, `${STATE_DIR}/local/environment.approved.Dockerfile`), "FROM registry.example/sandbox:old\n");
 
     const target = await makeRoots();
     const report = await restoreBundle(await bundleOf(source, false), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
-    expect(await readFile(join(target.work, ".intentic/environment.custom.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
+    expect(await readFile(join(target.work, ".intentic/config/environment.custom.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
     // A pending agent request survives the move — the owner still has a question to answer on the other side.
-    expect(await readFile(join(target.work, ".intentic/environment.d/rust.Dockerfile"), "utf8")).toBe("RUN rustup default stable\n");
-    await expect(readFile(join(target.work, ".intentic/environment.approved.Dockerfile"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(target.work, ".intentic/config/environment.d/rust.Dockerfile"), "utf8")).toBe("RUN rustup default stable\n");
+    await expect(readFile(join(target.work, ".intentic/local/environment.approved.Dockerfile"), "utf8")).rejects.toThrow();
     // And the owner is told the one thing the container cannot do for itself.
     expect(report.needsAction.map((action) => action.subject)).toContain("Rebuild the environment image");
     await cleanup();
@@ -274,16 +279,16 @@ test("the report names the capabilities a no-secrets bundle left unauthenticated
 
 test("derived trees are left out while durable artifacts travel", async () => {
     const source = await makeRoots();
-    await mkdir(join(source.work, `${STATE_DIR}/cache/iq`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/cache/iq/index.bin`), "cache");
-    await mkdir(join(source.work, `${STATE_DIR}/browser/chromium`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/browser/chromium/Cookies`), "cookies");
-    await mkdir(join(source.work, `${STATE_DIR}/artifacts/attachments/u1`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/artifacts/attachments/u1/shot.png`), "attachment");
-    await mkdir(join(source.work, `${STATE_DIR}/artifacts/browser`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/artifacts/browser/viewport.png`), "screenshot");
-    await mkdir(join(source.work, `${STATE_DIR}/runtime/extensions/whatsapp`), { recursive: true });
-    await writeFile(join(source.work, `${STATE_DIR}/runtime/extensions/whatsapp/gateway.url`), "http://127.0.0.1:1");
+    await mkdir(join(source.work, `${STATE_DIR}/local/cache/iq`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/local/cache/iq/index.bin`), "cache");
+    await mkdir(join(source.work, `${STATE_DIR}/local/browser/chromium`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/local/browser/chromium/Cookies`), "cookies");
+    await mkdir(join(source.work, `${STATE_DIR}/records/artifacts/attachments/u1`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/records/artifacts/attachments/u1/shot.png`), "attachment");
+    await mkdir(join(source.work, `${STATE_DIR}/records/artifacts/browser`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/records/artifacts/browser/viewport.png`), "screenshot");
+    await mkdir(join(source.work, `${STATE_DIR}/local/runtime/extensions/whatsapp`), { recursive: true });
+    await writeFile(join(source.work, `${STATE_DIR}/local/runtime/extensions/whatsapp/gateway.url`), "http://127.0.0.1:1");
     for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
         await mkdir(join(source.work, `${STATE_DIR}`, dir), { recursive: true });
         await writeFile(join(source.work, `${STATE_DIR}`, dir, "retired-cache.bin"), "retired cache");
@@ -296,11 +301,11 @@ test("derived trees are left out while durable artifacts travel", async () => {
     const target = await makeRoots();
     await restoreBundle(await bundleOf(source, true), { workspaceRoot: target.work, historyRoot: target.history }, LIMIT);
 
-    await expect(readFile(join(target.work, ".intentic/cache/iq/index.bin"), "utf8")).rejects.toThrow();
-    await expect(readFile(join(target.work, ".intentic/browser/chromium/Cookies"), "utf8")).rejects.toThrow();
-    expect(await readFile(join(target.work, ".intentic/artifacts/attachments/u1/shot.png"), "utf8")).toBe("attachment");
-    expect(await readFile(join(target.work, ".intentic/artifacts/browser/viewport.png"), "utf8")).toBe("screenshot");
-    await expect(readFile(join(target.work, ".intentic/runtime/extensions/whatsapp/gateway.url"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(target.work, ".intentic/local/cache/iq/index.bin"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(target.work, ".intentic/local/browser/chromium/Cookies"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(target.work, ".intentic/records/artifacts/attachments/u1/shot.png"), "utf8")).toBe("attachment");
+    expect(await readFile(join(target.work, ".intentic/records/artifacts/browser/viewport.png"), "utf8")).toBe("screenshot");
+    await expect(readFile(join(target.work, ".intentic/local/runtime/extensions/whatsapp/gateway.url"), "utf8")).rejects.toThrow();
     for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
         await expect(readFile(join(target.work, ".intentic", dir, "retired-cache.bin"), "utf8")).rejects.toThrow();
     }

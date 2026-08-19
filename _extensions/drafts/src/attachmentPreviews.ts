@@ -1,7 +1,7 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { host } from "./host";
 
-/* Thumbnails for a draft's workspace attachments (.intentic/artifacts/attachments/…), minted from
+/* Thumbnails for a draft's workspace attachments (.intentic/records/artifacts/attachments/…), minted from
  * /workspace/raw on first render — the same shape the chat's bubbles use, scoped to this extension because a
  * module-level object-URL cache belongs to whoever created the URLs.
  *

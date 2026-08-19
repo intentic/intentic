@@ -7,7 +7,7 @@ import { statePath } from "../workspace/state-paths.js";
 export type PurgeConversation = Pick<PersistedAgent, "id" | "provider" | "harness" | "sessionId">;
 
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
-const ATTACHMENT_DIR = /\.intentic\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
+const ATTACHMENT_DIR = /\.intentic\/records\/artifacts\/attachments\/([a-zA-Z0-9_-]+)\//g;
 
 const transcript = (historyRoot: string, id: string): string => join(historyRoot, "transcripts", `${id}.jsonl`);
 
@@ -20,7 +20,7 @@ const purgeClaudeSession = async (workspaceRoot: string, sessionId: string): Pro
     if (!SAFE_ID.test(sessionId)) {
         return;
     }
-    const projects = statePath(workspaceRoot, ".intentic/sessions/claude/", "projects");
+    const projects = statePath(workspaceRoot, ".intentic/records/sessions/claude/", "projects");
     const entries = await readdir(projects, { withFileTypes: true }).catch(() => []);
     await Promise.all(
         entries
@@ -68,7 +68,7 @@ export const purgeConversationState = async (
     await Promise.all([
         ...removed.map((entry) => rm(transcript(historyRoot, entry.id), { force: true })),
         ...[...orphanedAttachments].map((id) =>
-            rm(statePath(workspaceRoot, ".intentic/artifacts/", "attachments", id), { recursive: true, force: true }),
+            rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
         ),
         ...[...claudeSessions].map((sessionId) => purgeClaudeSession(workspaceRoot, sessionId)),
     ]);

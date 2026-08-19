@@ -15,9 +15,9 @@ import { statePath } from "../workspace/state-paths.js";
 // served at intentic.dev/rebuild, or the workspace provider) verifies the approved content against the hash pinned in the rebuild
 // command, builds, and recreates with SANDBOX_ENVIRONMENT_HASH stamped. Status is derived, never stored.
 
-export const proposalPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.Dockerfile");
-export const approvedPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.approved.Dockerfile");
-export const customPath = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.custom.Dockerfile");
+export const proposalPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.Dockerfile");
+export const approvedPath = (services: Services): string => statePath(services.workspace.root, ".intentic/local/environment.approved.Dockerfile");
+export const customPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.custom.Dockerfile");
 
 // The overlay extends the image this sandbox is actually on, not a fixed tag. Hardcoding `:stable` meant every
 // environment rebuild silently rolled the daemon back to the last release: a sandbox started on `:latest` or a
@@ -68,7 +68,7 @@ const invalidProposal = (content: string): boolean =>
 
 const HEADER =
     "# Composed by the intentic sandbox daemon — do not edit by hand.\n" +
-    "# Capability fragments are daemon-owned; the custom section mirrors .intentic/environment.custom.Dockerfile.";
+    "# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.";
 const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
 
 /* Persist a DERIVED file only when it actually derives to something new.
@@ -132,7 +132,7 @@ export const composeEnvironment = async (services: Services): Promise<string | u
 // proposal file makes concurrent drafts a last-writer-wins race in which one agent's request silently vanishes.
 // And naming the file after the tool means two agents that both need ffmpeg converge on one entry instead of
 // appending a near-duplicate each. The owner still reviews exactly one composed proposal.
-export const draftsDir = (services: Services): string => statePath(services.workspace.root, ".intentic/environment.d/");
+export const draftsDir = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.d/");
 
 const readDrafts = async (services: Services): Promise<string> => {
     const dir = draftsDir(services);

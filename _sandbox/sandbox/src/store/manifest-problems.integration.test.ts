@@ -31,7 +31,9 @@ const Settings = z.object({ terseOutput: z.boolean().default(false), skills: z.a
  * stand-in, the name is the part under test. `manifestProblems` reports only the paths the contract's table says
  * a write refreshes, so a helper pointed at an invented name would assert nothing. */
 const manifestAt = (root: string, name: string) => {
-    const path = join(root, STATE_DIR, name);
+    // Both live in the state dir's `config` group — the reviewed, hand-edited slice, which is exactly the slice
+    // the notice is addressed to.
+    const path = join(root, STATE_DIR, "config", name);
     return { path, file: jsonFile(path, { parse: objectParse(Settings), fallback: () => Settings.parse({}) }) };
 };
 const settingsFile = (root: string) => manifestAt(root, "settings.json");
@@ -63,7 +65,7 @@ test("a file that is not JSON is reported, workspace-relative, as wholly ignored
     // The read still succeeds — the daemon must boot with a broken settings file — but no longer in silence.
     expect(await file.read()).toEqual({ terseOutput: false, skills: [] });
     expect(manifestProblems(root)).toEqual([
-        { path: `${STATE_DIR}/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
+        { path: `${STATE_DIR}/config/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
     ]);
 });
 
@@ -82,7 +84,7 @@ test("a misspelled key is named, with what it was probably meant to be", async (
     // The rest of the file still applies — that is the difference between reporting a typo and refusing a file.
     expect(await file.read()).toEqual({ terseOutput: true, skills: [] });
     expect(manifestProblems(root)).toEqual([
-        { path: `${STATE_DIR}/settings.json`, problems: [{ kind: `unknownKey`, detail: `skils`, suggestion: `skills` }] },
+        { path: `${STATE_DIR}/config/settings.json`, problems: [{ kind: `unknownKey`, detail: `skils`, suggestion: `skills` }] },
     ]);
 });
 
@@ -123,7 +125,7 @@ test("one broken manifest does not implicate the others", async () => {
     await broken.file.read();
     await healthy.file.read();
 
-    expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/settings.json`]);
+    expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/config/settings.json`]);
 });
 
 test("a broken DAEMON-WRITTEN file is not put in front of the owner", async () => {
@@ -132,7 +134,7 @@ test("a broken DAEMON-WRITTEN file is not put in front of the owner", async () =
     // The ledger the daemon rewrites several times per workflow step. Nobody opens it, so "fix the file and this
     // clears on its own" is advice addressed to no one — and it feeds no query, so no write would refresh the
     // notice even if they did. It recovers by being written, which is what the next run does.
-    const ledgerPath = join(root, STATE_DIR, "workflow-runs.json");
+    const ledgerPath = join(root, STATE_DIR, "records", "workflow-runs.json");
     const ledger = jsonFile<z.infer<typeof Settings>[]>(ledgerPath, {
         parse: (raw) => z.array(Settings).safeParse(raw).data,
         fallback: () => [],
@@ -144,7 +146,7 @@ test("a broken DAEMON-WRITTEN file is not put in front of the owner", async () =
     expect(await ledger.read()).toEqual([]);
     await hand.file.read();
 
-    expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/settings.json`]);
+    expect(manifestProblems(root).map((report) => report.path)).toEqual([`${STATE_DIR}/config/settings.json`]);
 });
 
 test("after a rollback, a schema-rejected file is explained as newer rather than broken", async () => {

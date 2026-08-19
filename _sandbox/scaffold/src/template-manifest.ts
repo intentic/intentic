@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The opinionated template source, used when a workspace hasn't overridden it in .intentic/templates.json.
+// The opinionated template source, used when a workspace hasn't overridden it in .intentic/config/templates.json.
 export const DEFAULT_TEMPLATE_SOURCE = "https://github.com/radarsu/00-canonical-repo";
 export const DEFAULT_TEMPLATE_REF = "main";
 

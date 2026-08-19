@@ -20,7 +20,7 @@ import type { ChoreOutcome } from "@intentic/sandbox-contract";
  * useRuns.promote). The promotion is idempotent and re-runs on every poll, so a browser that was closed when the
  * turn finished picks it up the next time it opens — nothing is lost by not being watched. */
 
-export const RUNS_DIR = `${STATE_DIR}/chores/runs`;
+export const RUNS_DIR = `${STATE_DIR}/records/chores/runs`;
 
 const runDir = (runId: string): string => `${RUNS_DIR}/${runId}`;
 export const runManifestPath = (runId: string): string => `${runDir(runId)}/run.json`;

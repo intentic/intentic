@@ -6,7 +6,7 @@ import { sandboxJson } from "./sandboxClient";
 import { PERSONAS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* The sandbox's named personas (.intentic/personas.json), read/written via the daemon's /personas routes.
+/* The sandbox's named personas (.intentic/config/personas.json), read/written via the daemon's /personas routes.
  * Unlike a capability there is no apply and no stream to follow: saving a card provisions nothing and removing
  * one disconnects nothing, so both are plain mutations that end in a refetch.
  *

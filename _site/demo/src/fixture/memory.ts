@@ -1,7 +1,7 @@
 import type { MemoryFile, MemoryFileEntry } from "@intentic/ext-memory";
 
 /* WHAT THE AGENT REMEMBERS about acme-shop, across sessions — the markdown files under the workspace's
- * `.intentic/sessions/claude/projects/<project>/memory`, which is the one part of an agent's context the owner can read
+ * `.intentic/records/sessions/claude/projects/<project>/memory`, which is the one part of an agent's context the owner can read
  * and correct rather than infer.
  *
  * The notes are the demo's argument for the surface: they are the kind of thing a colleague learns in a first

@@ -42,7 +42,7 @@ use crate::util::{bail, sha256_hex, Fail, Result};
  * above the seam touches the container, so an abandoned or failed prepare costs exactly nothing; and the
  * staged image is a real local tag, so a routine `docker image prune` cannot silently drop it. */
 
-const APPROVED_FILE: &str = "/work/.intentic/environment.approved.Dockerfile";
+const APPROVED_FILE: &str = "/work/.intentic/local/environment.approved.Dockerfile";
 const DEV_TAG: &str = "intentic-sandbox:dev";
 const DEFAULT_REGISTRY: &str = "ghcr.io/intentic/sandbox";
 

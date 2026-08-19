@@ -152,13 +152,13 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
         }),
     );
     expect(events.some((event) => "message" in event && typeof event["message"] === "string" && event["message"].includes("rebuild"))).toBe(true);
-    const approvedFile = disk.get("/work/.intentic/environment.approved.Dockerfile");
+    const approvedFile = disk.get("/work/.intentic/local/environment.approved.Dockerfile");
     expect(approvedFile).toContain("wireguard-tools");
     expect(approvedFile).toContain("# intentic:runtime --device=/dev/net/tun");
 
     // Removing the last fragment-bearing capability recomposes the overlay away (stock container, no custom).
     await client.capabilities.remove({ id: "office" });
-    expect(disk.get("/work/.intentic/environment.approved.Dockerfile")).toBeUndefined();
+    expect(disk.get("/work/.intentic/local/environment.approved.Dockerfile")).toBeUndefined();
 });
 
 /* CHANGING A CONNECTION WITHOUT RE-TYPING WHAT IT IS SIGNED IN WITH — the whole point of the marker.

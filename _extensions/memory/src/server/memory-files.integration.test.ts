@@ -5,7 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import { deleteMemoryFile, listMemoryFiles, memoryRoot, readMemoryFile, writeMemoryFile } from "./memory-files.js";
 
 const tempDirs: string[] = [];
-// A fake workspace with .intentic/sessions/claude/projects/<project>/memory dirs, addressed through memoryRoot like the
+// A fake workspace with .intentic/records/sessions/claude/projects/<project>/memory dirs, addressed through memoryRoot like the
 // routes do.
 const tempWorkspace = async (): Promise<{ root: string; seed: (project: string, name: string, content: string) => Promise<string> }> => {
     const workspace = await mkdtemp(join(tmpdir(), "intentic-memory-"));

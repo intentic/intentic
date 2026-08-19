@@ -26,8 +26,8 @@ const viewer = async (): Promise<string> => {
 // them.
 const workspace = async (): Promise<string> => {
     const dir = await mkdtemp(join(tmpdir(), "share-workspace-"));
-    await mkdir(join(dir, ".intentic/artifacts/browser"), { recursive: true });
-    await writeFile(join(dir, ".intentic/artifacts/browser/after.png"), "PNG-BYTES");
+    await mkdir(join(dir, ".intentic/records/artifacts/browser"), { recursive: true });
+    await writeFile(join(dir, ".intentic/records/artifacts/browser/after.png"), "PNG-BYTES");
     return dir;
 };
 
@@ -46,7 +46,7 @@ const exists = async (path: string): Promise<boolean> =>
 it("publishes a page, its pictures, and one copy of the viewer every share loads", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     await publishShare(root, dist, "login-redirect-fix-3f9c", payload(), [
-        { source: ".intentic/artifacts/browser/after.png", published: "files/1-after.png" },
+        { source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" },
     ]);
 
     const share = join(shareRoot(root), "login-redirect-fix-3f9c");
@@ -62,7 +62,7 @@ it("publishes a page, its pictures, and one copy of the viewer every share loads
 it("re-sharing replaces what was there, pictures included", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
     const id = "chat-1a2b";
-    await publishShare(root, dist, id, payload(), [{ source: ".intentic/artifacts/browser/after.png", published: "files/1-after.png" }]);
+    await publishShare(root, dist, id, payload(), [{ source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" }]);
     await publishShare(root, dist, id, payload(), []);
 
     expect(await exists(join(shareRoot(root), id, "index.html"))).toBe(true);
@@ -80,7 +80,9 @@ it("never copies a picture from outside the workspace", async () => {
 
 it("stop sharing takes the page and its pictures, and switches publishing off behind the last one", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
-    await publishShare(root, dist, "chat-3c4d", payload(), [{ source: ".intentic/artifacts/browser/after.png", published: "files/1-after.png" }]);
+    await publishShare(root, dist, "chat-3c4d", payload(), [
+        { source: ".intentic/records/artifacts/browser/after.png", published: "files/1-after.png" },
+    ]);
     await unpublishShare(root, "chat-3c4d");
 
     // Nothing of the share is left — and with no share left, neither the assets nor the outbox itself remain,

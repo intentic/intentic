@@ -4,7 +4,7 @@ import { isNewer } from "@intentic/sandbox-contract";
 import { version } from "../version.js";
 import { statePath } from "../workspace/state-paths.js";
 
-/* THE NEWEST INTENTIC THAT EVER RAN THIS WORKSPACE — one small stamp, `.intentic/newest-run.json`, recorded at
+/* THE NEWEST INTENTIC THAT EVER RAN THIS WORKSPACE — one small stamp, `.intentic/local/newest-run.json`, recorded at
  * boot and moved only FORWARD.
  *
  * It exists for exactly one sentence. After `ic sandbox rollback`, every manifest the newer build wrote reads
@@ -29,7 +29,7 @@ let newest: string | undefined;
 export const newestRunVersion = (): string | undefined => newest;
 
 export const recordNewestRun = async (workspaceRoot: string, running: string = version): Promise<void> => {
-    const path = statePath(workspaceRoot, ".intentic/newest-run.json");
+    const path = statePath(workspaceRoot, ".intentic/local/newest-run.json");
     let recorded: string | undefined;
     try {
         const raw: unknown = JSON.parse(await readFile(path, "utf8"));

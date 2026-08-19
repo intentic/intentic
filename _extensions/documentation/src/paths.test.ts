@@ -63,7 +63,7 @@ describe(`the two document trees`, () => {
 
     it(`mirrors staged tails so publishing is a copy, never a translation`, () => {
         const tail = packagePageTail(`_deploy/graph`);
-        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/docs/intentic/_deploy/graph/README.md`);
+        expect(stagingPath(`intentic`, tail)).toBe(`.intentic/config/docs/intentic/_deploy/graph/README.md`);
         // The tail — the part publish carries across — is the end of the path on both sides.
         expect(publishedPath(`intentic`, tail).endsWith(tail)).toBe(true);
         expect(stagingPath(`intentic`, tail).endsWith(tail)).toBe(true);
@@ -74,11 +74,11 @@ describe(`the two document trees`, () => {
         // path that lands on STAGING_ROOT itself staged-side.
         expect(publishedPath(``, REPO_DOC_TAIL)).toBe(`docs/architecture/repo.json`);
         expect(stagingKey(``)).toBe(`root`);
-        expect(stagingPath(``, REPO_DOC_TAIL)).toBe(`.intentic/docs/root/repo.json`);
+        expect(stagingPath(``, REPO_DOC_TAIL)).toBe(`.intentic/config/docs/root/repo.json`);
     });
 
     it(`keeps every staged path under one prefix, which is what makes the file-change push declarable`, () => {
-        // contributes.files declares `.intentic/docs/` and matching is by prefix; a staged path escaping it would
+        // contributes.files declares `.intentic/config/docs/` and matching is by prefix; a staged path escaping it would
         // simply never invalidate the view. A package page stages here too — only PUBLISHING sends it elsewhere.
         for (const path of [stagingPath(`a/b`, INDEX_TAIL), stagingPath(``, REPO_DOC_TAIL), stagingPath(`x`, packagePageTail(`p/q`))]) {
             expect(path.startsWith(`${STAGING_ROOT}/`)).toBe(true);

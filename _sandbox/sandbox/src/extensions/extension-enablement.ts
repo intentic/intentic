@@ -2,7 +2,7 @@ import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
-// The owner's per-extension on/off switch (<workspace>/.intentic/extension-enablement.json), keyed by the
+// The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name) — the same key extension-settings.json uses, so the choice
 // survives a remove/re-add and the re-clone that is an update. ABSENT MEANS ENABLED: a fresh sandbox has no
 // file at all, and an extension that ships in a later image is on the moment it lands rather than waiting for
@@ -16,7 +16,7 @@ type EnablementFile = z.infer<typeof FileSchema>;
 const files = new Map<string, JsonFile<EnablementFile>>();
 
 const enablementFile = (root: string): JsonFile<EnablementFile> => {
-    const path = statePath(root, ".intentic/extension-enablement.json");
+    const path = statePath(root, ".intentic/config/extension-enablement.json");
     const existing = files.get(path);
     if (existing !== undefined) {
         return existing;

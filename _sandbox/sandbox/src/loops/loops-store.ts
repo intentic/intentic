@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* The loop manifest (<workspace>/.intentic/loops.json): every loop this workspace has run, with its iteration
+/* The loop manifest (<workspace>/.intentic/records/loops.json): every loop this workspace has run, with its iteration
  * history. Mirrors the automations store, down to the read-modify-write-through-jsonFile shape.
  *
  * KEYED BY CONVERSATION, because that is what a loop is — one conversation, driven repeatedly. A conversation
@@ -82,7 +82,7 @@ export const fileLoopsStore = (path: string): LoopsStore => {
     };
 };
 
-/* THE SECOND FILE (<workspace>/.intentic/loop-designs.json): the loops a user has SAVED, which is a manifest and
+/* THE SECOND FILE (<workspace>/.intentic/config/loop-designs.json): the loops a user has SAVED, which is a manifest and
  * not a ledger. It shares this module with the record store above and nothing else — the split is the one
  * workflows-store.ts draws for the same reason. A manifest is a handful of entries authored by a person and
  * changing at human speed; a ledger is written several times per iteration by a pump. Keeping them apart is

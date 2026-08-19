@@ -358,10 +358,15 @@ describe(`turn boundaries`, () => {
     });
 
     it(`carries a steered message's files onto its bubble, named from their paths`, () => {
-        const { state } = run(started(), { kind: `steer`, text: `look`, sentAt: 1, attachments: [`.intentic/artifacts/attachments/u1/shot.png`] });
+        const { state } = run(started(), {
+            kind: `steer`,
+            text: `look`,
+            sentAt: 1,
+            attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
+        });
         expect(state.messages.at(-1)).toMatchObject({
             role: `user`,
-            attachments: [{ name: `shot.png`, path: `.intentic/artifacts/attachments/u1/shot.png` }],
+            attachments: [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }],
         });
     });
 

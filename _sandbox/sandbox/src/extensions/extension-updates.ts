@@ -48,7 +48,7 @@ import { installedExtensions } from "./installed-extensions.js";
  * opts single extensions into the agent-prepared or auto rungs), and an advisory's automatic action is
  * DISABLING — the one direction that runs no new code and reverses with a click. */
 
-// ---- state: .intentic/extension-updates.json, keyed by the manifest identity (publisher.name) like the
+// ---- state: .intentic/records/extension-updates.json, keyed by the manifest identity (publisher.name) like the
 // settings and the switch, so records survive the remove/re-add that an update IS.
 
 const RecordSchema = z.object({
@@ -63,7 +63,7 @@ type UpdateState = z.infer<typeof StateSchema>;
 // Memoized per root for the reason extension-settings.ts spells out: the write queue lives on the file object.
 const stateFiles = new Map<string, JsonFile<UpdateState>>();
 const stateFile = (root: string): JsonFile<UpdateState> => {
-    const path = statePath(root, ".intentic/extension-updates.json");
+    const path = statePath(root, ".intentic/records/extension-updates.json");
     const existing = stateFiles.get(path);
     if (existing !== undefined) {
         return existing;
@@ -88,7 +88,7 @@ const patchRecord = async (root: string, identity: string, patch: (record: Updat
     });
 };
 
-// ---- policy: .intentic/extension-update-policy.json, same key. Absent means the safe posture: updates wait
+// ---- policy: .intentic/config/extension-update-policy.json, same key. Absent means the safe posture: updates wait
 // for the owner (`notify`), advisories act (`auto-disable`) — see ExtensionUpdatePolicySchema for the ladder.
 
 const PolicyFileSchema = z.record(
@@ -102,7 +102,7 @@ type PolicyFile = z.infer<typeof PolicyFileSchema>;
 
 const policyFiles = new Map<string, JsonFile<PolicyFile>>();
 const policyFile = (root: string): JsonFile<PolicyFile> => {
-    const path = statePath(root, ".intentic/extension-update-policy.json");
+    const path = statePath(root, ".intentic/config/extension-update-policy.json");
     const existing = policyFiles.get(path);
     if (existing !== undefined) {
         return existing;

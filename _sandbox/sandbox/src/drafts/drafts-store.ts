@@ -6,9 +6,9 @@ import { stateRelPath } from "../workspace/state-paths.js";
 
 // The workspace-relative home the skill text below teaches the agent — the table's spelling, so the prompt
 // can never name a directory the drafts store stopped reading.
-const DRAFTS_DIR = stateRelPath(".intentic/drafts/");
+const DRAFTS_DIR = stateRelPath(".intentic/config/drafts/");
 
-// The post-drafts queue (<workspace>/.intentic/drafts/<id>.json, one file per draft): the AGENT creates drafts
+// The post-drafts queue (<workspace>/.intentic/config/drafts/<id>.json, one file per draft): the AGENT creates drafts
 // (taught by DRAFTS_SKILL below), the daemon edits/deletes them for the owner. Per-file — never a shared
 // manifest like automations.json — because the two writers would race a read-modify-write (see json-dir.ts,
 // which owns that cycle and the trust boundary around agent-written names). No secrets live here.
@@ -23,7 +23,7 @@ export interface DraftsStore {
     readonly remove: (id: string) => Promise<boolean>;
 }
 
-// A per-file JSON store, used in production at <workspace>/.intentic/drafts/.
+// A per-file JSON store, used in production at <workspace>/.intentic/config/drafts/.
 export const fileDraftsStore = (dir: string): DraftsStore => {
     const files = jsonDir(dir, (raw) => DraftSchema.safeParse(raw).data);
     return {
@@ -69,7 +69,7 @@ the app and the daemon sends it when it comes due. One JSON file per draft: ${DR
 Only "platform" and "content" are required; everything else is optional — except "actsAs", which every
 platform that posts through a logged-in browser needs (see below).
 - platform: the skill that will post it — "x", "reddit", "youtube", "discord", …
-- actsAs: WHOSE NAME THIS GOES OUT UNDER — the id of a persona in .intentic/personas.json, one that holds an
+- actsAs: WHOSE NAME THIS GOES OUT UNDER — the id of a persona in .intentic/config/personas.json, one that holds an
   account for this platform. Read that file and pick; if none of them fits, say so to the owner rather than
   guessing. Sending happens with nobody watching, and a turn that names no persona is given NO logged-in
   account at all — so a browser-published draft without this is failed unsent, with that reason written into

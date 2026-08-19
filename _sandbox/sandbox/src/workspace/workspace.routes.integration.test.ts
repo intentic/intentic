@@ -454,17 +454,17 @@ test("the daemon's control plane is unreachable through the generic file API; it
     // The root's own .git joins them: it is the --separate-git-dir pointer to the shadow history repo on /history,
     // and a FILE, so a drop of a repo's CONTENTS at the root would aim a directory at it and 500 the whole upload.
     const controlPlane = [
-        `${STATE_DIR}/owner.json`,
-        `${STATE_DIR}/members.json`,
-        `${STATE_DIR}/capabilities.json`,
+        `${STATE_DIR}/identity/owner.json`,
+        `${STATE_DIR}/identity/members.json`,
+        `${STATE_DIR}/config/capabilities.json`,
         `${STATE_DIR}/claude.json`,
-        `${STATE_DIR}/auth/claude/acc.json`,
-        `${STATE_DIR}/auth/codex/acc/auth.json`,
-        `${STATE_DIR}/auth/opencode/auth.json`,
-        `${STATE_DIR}/auth/cliproxy/kimi-user.json`,
-        `${STATE_DIR}/auth/future-provider/token.json`,
-        `${STATE_DIR}/sessions/claude/projects/-work/session.jsonl`,
-        `${STATE_DIR}/browser/reddit/Default/Cookies`,
+        `${STATE_DIR}/secrets/auth/claude/acc.json`,
+        `${STATE_DIR}/secrets/auth/codex/acc/auth.json`,
+        `${STATE_DIR}/secrets/auth/opencode/auth.json`,
+        `${STATE_DIR}/secrets/auth/cliproxy/kimi-user.json`,
+        `${STATE_DIR}/secrets/auth/future-provider/token.json`,
+        `${STATE_DIR}/records/sessions/claude/projects/-work/session.jsonl`,
+        `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
         `${STATE_DIR}/claude/retired-account.json`,
         `${STATE_DIR}/codex/retired-account/auth.json`,
         `${STATE_DIR}/kimi/retired-key.json`,
@@ -483,7 +483,12 @@ test("the daemon's control plane is unreachable through the generic file API; it
     // The root .intentic's other subtrees are ordinary workspace content driven through this very API — chat
     // attachments and a directory's own UI — and a repo's nested .intentic is not the control plane at all. Nor is
     // a NESTED .git: a dropped repo keeps its own and stays connected to its remote.
-    const open = [".intentic/artifacts/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json", "app/.git/config"];
+    const open = [
+        ".intentic/records/artifacts/attachments/u1/pic.png",
+        ".intentic/ui/index.html",
+        "app/.intentic/identity/owner.json",
+        "app/.git/config",
+    ];
     for (const path of open) {
         expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 200]);
         expect([path, (await app.request(`/workspace/raw?path=${path}`)).status]).toEqual([path, 200]);

@@ -19,8 +19,8 @@ test("purge removes owned transcripts, unshared attachments, and Claude session 
     const workspace = join(root, "work");
     const history = join(root, "history");
     const transcripts = join(history, "transcripts");
-    const projects = join(workspace, `${STATE_DIR}`, "sessions", "claude", "projects", "-work");
-    const attachments = join(workspace, `${STATE_DIR}`, "artifacts", "attachments");
+    const projects = join(workspace, `${STATE_DIR}`, "records", "sessions", "claude", "projects", "-work");
+    const attachments = join(workspace, `${STATE_DIR}`, "records", "artifacts", "attachments");
     await Promise.all([
         mkdir(transcripts, { recursive: true }),
         mkdir(join(projects, "removed-session"), { recursive: true }),
@@ -31,12 +31,12 @@ test("purge removes owned transcripts, unshared attachments, and Claude session 
     await Promise.all([
         writeFile(
             join(transcripts, "removed.jsonl"),
-            `${JSON.stringify({ role: "user", text: "x", attachments: [`${STATE_DIR}/artifacts/attachments/only-removed/a.png`] })}\n` +
-                `${JSON.stringify({ role: "user", text: "y", attachments: [`${STATE_DIR}/artifacts/attachments/shared/b.png`] })}\n`,
+            `${JSON.stringify({ role: "user", text: "x", attachments: [`${STATE_DIR}/records/artifacts/attachments/only-removed/a.png`] })}\n` +
+                `${JSON.stringify({ role: "user", text: "y", attachments: [`${STATE_DIR}/records/artifacts/attachments/shared/b.png`] })}\n`,
         ),
         writeFile(
             join(transcripts, "kept.jsonl"),
-            `${JSON.stringify({ role: "user", text: "fork", attachments: [`${STATE_DIR}/artifacts/attachments/shared/b.png`] })}\n`,
+            `${JSON.stringify({ role: "user", text: "fork", attachments: [`${STATE_DIR}/records/artifacts/attachments/shared/b.png`] })}\n`,
         ),
         writeFile(join(projects, "removed-session.jsonl"), "removed"),
         writeFile(join(projects, "removed-session", "tool.json"), "removed"),

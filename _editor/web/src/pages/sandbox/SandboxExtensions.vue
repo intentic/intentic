@@ -16,7 +16,7 @@ import NewExtensionDialog from "./NewExtensionDialog.vue";
 
 /* The Sandbox hub's "Extensions" tab: EVERY first-party and installed extension — the ones compiled into this
  * bundle, the ones baked into the sandbox image, the git-installed capabilities, and the workspace extensions
- * living under .intentic/workspace-extensions/ — each with its on/off switch. Install/remove happens on the
+ * living under .intentic/config/workspace-extensions/ — each with its on/off switch. Install/remove happens on the
  * Capabilities page like every other capability (a workspace extension is instead created and deleted as files,
  * typically by an agent); this tab is the management surface.
  *
@@ -282,7 +282,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <RowGroup v-if="invalid.length > 0" label="Not loadable" caption="workspace-extension directories the sandbox could not read">
             <div v-for="entry in invalid" :key="entry.dir" class="flex items-start justify-between gap-3 px-3 py-2">
                 <div class="min-w-0">
-                    <p class="truncate text-sm font-medium text-content">.intentic/workspace-extensions/{{ entry.dir }}</p>
+                    <p class="truncate text-sm font-medium text-content">.intentic/config/workspace-extensions/{{ entry.dir }}</p>
                     <p class="text-2xs text-danger">{{ entry.error }}</p>
                 </div>
                 <StatusBadge variant="danger" label="invalid" size="xs" />

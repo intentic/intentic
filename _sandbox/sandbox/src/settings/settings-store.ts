@@ -2,7 +2,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 
-// The sandbox-owned agent-settings manifest (<workspace>/.intentic/settings.json). Mirrors the automations
+// The sandbox-owned agent-settings manifest (<workspace>/.intentic/config/settings.json). Mirrors the automations
 // store: a small JSON file the /settings routes edit and streamAgent reads. No secrets, so not on the denylist.
 
 export interface SandboxSettingsStore {

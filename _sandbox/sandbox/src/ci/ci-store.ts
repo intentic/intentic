@@ -3,7 +3,7 @@ import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 
-// The CI module's daemon-recorded state (<workspace>/.intentic/ci.json): the per-sandbox webhook secret, the
+// The CI module's daemon-recorded state (<workspace>/.intentic/secrets/ci.json): the per-sandbox webhook secret, the
 // last TERMINAL conclusion per repo+branch — what makes a success after a failure read as `pipeline_fixed`, and
 // a failure after a success as `pipeline_broken`, across daemon restarts — and the poller's memory of which
 // runs it has already announced. It carries a secret, so the file rides the CONTROL_PLANE_ENTRIES denylist

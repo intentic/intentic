@@ -14,7 +14,7 @@ import { useDraft } from "../../composables/useDraft";
  *
  * TWO THINGS, ONE TAB, because they are one folder and one decision: a release-notes writer is a prompt AND the
  * house style it reads, and splitting them across the card would make the second look like an unrelated feature.
- * The daemon keeps both in the card's own kit (`.intentic/personas/<id>/`), laid out so the agent's own loader
+ * The daemon keeps both in the card's own kit (`.intentic/config/personas/<id>/`), laid out so the agent's own loader
  * reads them on the turns wearing this card and no others.
  *
  * THE SKILLS ARE THE SKILLS PAGE'S OWN ROWS AND ITS OWN EDITOR, and that is the whole of why this file is short.

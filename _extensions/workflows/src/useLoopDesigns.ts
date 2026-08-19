@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The saved loops (.intentic/loop-designs.json), read and written through the daemon's /loops/designs routes.
+/* The saved loops (.intentic/config/loop-designs.json), read and written through the daemon's /loops/designs routes.
  *
  * WHY THEY LIVE ON THIS PAGE. A loop and a workflow answer one question — what is the next message run
  * THROUGH — with two answers: a workflow spreads it across sessions that are not this one, a loop repeats it

@@ -12,9 +12,9 @@ There are **two stored things** and **one derived thing**. That is the whole mod
 
 | Word | What it really is | Where it lives |
 | --- | --- | --- |
-| **Capability** | One thing you connected. A GitHub token, a database, a VPN — and, for our purposes, **one login on one site**. | one entry in `.intentic/capabilities.json` |
-| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do and where it works. | one entry in `.intentic/personas.json` (committed to git) |
-| **Browser session** | *Not a thing you create.* It is the signed-in Chromium profile that a browser capability grows once somebody logs in. | files under `.intentic/browser/` |
+| **Capability** | One thing you connected. A GitHub token, a database, a VPN — and, for our purposes, **one login on one site**. | one entry in `.intentic/config/capabilities.json` |
+| **Persona** | A card that says "these logins are the same someone", plus what a session wearing it may do and where it works. | one entry in `.intentic/config/personas.json` (committed to git) |
+| **Browser session** | *Not a thing you create.* It is the signed-in Chromium profile that a browser capability grows once somebody logs in. | files under `.intentic/local/browser/` |
 
 And one word that people expect to find and **will not**: there is no **Identity** object. See
 [What is deliberately not modelled](#what-is-deliberately-not-modelled).

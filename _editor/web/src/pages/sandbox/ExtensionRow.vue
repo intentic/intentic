@@ -111,7 +111,7 @@ watch(
 const publishable = computed(() => readiness.value !== undefined && !readiness.value.some((check) => check.status === `fail`));
 const publish = computed(() => ({
     id: extensionIdOf(manifest.value),
-    dir: `.intentic/workspace-extensions/${manifest.value.name}`,
+    dir: `.intentic/config/workspace-extensions/${manifest.value.name}`,
     name: manifest.value.name,
 }));
 
@@ -119,7 +119,7 @@ const publish = computed(() => ({
 // (the daemon enumerates one per subdirectory), so this needs no round trip to find out.
 const tighten = computed(() => ({
     id: extensionIdOf(manifest.value),
-    dir: `.intentic/workspace-extensions/${manifest.value.name}`,
+    dir: `.intentic/config/workspace-extensions/${manifest.value.name}`,
     unused: routes.value.filter((route) => route.unused).map((route) => route.route),
     used: routes.value.filter((route) => route.calls > 0).map(({ route, calls }) => ({ route, calls })),
 }));
@@ -366,7 +366,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     entry.extension.source === `builtin`
                         ? `built into the sandbox image`
                         : entry.extension.source === `workspace`
-                          ? `from .intentic/workspace-extensions`
+                          ? `from .intentic/config/workspace-extensions`
                           : `installed · ${entry.extension.commit.slice(0, 12)}`
                 }}
                 · needs intentic

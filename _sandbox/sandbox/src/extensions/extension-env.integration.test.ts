@@ -60,7 +60,7 @@ test("injects the env var for a set secret setting, skips unset and non-env sett
 
     // The split happened on the way in: the tracked file kept the open settings, the vault took the credential.
     expect(await vault.get("acme.tap")).toEqual({ token: "s3cr3t" });
-    expect(JSON.parse(await readFile(join(root, ".intentic/extension-settings.json"), "utf8"))).toEqual({
+    expect(JSON.parse(await readFile(join(root, ".intentic/config/extension-settings.json"), "utf8"))).toEqual({
         "acme.tap": { region: "eu", verbose: true },
     });
 

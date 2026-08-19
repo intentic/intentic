@@ -28,7 +28,7 @@ export function useDocs(repo: Ref<string>, source: Ref<DocSource>) {
     const api = host();
     const queryClient = useQueryClient();
 
-    // `documentation` is the key the manifest's contributes.files declares, so a write under `.intentic/docs/`
+    // `documentation` is the key the manifest's contributes.files declares, so a write under `.intentic/config/docs/`
     // invalidates exactly this — the staged tree appears as agents produce it, with no poll.
     const key = computed(() => api.sandbox.key(`documentation`, source.value, repo.value));
 

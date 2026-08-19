@@ -26,7 +26,7 @@ export interface ExtensionHost {
  * the workspace. Baked ones live under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout,
  * the iq-plugin precedent — no capability entry, not removable, present because they shipped in the image. The
  * web-builtin UI extensions bake their MANIFEST ONLY (the code is compiled into the web bundle). Workspace ones
- * live under .intentic/workspace-extensions/, one subdir per extension, consumed in place — no capability entry
+ * live under .intentic/config/workspace-extensions/, one subdir per extension, consumed in place — no capability entry
  * and no install moment, which is why their parse failures are reported (extensionInventory) rather than
  * silently skipped. So every extension enumerates here and the Extensions tab is a complete list rather than a
  * view of one load path. */

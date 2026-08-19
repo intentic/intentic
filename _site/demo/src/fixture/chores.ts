@@ -354,7 +354,7 @@ export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {
 export const choreFiles = (now: number): [string, string][] => {
     const createdAt = now - 2 * DAY;
     const runId = `r${createdAt.toString(36)}0`;
-    const dir = `.intentic/chores/runs/${runId}`;
+    const dir = `.intentic/records/chores/runs/${runId}`;
     return [
         [
             `${dir}/run.json`,

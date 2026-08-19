@@ -117,7 +117,7 @@ describe("scopedTarget", () => {
     it("keeps the daemon's own credential state unreachable through a scoped read", async () => {
         const { deps, worktrees } = await setup();
         await mkdir(join(worktrees, "isolated"), { recursive: true });
-        expect(await codeOf(() => scopedTarget(deps, "isolated", ".intentic/owner.json"))).toBe("NOT_FOUND");
+        expect(await codeOf(() => scopedTarget(deps, "isolated", ".intentic/identity/owner.json"))).toBe("NOT_FOUND");
     });
 
     /* A SYMLINK OUT OF THE WORKSPACE. `../` is a string the guard can see; a link is not — `work/escape` is

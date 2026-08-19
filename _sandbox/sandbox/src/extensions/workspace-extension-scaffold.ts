@@ -71,7 +71,7 @@ const View = defineComponent({
                 h(
                     \`p\`,
                     { style: { color: \`var(--color-muted)\`, marginTop: \`0.25rem\` } },
-                    \`This view is drawn by .intentic/workspace-extensions/${name}/extension.js.\`,
+                    \`This view is drawn by .intentic/config/workspace-extensions/${name}/extension.js.\`,
                 ),
                 h(\`div\`, { class: \`ui-card\`, style: { marginTop: \`1rem\` } }, [
                     h(\`p\`, { style: { color: \`var(--color-muted)\` } }, \`Nothing here yet — say what you want this to do.\`),

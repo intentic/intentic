@@ -156,13 +156,13 @@ describe(`intentic-docs against a real repository`, () => {
         const result = run(`check`, `--root`, root, `--write`);
         expect(result.status).toBe(1);
         expect(result.output).toContain(`--from published`);
-        expect(existsSync(join(root, `.intentic/docs/root`))).toBe(false);
+        expect(existsSync(join(root, `.intentic/config/docs/root`))).toBe(false);
     });
 
     it(`writes the staged index once a draft is actually there`, () => {
-        write(`${STATE_DIR}/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
+        write(`${STATE_DIR}/config/docs/root/repo.json`, `{ "repo": "", "provenance": { "sourceRev": "x", "generatedAt": 1 } }\n`);
         execFileSync(`node`, [BIN, `check`, `--root`, root, `--write`], { encoding: `utf8` });
-        expect(existsSync(join(root, `.intentic/docs/root/index.json`))).toBe(true);
+        expect(existsSync(join(root, `.intentic/config/docs/root/index.json`))).toBe(true);
     });
 
     /* A REPOSITORY CHECKED OUT INSIDE ANOTHER ONE IS NOT PART OF IT. A workspace root holding clones — a monorepo

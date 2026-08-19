@@ -126,10 +126,10 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   grid's derived cards exist out of the box — and why switching one of these packs off removes exactly its
   cards and nothing else.
 - **Git-installed** (the `extension` capability): an owner-only, full-sha-pinned clone into
-  `.intentic/extensions/<id>` — the path for third-party extensions and for opt-in first-party ones like
+  `.intentic/local/extensions/<id>` — the path for third-party extensions and for opt-in first-party ones like
   `rtk` (its environment fragment composes per capability entry, so baking it would be inert).
 - **Workspace** (none in this directory — they are not first-party by definition): a directory per extension
-  under `.intentic/workspace-extensions/`, consumed in place with no clone and no install moment — the path
+  under `.intentic/config/workspace-extensions/`, consumed in place with no clone and no install moment — the path
   for extensions authored *inside* the sandbox, typically by an agent with its own file tools. `.intentic` is
   shared across sessions, so an extension written from an isolated worktree is live for the daemon at once,
   and an edit to its UI entry is a new bundle identity (the bundle route ETags the bytes, not a commit).
@@ -141,7 +141,7 @@ renders and what the on/off switch acts on. The paths differ only in where the *
 
 ## Switching one off
 
-`POST /extensions/{id}/enabled` records the owner's choice in `.intentic/extension-enablement.json`, keyed by
+`POST /extensions/{id}/enabled` records the owner's choice in `.intentic/config/extension-enablement.json`, keyed by
 `publisher.name` so it outlives a remove/re-add. A disabled extension stays **listed** (that is what keeps its
 switch reachable) and drops out of `enabledExtensions()`, which every consumer that actually wires something
 up iterates: no agent plugin dir, no PATH entry, no listener provider, no connector card, no contributed env

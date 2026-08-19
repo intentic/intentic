@@ -35,7 +35,7 @@ import { host } from "./host";
  * The digest IS the mark, which is what makes this a comparing ledger rather than a presence one: the same chore
  * with new evidence has a new digest and is therefore new again, so acknowledging today's finding cannot swallow
  * tomorrow's. */
-const seen = sandboxLedger(host, `${STATE_DIR}/chores/seen.json`);
+const seen = sandboxLedger(host, `${STATE_DIR}/records/chores/seen.json`);
 
 /* The tile's whole source. Its own timer rather than the view's query — a badge that only updated while you were
  * already looking at Maintenance could never tell you anything you did not know, and nothing observes an

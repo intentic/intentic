@@ -28,7 +28,7 @@ test("decodes a generated PNG into a durable workspace-relative artifact", async
         image: { id: "ig/../../crocodile", result: PNG.toString("base64") },
     });
 
-    expect(path).toBe(".intentic/artifacts/imagegen/ig_______crocodile.png");
+    expect(path).toBe(".intentic/records/artifacts/imagegen/ig_______crocodile.png");
     expect(await readFile(join(workspaceRoot, path))).toEqual(PNG);
 });
 
@@ -40,7 +40,7 @@ test("copies a regular PNG from Codex's generated_images tree without removing t
 
     const path = await persistCodexImageArtifact({ workspaceRoot, codexHome, image: { id: "ig-1", result: "", saved_path: source } });
 
-    expect(path).toBe(".intentic/artifacts/imagegen/ig-1.png");
+    expect(path).toBe(".intentic/records/artifacts/imagegen/ig-1.png");
     expect(await readFile(join(workspaceRoot, path))).toEqual(PNG);
     expect(await readFile(source)).toEqual(PNG);
 });
@@ -59,7 +59,7 @@ test("rejects saved paths outside generated_images and symbolic-link sources or 
         "must not be a symbolic link",
     );
 
-    const outputDir = join(workspaceRoot, ".intentic", "artifacts", "imagegen");
+    const outputDir = join(workspaceRoot, ".intentic", "records", "artifacts", "imagegen");
     await mkdir(outputDir, { recursive: true });
     const destination = join(root, "destination.png");
     await writeFile(destination, Buffer.from("unchanged"));

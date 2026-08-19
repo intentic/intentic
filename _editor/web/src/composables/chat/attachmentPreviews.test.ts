@@ -23,7 +23,7 @@ const { attachmentPreview } = await import("./attachmentPreviews");
 
 // The module caches per path for the life of the page, so each case needs a path of its own.
 let counter = 0;
-const freshPath = (): string => `.intentic/artifacts/attachments/u${++counter}/shot.png`;
+const freshPath = (): string => `.intentic/records/artifacts/attachments/u${++counter}/shot.png`;
 
 // Let the address watcher flush and the pending .then callbacks run, without advancing the retry timers.
 const settle = async (): Promise<void> => {
@@ -112,7 +112,7 @@ it("stops asking for an attachment the daemon says is gone", async () => {
 });
 
 it("leaves a non-image attachment as a name chip without touching the daemon", () => {
-    expect(attachmentPreview(`.intentic/artifacts/attachments/u9/notes.pdf`)).toBeUndefined();
+    expect(attachmentPreview(`.intentic/records/artifacts/attachments/u9/notes.pdf`)).toBeUndefined();
     expect(blob).not.toHaveBeenCalled();
 });
 

@@ -10,7 +10,7 @@ import { MIRROR_AUTOSTART } from "./autostart.js";
 import { mirrorLogPath, type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
-import { ensureMutagen, ensureSyncSession, existingSyncSessions, retireOrphanSessions, runMutagen, sessionName } from "./mutagen.js";
+import { ensureMutagen, ensureSyncSession, existingSyncSessions, retireOrphanSessions, runMutagen, syncSessionNames } from "./mutagen.js";
 import { machineReport } from "./report.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
@@ -398,6 +398,14 @@ export const pairingLine = (pairing: MachineReport["pairings"][number]): string 
                   // rather than clobbering, and nothing else in the product has ever said one was waiting.
                   pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION — this folder is not syncing"),
                   pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
+                  /* The backup's own word, and it is SHOUTED when missing for the same reason the line above is:
+                   * the whole value of this session is being there on the day the sandbox is not, and a silent
+                   * absence reads identically to a healthy one. Named "backup" rather than shown as a bare second
+                   * status so the line says which of the two is in trouble. A paused pairing pauses both, so it
+                   * is not repeated here. */
+                  pairing.paused === true
+                      ? undefined
+                      : `backup ${pairing.backupStatus ?? "NOT RUNNING — this sandbox's own state is not being copied here"}`,
               ].filter((part) => part !== undefined);
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
@@ -481,12 +489,15 @@ const status = buildCommand<StatusFlags>({
         const syncing = report.pairings.filter((pairing) => pairing.mode === "sync");
         if (syncing.length > 0) {
             out("File sync:");
-            const wanted = syncing.map((pairing) => sessionName(pairing.sandboxId));
+            // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only
+            // the first would report a healthy sync while the thing standing between the owner and a lost
+            // sandbox was not running at all.
+            const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId));
             const live = new Set(existingSyncSessions(mutagen, wanted));
             if (live.size > 0) {
                 runMutagen(mutagen, ["sync", "list", ...wanted.filter((name) => live.has(name))]);
             }
-            for (const pairing of syncing.filter((held) => !live.has(sessionName(held.sandboxId)))) {
+            for (const pairing of syncing.filter((held) => !syncSessionNames(held.sandboxId).every((name) => live.has(name)))) {
                 out(
                     `  ${pairing.sandboxId}: no file-sync session exists on this machine — ${pairing.localDir ?? "its folder"} is NOT syncing. The mirror watcher retries every few minutes; if it stays this way the sandbox is unreachable (check ${mirrorLogPath}).`,
                 );
@@ -530,7 +541,9 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
                 return;
             }
             const mutagen = await ensureMutagen();
-            runMutagen(mutagen, ["sync", verb, ...syncing.map((pairing) => sessionName(pairing.sandboxId))]);
+            // Pause and resume act on the pair. Leaving the backup running under a deliberate `pause` would keep
+            // writing to a folder the owner just asked this agent to stop touching.
+            runMutagen(mutagen, ["sync", verb, ...syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId))]);
             out(`${verb === "pause" ? "Paused" : "Resumed"} file sync for: ${syncing.map((pairing) => pairing.sandboxId).join(", ")}`);
         },
     });
@@ -620,7 +633,9 @@ const uninstall = buildCommand<SandboxFlags>({
                 await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch(() => {});
             }
             if (pairing.mode === "sync") {
-                spawnSync(mutagen, ["sync", "terminate", sessionName(pairing.sandboxId)], { stdio: "ignore" });
+                // The pair goes together. A surviving backup session would keep mirroring a sandbox this machine
+                // has just unpaired — writing into a folder the owner considers released.
+                spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing.sandboxId)], { stdio: "ignore" });
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
             await retirePairingMirror(mutagen, pairing.sandboxId);

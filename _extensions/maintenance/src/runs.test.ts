@@ -65,7 +65,7 @@ describe(`what we ask the agent to write back`, () => {
 
     test(`names the exact path, so the file lands where the panel reads it`, () => {
         expect(clause).toContain(resultPath(`r1`));
-        expect(resultPath(`r1`).startsWith(`.intentic/chores/runs/`)).toBe(true);
+        expect(resultPath(`r1`).startsWith(`.intentic/records/chores/runs/`)).toBe(true);
     });
 
     /* `clean` is the outcome that makes the ledger a debounce rather than a nag, and a model that reads it as an

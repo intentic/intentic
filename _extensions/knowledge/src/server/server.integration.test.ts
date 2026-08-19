@@ -162,8 +162,11 @@ describe(`the knowledge backend`, () => {
     });
 
     it(`follows the knowledge base folder the owner chose`, async () => {
-        await mkdir(join(workspace, `.intentic`), { recursive: true });
-        await writeFile(join(workspace, `.intentic/extension-settings.json`), JSON.stringify({ "intentic.knowledge": { folder: `my-notes` } }));
+        await mkdir(join(workspace, `.intentic/config`), { recursive: true });
+        await writeFile(
+            join(workspace, `.intentic/config/extension-settings.json`),
+            JSON.stringify({ "intentic.knowledge": { folder: `my-notes` } }),
+        );
         await mkdir(join(workspace, `my-notes`), { recursive: true });
         await writeFile(join(workspace, `my-notes/only.md`), `---\ntype: term\n---\n`);
         const overview = await json<Overview>(`/overview`);

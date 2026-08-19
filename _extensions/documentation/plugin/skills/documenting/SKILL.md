@@ -149,6 +149,6 @@ reading order. Only then are packages documented, one at a time, each using the 
 component's accent. Writing package pages before the map exists is how a set ends up with a different vocabulary
 per page and no map at all.
 
-A generation run writes into `.intentic/docs/<repo>/` first — the same tails, staged — for the owner to review,
+A generation run writes into `.intentic/config/docs/<repo>/` first — the same tails, staged — for the owner to review,
 and publishing copies each tail into place (`<pkg>/README.md`, `docs/architecture/repo.md`). Editing an
 already-published page as part of a code change is different: edit it in place, in the repo, in your own commit.

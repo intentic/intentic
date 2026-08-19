@@ -130,7 +130,7 @@
                             "path": {
                                 "type": "string",
                                 "minLength": 1,
-                                "description": "Workspace-root-relative, forward-slash, matched by prefix — so one entry covers an exact file (`.intentic/automations.json`), a directory (`.intentic/drafts/`, with the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`). Not a glob."
+                                "description": "Workspace-root-relative, forward-slash, matched by prefix — so one entry covers an exact file (`.intentic/config/automations.json`), a directory (`.intentic/config/drafts/`, with the trailing slash so it cannot match a sibling file) or a name family (`.intentic/environment.`). Not a glob."
                             },
                             "invalidates": {
                                 "minItems": 1,

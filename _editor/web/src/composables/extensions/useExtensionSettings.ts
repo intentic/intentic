@@ -6,7 +6,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 
 /* One shared per-extension settings store (keyed by the capability entry id), so the Sandbox hub's Extensions
  * tab and a running extension's api.settings read and write THE SAME reactive record — an edit in either place
- * notifies the other. Values persist daemon-side (.intentic/extension-settings.json); saves overwrite the whole
+ * notifies the other. Values persist daemon-side (.intentic/config/extension-settings.json); saves overwrite the whole
  * record, mirroring the sandbox-settings pattern. */
 
 export interface ExtensionSettingsStore {

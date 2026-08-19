@@ -28,9 +28,12 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
     await mkdir(dir, { recursive: true });
     await defaultGit(dir, ["init", "--quiet"]);
     await defaultGit(dir, ["remote", "add", "origin", "https://github.com/acme/web.git"]);
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
+    const automations = fileAutomationsStore(
+        join(root, `${STATE_DIR}`, "config", "automations.json"),
+        join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
+    );
     await automations.upsert({
         id: automationId,
         trigger: { kind: "listener", provider: "ci", ...narrow },
@@ -41,10 +44,10 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
-        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
-        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
@@ -172,9 +175,12 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
     await mkdir(dir, { recursive: true });
     await defaultGit(dir, ["init", "--quiet"]);
     await defaultGit(dir, ["remote", "add", "origin", "git@gitlab.example.com:group/app.git"]);
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.example.com", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
+    const automations = fileAutomationsStore(
+        join(root, `${STATE_DIR}`, "config", "automations.json"),
+        join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
+    );
     await automations.upsert({
         id: "wh-gitlab",
         trigger: { kind: "listener", provider: "ci", eventType: "pipeline_succeeded" },
@@ -185,10 +191,10 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
-        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
-        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

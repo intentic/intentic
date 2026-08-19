@@ -312,7 +312,7 @@ model DesktopHandoff {
 
 // A non-owner invited to a sandbox. Email-based (not a User relation) to mirror the daemon's email-based Google
 // auth and to allow granting access before the invitee's first sign-in. The owner is NOT listed here — ownership
-// lives on Sandbox.ownerId. The daemon is the actual enforcer (its .intentic/members.json); this table is the
+// lives on Sandbox.ownerId. The daemon is the actual enforcer (its .intentic/identity/members.json); this table is the
 // platform's invite/grant record so the invitee's browser can discover the sandbox and its URL.
 //
 // Lifecycle: an invite is created PENDING (acceptedAt null) with a one-shot inviteToken carried in the emailed

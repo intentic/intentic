@@ -7,7 +7,7 @@ import { PERSONAS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* ONE PERSONA'S KIT — the prompt it runs on and the skills only its turns reach (`.intentic/personas/<id>/`).
+/* ONE PERSONA'S KIT — the prompt it runs on and the skills only its turns reach (`.intentic/config/personas/<id>/`).
  *
  * Separate from usePersonas, which reads the CARDS: a kit is files, it is only ever wanted for the one card
  * somebody has open, and reading every persona's prompt to draw a list of names would fetch text nothing on

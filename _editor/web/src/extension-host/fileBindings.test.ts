@@ -30,7 +30,7 @@ vi.hoisted(() => {
 
 const { builtinModules } = await import("./builtins");
 
-const AUTOMATIONS_FILES: readonly FileContribution[] = [{ path: `${STATE_DIR}/automations.json`, invalidates: [`automations`] }];
+const AUTOMATIONS_FILES: readonly FileContribution[] = [{ path: `${STATE_DIR}/config/automations.json`, invalidates: [`automations`] }];
 
 describe(`registerFileBindings`, () => {
     // The registry is module state, so each test has to start from empty or ordering decides the result.
@@ -42,8 +42,8 @@ describe(`registerFileBindings`, () => {
 
     it(`unions the bindings of every registered extension`, () => {
         registerFileBindings(`a.one`, AUTOMATIONS_FILES);
-        registerFileBindings(`a.two`, [{ path: `${STATE_DIR}/approvals/`, invalidates: [`automation-approvals`] }]);
-        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/automations.json`, `.intentic/approvals/`]);
+        registerFileBindings(`a.two`, [{ path: `${STATE_DIR}/records/approvals/`, invalidates: [`automation-approvals`] }]);
+        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/config/automations.json`, `.intentic/records/approvals/`]);
     });
 
     it(`replaces an extension's bindings on re-registration instead of doubling them`, () => {
@@ -57,9 +57,9 @@ describe(`registerFileBindings`, () => {
     it(`ignores a superseded activation's late dispose`, () => {
         // The disposable a retired activation holds must not evict the replacement that took its place.
         const stale = registerFileBindings(`a.one`, AUTOMATIONS_FILES);
-        registerFileBindings(`a.one`, [{ path: `${STATE_DIR}/drafts/`, invalidates: [`drafts`] }]);
+        registerFileBindings(`a.one`, [{ path: `${STATE_DIR}/config/drafts/`, invalidates: [`drafts`] }]);
         stale.dispose();
-        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/drafts/`]);
+        expect(contributedFileBindings().map((file) => file.path)).toEqual([`.intentic/config/drafts/`]);
     });
 
     it(`drops an extension's bindings when its own registration is disposed`, () => {
@@ -70,20 +70,20 @@ describe(`registerFileBindings`, () => {
 });
 
 describe(`the builtins' declared bindings`, () => {
-    /* The regression ③ closed. `.intentic/automations.json` and `.intentic/approvals/` are written by the DAEMON's
+    /* The regression ③ closed. `.intentic/config/automations.json` and `.intentic/records/approvals/` are written by the DAEMON's
      * automations store and rendered by the automations EXTENSION, and the core table used to carry the
      * extension's two query keys itself because the extension had no way to declare them. Asserted against the
      * real manifests, not a fixture: the point is that the shipped declaration is the thing that works. */
     const bindings = [...builtinModules.values()].flatMap((module) => module.manifest.contributes?.files ?? []);
 
     it(`refreshes the Automations view when the agent edits the manifest on disk`, () => {
-        expect(staleQueryKeys([`.intentic/automations.json`], bindings)).toEqual([`automations`]);
-        expect(staleQueryKeys([`.intentic/approvals/pending-1.json`], bindings)).toEqual([`automation-approvals`]);
+        expect(staleQueryKeys([`.intentic/config/automations.json`], bindings)).toEqual([`automations`]);
+        expect(staleQueryKeys([`.intentic/records/approvals/pending-1.json`], bindings)).toEqual([`automation-approvals`]);
     });
 
     it(`leaves those keys entirely to the extension`, () => {
         // With no extension running the same write makes nothing stale — the core table no longer reaches across
         // the boundary for keys it does not query.
-        expect(staleQueryKeys([`.intentic/automations.json`, `.intentic/approvals/pending-1.json`], [])).toEqual([]);
+        expect(staleQueryKeys([`.intentic/config/automations.json`, `.intentic/records/approvals/pending-1.json`], [])).toEqual([]);
     });
 });

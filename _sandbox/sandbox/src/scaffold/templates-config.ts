@@ -8,11 +8,11 @@ export interface TemplatesConfig {
     readonly ref: string;
 }
 
-// The per-workspace override for the opinionated-template source, at <root>/.intentic/templates.json. Absent (the
+// The per-workspace override for the opinionated-template source, at <root>/.intentic/config/templates.json. Absent (the
 // common case) → the baked-in canonical default. Malformed JSON propagates so a broken override surfaces rather
 // than silently reverting to the default.
 export const readTemplatesConfig = async (services: Services): Promise<TemplatesConfig> => {
-    const raw = await services.files.read(statePath(services.workspace.root, ".intentic/templates.json"));
+    const raw = await services.files.read(statePath(services.workspace.root, ".intentic/config/templates.json"));
     if (raw === undefined) {
         return { source: DEFAULT_TEMPLATE_SOURCE, ref: DEFAULT_TEMPLATE_REF };
     }

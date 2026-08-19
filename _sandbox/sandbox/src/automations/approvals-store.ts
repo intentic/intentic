@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract";
 import { jsonDir } from "../store/json-dir.js";
 
-// The automation approvals queue (<workspace>/.intentic/approvals/<id>.json, one file per held wake): a
+// The automation approvals queue (<workspace>/.intentic/records/approvals/<id>.json, one file per held wake): a
 // `requireApproval` automation enqueues here instead of waking; the owner approves/rejects via the /automations
 // routes. Per-file — never a shared manifest — because concurrent fires from different automations would race a
 // read-modify-write (see json-dir.ts, which owns that cycle). The item snapshots the trigger payload so an
@@ -22,7 +22,7 @@ export interface ApprovalsStore {
     readonly remove: (id: string) => Promise<boolean>;
 }
 
-// A per-file JSON store, used in production at <workspace>/.intentic/approvals/.
+// A per-file JSON store, used in production at <workspace>/.intentic/records/approvals/.
 export const fileApprovalsStore = (dir: string): ApprovalsStore => {
     const files = jsonDir(dir, (raw) => ApprovalBodySchema.safeParse(raw).data);
     return {

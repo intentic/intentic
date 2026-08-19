@@ -84,7 +84,7 @@ test("an own skill is the only origin that is editable, and reads its enabled st
 test("a plugin's skills are attributed to that plugin and offer no control of their own", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "my-pack", kind: "plugin", config: { url: "https://example.com/pack.git" } };
-    await writeSkill(join(root, ".intentic", "plugins", "my-pack", "skills"), "review", "Use when reviewing a diff.");
+    await writeSkill(join(root, ".intentic", "records", "plugins", "my-pack", "skills"), "review", "Use when reviewing a diff.");
 
     const rows = await skillInventory(stubServices(root, [plugin], settingsWith([])));
     expect(rowFor(rows, "plugin:my-pack:review")).toMatchObject({
@@ -103,7 +103,7 @@ test("a plugin's skills are attributed to that plugin and offer no control of th
 test("a plugin's subdirectory is honoured", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const plugin: Capability = { id: "market", kind: "plugin", config: { url: "https://example.com/m.git", path: "plugins/beta" } };
-    await writeSkill(join(root, ".intentic", "plugins", "market", "plugins", "beta", "skills"), "beta", "Use for beta things.");
+    await writeSkill(join(root, ".intentic", "records", "plugins", "market", "plugins", "beta", "skills"), "beta", "Use for beta things.");
 
     const rows = await skillInventory(stubServices(root, [plugin], settingsWith([])));
     expect(rowFor(rows, "plugin:market:beta").owner).toBe("market");
@@ -117,7 +117,7 @@ test("an extension's skills are attributed by its manifest name", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     // An extension entry pins a full commit sha — the owner approves exactly the code that runs in their browser.
     const entry: Capability = { id: "ext-1", kind: "extension", config: { url: "https://example.com/ext.git", ref: "a".repeat(40) } };
-    const checkout = join(root, ".intentic", "extensions", "ext-1");
+    const checkout = join(root, ".intentic", "local", "extensions", "ext-1");
     await mkdir(checkout, { recursive: true });
     await writeFile(
         join(checkout, "intentic-extension.json"),
@@ -191,7 +191,7 @@ test("every id the list mints reads back the right skill", async () => {
     const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
     const services = stubServices(root, [plugin], settingsWith([]), [studio]);
     await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Stored body." });
-    await writeSkill(join(root, ".intentic", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
+    await writeSkill(join(root, ".intentic", "records", "plugins", "my-pack", "skills"), "review", "Use when reviewing.", "Plugin body.");
     await writePersonaSkill(root, "studio", "Studio", { name: "voice", description: "How we write.", body: "Kit body." });
 
     for (const row of await skillInventory(services)) {

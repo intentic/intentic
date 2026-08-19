@@ -127,7 +127,7 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
     });
 };`;
 
-const workspace = `.intentic/workspace-extensions/
+const workspace = `.intentic/config/workspace-extensions/
 └── incidents/
     ├── intentic-extension.json   # the manifest, at the root of the directory
     ├── dist/extension.js         # the entry bundle, if it contributes UI
@@ -260,7 +260,7 @@ const workspace = `.intentic/workspace-extensions/
     <h2 id="workspace">Skip all of that: write it in the workspace</h2>
     <p>
         Steps 1 to 6 are the path for an extension other people will install. For one that only has to work in <em>your</em> sandbox, there
-        is a shorter one: put the directory under <code>.intentic/workspace-extensions/</code> and it runs from where it sits. No repo, no
+        is a shorter one: put the directory under <code>.intentic/config/workspace-extensions/</code> and it runs from where it sits. No repo, no
         commit, no sha, no install dialog.
     </p>
     <DocsCodeBlock code={workspace} lang="bash" title="Inside your sandbox" />

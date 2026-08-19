@@ -117,8 +117,8 @@ test("extensionBinDirsOf resolves each contributes.bin to an absolute dir on the
 
 // Write the owner's switch file the way the enablement store does — by publisher.name, not the capability id.
 const writeEnablement = async (root: string, values: Record<string, boolean>): Promise<void> => {
-    await mkdir(join(root, `${STATE_DIR}`), { recursive: true });
-    await writeFile(join(root, `${STATE_DIR}`, "extension-enablement.json"), JSON.stringify(values));
+    await mkdir(join(root, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(root, STATE_DIR, "config", "extension-enablement.json"), JSON.stringify(values));
 };
 
 test("a disabled extension stays listed but drops out of enabledExtensions", async () => {

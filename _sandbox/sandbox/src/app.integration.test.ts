@@ -1047,8 +1047,8 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "", attachments: [`${STATE_DIR}/artifacts/attachments/x/shot.png`] });
-    expect(seen?.prompt).toContain("/work/.intentic/artifacts/attachments/x/shot.png");
+    await runAgentTurn(client, { prompt: "", attachments: [`${STATE_DIR}/records/artifacts/attachments/x/shot.png`] });
+    expect(seen?.prompt).toContain("/work/.intentic/records/artifacts/attachments/x/shot.png");
 });
 
 test("agent.run rejects an attachment path escaping the workspace with an error frame", async () => {
@@ -1114,7 +1114,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     // A proposal is custom-section content only (the daemon owns the FROM).
     const proposal = "RUN apt-get install -y cowsay\n";
     const hash = sha256Hex(proposal);
-    disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/environment.Dockerfile`, proposal);
+    disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/config/environment.Dockerfile`, proposal);
 
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
     // a verified non-owner is 403, not 401.
@@ -1151,7 +1151,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     expect((await postJson(ownerApp, "/environment/approve", { hash })).status).toBe(404);
 
     // A proposal carrying its own FROM is invalid — the daemon owns the base image.
-    disk.set("/work/.intentic/environment.Dockerfile", "FROM alpine:latest\n");
+    disk.set("/work/.intentic/config/environment.Dockerfile", "FROM alpine:latest\n");
     expect((await postJson(ownerApp, "/environment/approve", { hash: sha256Hex("FROM alpine:latest\n") })).status).toBe(400);
 });
 

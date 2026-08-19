@@ -14,7 +14,7 @@ import { fileSecretVault, type SecretVault } from "./secret-vault.js";
 
 const vaulted = (): { store: CapabilitiesStore; manifest: string; vaultPath: string } => {
     const root = mkdtempSync(join(tmpdir(), "vault-"));
-    const manifest = join(root, STATE_DIR, "capabilities.json");
+    const manifest = join(root, STATE_DIR, "config", "capabilities.json");
     const vaultPath = join(root, "auth", "capability-secrets.json");
     const inner = fileCapabilitiesStore(manifest);
     return { store: withSecretVault(inner, fileSecretVault(vaultPath), async () => new Map()), manifest, vaultPath };
@@ -87,7 +87,7 @@ test("editing a capability to drop a credential drops it from the vault too", as
 
 const swept = (): { inner: CapabilitiesStore; vault: SecretVault; manifest: string; sweep: () => Promise<readonly string[]> } => {
     const root = mkdtempSync(join(tmpdir(), "sweep-"));
-    const manifest = join(root, STATE_DIR, "capabilities.json");
+    const manifest = join(root, STATE_DIR, "config", "capabilities.json");
     const inner = fileCapabilitiesStore(manifest);
     const vault = fileSecretVault(join(root, "auth", "capability-secrets.json"));
     return { inner, vault, manifest, sweep: () => vaultManifestSecrets(inner, vault, async () => new Map()) };

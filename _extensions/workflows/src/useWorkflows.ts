@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The sandbox's workflow manifest (.intentic/workflows.json) and run ledger (.intentic/workflow-runs.json),
+/* The sandbox's workflow manifest (.intentic/config/workflows.json) and run ledger (.intentic/records/workflow-runs.json),
  * read/written through the daemon's /workflows routes. All daemon access goes through the host api.
  *
  * NOT POLLED. Both files are on the daemon's file-change push — the scheduler writes the ledger several times

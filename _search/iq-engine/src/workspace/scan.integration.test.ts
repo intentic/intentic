@@ -33,13 +33,13 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
     // No security floor: a non-gitignore'd secret is indexed like any other file (role-based gating comes later).
     expect(paths()).toContain(".env");
     expect(paths()).toContain(".env.example");
-    expect(paths().some((path) => path.startsWith(".intentic/cache/iq"))).toBe(false); // index self-exclusion
+    expect(paths().some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false); // index self-exclusion
 
     const full = await sweep(root, true);
     const fullPaths = full.map((entry) => entry.path);
     expect(fullPaths).toContain("alpha/dist/decoy.js"); // --ignored lifts .gitignore + junk dirs…
     expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true); // …including .git now
-    expect(fullPaths.some((path) => path.startsWith(".intentic/cache/iq"))).toBe(false); // …but never the index dir
+    expect(fullPaths.some((path) => path.startsWith(".intentic/local/cache/iq"))).toBe(false); // …but never the index dir
 });
 
 test("the reference shelf is skipped by default and reachable via --ignored, like the junk layer", async () => {
@@ -73,17 +73,20 @@ test("a .git worktree pointer file is junk like a .git dir, and still liftable w
 });
 
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
-    await writeFile(join(root, `${STATE_DIR}/settings.json`), '{ "theme": "dark" }\n');
+    // The state dir is grouped, so the config folder has to exist before a manifest can be written into it —
+    // the fixture only makes the cache tree.
+    await mkdir(join(root, `${STATE_DIR}/config`), { recursive: true });
+    await writeFile(join(root, `${STATE_DIR}/config/settings.json`), '{ "theme": "dark" }\n');
     const excluded = [
-        `${STATE_DIR}/auth/codex/default/auth.json`,
-        `${STATE_DIR}/sessions/claude/projects/session.jsonl`,
-        `${STATE_DIR}/artifacts/attachments/u1/brief.md`,
-        `${STATE_DIR}/runtime/extensions/whatsapp/gateway.url`,
-        `${STATE_DIR}/browser/reddit/Default/Cookies`,
+        `${STATE_DIR}/secrets/auth/codex/default/auth.json`,
+        `${STATE_DIR}/records/sessions/claude/projects/session.jsonl`,
+        `${STATE_DIR}/records/artifacts/attachments/u1/brief.md`,
+        `${STATE_DIR}/local/runtime/extensions/whatsapp/gateway.url`,
+        `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
         ...Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}/retired-state`)),
         // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no
         // more searchable than the root's own.
-        "alpha/.intentic/cache/iq/index.db",
+        "alpha/.intentic/local/cache/iq/index.db",
     ];
     await Promise.all(
         excluded.map(async (path) => {
@@ -96,7 +99,7 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
         expect(swept).not.toContain(path);
     }
     // Manifests are user-authored config an agent is routinely asked to find and edit.
-    expect(swept).toContain(".intentic/settings.json");
+    expect(swept).toContain(".intentic/config/settings.json");
     // …and the floor holds with --ignored too, which lifts only the gitignore/junk layers.
     const full = (await sweep(root, true)).map((entry) => entry.path);
     for (const path of excluded) {

@@ -23,7 +23,7 @@ import { clientFor, errorCode, memoryCapabilitiesStore, services } from "../rout
  * are shared (route-testing.ts); what lives here is what these routes do. */
 
 test("extensions.setEnabled keeps the extension listed, switches it off, and unwires it daemon-side", async () => {
-    // A real workspace root, because the switch persists to <root>/.intentic/extension-enablement.json. The
+    // A real workspace root, because the switch persists to <root>/.intentic/config/extension-enablement.json. The
     // extensions dir is the repo's own _extensions, so this runs against the shipped first-party manifests.
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-toggle-")));
     const svc = services({ workspace });
@@ -56,8 +56,8 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
 test("an essential extension cannot be switched off, reads enabled over a stale entry, and says so on its row", async () => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-essential-")));
     // A disabled entry written before the concept existed (or by hand) — must not keep the surface shut.
-    await mkdir(join(workspace.root, ".intentic"), { recursive: true });
-    await writeFile(join(workspace.root, ".intentic/extension-enablement.json"), JSON.stringify({ "intentic.automations": false }));
+    await mkdir(join(workspace.root, ".intentic/config"), { recursive: true });
+    await writeFile(join(workspace.root, ".intentic/config/extension-enablement.json"), JSON.stringify({ "intentic.automations": false }));
     const client = clientFor(createApp(services({ workspace })));
 
     const rows = (await client.extensions.list()).extensions;
@@ -192,7 +192,7 @@ test("extensions.create writes a workspace extension that is listed, enabled and
     const client = clientFor(app);
 
     const created = await client.extensions.create({ publisher: "workspace", name: "release-notes" });
-    expect(created).toEqual({ id: "workspace.release-notes", dir: ".intentic/workspace-extensions/release-notes" });
+    expect(created).toEqual({ id: "workspace.release-notes", dir: ".intentic/config/workspace-extensions/release-notes" });
 
     // It is a real row on the same list the tab renders, on by default — not a draft awaiting an install step.
     const listed = (await client.extensions.list()).extensions.find((extension) => extension.id === "workspace.release-notes");

@@ -26,7 +26,7 @@ export type CapabilityEffect =
     // written to a file (cli). "disk": a 0600 file, or a field in the off-workspace secret vault the manifest
     // points at with a marker (ssh key, vpn conf, git token).
     | { readonly kind: "secret"; readonly exposure: "agent-env" | "disk" }
-    // Git-clones a repo into .intentic/plugins|extensions/<id>. `url` absent until the form field is filled.
+    // Git-clones a repo into .intentic/records/plugins|extensions/<id>. `url` absent until the form field is filled.
     | { readonly kind: "clone"; readonly url?: string | undefined }
     // Bakes a Dockerfile fragment into the sandbox image overlay — needs a one-time owner rebuild.
     | { readonly kind: "image" }
@@ -54,7 +54,7 @@ export type CapabilityEffect =
     | { readonly kind: "deploy"; readonly provisions: boolean }
     // Extension code runs inside the app with the owner's session — the owner-only trust decision.
     | { readonly kind: "trusted-code" }
-    // Keeps a logged-in Chromium profile under .intentic/browser/<id> that the agent drives — one per connected
+    // Keeps a logged-in Chromium profile under .intentic/local/browser/<id> that the agent drives — one per connected
     // ACCOUNT, so `platform` here is what the profile is a profile OF, not what it is keyed by.
     | { readonly kind: "profile"; readonly platform: string }
     // Gives the agent hands on a computer the user OWNS — the most consequential effect in this union, so it

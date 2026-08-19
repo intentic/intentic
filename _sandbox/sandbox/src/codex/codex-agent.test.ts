@@ -52,7 +52,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
             usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 2 },
         },
     ]);
-    const events = await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), request);
+    const events = await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), request);
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-1" },
         { kind: "thinking", text: "planning the edit" },
@@ -78,7 +78,7 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
 
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {
     const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), {
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {
         ...request,
         sessionId: "thr-9",
         model: "gpt-5-codex",
@@ -96,13 +96,13 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
         // Claude's top effort level maps onto Codex's scale ceiling.
         modelReasoningEffort: "xhigh",
     });
-    expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/auth/codex");
+    expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/secrets/auth/codex");
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
 });
 
 test("a subscription turn uses the translator bearer and the actor marker that unlocks image generation", async () => {
     const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), {
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {
         ...request,
         model: "gpt-5.5",
         codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
@@ -127,7 +127,7 @@ test("a subscription turn uses the translator bearer and the actor marker that u
 
 test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex`), { ...request, model: "gpt-5-codex" });
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), { ...request, model: "gpt-5-codex" });
     // The question tool is the one key every turn carries; nothing here names a provider or a credential.
     expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input": true });
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
@@ -180,12 +180,12 @@ test("attached images ride as native inputs while other files are referenced in 
     await collect(createTestAgent(runner), {
         ...request,
         attachments: [
-            `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/a/shot.png`,
-            `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/b/report.pdf`,
+            `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/shot.png`,
+            `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/b/report.pdf`,
         ],
     });
-    expect(calls[0]!.images).toEqual(["/work/.intentic/artifacts/attachments/a/shot.png"]);
-    expect(calls[0]!.prompt).toContain("/work/.intentic/artifacts/attachments/b/report.pdf");
+    expect(calls[0]!.images).toEqual(["/work/.intentic/records/artifacts/attachments/a/shot.png"]);
+    expect(calls[0]!.prompt).toContain("/work/.intentic/records/artifacts/attachments/b/report.pdf");
     expect(calls[0]!.prompt).not.toContain("shot.png");
 });
 

@@ -2,9 +2,9 @@ import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { statePath } from "../workspace/state-paths.js";
 
-// Where plugin checkouts live: .intentic/plugins/<id> — daemon-owned state beside capabilities.json, outside the
+// Where plugin checkouts live: .intentic/records/plugins/<id> — daemon-owned state beside capabilities.json, outside the
 // three repos (no git-status pollution) and outside .claude/ (which Claude Code manages with its own semantics).
-export const pluginsRoot = (root: string): string => statePath(root, ".intentic/plugins/");
+export const pluginsRoot = (root: string): string => statePath(root, ".intentic/records/plugins/");
 export const pluginDir = (root: string, id: string): string => join(pluginsRoot(root), id);
 
 // The absolute plugin dirs handed to the SDK `plugins` option each turn, derived from plugin-kind capabilities

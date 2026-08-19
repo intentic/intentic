@@ -17,16 +17,16 @@ import { isWatchIgnored } from "./workspace-watch.js";
  * drops: a declaration with no effect, indistinguishable from a working one until someone notices the view never
  * refreshes.
  *
- * That is not hypothetical. The agent's memory notes live at `.intentic/sessions/claude/projects/<slug>/memory/**`, under
- * the `.intentic/sessions/claude` prefix the watcher excludes wholesale (session transcripts are rewritten on every
- * streamed token). Declaring `{ path: ".intentic/sessions/claude/...", invalidates: ["memory"] }` would read as a fix and
+ * That is not hypothetical. The agent's memory notes live at `.intentic/records/sessions/claude/projects/<slug>/memory/**`, under
+ * the `.intentic/records/sessions/claude` prefix the watcher excludes wholesale (session transcripts are rewritten on every
+ * streamed token). Declaring `{ path: ".intentic/records/sessions/claude/...", invalidates: ["memory"] }` would read as a fix and
  * do nothing. This test fails on it instead.
  *
  * Scope note: only the in-repo builtins can be checked here — a git-installed third-party manifest arrives at
  * runtime. The constraint is the same for them, which is what FileContributionSchema's comment says.
  *
  * (Why the memory dirs stay excluded rather than the exclusion being narrowed: reaching them means letting the
- * watcher descend `.intentic/sessions/claude` → `projects` → all 116 project slugs, measured as +119 watched directories
+ * watcher descend `.intentic/records/sessions/claude` → `projects` → all 116 project slugs, measured as +119 watched directories
  * against ~593 today — a 20% rise — with 314 continuously-rewritten transcripts inside the newly-watched set, to
  * make ONE directory live. The /memory view polls instead, deliberately.) */
 

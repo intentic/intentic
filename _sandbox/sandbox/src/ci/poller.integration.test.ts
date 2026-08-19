@@ -41,21 +41,24 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
     await mkdir(dir, { recursive: true });
     await defaultGit(dir, ["init", "--quiet"]);
     await defaultGit(dir, ["remote", "add", "origin", "https://github.com/acme/web.git"]);
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
-    const automations = fileAutomationsStore(join(root, `${STATE_DIR}`, "automations.json"), join(root, `${STATE_DIR}`, "automation-runs.json"));
+    const automations = fileAutomationsStore(
+        join(root, `${STATE_DIR}`, "config", "automations.json"),
+        join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
+    );
     await automations.upsert({ id: "poll-ci", trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci", enabled: true });
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
-        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", "Pipeline webhooks are off: this sandbox has no public URL."]] : []),
         }),
-        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "thread-sessions.json")),
+        threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], open: async () => {}, append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

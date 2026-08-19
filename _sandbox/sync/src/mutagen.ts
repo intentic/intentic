@@ -1,11 +1,11 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
 import { binDir, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
-import { IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
+import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
 
 // The pinned Mutagen version this agent downloads when the machine has no install of its own.
 const MUTAGEN_VERSION = "0.18.1";
@@ -16,6 +16,17 @@ const SESSION_PREFIX = "intentic-";
 
 // The Mutagen session name (letters/digits/dashes) so `mutagen sync {list,pause,resume,terminate}` can target it.
 export const sessionName = (sandboxId: string): string => `${SESSION_PREFIX}${sanitizeId(sandboxId)}`;
+
+/* The BACKUP session's name — the second sync a pairing runs, carrying the sandbox's state dir down one-way (see
+ * backupSpec). It hangs off the workspace session's name rather than getting a prefix of its own so that
+ * everything which finds our sessions by prefix keeps finding it: `oursIn` sweeps it, `parseOrphanSyncNames`
+ * retires it with its pairing, and a user's own Mutagen sessions stay untouched by all of it. */
+export const backupSessionName = (sandboxId: string): string => `${sessionName(sandboxId)}-state`;
+
+/* Both of a pairing's sync sessions, in the order a person reads them: the workspace, then its backup. Every
+ * caller that used to name the one session now asks for the pair, which is what keeps a half-converged pairing
+ * from existing — pause, resume, terminate and the orphan sweep all act on the same two names. */
+export const syncSessionNames = (sandboxId: string): readonly string[] => [sessionName(sandboxId), backupSessionName(sandboxId)];
 
 // One port-mirror forward session per port, deterministically named so `mirror` can reconcile (terminate a
 // vanished port's session, recreate a live one) without querying Mutagen's session list. The shared prefix is
@@ -108,15 +119,60 @@ export interface SyncSessionSpec {
     readonly localDir: string;
     readonly alias: string;
     readonly remoteDir: string;
+    /* Pinned per session rather than globally, because the two a pairing runs want opposite things. The workspace
+     * is edited on both ends, so it is two-way and conflicts are flagged. The backup has exactly one writer, so
+     * it is a replica: the laptop copy is whatever the sandbox holds, deletions included. Replica is also what
+     * makes it a BACKUP rather than an ever-growing pile — a note deleted in the sandbox should not linger. */
+    readonly mode: "two-way-safe" | "one-way-replica";
+    readonly ignores: readonly string[];
+    /* WHICH END IS ALPHA, and the reason this is a field instead of a convention. Mutagen's one-way modes always
+     * propagate alpha → beta, so a session that must run sandbox → laptop has to put the SANDBOX first. The
+     * workspace session is local-first and two-way, where the order carries no direction at all. Getting this
+     * backwards on the backup would not fail loudly; it would quietly overwrite the sandbox's own state with
+     * whatever the laptop had. */
+    readonly from: "local" | "sandbox";
 }
 
-// The session for a pairing: name and ssh alias both namespace on the sandbox id, and the remote side is always
-// /work — the sandbox's workspace root is the only thing there is to sync.
+// The workspace session for a pairing: name and ssh alias both namespace on the sandbox id, and the remote side
+// is always /work — the sandbox's workspace root is the only thing there is to sync.
 const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessionSpec => ({
     name: sessionName(pairing.sandboxId),
     localDir: pairing.localDir,
     alias: sshAlias(pairing.sandboxId),
     remoteDir: WORKSPACE_ROOT,
+    mode: "two-way-safe",
+    ignores: IGNORES,
+    from: "local",
+});
+
+/* THE BACKUP SESSION: the sandbox's state dir, mirrored down into the same place under the paired folder.
+ *
+ * It lands at `<localDir>/.intentic` — inside the folder the user already has, not beside it — so what sits on
+ * their disk is the sandbox as it actually is, and a restore is a copy rather than a reassembly. The two
+ * sessions cannot fight over it: the workspace session ignores the state dir wholesale (IGNORES), which is
+ * exactly the exclusion that makes room for this one.
+ *
+ * ONE-WAY, SANDBOX FIRST. The daemon is the only writer of anything in here, so there is no edit on the laptop
+ * worth propagating back, and pretending otherwise is what would put transcript churn and ledger rewrites into a
+ * two-way reconciler. Mutagen halts a replica rather than emptying beta when alpha's root disappears
+ * (halted-on-root-emptied), which is the case that matters here: a sandbox mid-rebuild must not read as "the
+ * owner deleted their backup".
+ *
+ * IT WILL BE CHATTY, and that is accepted rather than overlooked. Session transcripts are rewritten on every
+ * streamed token and the run ledgers every few seconds, so this session transfers something most of the time a
+ * turn is running — which is exactly why the workspace watcher refuses to WATCH those same paths. The difference
+ * is what each one costs: a watcher event fans out to every connected browser as a refetch, while this is a
+ * delta on a wire that is already up, with no reader waiting on it. If it ever needs trimming, the honest lever
+ * is the classification (a transcript tree could be its own entry with its own answer), not a quiet exclusion
+ * here — the whole point of the list is that what the owner keeps is decided in one place. */
+const backupSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessionSpec => ({
+    name: backupSessionName(pairing.sandboxId),
+    localDir: join(pairing.localDir, STATE_DIR),
+    alias: sshAlias(pairing.sandboxId),
+    remoteDir: `${WORKSPACE_ROOT}/${STATE_DIR}`,
+    mode: "one-way-replica",
+    ignores: BACKUP_IGNORES,
+    from: "sandbox",
 });
 
 // `mutagen sync create` args: two-way-safe (flags conflicts rather than clobber), our ignore set, and
@@ -129,27 +185,34 @@ const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSess
 // the pointer FILES the daemon leaves at /work/.git and inside every relocated repo — slip straight through
 // it. IGNORES carries the bare `.git` that covers every shape at every level; see the comment there. Git
 // state travels by git's own protocol instead (git-bridge.ts).
-export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => [
-    "sync",
-    "create",
-    "--name",
-    spec.name,
-    "--sync-mode",
-    "two-way-safe",
-    ...(paused ? ["--paused"] : []),
-    ...IGNORES.flatMap((pattern) => ["--ignore", pattern]),
-    "--stage-mode-beta",
-    "neighboring",
-    spec.localDir,
-    `${spec.alias}:${spec.remoteDir}`,
-];
+export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => {
+    const local = spec.localDir;
+    const remote = `${spec.alias}:${spec.remoteDir}`;
+    return [
+        "sync",
+        "create",
+        "--name",
+        spec.name,
+        "--sync-mode",
+        spec.mode,
+        ...(paused ? ["--paused"] : []),
+        ...spec.ignores.flatMap((pattern) => ["--ignore", pattern]),
+        "--stage-mode-beta",
+        "neighboring",
+        // Alpha first. `from` is what decides it, because a one-way session's direction IS its endpoint order.
+        ...(spec.from === "local" ? [local, remote] : [remote, local]),
+    ];
+};
 
 // A live session as the daemon reports it, narrowed to what the drift check and the status report read. Protobuf
 // JSON omits defaults, so a session with no ignores at all arrives as `"ignore":{}` and vcs:false is simply
 // absent — and by the same rule `status`/`conflicts` are absent on a session that has neither, which is why
 // everything the report reads is optional rather than defaulted here.
 interface LiveSession {
-    readonly alpha: { readonly path?: string };
+    // Both ends carry an optional host now that a session may run either way round: the backup's ALPHA is the
+    // sandbox. Protobuf JSON omits a local endpoint's empty host, so `undefined` is what "this machine" looks
+    // like on whichever side happens to be local.
+    readonly alpha: { readonly host?: string; readonly path?: string };
     readonly beta: { readonly host?: string; readonly path?: string };
     readonly ignore: { readonly paths?: readonly string[]; readonly vcs?: boolean };
     readonly paused?: boolean;
@@ -205,12 +268,28 @@ export const existingSyncSessions = (mutagen: string, names: readonly string[]):
 // Whether what's running is what THIS build would create. Both endpoints and the WHOLE ignore set count:
 // Mutagen freezes a session's configuration at `sync create` and has no verb that edits it afterwards, so an
 // ignore list that no longer matches is a session that will never behave like this version says it does.
-export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean =>
-    session.alpha.path === spec.localDir &&
-    session.beta.host === spec.alias &&
-    session.beta.path === spec.remoteDir &&
-    session.ignore.vcs !== true &&
-    (session.ignore.paths ?? []).join("\n") === IGNORES.join("\n");
+export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean => {
+    // Which endpoint should be holding what, given the direction this spec runs in. A backup session whose ends
+    // are the wrong way round is the one drift that must never be read as "close enough" — it would be uploading.
+    const [alpha, beta] =
+        spec.from === "local"
+            ? [
+                  { host: undefined, path: spec.localDir },
+                  { host: spec.alias, path: spec.remoteDir },
+              ]
+            : [
+                  { host: spec.alias, path: spec.remoteDir },
+                  { host: undefined, path: spec.localDir },
+              ];
+    return (
+        session.alpha.path === alpha.path &&
+        session.alpha.host === alpha.host &&
+        session.beta.path === beta.path &&
+        session.beta.host === beta.host &&
+        session.ignore.vcs !== true &&
+        (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n")
+    );
+};
 
 // Converge the file-sync session on this build: create it when missing, recreate it when what's running drifted.
 // Recreating is the only way to change a session's ignores, and that is what makes an agent upgrade actually
@@ -225,7 +304,17 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     if (pairing.mode !== "sync" || pairing.localDir === undefined) {
         return; // a mirror-only enrollment has no file sync at all — just port forwards
     }
-    const spec = sessionSpec({ ...pairing, localDir: pairing.localDir });
+    const held = { ...pairing, localDir: pairing.localDir };
+    /* Both sessions, converged in order and independently. Sequential rather than concurrent because they share
+     * one ssh transport and one Mutagen daemon, and a recreate on either can block on the same probe; the
+     * workspace goes first because it is the one the user is waiting on. An unreachable sandbox leaves BOTH
+     * alone (each converge bails on the same probe), so a pairing never ends up half on the new rules. */
+    for (const spec of [sessionSpec(held), backupSpec(held)]) {
+        await convergeSession(mutagen, spec, log);
+    }
+};
+
+const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<void> => {
     const live = readSession(mutagen, spec.name);
     if (live !== undefined && sessionMatchesSpec(live, spec)) {
         return;
@@ -262,7 +351,7 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
     const ids = pairings.map((pairing) => pairing.sandboxId);
     const sessions = parseOrphanSyncNames(
         listSessionNames(mutagen, "sync"),
-        pairings.map((pairing) => sessionName(pairing.sandboxId)),
+        pairings.flatMap((pairing) => syncSessionNames(pairing.sandboxId)),
     );
     if (sessions.length > 0) {
         spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore", windowsHide: true });

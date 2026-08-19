@@ -7,7 +7,7 @@ import type { TrialService } from "./trial.js";
 /* THE TRIAL AS A CAPABILITY THE USER NEVER ADDED — provisioned by the daemon, and deliberately never written to
  * the manifest.
  *
- * It is a synthetic entry laid over the store rather than a row in .intentic/capabilities.json, and that is the
+ * It is a synthetic entry laid over the store rather than a row in .intentic/config/capabilities.json, and that is the
  * whole design. A persisted entry would be the user's to edit and delete, which is wrong in both directions: its
  * "API key" is this sandbox's connect token, so an editable card is a card that shows a credential and lets a
  * typo break the sandbox's identity to the platform; and a deleted entry would come back on the next boot,

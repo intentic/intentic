@@ -29,6 +29,8 @@ import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import CopyButton from "./CopyButton.vue";
 import Icon from "./Icon.vue";
 import {
+    backupState,
+    backupTone,
     folderState,
     folderTone,
     groupNeedsAttention,
@@ -133,6 +135,13 @@ watch(
  * stays (it is the session's own state, and this view exists to replace the CLI that prints it); only the states
  * worth looking at keep the pill. */
 const restingSync = (folder: MachineFolderRow): boolean => folderTone(folderState(folder)) === `success`;
+
+/* And the same rule for the state BACKUP, which is a second session with a second word and no reason to be
+ * louder about being fine. Its first draft printed "backup on" beside every healthy row, on the argument that
+ * an absent backup is invisible until the day it matters — but that argues for the FAILING case being loud,
+ * which it is, not for the resting one being present. A grey word next to a grey path, saying what the machine's
+ * own "sync agent running" line already says, is exactly the noise the rule above deletes. */
+const restingBackup = (folder: MachineFolderRow): boolean => backupTone(backupState(folder)) === `success`;
 
 /* GOING TO WHOEVER TOOK THE PORT.
  *
@@ -312,6 +321,18 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 :variant="folderTone(folderState(group.folder))"
                                 size="xs"
                                 :label="folderState(group.folder) ?? ``"
+                            />
+                            <!-- Whether anything off this sandbox holds a copy of its own state, and SILENT while
+                                 the answer is yes — the same bargain the sync word above just made. The failing
+                                 case is the one that matters here and it is the one that speaks: a backup that
+                                 stopped costs nothing at all until the sandbox is gone, so it is named rather
+                                 than left to be noticed. Labelled, because "halted-on-root-emptied" beside a
+                                 folder path would otherwise read as the folder's own trouble. -->
+                            <StatusBadge
+                                v-if="backupState(group.folder) && !restingBackup(group.folder)"
+                                :variant="backupTone(backupState(group.folder))"
+                                size="xs"
+                                :label="`backup: ${backupState(group.folder)}`"
                             />
                             <!-- Two-way-safe flags conflicts instead of clobbering, and nothing else in the
                                  product has ever said one was waiting — so a file edited on both ends sat stuck

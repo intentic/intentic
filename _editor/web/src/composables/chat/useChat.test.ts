@@ -64,9 +64,8 @@ const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?
 };
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
-const { draftConversation, hydrateOnce, loadAccountStatus, openAgentConversation, refreshConnections, resetChat, reveal, useChat } = await import(
-    "./useChat"
-);
+const { draftConversation, hydrateOnce, loadAccountStatus, openAgentConversation, refreshConnections, resetChat, reveal, useChat } =
+    await import("./useChat");
 // The store half of "New agent", as the summons applies it (agentActions.startAgent) — the fixture these
 // suites open extra tabs with.
 const newChat = () => {
@@ -455,7 +454,9 @@ describe(`per-tab drafts`, () => {
     it(`restores tabs, drafts, attachment metadata, and the active tab from the persisted snapshot`, async () => {
         const chat = useChat();
         chat.draft.value = `draft one`;
-        chat.attachments.value = [{ id: `a1`, name: `pic.png`, path: `${STATE_DIR}/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 }];
+        chat.attachments.value = [
+            { id: `a1`, name: `pic.png`, path: `${STATE_DIR}/records/artifacts/attachments/u1/pic.png`, status: `done`, progress: 1 },
+        ];
         newChat();
         chat.draft.value = `draft two`;
         await nextTick(); // flush the persistence watch
@@ -464,7 +465,9 @@ describe(`per-tab drafts`, () => {
         const tabs = chat.conversations.value;
         expect(tabs).toHaveLength(2);
         expect(tabs[0]!.draft.value).toBe(`draft one`);
-        expect(tabs[0]!.attachments.value).toMatchObject([{ name: `pic.png`, path: `.intentic/artifacts/attachments/u1/pic.png`, status: `done` }]);
+        expect(tabs[0]!.attachments.value).toMatchObject([
+            { name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png`, status: `done` },
+        ]);
         expect(tabs[1]!.draft.value).toBe(`draft two`);
         expect(chat.active.value).toBe(tabs[1]); // the second tab was active when persisted
     });
@@ -473,13 +476,17 @@ describe(`per-tab drafts`, () => {
     it(`restores messages queued behind a running turn, with their attachments`, async () => {
         const chat = useChat();
         chat.active.value.queued.value = [
-            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `${STATE_DIR}/artifacts/attachments/u1/spec.md` }] },
+            {
+                id: `q1`,
+                text: `also update the tests`,
+                attachments: [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }],
+            },
         ];
         await nextTick();
 
         resetChat();
         expect(chat.queued.value).toMatchObject([
-            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/artifacts/attachments/u1/spec.md` }] },
+            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/records/artifacts/attachments/u1/spec.md` }] },
         ]);
     });
 

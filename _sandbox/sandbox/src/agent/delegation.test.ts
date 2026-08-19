@@ -7,7 +7,7 @@ test("no connected provider means no note", () => {
 });
 
 test("codex-only note documents codex exec and resume with the hook-trust flag, and no opencode", () => {
-    const note = delegationNote({ codexHome: `${WORKSPACE_ROOT}/${STATE_DIR}/auth/codex/a1` });
+    const note = delegationNote({ codexHome: `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex/a1` });
     expect(note).toContain("codex exec --sandbox danger-full-access --dangerously-bypass-hook-trust --skip-git-repo-check");
     // The resume command carries the flag too — a continued thread reports the same way a fresh one does.
     expect(note).toContain("--dangerously-bypass-hook-trust resume <threadId>");

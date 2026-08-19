@@ -1,7 +1,7 @@
 /* Browser evidence carried by the recorded persona conversation. SVG keeps the capture sharp inside a narrow
  * chat card and lets the demo serve it through the same /workspace/raw path as every real browser artifact. */
 
-export const SUPPORT_SWEEP_PATH = `.intentic/artifacts/browser/maya-support-sweep.svg`;
+export const SUPPORT_SWEEP_PATH = `.intentic/records/artifacts/browser/maya-support-sweep.svg`;
 
 export const SUPPORT_SWEEP_SHOT = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520">
   <defs>

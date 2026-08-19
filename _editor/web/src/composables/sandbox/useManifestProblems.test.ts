@@ -8,10 +8,10 @@ import { describe, expect, it } from "vitest";
 describe(`ManifestProblemsSchema`, () => {
     it(`accepts the three kinds the daemon reports`, () => {
         const parsed = ManifestProblemsSchema.parse([
-            { path: `.intentic/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
-            { path: `.intentic/capabilities.json`, problems: [{ kind: `invalidEntry`, detail: `gh — kind: required` }] },
+            { path: `.intentic/config/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
+            { path: `.intentic/config/capabilities.json`, problems: [{ kind: `invalidEntry`, detail: `gh — kind: required` }] },
         ]);
-        expect(parsed.map((report) => report.path)).toEqual([`.intentic/settings.json`, `.intentic/capabilities.json`]);
+        expect(parsed.map((report) => report.path)).toEqual([`.intentic/config/settings.json`, `.intentic/config/capabilities.json`]);
     });
 
     it(`carries a suggestion when the daemon could name one, and tolerates its absence`, () => {

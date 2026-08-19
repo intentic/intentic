@@ -25,10 +25,10 @@
     "contributes": {
         "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
         "files": [
-            { "path": ".intentic/automations.json", "invalidates": ["automations"] },
-            { "path": ".intentic/automation-runs.json", "invalidates": ["automations"] },
-            { "path": ".intentic/personas.json", "invalidates": ["personas"] },
-            { "path": ".intentic/approvals/", "invalidates": ["automation-approvals"] }
+            { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
+            { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },
+            { "path": ".intentic/config/personas.json", "invalidates": ["personas"] },
+            { "path": ".intentic/records/approvals/", "invalidates": ["automation-approvals"] }
         ]
     }
 }

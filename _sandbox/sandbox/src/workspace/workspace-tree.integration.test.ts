@@ -238,30 +238,30 @@ test("walkWorkspaceTree lists the daemon's own state entries but never lists wha
     // for each and stops. Listing their contents would spend the walk's entry budget — a Chromium profile is
     // thousands of files — on rows that can only ever answer "kept private".
     const root = await mkdtemp(join(tmpdir(), "ws-tree-locked-"));
-    await mkdir(join(root, `${STATE_DIR}`, "browser", "Default"), { recursive: true });
-    await mkdir(join(root, `${STATE_DIR}`, "auth", "codex"), { recursive: true });
-    await mkdir(join(root, `${STATE_DIR}`, "drafts"), { recursive: true });
-    await writeFile(join(root, `${STATE_DIR}`, "capabilities.json"), '{"entries":[]}');
-    await writeFile(join(root, `${STATE_DIR}`, "settings.json"), "{}");
-    await writeFile(join(root, `${STATE_DIR}`, "browser", "Default", "Cookies"), "sqlite");
-    await writeFile(join(root, `${STATE_DIR}`, "auth", "codex", "auth.json"), '{"token":"secret"}');
-    await writeFile(join(root, `${STATE_DIR}`, "drafts", "post-1.json"), "{}");
+    await mkdir(join(root, `${STATE_DIR}`, "local", "browser", "Default"), { recursive: true });
+    await mkdir(join(root, `${STATE_DIR}`, "secrets", "auth", "codex"), { recursive: true });
+    await mkdir(join(root, `${STATE_DIR}`, "config", "drafts"), { recursive: true });
+    await writeFile(join(root, `${STATE_DIR}`, "config", "capabilities.json"), '{"entries":[]}');
+    await writeFile(join(root, `${STATE_DIR}`, "config", "settings.json"), "{}");
+    await writeFile(join(root, `${STATE_DIR}`, "local", "browser", "Default", "Cookies"), "sqlite");
+    await writeFile(join(root, `${STATE_DIR}`, "secrets", "auth", "codex", "auth.json"), '{"token":"secret"}');
+    await writeFile(join(root, `${STATE_DIR}`, "config", "drafts", "post-1.json"), "{}");
 
     const result = await walkWorkspaceTree(root);
     const all = paths(result.tree);
 
     // The locked entries are LISTED — they exist, and a tree that quietly dropped them would read as files
     // having gone missing.
-    expect(all).toContain(".intentic/capabilities.json");
-    expect(all).toContain(".intentic/browser");
-    expect(all).toContain(".intentic/auth");
+    expect(all).toContain(".intentic/config/capabilities.json");
+    expect(all).toContain(".intentic/local/browser");
+    expect(all).toContain(".intentic/secrets/auth");
     // …with nothing of theirs behind them, on the eager walk or on a later ask.
-    expect(all).not.toContain(".intentic/browser/Default");
-    expect(all).not.toContain(".intentic/auth/codex");
-    expect(await listWorkspaceChildren(root, `${STATE_DIR}/auth`)).toEqual({ entries: [], hidden: 0 });
+    expect(all).not.toContain(".intentic/local/browser/Default");
+    expect(all).not.toContain(".intentic/secrets/auth/codex");
+    expect(await listWorkspaceChildren(root, `${STATE_DIR}/secrets/auth`)).toEqual({ entries: [], hidden: 0 });
     // The state dir's ORDINARY contents are untouched by any of this.
-    expect(all).toContain(".intentic/settings.json");
-    expect(all).toContain(".intentic/drafts/post-1.json");
+    expect(all).toContain(".intentic/config/settings.json");
+    expect(all).toContain(".intentic/config/drafts/post-1.json");
 });
 
 /* SYMLINKS. They were filtered out of every listing, which is how `.claude/skills` — a folder holding thirty

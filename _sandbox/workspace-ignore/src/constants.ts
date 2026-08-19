@@ -6,7 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 // Kept conservative on purpose: dirs that are essentially never browsed as source AND rarely committed, so the
 // static list can't wrongly gray a dir some project actually tracks. Ambiguous ones (build, target, vendor,
 // coverage, out) are intentionally absent — .gitignore catches those accurately. `.tmp` is a scratch dir (e.g.
-// .intentic/auth/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
+// .intentic/secrets/auth/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
 // source, so it grays and lazy-loads like node_modules (its contents stay readable on demand).
 export const IGNORED_DIRS = new Set([
     "node_modules",
@@ -59,14 +59,22 @@ const firstSegment = (relPath: string): string | undefined => relPath.split(/[\\
 export const isReferencePath = (relPath: string): boolean => firstSegment(relPath) === REFERENCE_DIR;
 export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) === PUBLIC_DIR;
 
-// The persisted browser-login profiles (.intentic/browser/<capability>) are a Chromium user-data dir: thousands of
+// The persisted browser-login profiles (.intentic/local/browser/<capability>) are a Chromium user-data dir: thousands of
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
 // subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are
 // served on demand like any other ignored path.
+/* The group folder the profiles sit in, spelled here rather than imported. This file is the BROWSER-SAFE half of
+ * the package — no node imports, and no @intentic/sandbox-contract either, since the whole point is that the
+ * platform's web bundle can take it without dragging zod and the contract surface along. The cost of that is one
+ * copy of a name, and the thing that keeps the copy honest lives on the other side: workspace-state.test.ts pins
+ * the browser entry's full path and names this file in the failure, so moving the group breaks a test that says
+ * where to come. */
+const BROWSER_PROFILE_GROUP = "local";
+
 export const isBrowserProfilePath = (path: string): boolean => {
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
     const i = segments.indexOf(STATE_DIR);
-    return i !== -1 && segments[i + 1] === "browser";
+    return i !== -1 && segments[i + 1] === BROWSER_PROFILE_GROUP && segments[i + 2] === "browser";
 };
 
 // Agent worktrees (<repo>/.claude/worktrees/<name>) are throwaway full checkouts of their repo. Not junk by

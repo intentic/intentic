@@ -9,7 +9,7 @@ import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities-st
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = (): { store: CapabilitiesStore; path: string } => {
-    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "capabilities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
     return { store: fileCapabilitiesStore(path), path };
 };
 
@@ -51,7 +51,7 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
     // devops, docker and every mcp connector too — and the composed overlay collapsed to a bare FROM, which the
     // Environment card then asked the owner to rebuild.
     const invalid: string[] = [];
-    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "capabilities.json");
+    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
     const store = fileCapabilitiesStore(path, (id) => invalid.push(id));
     await mkdir(dirname(path), { recursive: true });
     await writeFile(

@@ -7,7 +7,7 @@ import { queryClient } from "../queryPersistence";
 import { SANDBOX_SETTINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* The active sandbox's agent settings (.intentic/settings.json), read/written via the daemon's /settings routes.
+/* The active sandbox's agent settings (.intentic/config/settings.json), read/written via the daemon's /settings routes.
  * All per-sandbox agent toggles (iq search, hashline edits, output cleaning, prompt stability, …). `save`
  * overwrites the whole object; the next turn's streamAgent reads it to gate each behavior. */
 

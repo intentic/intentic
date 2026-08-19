@@ -263,7 +263,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </div>
             <!-- What the agent produced or looked at. Where the bytes come from is the surface's business: in
                  the app they are re-minted from the workspace (browser captures and generated images both live
-                 under .intentic/artifacts) and a click opens the file full size; on a published conversation
+                 under .intentic/records/artifacts) and a click opens the file full size; on a published conversation
                  they are a copy sitting beside the page, and there is nothing to open. -->
             <component
                 :is="openFile ? 'button' : 'div'"

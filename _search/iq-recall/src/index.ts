@@ -57,9 +57,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const createRecall = (options: RecallOptions): Recall => {
     const projectsDir = projectsDirOf(options.root, options.claudeDir);
-    // Mirrors iq-engine's IQ_DIR ("<root>/.intentic/cache/iq") without dragging its heavy dependency tree in for
+    // Mirrors iq-engine's IQ_DIR ("<root>/.intentic/local/cache/iq") without dragging its heavy dependency tree in for
     // one constant — recall.db sits next to index.db, inside the dir iq already excludes from search.
-    const dbPath = options.dbPath ?? join(options.root, `${STATE_DIR}/cache/iq/recall.db`);
+    const dbPath = options.dbPath ?? join(options.root, `${STATE_DIR}/local/cache/iq/recall.db`);
     let opened: RecallDb | undefined;
     const db = (): RecallDb => (opened ??= openRecallDb(dbPath));
     return {

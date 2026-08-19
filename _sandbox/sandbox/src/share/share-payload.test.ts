@@ -11,7 +11,7 @@ const conversation: RestoredMessage[] = [
         role: "user",
         text: "here is the key: sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
         sentAt: 1786372320000,
-        attachments: [".intentic/artifacts/attachments/a1/screenshot.png"],
+        attachments: [".intentic/records/artifacts/attachments/a1/screenshot.png"],
         notes: [{ title: "Workspace context", text: "the branch moved under you" }],
         checkpointId: "snap-1",
     },
@@ -28,7 +28,7 @@ const conversation: RestoredMessage[] = [
                 target: "auth/guard.ts",
                 content: [
                     { type: "diff", path: "auth/guard.ts", oldText: "const KEY = 'AKIAIOSFODNN7EXAMPLE'", newText: "const KEY = process.env.KEY" },
-                    { type: "image", path: ".intentic/artifacts/browser/after.png" },
+                    { type: "image", path: ".intentic/records/artifacts/browser/after.png" },
                 ],
             },
         ],
@@ -51,7 +51,7 @@ describe("a messages-only share", () => {
     it("keeps what the user attached to their own message", () => {
         const { messages, pictures } = shareTranscript(conversation, "messages");
         expect(messages[0]?.attachments).toEqual(["files/1-screenshot.png"]);
-        expect(pictures).toEqual([{ source: ".intentic/artifacts/attachments/a1/screenshot.png", published: "files/1-screenshot.png" }]);
+        expect(pictures).toEqual([{ source: ".intentic/records/artifacts/attachments/a1/screenshot.png", published: "files/1-screenshot.png" }]);
     });
 });
 

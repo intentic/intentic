@@ -71,7 +71,7 @@ const capability = (id: string, kind: string, config: Record<string, string> = {
     ({ id, kind, status: { state: `active` }, config }) as CapabilitySummary;
 
 const credential = (id: string): SecretInventoryEntry =>
-    entry({ key: id, kind: `capability`, status: `connected`, storedAt: `.intentic/capabilities.json` });
+    entry({ key: id, kind: `capability`, status: `connected`, storedAt: `.intentic/config/capabilities.json` });
 
 // The sandbox in the report: sixteen identities the owner opened, three connectors, and a handful of real
 // secrets underneath them.

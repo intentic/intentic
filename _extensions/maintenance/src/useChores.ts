@@ -19,7 +19,7 @@ import { host } from "./host";
  *
  * The poll is slow because nothing here is urgent: probes refresh on a daily-to-weekly TTL, so a panel that
  * re-read every few seconds would be asking a question whose answer changes twice a week. The daemon's own file
- * push (contributes.files on .intentic/chores/) is what makes a probe finishing or a run landing appear at once,
+ * push (contributes.files on .intentic/records/chores/) is what makes a probe finishing or a run landing appear at once,
  * which is the only case where promptness matters. */
 
 const POLL_MS = 5 * 60_000;
@@ -50,7 +50,7 @@ export interface MeasuringProbe {
 export function useChores() {
     const api = host();
     const queryClient = useQueryClient();
-    // The first key segment matches the manifest's `contributes.files` invalidation for .intentic/chores/, so a
+    // The first key segment matches the manifest's `contributes.files` invalidation for .intentic/records/chores/, so a
     // probe the background runner just wrote reaches the panel without a poll.
     const reportKey = computed(() => api.sandbox.key(`maintenance-report`));
 

@@ -78,7 +78,7 @@ export const writeJsonFile = async (path: string, value: unknown, mode?: number)
      *
      * The tag goes in FRONT of the name, not after it. The watcher's manifest→query table (sandbox-contract's
      * workspace-state.ts) matches changed paths by PREFIX, so a trailing-tag temp of `settings.json` would
-     * read as a write to `.intentic/settings.json` itself and bill every browser an extra refetch for a file
+     * read as a write to `.intentic/config/settings.json` itself and bill every browser an extra refetch for a file
      * that is still mid-swap. A leading dot cannot prefix-match the target, and hides the temp besides. */
     const tempPath = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
     await mkdir(dirname(path), { recursive: true });

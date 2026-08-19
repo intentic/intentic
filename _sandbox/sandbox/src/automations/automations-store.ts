@@ -2,8 +2,8 @@ import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSch
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* The sandbox-owned automations manifest (<workspace>/.intentic/automations.json), and the run ledger beside it
- * (<workspace>/.intentic/automation-runs.json). The scheduler polls the manifest; the /automations routes edit
+/* The sandbox-owned automations manifest (<workspace>/.intentic/config/automations.json), and the run ledger beside it
+ * (<workspace>/.intentic/records/automation-runs.json). The scheduler polls the manifest; the /automations routes edit
  * it. Mirrors the capabilities store. No secrets live here, so neither is on the file-route denylist.
  *
  * TWO FILES, because they answer to different readers. The manifest is CONFIGURATION — a handful of entries a
@@ -67,7 +67,7 @@ export interface AutomationsStore {
     readonly recordRun: (id: string, run: AutomationRun) => Promise<void>;
 }
 
-// Two JSON file stores, used in production at <workspace>/.intentic/automations.json and its runs sibling.
+// Two JSON file stores, used in production at <workspace>/.intentic/config/automations.json and its runs sibling.
 export const fileAutomationsStore = (path: string, runsPath: string): AutomationsStore => {
     const file = jsonFile<Automation[]>(path, {
         parse: (raw) => z.array(AutomationSchema).safeParse(raw).data,

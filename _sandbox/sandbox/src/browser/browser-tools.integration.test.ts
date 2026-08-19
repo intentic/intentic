@@ -26,8 +26,8 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     const spec = browserServerSpec(
         "cli.js",
         "/ms/chrome",
-        `${WORKSPACE_ROOT}/${STATE_DIR}/browser/reddit`,
-        `${WORKSPACE_ROOT}/${STATE_DIR}/browser/stealth.js`,
+        `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/reddit`,
+        `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/stealth.js`,
         ":99",
         "/tmp/cfg.json",
     ) as {
@@ -39,9 +39,9 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     expect(spec.type).toBe("stdio");
     expect(spec.args).toContain("chromium");
     expect(spec.args).toContain("--user-data-dir");
-    expect(spec.args).toContain("/work/.intentic/browser/reddit");
+    expect(spec.args).toContain("/work/.intentic/local/browser/reddit");
     expect(spec.args).toContain("--init-script");
-    expect(spec.args).toContain("/work/.intentic/browser/stealth.js");
+    expect(spec.args).toContain("/work/.intentic/local/browser/stealth.js");
     expect(spec.args).toContain("--no-sandbox");
     // The config file is what carries --remote-debugging-port, and so what makes the browser watchable.
     expect(spec.args).toContain("--config");
@@ -69,14 +69,14 @@ test("every browser server bounds a single tool call", () => {
 // The credential-free browser carries no identity at all — that is what lets it exist without a login, and
 // what lets two turns run one at once.
 test("isolatedBrowserSpec keeps the profile in memory and needs no display", () => {
-    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`, "/tmp/cfg.json") as {
+    const spec = isolatedBrowserSpec("cli.js", "/ms/chrome", `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`, "/tmp/cfg.json") as {
         args: string[];
         env: Record<string, string>;
     };
     expect(spec.args).toContain("--isolated");
     expect(spec.args).toContain("--headless");
     expect(spec.args).toContain("--output-dir");
-    expect(spec.args).toContain("/work/.intentic/artifacts/browser");
+    expect(spec.args).toContain("/work/.intentic/records/artifacts/browser");
     expect(spec.args).not.toContain("--user-data-dir");
     expect(spec.args).not.toContain("--init-script");
     expect(spec.env["DISPLAY"]).toBeUndefined();
@@ -143,8 +143,8 @@ test("accounts of the same site each get their own browser on their own profile"
         const args = (servers[id] as { args: string[] }).args;
         return args[args.indexOf("--user-data-dir") + 1];
     };
-    expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "browser", "reddit-work"));
-    expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "browser", "reddit-personal"));
+    expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "local", "browser", "reddit-work"));
+    expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "local", "browser", "reddit-personal"));
     // Their software security keys are separate too — one account's second factor is not the other's.
     expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
 });

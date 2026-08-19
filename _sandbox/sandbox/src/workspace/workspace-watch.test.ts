@@ -128,10 +128,10 @@ test("each skip rule still silences the path it exists for", () => {
     const root = "/work";
     for (const relPath of [
         "app/node_modules/dep/index.js",
-        `${STATE_DIR}/browser/reddit/Default/Cookies`,
+        `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
         "app/.claude/worktrees/fix/src/main.ts",
         "refs/react/packages/scheduler/index.js",
-        `${STATE_DIR}/sessions/claude/projects/-work/session.jsonl`,
+        `${STATE_DIR}/records/sessions/claude/projects/-work/session.jsonl`,
     ]) {
         expect(isWatchIgnored(root, `${root}/${relPath}`)).toBe(true);
     }

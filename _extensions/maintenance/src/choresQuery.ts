@@ -18,7 +18,7 @@ import { parseManifest, parseResult, resultPath, type RunManifest, type RunResul
 
 const reportFn = async (): Promise<ChoresReport> => ChoresReportSchema.parse(await host().sandbox.json(`/chores`));
 
-// The key's first segment is what the manifest's `contributes.files` invalidation for .intentic/chores/ names,
+// The key's first segment is what the manifest's `contributes.files` invalidation for .intentic/records/chores/ names,
 // so a probe the background runner just wrote reaches every one of the three readers above at once.
 export const choresReportQuery = (): HostQuery<ChoresReport> => ({ queryKey: host().sandbox.key(`maintenance-report`), queryFn: reportFn });
 

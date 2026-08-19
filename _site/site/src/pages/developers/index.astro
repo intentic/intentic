@@ -299,9 +299,9 @@ const agentPoints = [
     <h2>How extensions reach a sandbox</h2>
     <ul>
         <li><strong>Baked into the image</strong>: first-party ones are present in every sandbox and can be switched off, not removed.</li>
-        <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/extensions/</code>, added from a repo URL or picked from a registry.</li>
+        <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/local/extensions/</code>, added from a repo URL or picked from a registry.</li>
         <li>
-            <strong>Written in the workspace</strong>: a directory under <code>.intentic/workspace-extensions/</code>, run straight from
+            <strong>Written in the workspace</strong>: a directory under <code>.intentic/config/workspace-extensions/</code>, run straight from
             where it sits. No clone, no install step, no publishing: see <a href="/developers/build/#workspace">Build an extension</a>.
         </li>
     </ul>

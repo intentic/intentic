@@ -20,20 +20,20 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(watchIgnored(at("app", ".git", "config"))).toBe(true);
     expect(watchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
     // A connected browser's profile churns credential files constantly — still never watched (event-spam guard).
-    expect(watchIgnored(at(".intentic", "browser", "reddit", "Default", "Cookies"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "local", "browser", "reddit", "Default", "Cookies"))).toBe(true);
     // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
     expect(watchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
     expect(watchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
     // The daemon's own state: the iq index's WAL churns for minutes through a rebuild's re-embed, and the agent
     // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
-    expect(watchIgnored(at(".intentic", "cache", "iq", "index.db-wal"))).toBe(true);
-    expect(watchIgnored(at(".intentic", "sessions", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
-    expect(watchIgnored(at(".intentic", "auth", "codex", "default", "auth.json"))).toBe(true);
-    expect(watchIgnored(at(".intentic", "runtime", "extensions", "whatsapp", "gateway.url"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "local", "cache", "iq", "index.db-wal"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "records", "sessions", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "secrets", "auth", "codex", "default", "auth.json"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "local", "runtime", "extensions", "whatsapp", "gateway.url"))).toBe(true);
     // The manifests next to them still push: that's how another member's capability write reaches this browser.
-    expect(watchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
-    expect(watchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);
-    expect(watchIgnored(at(".intentic", "approvals", "wake-1.json"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "config", "capabilities.json"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "config", "environment.Dockerfile"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "records", "approvals", "wake-1.json"))).toBe(false);
     // No security floor: secret files are watched now, so a change to .env pushes a refresh like any other file.
     expect(watchIgnored(at("app", ".env"))).toBe(false);
     expect(watchIgnored(at("app", ".env.example"))).toBe(false);
@@ -110,8 +110,11 @@ test("the ignore globs prune each hand-written rule, and only where the rule say
     const root = await mkdtemp(join(tmpdir(), "ws-watch-globs-"));
     await mkdir(join(root, "refs", "vendored"), { recursive: true });
     await mkdir(join(root, "myrepo", "refs"), { recursive: true });
-    await mkdir(join(root, ".intentic", "sessions", "claude"), { recursive: true });
-    await mkdir(join(root, ".intentic", "browser", "reddit"), { recursive: true });
+    await mkdir(join(root, ".intentic", "records", "sessions", "claude"), { recursive: true });
+    await mkdir(join(root, ".intentic", "local", "browser", "reddit"), { recursive: true });
+    // The manifest's own group folder. Since the state dir was grouped, a manifest no longer sits directly in
+    // it, so the directory the write below needs is one level deeper than the watcher's churning subtrees.
+    await mkdir(join(root, ".intentic", "config"), { recursive: true });
     await mkdir(join(root, "app", ".claude", "worktrees", "fix"), { recursive: true });
     await mkdir(join(root, "app", ".claude"), { recursive: true });
     const watch = createWorkspaceWatch(root);
@@ -121,14 +124,14 @@ test("the ignore globs prune each hand-written rule, and only where the rule say
         await delay(500);
         await Promise.all([
             writeFile(join(root, "refs", "vendored", "clone.js"), "x"),
-            writeFile(join(root, ".intentic", "sessions", "claude", "session.jsonl"), "x"),
-            writeFile(join(root, ".intentic", "browser", "reddit", "Cookies"), "x"),
+            writeFile(join(root, ".intentic", "records", "sessions", "claude", "session.jsonl"), "x"),
+            writeFile(join(root, ".intentic", "local", "browser", "reddit", "Cookies"), "x"),
             writeFile(join(root, "app", ".claude", "worktrees", "fix", "main.ts"), "x"),
             // The three that MUST still push: a repo's own refs/, sibling .claude config, and a manifest that
             // sits directly in the daemon's state dir rather than under one of its churning subtrees.
             writeFile(join(root, "myrepo", "refs", "notes.md"), "x"),
             writeFile(join(root, "app", ".claude", "settings.json"), "x"),
-            writeFile(join(root, ".intentic", "capabilities.json"), "x"),
+            writeFile(join(root, ".intentic", "config", "capabilities.json"), "x"),
         ]);
 
         await waitFor(() => batches.flat().length >= 3, 5000);
@@ -136,7 +139,7 @@ test("the ignore globs prune each hand-written rule, and only where the rule say
 
         expect(all).toContain("myrepo/refs/notes.md");
         expect(all).toContain("app/.claude/settings.json");
-        expect(all).toContain(".intentic/capabilities.json");
+        expect(all).toContain(".intentic/config/capabilities.json");
         expect(all.some((path) => path.startsWith("refs/"))).toBe(false);
         expect(all.some((path) => path.includes("sessions"))).toBe(false);
         expect(all.some((path) => path.includes("browser"))).toBe(false);

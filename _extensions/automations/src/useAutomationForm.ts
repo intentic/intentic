@@ -180,7 +180,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
                 return;
             }
             form.prompt = starterPrompt.value ?? ``;
-            // A template's GUARD came with its prompt and goes with it: a jq over .intentic/drafts/ left behind on
+            // A template's GUARD came with its prompt and goes with it: a jq over .intentic/config/drafts/ left behind on
             // a Discord listener is a row that never fires and never says why.
             if (formGuards.value.has(form.guard)) {
                 form.guard = ``;

@@ -14,8 +14,8 @@ const enoent: ExecFn = () => Promise.reject(Object.assign(new Error("spawn whisp
 const rootWith = (model: boolean): string => {
     const root = mkdtempSync(join(tmpdir(), "speech-test-"));
     if (model) {
-        mkdirSync(join(root, STATE_DIR, "cache", "whisper"), { recursive: true });
-        writeFileSync(join(root, STATE_DIR, "cache", "whisper", "ggml-large-v3-turbo.bin"), "model bytes");
+        mkdirSync(join(root, STATE_DIR, "local", "cache", "whisper"), { recursive: true });
+        writeFileSync(join(root, STATE_DIR, "local", "cache", "whisper", "ggml-large-v3-turbo.bin"), "model bytes");
     }
     return root;
 };
@@ -37,7 +37,7 @@ const streamingModel = (): { blob: Blob; push: (bytes: number) => void; finish: 
 
 // What is on disk in the model's directory, by name — the staged download and the model itself are told apart
 // here exactly the way `stat` tells them apart in the engine.
-const modelDir = (root: string): string => join(root, STATE_DIR, "cache", "whisper");
+const modelDir = (root: string): string => join(root, STATE_DIR, "local", "cache", "whisper");
 const bytesOnDisk = (root: string, name: string): number => {
     const found = readdirSync(modelDir(root)).filter((entry) => (name === "model" ? entry === "ggml-large-v3-turbo.bin" : entry.endsWith(".part")));
     return found.reduce((total, entry) => total + statSync(join(modelDir(root), entry)).size, 0);

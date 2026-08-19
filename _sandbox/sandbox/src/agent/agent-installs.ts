@@ -142,7 +142,7 @@ const BROWSER_ALREADY_BAKED =
 const OVERLAY_DRAFT =
     // Interpolated for real: as a plain string this notice told the agent to write under a literal
     // dollar-brace STATE_DIR spelling, template syntax and all.
-    `write the install step to \`${stateRelPath(".intentic/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM) — the ` +
+    `write the install step to \`${stateRelPath(".intentic/config/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM) — the ` +
     "daemon composes those drafts into one proposal for the owner to approve, and the `environment` skill has " +
     "the details.";
 

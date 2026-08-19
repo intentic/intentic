@@ -4,7 +4,7 @@ import type { CapabilityHandler } from "../capability.js";
 import { checkoutInto } from "../git-checkout.js";
 import { pluginDir, pluginsRoot } from "../plugin-dirs.js";
 
-// A Claude Code plugin: the daemon owns the git checkout at .intentic/plugins/<id>; the Agent SDK's plugin
+// A Claude Code plugin: the daemon owns the git checkout at .intentic/records/plugins/<id>; the Agent SDK's plugin
 // loader reads its internals (skills/agents/hooks/commands/.mcp.json) each turn — see pluginDirsOf. Apply is an
 // upsert: re-adding re-clones, which is also how a plugin updates. The clone/checkout run in the visible job
 // session the first frame surfaces.

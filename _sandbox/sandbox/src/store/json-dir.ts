@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { writeJsonFile } from "./json-file.js";
 
 /* The substrate under the daemon's per-entry-file stores — a DIRECTORY holding one JSON file per entry
- * (.intentic/drafts/, .intentic/approvals/) rather than one manifest holding them all. `jsonFile` is the other
+ * (.intentic/config/drafts/, .intentic/records/approvals/) rather than one manifest holding them all. `jsonFile` is the other
  * shape; this is the one to reach for when the daemon is not the only writer.
  *
  * PER FILE, NEVER A MANIFEST, because both of these have a second writer: the agent creates drafts with its own

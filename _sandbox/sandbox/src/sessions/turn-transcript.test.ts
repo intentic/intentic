@@ -103,7 +103,7 @@ describe("restoredTurn", () => {
     it("writes a mid-turn steer down as a user row, with the answer to it beneath", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "on it" },
-            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000, attachments: [".intentic/artifacts/attachments/u1/spec.md"] },
+            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000, attachments: [".intentic/records/artifacts/attachments/u1/spec.md"] },
             { kind: "delta", text: "will do" },
         ];
         expect(restoredTurn({ prompt: "ship it" }, events, "/work", SENT_AT).slice(1)).toEqual([
@@ -112,7 +112,7 @@ describe("restoredTurn", () => {
                 role: "user",
                 text: "and the tests",
                 sentAt: SENT_AT + 1000,
-                attachments: [".intentic/artifacts/attachments/u1/spec.md"],
+                attachments: [".intentic/records/artifacts/attachments/u1/spec.md"],
             },
             { role: "assistant", text: "will do" },
         ]);

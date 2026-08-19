@@ -26,7 +26,7 @@ test("the walk stops at the first .git boundary — a nested repo belongs to its
 
 test("hidden dirs, junk dirs, symlinks, the reserved 'root' name, and the reference shelf are never repos", async () => {
     const root = setup();
-    mkdirSync(join(root, `${STATE_DIR}`, "cache", ".git"), { recursive: true });
+    mkdirSync(join(root, `${STATE_DIR}`, "local", "cache", ".git"), { recursive: true });
     mkdirSync(join(root, "node_modules", "dep", ".git"), { recursive: true });
     mkdirSync(join(root, "root", ".git"), { recursive: true });
     // The reference shelf: a clone dropped there is consulted by path, never a workspace repo.

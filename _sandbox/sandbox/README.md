@@ -47,7 +47,7 @@ reports the profile.
   edges (`deps.broken`/`deps.fixed`) that wake a fix chore the owner picked from the Automations templates — every
   step in a visible terminal panel and the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts →
   src/automations).
-- Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/drafts/`, src/drafts),
+- Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/config/drafts/`, src/drafts),
   the owner approves them on the Drafts page, and the daemon itself sends each one the moment it comes due —
   sleeping on one timer until then rather than sweeping, since it is the process that wrote the deadline. A
   platform with a real API goes out as an authenticated request; one that is only a logged-in browser goes out
@@ -114,7 +114,7 @@ reports the profile.
   sitting in the loaded folder — and nothing joined them, so "what is my agent carrying" had no answer. The
   inventory reads all six off disk and reports where each came from, which is what decides whether a row may be
   switched, rewritten or deleted at all: a control the source would undo on the next reconcile is not offered.
-  The owner's own skills are stored APART from the folder the agents read (`.intentic/skills/`, reconciled into
+  The owner's own skills are stored APART from the folder the agents read (`.intentic/config/skills/`, reconciled into
   `.agents/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote — in the loaded
   folder, "off" and "deleted" would be the same operation. The loaded folder is the vendor-neutral one on
   purpose (src/settings/loaded-skills.ts): Codex and Gemini read `.agents/skills/` natively, Claude Code reads
@@ -273,7 +273,7 @@ The agent half of the dev plane. The browser talks to this daemon **directly** o
 Native Codex turns use `codex app-server --stdio`. A subscription turn gives app-server a custom Responses
 provider aimed at the bundled CLIProxyAPI translator; the translator authenticates upstream with the owner's
 connected ChatGPT account, so image generation consumes that subscription rather than an `OPENAI_API_KEY`.
-Generated PNGs are copied out of Codex's provider state into `.intentic/artifacts/imagegen/`; only the durable
+Generated PNGs are copied out of Codex's provider state into `.intentic/records/artifacts/imagegen/`; only the durable
 workspace-relative path enters the event stream and transcript. The `@openai/codex-sdk` dependency remains the
 exact CLI-version anchor and the locator for a vendored development fallback, not the native turn transport.
 
@@ -290,19 +290,19 @@ conversation's worktree instead of a path that still reaches the shared checkout
 
 ## Conventions & gotchas
 
-- Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/auth/`,
-  resumable Claude state is carried under `.intentic/sessions/claude/`, rebuildable caches (the iq index, the
-  whisper model) are under `.intentic/cache/`, durable attachments/browser captures/generated images/run
-  evidence/workflow reports are under `.intentic/artifacts/`, extension scratch is derived under
-  `.intentic/runtime/`, and agent scratch is derived under `.intentic/tmp/`. Small owner-edited manifests remain
+- Workspace-root daemon state has a lifecycle taxonomy: provider homes are secret under `.intentic/secrets/auth/`,
+  resumable Claude state is carried under `.intentic/records/sessions/claude/`, rebuildable caches (the iq index, the
+  whisper model) are under `.intentic/local/cache/`, durable attachments/browser captures/generated images/run
+  evidence/workflow reports are under `.intentic/records/artifacts/`, extension scratch is derived under
+  `.intentic/local/runtime/`, and agent scratch is derived under `.intentic/local/tmp/`. Small owner-edited manifests remain
   directly under `.intentic/` so their stable paths stay readable. A janitor
   (src/workspace/state-janitor.ts) collects what the classes call disposable: tmp/ at boot, retired derived
   roots, unreferenced pnpm-store blobs, browser captures past thirty days.
-- The Claude credential lives in the sandbox's own `.intentic/auth/claude/` store (connected via the daemon's
+- The Claude credential lives in the sandbox's own `.intentic/secrets/auth/claude/` store (connected via the daemon's
   `/claude/*` flow), resolved + injected into the SDK per turn — never held by the platform. The generic file API
   protects the whole `auth/` parent, provider-native `sessions/`, and logged-in `browser/` profiles; purpose-built
   routes expose only the safe slices those stores need.
-- The daemon authenticates every request itself (a Google ID token only at exchange, then a daemon-minted session verified per request), since it is reached directly over its public tunnel — it owns its own auth. Access is tiered: the owner binds on first sign-in, and every invited member holds a granted role (viewer / collaborator / maintainer) stored in `.intentic/members.json`. The bearer middleware holds each request to its route's floor (`src/auth/role-floor.ts`): viewers read, collaborators drive agents (their lands become requests on the agent card), maintainers ship and get the terminal, and credentials-adjacent surfaces stay owner-only. Rotating sessions or changing a member's grant closes that identity's live event, terminal, and browser transports and invalidates unused connection tickets. Account deletion retires browser authorization at the daemon before the platform record disappears; if the daemon cannot be reached, deletion stops and names the sandbox that still needs attention. The platform only mirrors the grants; this daemon is the enforcer.
+- The daemon authenticates every request itself (a Google ID token only at exchange, then a daemon-minted session verified per request), since it is reached directly over its public tunnel — it owns its own auth. Access is tiered: the owner binds on first sign-in, and every invited member holds a granted role (viewer / collaborator / maintainer) stored in `.intentic/identity/members.json`. The bearer middleware holds each request to its route's floor (`src/auth/role-floor.ts`): viewers read, collaborators drive agents (their lands become requests on the agent card), maintainers ship and get the terminal, and credentials-adjacent surfaces stay owner-only. Rotating sessions or changing a member's grant closes that identity's live event, terminal, and browser transports and invalidates unused connection tickets. Account deletion retires browser authorization at the daemon before the platform record disappears; if the daemon cannot be reached, deletion stops and names the sandbox that still needs attention. The platform only mirrors the grants; this daemon is the enforcer.
 - Resource diagnostics survive the container. Once a minute `src/platform/resource-metrics.ts` appends one JSON
   object to `/history/logs/resource-metrics.jsonl`: daemon heap/native memory, GC and event-loop windows, cgroup
   pressure, process memory/CPU grouped by workload role, and cardinalities for the resident transcript, turn,

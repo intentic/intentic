@@ -4,7 +4,7 @@ import { useEndpoint } from "../sandbox/useEndpoint";
 
 /* Image thumbnails for attachments that carry only a workspace path — a restored or cached transcript's
  * chips, whose send-time object URLs died with their page. The bytes still sit in the workspace
- * (.intentic/artifacts/attachments/…), so a thumb is re-minted from /workspace/raw on first render.
+ * (.intentic/records/artifacts/attachments/…), so a thumb is re-minted from /workspace/raw on first render.
  *
  * Module-level cache: one fetch per path across every bubble and window that shows it, and the object URLs
  * live for the page (the same lifetime the composer's own previews get).

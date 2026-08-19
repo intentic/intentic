@@ -188,7 +188,7 @@ export interface WantWorkspaceInput {
     // endpoint in the catalog (e.g. signoz). Wire a provisioned tool exactly like an app wires `observe`.
     tools?: readonly Service[];
     // Content of an owner-approved overlay Dockerfile (FROM the official sandbox image) extending the sandbox's
-    // environment — typically readFileSync of .intentic/environment.approved.Dockerfile. The provider builds it
+    // environment — typically readFileSync of .intentic/local/environment.approved.Dockerfile. The provider builds it
     // on the host and recreates the sandbox from the result. Absent ⇒ the stock image.
     dockerfile?: string;
 }

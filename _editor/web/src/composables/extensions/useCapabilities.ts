@@ -14,7 +14,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { CAPABILITIES, ENVIRONMENT, PANELS, SECRETS_INVENTORY } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* The sandbox's unified capability manifest (.intentic/capabilities.json), read/written via the daemon's
+/* The sandbox's unified capability manifest (.intentic/config/capabilities.json), read/written via the daemon's
  * /capabilities routes. `add` STREAMS its apply (devops scaffolding, service provisioning) as ndjson, like the
  * provision flow. Presence of a kind = it's active (DevOps present ⇒ the intent + desired-state operator panels
  * appear in the sidebar). */

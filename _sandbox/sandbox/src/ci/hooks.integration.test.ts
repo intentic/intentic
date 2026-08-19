@@ -22,12 +22,12 @@ const workspaceWith = async (remote: string): Promise<string> => {
 };
 
 const servicesFor = async (root: string, publicUrl: string) => {
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T" } });
     return {
         workspace: { root },
         capabilities,
-        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "ci.json")),
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         config: { sandbox: { publicUrl } },
         logger,
     };

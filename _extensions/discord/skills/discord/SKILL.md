@@ -40,7 +40,7 @@ the call across turns:
 - `discord-voice join <channelId>` — join a voice channel and transcribe the conversation per speaker (local whisper).
 - `discord-voice leave` — leave now and finalize the transcript.
 - `discord-voice status` — current session: channel, duration, participants, utterances, live transcript path.
-The transcript under `.intentic/artifacts/voice/` updates live after every utterance — read it mid-call to follow
+The transcript under `.intentic/records/artifacts/voice/` updates live after every utterance — read it mid-call to follow
 the conversation. Each transcribed utterance also fires a `voice_utterance` listener event (batched), and when
 the call ends (everyone leaves, or `discord-voice leave`) a `voice_transcript` event fires with the finalized
 transcript — those wakes are where you turn it into notes/action items. Voice channel ids come from the channel

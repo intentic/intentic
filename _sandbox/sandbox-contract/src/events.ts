@@ -170,8 +170,8 @@ export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
 // previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
 //
 // `image` is a PICTURE THE TOOL PRODUCED, carried as a workspace path rather than as bytes. Browser screenshots
-// already live under .intentic/artifacts/browser, and provider-generated images are copied into
-// .intentic/artifacts/imagegen, so the client fetches either from /workspace/raw like any other file. Base64 on
+// already live under .intentic/records/artifacts/browser, and provider-generated images are copied into
+// .intentic/records/artifacts/imagegen, so the client fetches either from /workspace/raw like any other file. Base64 on
 // the wire would bloat the event stream and every stored transcript to show bytes the workspace already serves;
 // the path also keeps the picture openable afterwards. Root-relative, forward-slash: the same route space as
 // ToolCallLocation.

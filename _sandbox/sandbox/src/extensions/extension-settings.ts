@@ -3,7 +3,7 @@ import type { SecretVault } from "../capabilities/secret-vault.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
-/* Per-extension settings values (<workspace>/.intentic/extension-settings.json), keyed by the manifest-derived
+/* Per-extension settings values (<workspace>/.intentic/config/extension-settings.json), keyed by the manifest-derived
  * extension id (publisher.name) — NOT the capability entry id — so values survive a remove/re-add and the
  * re-clone that is an update; the checkout dir itself stays pristine. Values are the primitive union the
  * contributes.settings descriptors declare.
@@ -38,7 +38,7 @@ export type ExtensionSettings = SettingsFile[string];
 const files = new Map<string, JsonFile<SettingsFile>>();
 
 const settingsFile = (root: string): JsonFile<SettingsFile> => {
-    const path = statePath(root, ".intentic/extension-settings.json");
+    const path = statePath(root, ".intentic/config/extension-settings.json");
     const existing = files.get(path);
     if (existing !== undefined) {
         return existing;

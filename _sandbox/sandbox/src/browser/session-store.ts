@@ -29,18 +29,18 @@ export const profileOwner = (capability: Capability): string =>
     capability.kind === "browser" ? ((capability.config as BrowserConfig).identity ?? capability.id) : capability.id;
 
 // The Chromium `--user-data-dir` for one profile owner (an identity id, or a standalone account's id).
-export const sessionDir = (root: string, owner: string): string => statePath(root, ".intentic/browser/", owner);
+export const sessionDir = (root: string, owner: string): string => statePath(root, ".intentic/local/browser/", owner);
 
 // A completed-login marker, kept OUTSIDE the profile dir so Chromium never rewrites it. A bare profile dir
 // exists the moment Chromium launches (before any login), so its presence can't mean "connected" — the marker,
 // written only when the owner finishes the guided login, is the real "connected" probe.
-const markerPath = (root: string, id: string): string => statePath(root, ".intentic/browser/", `${id}.connected`);
+const markerPath = (root: string, id: string): string => statePath(root, ".intentic/local/browser/", `${id}.connected`);
 
 // The profile owner's WebAuthn passkey store (passkeys.ts) — beside the profile because it is part of the same
 // someone: ONE software security key per browser, shared by every account living in it exactly as the cookies
 // are, and torn down with them. Keyed by owner, not per account — a passkey enrolled on Reddit through an
 // identity's browser is that identity's key.
-export const passkeyPath = (root: string, owner: string): string => statePath(root, ".intentic/browser/", `${owner}.passkeys.json`);
+export const passkeyPath = (root: string, owner: string): string => statePath(root, ".intentic/local/browser/", `${owner}.passkeys.json`);
 
 export const hasSession = (root: string, id: string): boolean => existsSync(markerPath(root, id));
 

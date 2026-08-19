@@ -5,6 +5,7 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
+import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir, knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 import { runProcess } from "./exec.js";
 import { syncSshPort } from "./tunnel.js";
@@ -49,6 +50,43 @@ export const IGNORES = [
     ".git",
     ".pnpm-store",
 ];
+
+/* THE BACKUP SESSION'S IGNORES — the other half of the line above, and the reason `STATE_DIR` can stay in it.
+ *
+ * The workspace session excludes the state dir wholesale and must keep doing so: it is TWO-WAY, and two-way over
+ * files the daemon rewrites at token cadence (transcripts) or every few seconds (run ledgers) is a conflict
+ * generator, with a local deletion able to clobber state nobody meant to edit. What that exclusion also did,
+ * though, was make a paired machine a backup of the source tree ONLY — lose the sandbox and every persona,
+ * skill, automation, draft and transcript went with it.
+ *
+ * So the state dir travels on its own session instead, ONE-WAY and downhill (see backupSpec): the sandbox is the
+ * only writer, the laptop is a mirror, and the conflict class disappears rather than being managed. This is the
+ * list of what that mirror must NOT carry, derived from the state table's own classes — the rebuildable bulk and
+ * every credential. See BACKED_UP_STATE_PATHS for which side of the line each class falls and why.
+ *
+ * ANCHORED patterns, unlike the workspace list above. There the point is to catch a junk dir at any depth; here
+ * each name is one declared entry at a known place, and matching `cache` at any depth would silently drop a
+ * `cache` directory that happened to sit inside a session transcript tree. A trailing-dot entry is a name family
+ * (`environment.` covering the Dockerfiles beside it), so it keeps its glob.
+ *
+ * COLLAPSED TO FOLDERS where a whole group is out, which is the payoff of the state dir being grouped: the
+ * rebuildable folder and the secrets folder are excluded entire, so they are two patterns rather than the twelve
+ * entries inside them. A group that is only PARTLY excluded still lists its entries one by one — `identity` is
+ * the live case, where the ownership records come down and the control tokens do not. Collapsing that one to a
+ * folder would silently start withholding the records, so the rule is written to collapse only on `every`. */
+const anchored = (path: string): string => {
+    const tail = path.slice(`${STATE_DIR}/`.length).replace(/\/$/, "");
+    return `/${tail.endsWith(".") ? `${tail}*` : tail}`;
+};
+
+export const BACKUP_IGNORES: readonly string[] = STATE_GROUPS.flatMap((group) => {
+    const inGroup = stateGroupPaths(group);
+    const excluded = inGroup.filter((path) => UNBACKED_STATE_PATHS.includes(path));
+    if (excluded.length === 0) {
+        return [];
+    }
+    return excluded.length === inGroup.length ? [`/${group}`] : excluded.map(anchored);
+});
 
 // A sandbox id safe for an ssh-config alias / Mutagen session name (letters, digits, dashes).
 export const sanitizeId = (raw: string): string => raw.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");

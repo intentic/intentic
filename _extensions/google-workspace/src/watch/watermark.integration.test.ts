@@ -17,7 +17,7 @@ beforeEach(async () => {
 
 describe("watermarkPath", () => {
     it("puts a connection's state under the workspace's runtime tree, one directory per account", () => {
-        expect(watermarkPath("/work", "work_gmail")).toBe("/work/.intentic/runtime/extensions/google-workspace/work_gmail/watch.json");
+        expect(watermarkPath("/work", "work_gmail")).toBe("/work/.intentic/local/runtime/extensions/google-workspace/work_gmail/watch.json");
     });
 });
 

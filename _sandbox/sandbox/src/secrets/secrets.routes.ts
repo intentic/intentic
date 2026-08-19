@@ -163,17 +163,23 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                      * unreadable-ish; actively misleading now that it is neither, because "where does this live"
                      * would be pointing the owner at a file in their own Changes review. The value is beside the
                      * provider logins below, in the one tree a secret-less export leaves behind. */
-                    storedAt: stateRelPath(".intentic/auth/", "capability-secrets.json"),
+                    storedAt: stateRelPath(".intentic/secrets/auth/", "capability-secrets.json"),
                     revealable: true,
                 }));
             // One entry per connected account.
             const providerEntries: SecretInventoryEntry[] = [
-                ...claudeAccounts.map((a) => providerAccountEntry("claude", "Claude", a.id, a.label, stateRelPath(".intentic/auth/", "claude", `${a.id}.json`))),
+                ...claudeAccounts.map((a) =>
+                    providerAccountEntry("claude", "Claude", a.id, a.label, stateRelPath(".intentic/secrets/auth/", "claude", `${a.id}.json`)),
+                ),
                 // Codex and Gemini authenticate through the translator on subscriptions — one auth file per
                 // connected account in the cliproxy auth-dir, its name doubling as the entry id.
-                ...translatorAccounts.codex.map((a) => providerAccountEntry("codex", "ChatGPT", a.name, a.label, stateRelPath(".intentic/auth/", "cliproxy"))),
-                ...translatorAccounts.gemini.map((a) => providerAccountEntry("gemini", "Gemini", a.name, a.label, stateRelPath(".intentic/auth/", "cliproxy"))),
-                ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", stateRelPath(".intentic/auth/", "opencode"))] : []),
+                ...translatorAccounts.codex.map((a) =>
+                    providerAccountEntry("codex", "ChatGPT", a.name, a.label, stateRelPath(".intentic/secrets/auth/", "cliproxy")),
+                ),
+                ...translatorAccounts.gemini.map((a) =>
+                    providerAccountEntry("gemini", "Gemini", a.name, a.label, stateRelPath(".intentic/secrets/auth/", "cliproxy")),
+                ),
+                ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", stateRelPath(".intentic/secrets/auth/", "opencode"))] : []),
             ];
             // The use ledger's newest row per entry, joined in — the inventory is where "when did the agent
             // last spend this" is answered, so the ledger never needs its own surface.

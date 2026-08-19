@@ -9,7 +9,7 @@ import { fileSandboxSettingsStore } from "./settings-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet — the store must create it on write).
 const tempStore = () => {
-    const path = join(mkdtempSync(join(tmpdir(), "settings-")), `${STATE_DIR}`, "settings.json");
+    const path = join(mkdtempSync(join(tmpdir(), "settings-")), `${STATE_DIR}`, "config", "settings.json");
     return { store: fileSandboxSettingsStore(path), path };
 };
 

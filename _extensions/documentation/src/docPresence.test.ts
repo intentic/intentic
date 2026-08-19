@@ -26,8 +26,8 @@ const hostOver = (): Parameters<typeof bindHost>[0] =>
             reachable: () => true,
             json: async (route: string) => {
                 asked.push(route);
-                return route.includes(encodeURIComponent(`${STATE_DIR}/docs/api`))
-                    ? { entries: [{ name: `repo.json`, path: `${STATE_DIR}/docs/api/repo.json`, type: `file` }], hidden: 0 }
+                return route.includes(encodeURIComponent(`${STATE_DIR}/config/docs/api`))
+                    ? { entries: [{ name: `repo.json`, path: `${STATE_DIR}/config/docs/api/repo.json`, type: `file` }], hidden: 0 }
                     : { entries: [], hidden: 0 };
             },
         },
@@ -54,7 +54,7 @@ test(`reads the documented repo's index and map, and asks the undocumented one f
     expect(asked.filter((route) => route.startsWith(`web/`))).toEqual([`web/docs/architecture/index.json`, `web/docs/architecture/repo.json`]);
     // The whole point: not one read against a repo that documents nothing. Its staged tree is still listed.
     expect(asked.filter((route) => route.startsWith(`api/`))).toEqual([]);
-    expect(asked.some((route) => route.includes(encodeURIComponent(`.intentic/docs/api`)))).toBe(true);
+    expect(asked.some((route) => route.includes(encodeURIComponent(`.intentic/config/docs/api`)))).toBe(true);
 });
 
 test(`the documented repo's packages and map land on the tree, and the undocumented one's draft still does`, async () => {

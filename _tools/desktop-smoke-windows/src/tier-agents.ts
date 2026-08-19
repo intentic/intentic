@@ -58,7 +58,7 @@ export interface AgentsTierOptions {
 const PROMPT = `Reply with exactly the word: ready`;
 const EXPECTED = `ready`;
 
-const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/control-tokens.json`;
+const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/identity/control-tokens.json`;
 
 /** sha256, computed by the container so the digest is the one that container's own code would compute. */
 const seedControlToken = async (container: string, token: string): Promise<boolean> => {

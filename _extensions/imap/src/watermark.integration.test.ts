@@ -36,6 +36,6 @@ test("watermark roundtrips through its file; missing and corrupt files read as a
 });
 
 test("watermarkPath keeps the file under the runtime tree and sanitizes the id", () => {
-    expect(watermarkPath("/work", "my-inbox")).toBe("/work/.intentic/runtime/extensions/imap/my-inbox.json");
-    expect(watermarkPath("/work", "../escape me")).toBe("/work/.intentic/runtime/extensions/imap/.._escape_me.json");
+    expect(watermarkPath("/work", "my-inbox")).toBe("/work/.intentic/local/runtime/extensions/imap/my-inbox.json");
+    expect(watermarkPath("/work", "../escape me")).toBe("/work/.intentic/local/runtime/extensions/imap/.._escape_me.json");
 });

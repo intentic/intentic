@@ -47,14 +47,17 @@ test("tool_call_update maps statuses and content; text content wraps as a conten
 
 test("image content becomes a resource_link at the mirror copy of the file", () => {
     expect(
-        sessionUpdateOf({ kind: "tool_call_update", id: "t1", content: [{ type: "image", path: ".intentic/artifacts/browser/shot.png" }] }, CWD),
+        sessionUpdateOf(
+            { kind: "tool_call_update", id: "t1", content: [{ type: "image", path: ".intentic/records/artifacts/browser/shot.png" }] },
+            CWD,
+        ),
     ).toEqual({
         sessionUpdate: "tool_call_update",
         toolCallId: "t1",
         content: [
             {
                 type: "content",
-                content: { type: "resource_link", uri: `file://${CWD}/.intentic/artifacts/browser/shot.png`, name: "shot.png" },
+                content: { type: "resource_link", uri: `file://${CWD}/.intentic/records/artifacts/browser/shot.png`, name: "shot.png" },
             },
         ],
     });

@@ -160,7 +160,7 @@ emulates the foreign runtime.
 | `AGENTS.md` | Same fenced merge into ours; our managed skills-index block is marker-fenced and survives | Idempotent merge |
 | `HEARTBEAT.md` | One `schedule` automation whose prompt is the file, `chore: true`, default cadence from their heartbeat config | `POST /automations` |
 | cron `jobs.json` / Hermes cron | One `AutomationSchema` record each: cron expression → `schedule` trigger, message → `prompt`, `requireApproval: true` on anything whose prompt implies outbound sends | `POST /automations` |
-| `skills/<name>/SKILL.md` | `.intentic/skills/<name>/` + enabled in `settings.skills` | `POST /skills`; frontmatter normalized to our two-key form, nested Hermes skills flattened |
+| `skills/<name>/SKILL.md` | `.intentic/config/skills/<name>/` + enabled in `settings.skills` | `POST /skills`; frontmatter normalized to our two-key form, nested Hermes skills flattened |
 | Channel configs (Telegram, Discord, Slack, WhatsApp…) | The matching extension's connector capability + its `listener` automation | Capability add path; bot tokens are secrets (§6). We already ship `_extensions/{discord,slack,telegram,whatsapp}` — the mapping is config-shape translation, not new channels |
 | Model config (`openclaw.json` agents, Hermes `config.yaml` + fallbacks) | Native provider when it maps through `agent-catalog.ts` (claude/codex/gemini/…); an `endpoint` capability for anything OpenAI/Anthropic-protocol we don't carry natively | Settings + capability add. Fallback chains have no native equivalent → `unmapped`, noted in the report |
 | MCP server definitions | `mcp` capabilities | Capability add path |

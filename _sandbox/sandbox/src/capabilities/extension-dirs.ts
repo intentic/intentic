@@ -3,18 +3,18 @@ import { join } from "node:path";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { statePath } from "../workspace/state-paths.js";
 
-// Where GIT-INSTALLED extension checkouts live: .intentic/extensions/<id> — daemon-owned state beside
+// Where GIT-INSTALLED extension checkouts live: .intentic/local/extensions/<id> — daemon-owned state beside
 // capabilities.json (outside the three repos, outside .claude/). Baked extensions live at EXTENSIONS_DIR
 // instead. Both are daemon-owned dirs read with a RAW fs read (extensionRead) — never the agent-facing
 // workspace-scoped read, which refuses paths outside /work (where the baked dir lives).
-export const extensionsRoot = (root: string): string => statePath(root, ".intentic/extensions/");
+export const extensionsRoot = (root: string): string => statePath(root, ".intentic/local/extensions/");
 export const extensionDir = (root: string, id: string): string => join(extensionsRoot(root), id);
 
 // Where WORKSPACE extensions live: one directory per extension, consumed in place — no clone, no capability
 // entry, no install moment. Deliberately a sibling of the checkout root above: that one is daemon-owned and
 // keyed by capability ids, this one is authored with the agent's file tools (the drafts precedent) and keyed
 // by nothing but its manifest.
-export const workspaceExtensionsRoot = (root: string): string => statePath(root, ".intentic/workspace-extensions/");
+export const workspaceExtensionsRoot = (root: string): string => statePath(root, ".intentic/config/workspace-extensions/");
 
 // The manifest's directory inside a checkout — `config.path` for extensions hosted in a marketplace/monorepo.
 export const extensionRootOf = (dir: string, path: string | undefined): string => (path === undefined ? dir : join(dir, path));

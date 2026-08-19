@@ -31,7 +31,7 @@ const request = {
     prompt: "add a /ping route",
     cwd: WORKSPACE_ROOT,
     signal: new AbortController().signal,
-    browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/browser`,
+    browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
 };
 
 // Bash routing through bin/tmux-run is decided by whether the wrapper is baked into the image, so a suite run
@@ -371,8 +371,8 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, plugins: [`${WORKSPACE_ROOT}/${STATE_DIR}/plugins/x`] }, capture);
-    expect(captured.at(-1)?.plugins).toEqual([{ type: "local", path: "/work/.intentic/plugins/x" }]);
+    await collect({ ...request, plugins: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/plugins/x`] }, capture);
+    expect(captured.at(-1)?.plugins).toEqual([{ type: "local", path: "/work/.intentic/records/plugins/x" }]);
 
     await collect(request, capture);
     expect(captured.at(-1)?.plugins).toBeUndefined();

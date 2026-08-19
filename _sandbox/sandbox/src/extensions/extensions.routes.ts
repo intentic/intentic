@@ -154,12 +154,12 @@ export const createExtensionsRoutes = (services: Services) => {
                 if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                     throw error;
                 }
-                throw new ORPCError("CONFLICT", { message: `.intentic/workspace-extensions/${input.name} already exists` });
+                throw new ORPCError("CONFLICT", { message: `.intentic/config/workspace-extensions/${input.name} already exists` });
             }
             // The same ping a file the owner wrote through the workspace routes sends — this is their edit, made
             // on their behalf, and the history/commit machinery should see it as one.
             services.history.notifyUserWrite();
-            return { id, dir: `.intentic/workspace-extensions/${input.name}` };
+            return { id, dir: `.intentic/config/workspace-extensions/${input.name}` };
         }),
         settings: i.settings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);

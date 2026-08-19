@@ -218,7 +218,7 @@ test("whatsapp reads record nothing, and the word whatsapp in ordinary text is n
     sniffer.observe(tool(`whatsapp chats`, "t1"));
     sniffer.observe(result("...", "t1"));
     sniffer.observe(tool(`whatsapp download ABC123`, "t2"));
-    sniffer.observe(result(`${WORKSPACE_ROOT}/${STATE_DIR}/runtime/extensions/whatsapp/media/ABC123-voice.ogg`, "t2"));
+    sniffer.observe(result(`${WORKSPACE_ROOT}/${STATE_DIR}/local/runtime/extensions/whatsapp/media/ABC123-voice.ogg`, "t2"));
     sniffer.observe(tool(`grep -r "whatsapp send" _extensions/`, "t3"));
     sniffer.observe(result("", "t3"));
     sniffer.flush();

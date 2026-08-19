@@ -190,7 +190,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
             const label = String.fromCharCode(65 + index);
             const title = source.title.value ?? `Untitled agent`;
             const name = `source-${label}-${slugOf(title)}.md`;
-            const path = `.intentic/artifacts/attachments/${crypto.randomUUID()}/${name}`;
+            const path = `.intentic/records/artifacts/attachments/${crypto.randomUUID()}/${name}`;
             refs.push({ label, title, path });
             return { name, path, markdown: renderTranscript(label, title, transcripts[index] ?? []) };
         });

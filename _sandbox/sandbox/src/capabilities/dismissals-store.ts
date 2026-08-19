@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* WHAT THE OWNER HAS ALREADY SAID NO TO (<workspace>/.intentic/capability-dismissals.json).
+/* WHAT THE OWNER HAS ALREADY SAID NO TO (<workspace>/.intentic/config/capability-dismissals.json).
  *
  * Recommendations are derived on every read, so without this a declined one comes straight back on the next page
  * load and the Recommended slice becomes a nag strip — the surface people learn to stop looking at, which costs

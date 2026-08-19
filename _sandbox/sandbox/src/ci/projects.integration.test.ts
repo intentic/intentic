@@ -18,7 +18,7 @@ const initRepo = async (dir: string, remote?: string): Promise<void> => {
 
 test("ciProjects maps workspace repos onto connected accounts by remote hostname", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-projects-"));
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t1" } });
     await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.example.com", token: "t2" } });
     await initRepo(join(root, "web"), "https://github.com/acme/web.git");
@@ -40,7 +40,7 @@ test("ciProjects maps workspace repos onto connected accounts by remote hostname
 // dropped it entirely once the gitlab account was disconnected.
 test("ciProjects maps a repo by whichever of its remotes is connected, not the one git lists first", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-abandoned-"));
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t" } });
     const dir = join(root, "web");
     await initRepo(dir, "https://github.com/acme/web.git");
@@ -55,7 +55,7 @@ test("ciProjects maps a repo by whichever of its remotes is connected, not the o
 // the board must not flip hosts on a name that happens to sort first.
 test("ciProjects breaks a multi-remote tie on origin", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-tie-"));
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t1" } });
     await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.com", token: "t2" } });
     const dir = join(root, "web");
@@ -70,7 +70,7 @@ test("ciProjects breaks a multi-remote tie on origin", async () => {
 // A pushurl adds a second (push) line for the same remote; the (fetch) url is the one CI addresses.
 test("ciProjects reads the fetch url of a remote that pushes somewhere else too", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-pushurl-"));
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t" } });
     const dir = join(root, "web");
     await initRepo(dir, "https://github.com/acme/web.git");
@@ -82,7 +82,7 @@ test("ciProjects reads the fetch url of a remote that pushes somewhere else too"
 
 test('ciProjects includes the workspace root repo itself as "root"', async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-root-"));
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "t" } });
     await initRepo(root, "https://github.com/acme/mono.git");
 
@@ -94,6 +94,6 @@ test('ciProjects includes the workspace root repo itself as "root"', async () =>
 test("ciProjects is empty with no git accounts connected — no git spawns for nothing", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-none-"));
     await initRepo(join(root, "web"), "https://github.com/acme/web.git");
-    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "capabilities.json"));
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     expect(await ciProjects({ workspace: { root }, capabilities })).toEqual([]);
 });

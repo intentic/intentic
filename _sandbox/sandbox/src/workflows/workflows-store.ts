@@ -14,10 +14,10 @@ import { jsonFile } from "../store/json-file.js";
 
 /* TWO FILES, because the two halves have nothing in common but a name.
  *
- * `.intentic/workflows.json` is a MANIFEST — a handful of designs the user authors and edits, the same shape
+ * `.intentic/config/workflows.json` is a MANIFEST — a handful of designs the user authors and edits, the same shape
  * and lifecycle as automations.json, changing at human speed.
  *
- * `.intentic/workflow-runs.json` is a LEDGER — append-mostly, written several times per step by the scheduler,
+ * `.intentic/records/workflow-runs.json` is a LEDGER — append-mostly, written several times per step by the scheduler,
  * bounded by count and never edited by a person. Keeping it out of the manifest is what stops a run's fourth
  * step-state write from rewriting the user's designs, and what lets a run of a since-deleted workflow stay
  * readable (it snapshotted its definition; see WorkflowRunSchema.workflow).

@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 
 // Mirrored from src/paths.ts — see the header, and paths.test.ts which pins them together.
 export const DOCS_DIR = "docs/architecture";
-export const STAGING_ROOT = ".intentic/docs";
+export const STAGING_ROOT = ".intentic/config/docs";
 export const README_TAIL = "README.md";
 
 const MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml", "go.mod"];

@@ -29,12 +29,12 @@ import { stateRelPath } from "./state-paths.js";
 // exactly how another member's write reaches this browser. Spelled through stateRelPath so each exclusion is
 // a path the state table declares, and a renamed store breaks this list at compile time.
 const DAEMON_STATE_PATHS = [
-    stateRelPath(".intentic/cache/"),
-    stateRelPath(".intentic/auth/"),
-    stateRelPath(".intentic/sessions/claude/"),
-    stateRelPath(".intentic/runtime/"),
-    stateRelPath(".intentic/tmp/"),
-    stateRelPath(".intentic/.pnpm-store/"),
+    stateRelPath(".intentic/local/cache/"),
+    stateRelPath(".intentic/secrets/auth/"),
+    stateRelPath(".intentic/records/sessions/claude/"),
+    stateRelPath(".intentic/local/runtime/"),
+    stateRelPath(".intentic/local/tmp/"),
+    stateRelPath(".intentic/local/.pnpm-store/"),
 ];
 const isDaemonStatePath = (relPath: string): boolean => {
     const segments = relPath.split(/[\\/]/);
@@ -75,7 +75,7 @@ const WATCH_IGNORE_RULES: readonly WatchIgnoreRule[] = [
         matches: (relPath) => relPath.split(/[\\/]/).some((segment) => IGNORED_DIRS.has(segment)),
     },
     // A connected browser's profile churns constantly (Chromium rewrites Cookies etc.).
-    { globs: [`**/${stateRelPath(".intentic/browser/")}`], matches: isBrowserProfilePath },
+    { globs: [`**/${stateRelPath(".intentic/local/browser/")}`], matches: isBrowserProfilePath },
     // Agent worktrees are whole checkouts an agent edits at full speed; sibling .claude config still pushes.
     { globs: ["**/.claude/worktrees"], matches: isAgentWorktreePath },
     // A reference clone into the shelf writes thousands of files in one burst.

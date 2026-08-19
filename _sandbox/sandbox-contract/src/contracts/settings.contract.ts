@@ -9,7 +9,7 @@ import {
     SavingsReportSchema,
 } from "../schemas.js";
 
-// Per-sandbox agent settings (.intentic/settings.json). `get` returns the current flags with defaults applied
+// Per-sandbox agent settings (.intentic/config/settings.json). `get` returns the current flags with defaults applied
 // when the file is absent; `set` overwrites them. `savings` reports what each token-reduction mechanism was
 // worth — the cleaners' realized per-command savings and the terse steer's measured A/B — over an inclusive
 // UTC day window, the same one the spend ledger takes, so a screen can filter both with one calendar.

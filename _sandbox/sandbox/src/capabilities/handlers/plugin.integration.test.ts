@@ -103,7 +103,7 @@ test("pluginDirsOf maps plugin capabilities to checkout dirs (honoring the subdi
     const plain: Capability = { id: "a", kind: "plugin", config: { url: "https://x/y.git" } };
     const sub: Capability = { id: "b", kind: "plugin", config: { url: "https://x/m.git", path: "plugins/beta" } };
     const mcp: Capability = { id: "x", kind: "mcp", config: { url: "https://a/mcp" } };
-    expect(pluginDirsOf([plain, sub, mcp], "/work")).toEqual(["/work/.intentic/plugins/a", "/work/.intentic/plugins/b/plugins/beta"]);
+    expect(pluginDirsOf([plain, sub, mcp], "/work")).toEqual(["/work/.intentic/records/plugins/a", "/work/.intentic/records/plugins/b/plugins/beta"]);
     expect(pluginDirsOf([mcp], "/work")).toEqual([]);
 });
 

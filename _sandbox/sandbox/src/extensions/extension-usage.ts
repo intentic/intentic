@@ -2,7 +2,7 @@ import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
-/* WHICH OF THE ROUTES AN EXTENSION DECLARED IT ACTUALLY CALLS (<workspace>/.intentic/extension-usage.json),
+/* WHICH OF THE ROUTES AN EXTENSION DECLARED IT ACTUALLY CALLS (<workspace>/.intentic/records/extension-usage.json),
  * keyed by the manifest-derived extension id and then by the DECLARED ENTRY, verbatim.
  *
  * `permissions.sandbox` is the one part of a manifest that is a promise about behaviour rather than a
@@ -37,7 +37,7 @@ type UsageFile = z.infer<typeof FileSchema>;
 const files = new Map<string, JsonFile<UsageFile>>();
 
 const usageFile = (root: string): JsonFile<UsageFile> => {
-    const path = statePath(root, ".intentic/extension-usage.json");
+    const path = statePath(root, ".intentic/records/extension-usage.json");
     const existing = files.get(path);
     if (existing !== undefined) {
         return existing;

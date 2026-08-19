@@ -422,7 +422,7 @@ formatting step is instant and needs no build; clippy is the slow one, and only 
 
 - **Linux builds need system packages** — `webkit2gtk-4.1`, `gtk-3`, `libayatana-appindicator3`, `librsvg2`
   (dev packages), plus `patchelf` and `xdg-utils` for AppImage. In a sandbox, that is the
-  `.intentic/environment.d/rust-tauri.Dockerfile` overlay.
+  `.intentic/config/environment.d/rust-tauri.Dockerfile` overlay.
 - **Verifying the Windows target without a Windows box:** `cargo xwin check --target x86_64-pc-windows-msvc`
   (needs clang-cl / lld-link / llvm-rc).
 - **`Cargo.lock` regenerates on the first build** — the archived one referenced a crate that no longer exists

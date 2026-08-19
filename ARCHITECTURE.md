@@ -74,13 +74,13 @@ flowchart TB
   Google ID token, verified against Google's JWKS, and the daemon binds its owner **on first use**:
   the first authenticated request must carry the `x-intentic-connect` connect token (and, when setup
   seeded an expected owner, match that account's email), then the owner email persists in
-  `/work/.intentic/owner.json` ([auth.ts](_sandbox/sandbox/src/auth/auth.ts)). Because a Google ID token
+  `/work/.intentic/identity/owner.json` ([auth.ts](_sandbox/sandbox/src/auth/auth.ts)). Because a Google ID token
   lives ~an hour and renewing it needs Google UI, it is only the **sign-in** credential: the browser
   exchanges it at `system.session` for a **daemon-minted session** (HMAC-signed with a secret that
   never leaves the sandbox, [session.ts](_sandbox/sandbox/src/auth/session.ts)) and presents that on
   every call, renewing it silently — Google reappears only for a first visit, an account switch, or a
   long-idle return. First-bind always takes a fresh Google proof, never a session. Additional
-  collaborators are granted via `/work/.intentic/members.json`, and owner/membership are re-checked
+  collaborators are granted via `/work/.intentic/identity/members.json`, and owner/membership are re-checked
   per request, so revoking a member kills their live sessions too. The platform never holds or forges
   either credential, so a platform breach can read the stored URL but **cannot drive any sandbox** —
   the hub's blast radius is bounded to identity + the sandbox URL.
@@ -134,7 +134,7 @@ survive reconnects. Its subsystems:
   harness
   ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. Native Codex
   points app-server at that same subscription-backed translator; generated image items are copied into
-  `.intentic/artifacts/imagegen/` and stream as paths, never transcript-embedded base64. The five runtimes
+  `.intentic/records/artifacts/imagegen/` and stream as paths, never transcript-embedded base64. The five runtimes
   behind that seam (the Claude Code loop, Codex app-server, OpenCode, ACP, and Pi's RPC mode under the
   reserved `pi` capability id — [pi/](_sandbox/sandbox/src/pi/)) do not do the same things, so
   what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
@@ -204,7 +204,7 @@ survive reconnects. Its subsystems:
   UI surface ([ci/](_sandbox/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
   github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A
   reconciler keeps a webhook on every mapped repo pointing at the public receiver `/ci/webhook/:host`,
-  authenticated by a per-sandbox secret in `.intentic/ci.json` (GitHub signs the body, GitLab echoes the
+  authenticated by a per-sandbox secret in `.intentic/secrets/ci.json` (GitHub signs the body, GitLab echoes the
   token); a refusal (token scope, role) degrades that repo to a warning carrying the manual hook recipe, the
   ssh-key-registration posture. Completed pipelines dispatch the core listener provider **`ci`** — the webchat
   precedent: no gateway extension, the daemon's own receiver is the source — with event types
@@ -537,9 +537,9 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   `slack`, `imap`). This is how those cards exist out of the box, and why switching one of those packs off
   removes exactly its cards.
 - **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
-  `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
+  `.intentic/local/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
   first-party ones only `rtk` does, because its environment fragment composes per capability entry.
-- **Workspace** — a directory per extension under `.intentic/workspace-extensions/`, consumed in place: no
+- **Workspace** — a directory per extension under `.intentic/config/workspace-extensions/`, consumed in place: no
   clone, no capability entry, no install moment. The path for extensions authored *inside* the sandbox,
   typically by an agent with its own file tools — `.intentic` is shared across sessions, so one written from
   an isolated worktree is live for the daemon at once, and an edit to its UI entry is simply a new bundle
@@ -549,7 +549,7 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   reject it, the list is the author's feedback channel.
 
 Any of them can be **switched off** — `POST /extensions/{id}/enabled`, recorded in
-`.intentic/extension-enablement.json` by `publisher.name`. A disabled extension stays listed (that is what
+`.intentic/config/extension-enablement.json` by `publisher.name`. A disabled extension stays listed (that is what
 keeps its switch reachable) and drops out of `enabledExtensions()`, which every consumer that wires something
 up iterates, so it contributes no agent plugin dir, PATH entry, listener provider, connector card, env var or
 autoStart process; the web loader retires its activation in place. `agent` and `bin` are composed per turn and
@@ -639,7 +639,7 @@ VSCode makes with "everything is an extension", disclosed per item instead of cl
 machinery is uniform:
 
 - **One manifest, and the credentials are not in it** —
-  `/work/.intentic/capabilities.json` is the source of truth for what's active
+  `/work/.intentic/config/capabilities.json` is the source of truth for what's active
   ([capabilities-store.ts](_sandbox/sandbox/src/capabilities/capabilities-store.ts)), but every secret FIELD is
   stored under the provider-credential root off `/work`
   ([secret-vault.ts](_sandbox/sandbox/src/capabilities/secret-vault.ts)) and the manifest carries a marker in
@@ -725,7 +725,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | --- | --- |
 | `skill` | Writes `.agents/skills/<name>/SKILL.md` — the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through a managed AGENTS.md index) — per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file, or a field in the off-workspace secret vault the manifest points at with a marker (ssh key/password, WireGuard conf, git token). |
-| `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
+| `clone` | Git checkout into `.intentic/records/plugins/<id>` or `.intentic/local/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
 | `runtime` | Privileged directives riding a core fragment — the ONLY source of container privileges (the base run is unprivileged): `vpn` → `NET_ADMIN` + `/dev/net/tun`, `docker` → `--privileged`. |
 | `process` | Long-lived tmux-managed background processes (an extension's declared `processes`), restored on boot. |
@@ -733,7 +733,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
 | `deploy` | A managed `deploy.config.ts` entry; `service` also runs the shared infra-apply job now, `integration` applies on the next provision. |
 | `trusted-code` | Extension code runs inside the app with the owner's session — owner-only, full-sha-pinned install; the trust decision of the system. |
-| `profile` | A persisted logged-in Chromium profile under `.intentic/browser/<id>` — keyed by the CAPABILITY, so one site can be connected several times over (a work Reddit and a personal one) and each account signs in, and is disconnected, on its own. Established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. Beside it, `<id>.passkeys.json` holds any WebAuthn credential enrolled in that browser: a CDP virtual authenticator is armed on every page of a logged-in browser, so the sandbox owns a software security key for that account and answers its 2FA ceremonies itself ([passkeys.ts](_sandbox/sandbox/src/browser/passkeys.ts)). Both die with the connection. |
+| `profile` | A persisted logged-in Chromium profile under `.intentic/local/browser/<id>` — keyed by the CAPABILITY, so one site can be connected several times over (a work Reddit and a personal one) and each account signs in, and is disconnected, on its own. Established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. Beside it, `<id>.passkeys.json` holds any WebAuthn credential enrolled in that browser: a CDP virtual authenticator is armed on every page of a logged-in browser, so the sandbox owns a software security key for that account and answers its 2FA ceremonies itself ([passkeys.ts](_sandbox/sandbox/src/browser/passkeys.ts)). Both die with the connection. |
 
 **Environment fragments have two trust tiers.** Core handler fragments (`vpn`/`browser`) are
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
@@ -745,7 +745,7 @@ extension entry its `contributes.environment`) into the overlay Dockerfile (`FRO
 owner-run rebuild applies it — until then the capability reads `pending` and the UI routes to the
 Environment card.
 
-The AGENT's half of that surface is the custom section, and it proposes into `.intentic/environment.d/` —
+The AGENT's half of that surface is the custom section, and it proposes into `.intentic/config/environment.d/` —
 one `<tool>.Dockerfile` per thing it needs — rather than writing the proposal directly. Worktree-isolated
 agents run in parallel, so a single shared proposal file would lose one of two concurrent drafts; naming each
 draft for its tool also makes two agents needing ffmpeg converge on one entry. `readEnvironment` folds the
@@ -767,8 +767,8 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 | `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
 | `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
 | `cli` | Card-driven (data from `contributes.capabilities`): templates the connector's SKILL.md into `.agents/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
-| `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
-| `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
+| `plugin` | Clones a Claude Code plugin repo into `.intentic/records/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
+| `extension` | Owner-only, sha-pinned clone into `.intentic/local/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores ONE connection, discriminated by `provider` — `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan) — plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
@@ -780,7 +780,7 @@ Per-kind mechanics ([handlers/](_sandbox/sandbox/src/capabilities/handlers/)):
 ### Personas
 
 A `browser` capability is ONE ACCOUNT; a **persona** is the card that says which of those accounts are the
-same someone (`.intentic/personas.json` — part of the config slice under `.intentic` that is committed, because
+same someone (`.intentic/config/personas.json` — part of the config slice under `.intentic` that is committed, because
 it holds no secret). A turn names one via `actsAs`, and `turnPersona()`
 ([personas.ts](_sandbox/sandbox/src/personas/personas.ts)) resolves it in one place: an attended turn naming
 none keeps every account, an **unattended** one naming none gets NONE, a named card gets exactly its accounts,

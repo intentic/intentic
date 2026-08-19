@@ -80,12 +80,12 @@ const pruneStore = (storeDir: string, log: Logger): Promise<void> =>
 /* The boot sweep: scratch, retired derived roots, and the pnpm store — the things where "since last boot" is
  * the natural cadence and where sweeping mid-flight could race a writer. */
 export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Promise<void> => {
-    await emptyDir(statePath(workspaceRoot, ".intentic/tmp/"), log, "boot scratch");
+    await emptyDir(statePath(workspaceRoot, ".intentic/local/tmp/"), log, "boot scratch");
     for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
         // Quarantined names, deliberately outside the table — spelled the way classify.ts spells them.
         await remove(join(workspaceRoot, `.intentic/${dir}`), log, "a retired derived root");
     }
-    const storeDir = statePath(workspaceRoot, ".intentic/.pnpm-store/");
+    const storeDir = statePath(workspaceRoot, ".intentic/local/.pnpm-store/");
     if ((await stat(storeDir).catch(() => undefined))?.isDirectory() === true) {
         await pruneStore(storeDir, log);
     }
@@ -94,5 +94,5 @@ export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Prom
 
 // The recurring half — cheap enough for the hourly timer the agent sweeps already run on.
 export const sweepAgedState = async (workspaceRoot: string, now: number, log: Logger): Promise<void> => {
-    await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/artifacts/", "browser"), now, log);
+    await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/records/artifacts/", "browser"), now, log);
 };

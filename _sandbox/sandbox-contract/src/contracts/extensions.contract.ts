@@ -25,7 +25,7 @@ import {
 // declared are refused, the same honesty rule the host applies to runtime view/command registrations.
 export const extensionsContract = {
     list: oc.route({ method: "GET", path: "/extensions" }).output(ExtensionsListSchema),
-    // Author a new extension in place: writes a running one into .intentic/workspace-extensions/<name>/. The only
+    // Author a new extension in place: writes a running one into .intentic/config/workspace-extensions/<name>/. The only
     // creating route here, and it exists because that directory is otherwise reachable exclusively through an
     // agent's file tools — which is a fine way to CHANGE an extension and a poor way to meet the idea of one.
     create: oc.route({ method: "POST", path: "/extensions/workspace" }).input(WorkspaceExtensionCreateSchema).output(WorkspaceExtensionCreatedSchema),

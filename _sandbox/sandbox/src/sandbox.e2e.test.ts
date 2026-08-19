@@ -117,7 +117,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             { name: "tree/.env", content: "SECRET=1" },
             // The control plane is the floor that remains, and skipping it is per-entry: the rest of the drop
             // still lands. A member who could post this one would own the sandbox.
-            { name: `${STATE_DIR}/owner.json`, content: `{"email":"attacker@example.com"}` },
+            { name: `${STATE_DIR}/identity/owner.json`, content: `{"email":"attacker@example.com"}` },
         ]);
         const response = await fetch(`${base}/workspace/upload-archive`, { method: "POST", body: new Uint8Array(archive) });
         expect(response.status).toBe(200);
@@ -126,12 +126,12 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await inContainer("cat", "/work/tree/sub/b.txt")).output).toBe("beta");
         expect((await inContainer("cat", "/work/tree/.env")).output).toBe("SECRET=1");
         // Absent (loopback binds no owner) or a real record — either way it is not the one the tar carried.
-        expect((await inContainer("cat", "/work/.intentic/owner.json")).output).not.toContain("attacker@example.com");
+        expect((await inContainer("cat", "/work/.intentic/identity/owner.json")).output).not.toContain("attacker@example.com");
     }, 60_000);
 
     it("guards the upload surface: path escape 400, control-plane write 404, oversize 413, escaping tar 400", async () => {
         expect((await fetch(`${base}/workspace/upload?path=../escape.txt`, { method: "POST", body: "x" })).status).toBe(400);
-        expect((await fetch(`${base}/workspace/upload?path=.intentic/owner.json`, { method: "POST", body: "x" })).status).toBe(404);
+        expect((await fetch(`${base}/workspace/upload?path=.intentic/identity/owner.json`, { method: "POST", body: "x" })).status).toBe(404);
         // offset + declared length overshoots MAX_UPLOAD_BYTES (10 GiB) without sending 10 GiB.
         expect((await fetch(`${base}/workspace/upload?path=notes/big.txt&offset=${10 * 1024 ** 3}`, { method: "POST", body: "x" })).status).toBe(413);
         const escaping = await tarBuffer([{ name: "../outside.txt", content: "x" }]);

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import { stateRelPath } from "../workspace/state-paths.js";
 
-/* The two files the maintenance surface persists, both under <workspace>/.intentic/chores/ and both deliberately
+/* The two files the maintenance surface persists, both under <workspace>/.intentic/records/chores/ and both deliberately
  * boring: a cache of what the probes measured, and a ledger of what has been done about it.
  *
  * WHY .intentic AND NOT A REPO. Neither of these is an asset about the code — they are point-in-time evidence and
@@ -18,8 +18,8 @@ import { stateRelPath } from "../workspace/state-paths.js";
  * probe cache holds a handful of results per repo and the ledger holds one row per repo × chore, capped by the
  * catalog's size rather than by time. Nothing here grows without bound. */
 
-export const PROBES_FILE = stateRelPath(".intentic/chores/", "probes.json");
-export const LEDGER_FILE = stateRelPath(".intentic/chores/", "ledger.json");
+export const PROBES_FILE = stateRelPath(".intentic/records/chores/", "probes.json");
+export const LEDGER_FILE = stateRelPath(".intentic/records/chores/", "ledger.json");
 
 // repo → probe id → its last completed result. The repo key is the root-relative dir, with the workspace's own
 // root repo keyed by the empty string exactly as it is everywhere else in the daemon.

@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The sandbox's post-drafts queue (.intentic/drafts/, one file per draft), read/written via the daemon's
+/* The sandbox's post-drafts queue (.intentic/config/drafts/, one file per draft), read/written via the daemon's
  * /drafts routes. The AGENT creates drafts with its file tools (taught by the daemon's drafts skill); this is
  * the OWNER's side — `save` upserts by id (approve/edit/retry are all a re-post with a field changed), `remove`
  * rejects. The publish automation's guard re-reads the files on its next fire, so there's nothing to provision.
  *
- * The manifest's `contributes.files` entry points `.intentic/drafts/` at this query key, so the agent dropping
+ * The manifest's `contributes.files` entry points `.intentic/config/drafts/` at this query key, so the agent dropping
  * a proposal in mid-conversation is on screen without a poll. */
 
 export const draftsQuery = () => ({

@@ -2,7 +2,7 @@
 
 The approval inbox for posts the agent proposed during its scheduled work.
 
-The agent writes one JSON file per draft into `.intentic/drafts/` (taught by the daemon's drafts skill); this
+The agent writes one JSON file per draft into `.intentic/config/drafts/` (taught by the daemon's drafts skill); this
 surface is the owner's approve / edit / reschedule / reject side. There is no create dialog — drafts originate
 with the agent, never the UI. Approving starts a visible one-minute countdown, not a send.
 

@@ -8,7 +8,7 @@ import type { CapabilityHandler } from "../capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
 import { checkoutInto, previousDir } from "../git-checkout.js";
 
-// An intentic extension: a git checkout at .intentic/extensions/<id>, sha-pinned by construction (the config
+// An intentic extension: a git checkout at .intentic/local/extensions/<id>, sha-pinned by construction (the config
 // schema requires a full commit sha, so the owner approves EXACTLY the code that runs; an update is an explicit
 // re-add at a new sha). Install validates the manifest and the prebuilt entry bundle BEFORE the staged checkout
 // goes live, so a broken extension never replaces a working one; an update stops the outgoing checkout's

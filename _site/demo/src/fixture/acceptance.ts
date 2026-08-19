@@ -4,7 +4,7 @@ import { cartPage, checkoutPage, pricingPage } from "./storefront";
 /* ACCEPTANCE, RECORDED — acme-shop's user stories and the run that walked three of them through the app.
  *
  * Everything this surface shows is FILES, which is the whole reason it can be fixtured at all: the stories are
- * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/artifacts/acceptance/` holding
+ * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/records/artifacts/acceptance/` holding
  * one manifest plus a result, a report and its screenshots per story. So this module contributes paths and
  * bodies to the recording's filesystem (workspace.ts) and nothing else — no route, no state, no special case in
  * the daemon. The extension walks the same directories it would walk against a real sandbox.
@@ -92,7 +92,7 @@ clicking anything, or you will report a bug that is only a race in the test.
 
 // ---- the run ---------------------------------------------------------------------------------------------
 
-const RUNS_DIR = `${STATE_DIR}/artifacts/acceptance`;
+const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
 
 // The stories that run covered — the slug is what `slugOf` derives from the filename, and the conversation id is
 // `xt-<runId>-<slug>`. Both are stored in the manifest rather than re-derived, exactly as a real run stores them.

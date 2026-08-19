@@ -18,7 +18,7 @@ import { statePath } from "../workspace/state-paths.js";
  * as the plugin capability's checkouts do. The two exceptions are PROMPT.md, which is ours because the card
  * points at it, and the skills listing, which the settings surface needs to show what a persona carries.
  *
- * SEPARATE FROM `.intentic/skills/`, deliberately. Those are the sandbox's skills — one list, one switch each,
+ * SEPARATE FROM `.intentic/config/skills/`, deliberately. Those are the sandbox's skills — one list, one switch each,
  * every session gets them. These belong to one card: a persona that reviews contracts should not put its
  * checklist in front of a turn that is fixing a build, and the way to say that is for the skill to live where
  * only that persona's turns look. The two do not share the enabled list for the same reason; a kit skill is on
@@ -29,7 +29,7 @@ import { statePath } from "../workspace/state-paths.js";
  * pull request rather than appear one morning. */
 
 // The card's own directory, and the two paths inside it the daemon knows the meaning of.
-export const personaKitDir = (root: string, id: string): string => statePath(root, ".intentic/personas/", id);
+export const personaKitDir = (root: string, id: string): string => statePath(root, ".intentic/config/personas/", id);
 const manifestPath = (root: string, id: string): string => join(personaKitDir(root, id), ".claude-plugin", "plugin.json");
 export const personaPromptPath = (root: string, id: string): string => join(personaKitDir(root, id), "PROMPT.md");
 export const personaSkillsRoot = (root: string, id: string): string => join(personaKitDir(root, id), "skills");

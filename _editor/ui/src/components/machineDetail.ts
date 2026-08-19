@@ -28,6 +28,8 @@ export interface MachineFolderRow {
     mutagenStatus?: string | undefined;
     conflicts?: number | undefined;
     paused?: boolean | undefined;
+    // The second session's word — the one-way mirror carrying the sandbox's own state down. See backupState.
+    backupStatus?: string | undefined;
 }
 
 /* The watcher, in the three states a reader can act on. `stalled` is decided by the CALLER rather than derived
@@ -172,6 +174,28 @@ export const folderState = (folder: MachineFolderRow): string | undefined => {
     }
     return folder.mutagenStatus;
 };
+
+/* WHETHER THIS SANDBOX'S OWN STATE IS BEING KEPT ANYWHERE ELSE, and the one row on this card where an ABSENCE
+ * has to be louder than any word Mutagen could return.
+ *
+ * The folder state above answers "are my edits moving", which a person notices within minutes of it going wrong.
+ * This answers "does a copy of my personas, skills, automations, drafts and transcripts exist off this sandbox",
+ * which costs nothing at all until the day the sandbox is gone — and then costs everything. So a missing session
+ * is a sentence rather than a blank, on the same reasoning the terminal's pairingLine shouts about it.
+ *
+ * Undefined for a mirror enrollment and for a paused pairing: neither is a backup that FAILED. Pause is the one
+ * state the user chose, and it pauses both sessions together. */
+export const backupState = (folder: MachineFolderRow): string | undefined => {
+    if (folder.mode === `mirror` || folder.paused === true) {
+        return undefined;
+    }
+    return folder.backupStatus ?? `not backed up`;
+};
+
+// Only two answers here, unlike folderTone's three: a backup is either running or it is a gap the reader should
+// act on. A halted replica is the same gap as a missing one — nothing is being copied either way.
+export const backupTone = (state: string | undefined): `success` | `warning` | `neutral` =>
+    state === undefined ? `neutral` : state === `watching` ? `success` : `warning`;
 
 /* The TINT on that word — which is not the same as translating it. Mutagen's vocabulary stays verbatim; all
  * this decides is whether the word reads as settled, as busy, or as something to look at. Only two of them are

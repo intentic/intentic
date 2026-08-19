@@ -77,7 +77,7 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             kind: "capability",
             status: "connected",
             requiredBy: [],
-            storedAt: `${STATE_DIR}/auth/capability-secrets.json`,
+            storedAt: `${STATE_DIR}/secrets/auth/capability-secrets.json`,
             revealable: true,
         },
         {
@@ -86,7 +86,7 @@ test("secrets.inventory merges artifact requirements, .env keys, credentialed ca
             label: "Claude · Claude",
             status: "connected",
             requiredBy: [],
-            storedAt: `${STATE_DIR}/auth/claude/default.json`,
+            storedAt: `${STATE_DIR}/secrets/auth/claude/default.json`,
             revealable: false,
         },
     ]);

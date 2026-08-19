@@ -43,15 +43,18 @@ describe(`knowledgeRoot`, () => {
 
 describe(`configuredFolder`, () => {
     it(`reads the folder the owner chose`, async () => {
-        await mkdir(join(workspace, `.intentic`), { recursive: true });
-        await writeFile(join(workspace, `.intentic/extension-settings.json`), JSON.stringify({ "intentic.knowledge": { folder: `my-notes` } }));
+        await mkdir(join(workspace, `.intentic/config`), { recursive: true });
+        await writeFile(
+            join(workspace, `.intentic/config/extension-settings.json`),
+            JSON.stringify({ "intentic.knowledge": { folder: `my-notes` } }),
+        );
         expect(await configuredFolder(workspace)).toBe(`my-notes`);
     });
 
     it(`is silent when nothing has ever been set, rather than an error path`, async () => {
         expect(await configuredFolder(workspace)).toBeUndefined();
-        await mkdir(join(workspace, `.intentic`), { recursive: true });
-        await writeFile(join(workspace, `.intentic/extension-settings.json`), `{ not json`);
+        await mkdir(join(workspace, `.intentic/config`), { recursive: true });
+        await writeFile(join(workspace, `.intentic/config/extension-settings.json`), `{ not json`);
         expect(await configuredFolder(workspace)).toBeUndefined();
     });
 });

@@ -39,8 +39,9 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     await writeFile(join(work, "notes.md"), "hello\n");
     await mkdir(join(work, "intent", ".git"), { recursive: true });
     await writeFile(join(work, "intent", "deploy.config.ts"), "v1\n");
-    await mkdir(join(work, `${STATE_DIR}`), { recursive: true });
-    await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
+    await mkdir(join(work, `${STATE_DIR}`, "config"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "identity"), { recursive: true });
+    await writeFile(join(work, `${STATE_DIR}`, "identity", "owner.json"), "{}\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
@@ -70,57 +71,58 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
  * is the shape a `*` glob written one level too shallow would silently drop. */
 test("the baseline commits the config slice and still refuses every credential and ledger beside it", async () => {
     const { work, historyRoot } = await tempBase();
-    await mkdir(join(work, `${STATE_DIR}`, "browser", "reddit-work"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "auth", "claude"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "environment.d"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "sessions", "claude"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "drafts"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo"), { recursive: true });
-    await mkdir(join(work, `${STATE_DIR}`, "approvals"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "local", "browser", "reddit-work"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "secrets", "auth", "claude"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "config", "environment.d"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "records", "sessions", "claude"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "config", "drafts"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "records", "approvals"), { recursive: true });
+    await mkdir(join(work, `${STATE_DIR}`, "identity"), { recursive: true });
     // Configuration — every one of these decides how the sandbox behaves, and each is `versioned` in the contract.
-    await writeFile(join(work, `${STATE_DIR}`, "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
-    await writeFile(join(work, `${STATE_DIR}`, "settings.json"), "{}\n");
-    await writeFile(join(work, `${STATE_DIR}`, "automations.json"), "[]\n");
-    await writeFile(join(work, `${STATE_DIR}`, "environment.custom.Dockerfile"), "RUN echo hi\n");
-    await writeFile(join(work, `${STATE_DIR}`, "environment.d", "rust.Dockerfile"), "RUN rustup\n");
+    await writeFile(join(work, `${STATE_DIR}`, "config", "personas.json"), `[{"id":"work","capabilities":["reddit-work"]}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "settings.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "config", "automations.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "config", "environment.custom.Dockerfile"), "RUN echo hi\n");
+    await writeFile(join(work, `${STATE_DIR}`, "config", "environment.d", "rust.Dockerfile"), "RUN rustup\n");
     /* What the AGENT authored on its own initiative — tracked for a different reason than the config above it:
      * not "the owner decided this" but "the sandbox did this outward, and it must be readable, revertible and
      * attributable". The extension is the nested-directory case, and its manifest is what decides how far its
      * code may reach, so the two files together are the whole review. */
-    await writeFile(join(work, `${STATE_DIR}`, "drafts", "reddit-launch.json"), `{"platform":"reddit","status":"proposed"}\n`);
-    await writeFile(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
-    await writeFile(join(work, `${STATE_DIR}`, "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "drafts", "reddit-launch.json"), `{"platform":"reddit","status":"proposed"}\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
+    await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
     // A CONSUMED QUEUE beside them, and the counterexample that keeps the line honest: a held wake is removed the
     // moment it is answered, so tracking it would commit an add and a delete about a decision recorded elsewhere.
-    await writeFile(join(work, `${STATE_DIR}`, "approvals", "wake-1.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "records", "approvals", "wake-1.json"), "{}\n");
     /* WHAT THIS SANDBOX IS CONNECTED TO — tracked, and the entry that reads most like a credential without being
      * one. The values are in the vault off /work and the manifest keeps the shape (an id, a kind, an address);
      * granting a connected computer shell access is a decision, and it belongs in the same review as the rules
      * that decide how the agent behaves. */
-    await writeFile(join(work, `${STATE_DIR}`, "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
+    await writeFile(join(work, `${STATE_DIR}`, "config", "capabilities.json"), `[{"id":"reddit-work","kind":"browser","config":{}}]\n`);
     // Credentials and identity — never tracked, whatever else changes.
-    await writeFile(join(work, `${STATE_DIR}`, "owner.json"), "{}\n");
-    await writeFile(join(work, `${STATE_DIR}`, "auth", "claude", "token.json"), "{}\n");
-    await writeFile(join(work, `${STATE_DIR}`, "browser", "reddit-work", "Cookies"), "secret\n");
+    await writeFile(join(work, `${STATE_DIR}`, "identity", "owner.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "secrets", "auth", "claude", "token.json"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "local", "browser", "reddit-work", "Cookies"), "secret\n");
     // Ledgers and bulk — `carry`, holding no secret, and still out: they are machine noise in a human's review.
-    await writeFile(join(work, `${STATE_DIR}`, "workflow-runs.json"), "[]\n");
-    await writeFile(join(work, `${STATE_DIR}`, "loops.json"), "[]\n");
-    await writeFile(join(work, `${STATE_DIR}`, "sessions", "claude", "turn.jsonl"), "{}\n");
+    await writeFile(join(work, `${STATE_DIR}`, "records", "workflow-runs.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "records", "loops.json"), "[]\n");
+    await writeFile(join(work, `${STATE_DIR}`, "records", "sessions", "claude", "turn.jsonl"), "{}\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
     // Exactly the tracked slice out of that directory — both directory carve-outs included, nothing else.
     expect((await sh(work, "ls-files")).split("\n")).toEqual([
-        ".intentic/automations.json",
-        ".intentic/capabilities.json",
-        ".intentic/drafts/reddit-launch.json",
-        ".intentic/environment.custom.Dockerfile",
-        ".intentic/environment.d/rust.Dockerfile",
-        ".intentic/personas.json",
-        ".intentic/settings.json",
-        ".intentic/workspace-extensions/rail-demo/extension.js",
-        ".intentic/workspace-extensions/rail-demo/intentic-extension.json",
+        ".intentic/config/automations.json",
+        ".intentic/config/capabilities.json",
+        ".intentic/config/drafts/reddit-launch.json",
+        ".intentic/config/environment.custom.Dockerfile",
+        ".intentic/config/environment.d/rust.Dockerfile",
+        ".intentic/config/personas.json",
+        ".intentic/config/settings.json",
+        ".intentic/config/workspace-extensions/rail-demo/extension.js",
+        ".intentic/config/workspace-extensions/rail-demo/intentic-extension.json",
     ]);
     // Nothing left over: the credentials and ledgers are IGNORED, not merely uncommitted-and-pending.
     expect(await bothSides(work)).toEqual([]);

@@ -24,7 +24,7 @@ const withStore = (personas: Persona[] = [studio]) => {
 };
 
 const kitFile = (root: string, ...tail: string[]): Promise<string | undefined> =>
-    readFile(join(root, ".intentic", "personas", ...tail), "utf8").catch(() => undefined);
+    readFile(join(root, ".intentic", "config", "personas", ...tail), "utf8").catch(() => undefined);
 
 test("a card with no kit reads as an empty one rather than a failure", async () => {
     const { client } = withStore();

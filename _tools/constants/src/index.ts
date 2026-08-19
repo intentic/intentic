@@ -29,7 +29,7 @@ export const HISTORY_ROOT = "/history";
 /* The daemon's own state folder, relative to whichever workspace root is in force. Never join this by hand
  * where a typed helper exists: the daemon's `statePath()` takes the literal union of the files the state table
  * declares, so a store can only name a file that table knows about. This constant is for the callers OUTSIDE
- * that table — extensions writing under `.intentic/runtime`, ignore lists, path classifiers. */
+ * that table — extensions writing under `.intentic/local/runtime`, ignore lists, path classifiers. */
 export const STATE_DIR = ".intentic";
 
 // Where the deploy CLI and providers keep per-service state on a PROVISIONED HOST (a server reached over ssh),

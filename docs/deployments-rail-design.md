@@ -190,7 +190,7 @@ Three things came out differently from the sketch above, each because the code m
 - **One tile per connection, not one tile.** `detect()` returns an activation per connected `komodo`
   capability, so two Komodos are two tiles with two independent `seenAt` stamps. Looking at staging must not
   silence production — which also pushed the seen-state store from one timestamp to a map keyed by capability
-  id (`.intentic/runtime/extensions/deployments/komodo.json`).
+  id (`.intentic/local/runtime/extensions/deployments/komodo.json`).
 - **`exited` is neutral in the list and a breakage in the alert.** A container sitting exited says nothing
   (it may have been stopped on purpose); a container that *transitioned into* exited stopped while it was
   meant to be running. The state table and `BROKEN_STATES` disagree on that word deliberately, and that

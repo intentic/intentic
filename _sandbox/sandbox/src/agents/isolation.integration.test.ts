@@ -155,7 +155,7 @@ test("translating a worktree path out and back is the path it started as", () =>
 
 test("re-bound subtrees resolve to the main tree in both namespaces and are never translated", () => {
     // Translating these would send the daemon looking in a worktree that has no such file.
-    expect(inWorktree("/work/.intentic/artifacts/attachments/a.png", plan)).toBe("/work/.intentic/artifacts/attachments/a.png");
+    expect(inWorktree("/work/.intentic/records/artifacts/attachments/a.png", plan)).toBe("/work/.intentic/records/artifacts/attachments/a.png");
     expect(inWorktree("/work/_apps/web/node_modules/vue/index.js", plan)).toBe("/work/_apps/web/node_modules/vue/index.js");
     // A path that merely STARTS like one of them is still worktree content.
     expect(inWorktree("/work/.intentic-notes/x.md", plan)).toBe("/history/worktrees/abc/.intentic-notes/x.md");

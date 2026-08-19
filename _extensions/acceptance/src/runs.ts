@@ -15,7 +15,7 @@ import type { Story } from "./stories";
  * and is bound back in SHARED for isolated turns — so every agent in a run writes into the same tree the browser
  * reads, with nothing to land and no git noise. */
 
-export const RUNS_DIR = `${STATE_DIR}/artifacts/acceptance`;
+export const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
 
 /* How many runs deep anything that READS RESULTS goes. A bound on the walk, not on what can be tested: only the
  * newest runs carry news, and a workspace with hundreds of run directories must not spend a request per story to

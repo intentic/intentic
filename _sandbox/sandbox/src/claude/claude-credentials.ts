@@ -311,7 +311,7 @@ export interface ClaudeStore {
     readonly logger: Logger;
 }
 
-// A JSON file store: one <id>.json per account under <workspace>/.intentic/auth/claude/ (outside the three repos).
+// A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/claude/ (outside the three repos).
 export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
     const path = (id: string): string => join(dir, `${id}.json`);
     const lockPath = (id: string): string => join(dir, `${id}.refresh.lock`);

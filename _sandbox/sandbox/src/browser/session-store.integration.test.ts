@@ -20,9 +20,9 @@ import {
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-sess-"));
 
-test("sessionDir is the account's profile under .intentic/browser", () => {
+test("sessionDir is the account's profile under .intentic/local/browser", () => {
     const root = WORKSPACE_ROOT;
-    expect(sessionDir(root, "reddit")).toBe(join(root, ".intentic", "browser", "reddit"));
+    expect(sessionDir(root, "reddit")).toBe(join(root, ".intentic", "local", "browser", "reddit"));
 });
 
 test("hasSession flips on the connected marker; clearSession resets it", async () => {
@@ -65,7 +65,7 @@ test("accounts of the same site connect, and disconnect, independently", async (
 // sandbox's software security key with the cookies, or a removed account leaves a usable second factor behind.
 test("the passkey store sits beside the profile and is cleared with the session", async () => {
     const root = tempRoot();
-    expect(passkeyPath(root, "npmjs")).toBe(join(root, ".intentic", "browser", "npmjs.passkeys.json"));
+    expect(passkeyPath(root, "npmjs")).toBe(join(root, ".intentic", "local", "browser", "npmjs.passkeys.json"));
     await markConnected(root, "npmjs");
     await writeFile(passkeyPath(root, "npmjs"), JSON.stringify({ credentials: [] }));
     expect(existsSync(passkeyPath(root, "npmjs"))).toBe(true);

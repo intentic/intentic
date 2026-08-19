@@ -3,8 +3,8 @@ import { expect, test } from "vitest";
 import { stripAttachmentNote, withAttachmentNote } from "./attachment-note.js";
 
 const paths = [
-    `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/uuid-1/image.png`,
-    `${WORKSPACE_ROOT}/${STATE_DIR}/artifacts/attachments/uuid-2/notes.pdf`,
+    `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/uuid-1/image.png`,
+    `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/uuid-2/notes.pdf`,
 ];
 
 test("strip is the builder's inverse", () => {

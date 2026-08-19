@@ -37,9 +37,9 @@ import type { StateFile } from "./state-portability.js";
  *
  * `path` is workspace-root-relative, forward-slash — the space `workspaceChanged` paths arrive in. Matching is
  * by PREFIX, which lets one entry cover three shapes without a second matching rule:
- *   - an exact file      `.intentic/settings.json`
- *   - a directory        `.intentic/drafts/`     (one file per draft)
- *   - a name family      `.intentic/environment.custom.` (…Dockerfile and anything later named beside it)
+ *   - an exact file      `.intentic/config/settings.json`
+ *   - a directory        `.intentic/config/drafts/`     (one file per draft)
+ *   - a name family      `.intentic/config/environment.custom.` (…Dockerfile and anything later named beside it)
  * A directory entry keeps its trailing slash so it can never prefix-match a sibling file. Entries may NEST —
  * see stateFileFor, which resolves the longest match rather than the first. */
 export interface WorkspaceStateFile extends StateFile {
@@ -94,6 +94,26 @@ export interface WorkspaceStateFile extends StateFile {
      * hand-keeping a deny list that goes stale the day a store is added (which is how a 98 kB loop ledger and
      * whole third-party extension checkouts ended up ranking in code search). */
     readonly authored?: true;
+    /* WHETHER DESKTOP-SYNC COPIES THIS DOWN — the fifth question, and the one `portability` cannot answer even
+     * though it looks like it should.
+     *
+     * Portability asks whether a piece of state may RESTORE into a different sandbox. Backup asks whether it may
+     * be COPIED to the owner's own machine so the loss of this sandbox is not the loss of the work. Those read as
+     * the same question and are not: `members.json` is the clearest case, and its own entry argues the half that
+     * was already written down — an access list that TRAVELLED would let a source sandbox hand itself the
+     * target's ownership, which is why it may never be `carry`. None of that reasoning says the owner may not
+     * hold a copy of who could drive their own sandbox. Conflating the two is what made the sync ignore the state
+     * dir wholesale, so a sandbox that went away took every persona, skill, draft and transcript with it.
+     *
+     * SO IT DERIVES, and this flag exists only to carve out the entry where the derivation is wrong. The default
+     * (backedUp below) is `carry` plus `identity`: ordinary state and the small records that bind this sandbox to
+     * its owner. `derived` is excluded for size — it is the caches, the checkouts and the browser profiles, all
+     * rebuildable and all bulk — and `secret` is excluded because a credential's blast radius is the number of
+     * places it exists, and a laptop is one more place.
+     *
+     * `false` is the only value: an entry either accepts the derived answer or opts out of the copy, and there is
+     * no entry that needs opting IN against its class. Anything opting out says why on the entry. */
+    readonly backup?: false;
     /* WHO BUILDS THIS TREE, when it is not the daemon — an extension, pnpm, another process entirely. Declared
      * on the entry because the coverage guard's second direction ("every declared entry is built somewhere in
      * the daemon") is only meaningful for entries the daemon owns: one it can never build must say who does, or
@@ -134,7 +154,7 @@ const STATE_FILES = [
      * credential — Komodo's api key beside its api secret, which its own connector card calls "like a database
      * user" — is echoed, and therefore lands in the diff exactly as a database username would. */
     {
-        path: ".intentic/capabilities.json",
+        path: ".intentic/config/capabilities.json",
         invalidates: ["capabilities", "environment", "panels", "manifests"],
         portability: "carry",
         versioned: true,
@@ -145,14 +165,14 @@ const STATE_FILES = [
      * it travels because a decision about what this workspace does NOT need is as much the owner's as the
      * connections themselves — an export that dropped it would greet them on the target with the same
      * suggestions they had already dismissed. Holds no credential: it is a card name and a file path. */
-    { path: ".intentic/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry", versioned: true },
+    { path: ".intentic/config/capability-dismissals.json", invalidates: ["capabilities"], portability: "carry", versioned: true },
 
     /* The secret use ledger — one row per moment the agent's exits spent a stored secret (a `{{secret:name}}`
      * reference resolved into a shell command, a value typed into a browser field), joined onto the secrets
      * inventory as each entry's "last used" (sandbox's secrets/secret-uses.ts). Holds names and destinations,
      * never values — which is why it may `carry`: like the automations' run ledger, a use history is about the
      * secrets, and an export that dropped it would arrive claiming none had ever been touched. */
-    { path: ".intentic/secret-uses.json", invalidates: ["secrets"], portability: "carry" },
+    { path: ".intentic/records/secret-uses.json", invalidates: ["secrets"], portability: "carry" },
 
     /* The named personas this sandbox shows the outside world — which connected accounts each one speaks for,
      * what a session wearing it may do, where it works (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
@@ -166,7 +186,7 @@ const STATE_FILES = [
      * argument it was carved out on — a card is configuration, holds no secret, and belongs in review — is the
      * one `versioned` now generalises to the rest of the config slice (personas/personas-store.ts argues it at
      * length, and its reasoning is why the flag exists rather than a second hand-kept list). */
-    { path: ".intentic/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
+    { path: ".intentic/config/personas.json", invalidates: ["personas", "capabilities", "manifests"], portability: "carry", versioned: true },
 
     /* The overlay Dockerfile, four files that a single `.intentic/environment.` prefix used to cover. They are
      * split here because they answer PORTABILITY differently while answering invalidation identically, and the
@@ -178,22 +198,22 @@ const STATE_FILES = [
      *     not be on (see composeEnvironment's baseImageOf);
      *   - the proposal and the per-tool drafts under environment.d/ are the agent's pending requests, which the
      *     owner has not answered yet; they travel so the question survives the move. */
-    { path: ".intentic/environment.custom.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
-    { path: ".intentic/environment.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
-    { path: ".intentic/environment.d/", invalidates: ["environment"], portability: "carry", versioned: true },
+    { path: ".intentic/config/environment.custom.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
+    { path: ".intentic/config/environment.Dockerfile", invalidates: ["environment"], portability: "carry", versioned: true },
+    { path: ".intentic/config/environment.d/", invalidates: ["environment"], portability: "carry", versioned: true },
     {
-        path: ".intentic/environment.approved.Dockerfile",
+        path: ".intentic/local/environment.approved.Dockerfile",
         invalidates: ["environment"],
         portability: "derived",
         note: "The target composes its own overlay on first boot; rebuild it there to install the tools it names.",
     },
 
-    { path: ".intentic/settings.json", invalidates: ["settings", "manifests"], portability: "carry", versioned: true },
+    { path: ".intentic/config/settings.json", invalidates: ["settings", "manifests"], portability: "carry", versioned: true },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
     // that machine never did.
     {
-        path: ".intentic/rule-firings.json",
+        path: ".intentic/local/rule-firings.json",
         invalidates: ["rule-firings"],
         portability: "derived",
         note: "Stamps of when each rule last did something; the new sandbox starts its own record.",
@@ -213,13 +233,13 @@ const STATE_FILES = [
      * `postedAt`/`postedUrl` stamped at the end), and it is KEPT afterwards rather than consumed — so tracking
      * yields a durable record instead of the add/delete churn a queue would produce. Nothing in a draft is a
      * credential: it is a platform, a target URL and the body itself, all of it bound for publication anyway. */
-    { path: ".intentic/drafts/", invalidates: ["drafts"], portability: "carry", versioned: true, authored: true },
+    { path: ".intentic/config/drafts/", invalidates: ["drafts"], portability: "carry", versioned: true, authored: true },
     // ---- declared by the extension that renders them (contributes.files), not here ----
     // The path is the DAEMON's (automations-store writes both), the query keys are the intentic.automations
     // extension's. It declares them in its own manifest and the browser unions the two lists, so uninstalling
     // the extension takes its invalidations with it instead of leaving a rule for a view that no longer exists.
     {
-        path: ".intentic/automations.json",
+        path: ".intentic/config/automations.json",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
         portability: "carry",
@@ -239,13 +259,13 @@ const STATE_FILES = [
      * rather than inherited, because the row renders its run history from this file now: without its own entry
      * a completed run would stop refreshing the view the moment it stopped living in automations.json. */
     {
-        path: ".intentic/automation-runs.json",
+        path: ".intentic/records/automation-runs.json",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automations` is its query key, not core's.",
         portability: "carry",
     },
     {
-        path: ".intentic/approvals/",
+        path: ".intentic/records/approvals/",
         invalidates: [],
         why: "Declared by the intentic.automations extension's contributes.files — `automation-approvals` is its query key, not core's.",
         portability: "carry",
@@ -256,7 +276,7 @@ const STATE_FILES = [
      * evidence about this workspace, so `carry` like the run ledgers: an export that dropped it would arrive
      * claiming no chore had ever been checked. */
     {
-        path: ".intentic/chores/",
+        path: ".intentic/records/chores/",
         invalidates: [],
         why: "Declared by the intentic.maintenance extension's contributes.files — `maintenance-report`/`maintenance-runs` are its query keys, not core's.",
         portability: "carry",
@@ -266,7 +286,7 @@ const STATE_FILES = [
      * these are draft READMEs, drafts-shaped in every way that matters, and "find the staged page about X" is
      * as ordinary a search as finding a post draft. */
     {
-        path: ".intentic/docs/",
+        path: ".intentic/config/docs/",
         invalidates: [],
         why: "Declared by the intentic.documentation extension's contributes.files — `documentation`/`documentation-runs` are its query keys, not core's.",
         portability: "carry",
@@ -280,17 +300,17 @@ const STATE_FILES = [
      * run surfaces have: the scheduler writes the ledger several times per step and nothing polls for it.
      * The runs file invalidates `workflows` too, because GET /workflows embeds each design's runs
      * (WorkflowSummary) — a settled step changes that answer as surely as an edited design does. */
-    { path: ".intentic/workflows.json", invalidates: ["workflows"], portability: "carry", versioned: true },
-    { path: ".intentic/workflow-runs.json", invalidates: ["workflows", "workflow-runs"], portability: "carry" },
+    { path: ".intentic/config/workflows.json", invalidates: ["workflows"], portability: "carry", versioned: true },
+    { path: ".intentic/records/workflow-runs.json", invalidates: ["workflows", "workflow-runs"], portability: "carry" },
     /* The SAVED loops, which are a manifest and so the opposite of the ledger below them: a handful of entries
      * a person authors, read by two surfaces at once — the workflows page that owns them, and every chat
      * composer's loop picker. Those two are in different windows as often as not (a popped-out chat is its own
      * window), so an edit made on the page has to reach a picker nobody is going to think to reopen. A CORE key
      * rather than the workflows extension's, for the reason the workflow designs beside it are: the composer
      * lists saved loops whether or not that extension is switched on. */
-    { path: ".intentic/loop-designs.json", invalidates: ["loop-designs"], portability: "carry", versioned: true },
+    { path: ".intentic/config/loop-designs.json", invalidates: ["loop-designs"], portability: "carry", versioned: true },
     {
-        path: ".intentic/loops.json",
+        path: ".intentic/records/loops.json",
         invalidates: [],
         why: "Ralph loops and their iteration history. Nothing observes it: where a RUNNING loop stands rides on the fleet roster (AgentSummary.loop), which the /events stream already pushes about once a second, and a second source invalidating on this file could only ever disagree with the card beside it. The iteration list of an ENDED loop is an on-demand read — nothing renders it until someone opens it (web's useLoops, which holds no query for exactly this reason).",
         portability: "carry",
@@ -303,13 +323,13 @@ const STATE_FILES = [
      * query uses would put the drift this table exists to remove straight back into it. Each says which
      * constraint would have to move first, so the next reader doesn't re-derive it. */
     {
-        path: ".intentic/webchat-installs.json",
+        path: ".intentic/records/webchat-installs.json",
         invalidates: [],
         why: "Which origins have loaded a Doorbell's widget, written on a 30s flush timer while a customer's site serves page views. The install panel that renders it fetches on open and polls itself while it is on screen, which is the whole window in which the answer changes for anyone. Pushing instead would bill every connected browser a refetch per flush, for a panel almost nobody has open.",
         portability: "carry",
     },
     {
-        path: ".intentic/thread-sessions.json",
+        path: ".intentic/records/thread-sessions.json",
         invalidates: [],
         why: "Thread bookkeeping (an inbound thread — a Doorbell visitor, a Discord or Slack channel — → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message — the request storm this table's own note warns about — to refresh nothing it can see.",
         portability: "carry",
@@ -336,7 +356,7 @@ const STATE_FILES = [
      * that carries can never show one. "Re-enter the credentials" is now the vault's instruction to give, and the
      * vault is under `.intentic/auth/` — which is skipped, and says so there. */
     {
-        path: ".intentic/extension-settings.json",
+        path: ".intentic/config/extension-settings.json",
         invalidates: [],
         why: "Held in a module-level shallowRef store per extension (web's extensionSettingsStore) with no query observer, and deliberately so: api.settings.get must answer SYNCHRONOUSLY from an extension's first activate() line, and the store outlives every component scope. A module-level QueryObserver is the one shape that would make invalidation refetch, and this app already ruled it out — it detaches on the queryClient.clear() at logout (see useSandbox's sandbox-list mirror). So a remote member's setting edit reaches this browser on its next load, not live.",
         portability: "carry",
@@ -347,7 +367,7 @@ const STATE_FILES = [
      * file) shows up here live. It does not re-run the host: activating or retiring an extension is the loader's
      * reconcile, which the tab's own toggle triggers, so a remote flip takes effect on this browser's next load. */
     {
-        path: ".intentic/extension-enablement.json",
+        path: ".intentic/config/extension-enablement.json",
         invalidates: ["extensions"],
         portability: "carry",
         versioned: true,
@@ -371,18 +391,18 @@ const STATE_FILES = [
      * Not a ledger and not bulk: a handful of small authored files per extension, written when someone edits them.
      * The daemon restarts the backend host on a change here, so an edit is already a consequential event — this
      * makes it a legible one. */
-    { path: ".intentic/workspace-extensions/", invalidates: ["extensions"], portability: "carry", versioned: true, authored: true },
+    { path: ".intentic/config/workspace-extensions/", invalidates: ["extensions"], portability: "carry", versioned: true, authored: true },
     /* What the registry comparison found per installed extension (update available / advisory / post-update
      * health), written by the periodic check and by the update/revert transactions — pushed to the tab because
      * an advisory that auto-disabled something must not wait for a reload to be seen. */
-    { path: ".intentic/extension-updates.json", invalidates: ["extensions"], portability: "carry" },
+    { path: ".intentic/records/extension-updates.json", invalidates: ["extensions"], portability: "carry" },
     /* The owner's per-extension update posture (notify / agent / auto, and the advisory opt-out). Carried:
      * it is a decision about the extension, not about this machine. */
-    { path: ".intentic/extension-update-policy.json", invalidates: ["extensions"], portability: "carry", versioned: true },
+    { path: ".intentic/config/extension-update-policy.json", invalidates: ["extensions"], portability: "carry", versioned: true },
     /* Carried, because the evidence is about the extension rather than about the machine: an export that dropped
      * it would arrive claiming every permission was unused, which is worse than arriving with no figures at all. */
     {
-        path: ".intentic/extension-usage.json",
+        path: ".intentic/records/extension-usage.json",
         invalidates: [],
         why: "Which of the routes each extension DECLARED it has actually called — the evidence behind the permissions list on its row. The one entry here whose empty set is a RATE decision rather than an architectural one: every browser with the app open reports its batch on a timer, so wiring this to the `extensions` query would refetch the whole list every few seconds for a figure nobody is watching change. The tab reads it when it loads, which is when anyone is reading it.",
         portability: "carry",
@@ -399,7 +419,7 @@ const STATE_FILES = [
      * let a source sandbox hand itself the target's ownership. Widening the guard for this single entry is the
      * worse trade — it protects every `identity` entry, and most of those ARE credentials. */
     {
-        path: ".intentic/members.json",
+        path: ".intentic/identity/members.json",
         invalidates: [],
         why: "Not this view's source at all: SandboxAccess renders the PLATFORM's invite records (apiClient.invite.list), and this file is the daemon's ENFORCED copy — written first so a grant the enforcer never got is never recorded, then never read back. A change here means the two disagreed, which the write order makes fail-closed rather than stale.",
         portability: "identity",
@@ -419,7 +439,7 @@ const STATE_FILES = [
      * therefore the only place the owner is told what to re-enter: the manifests that name those connections
      * travel, and would otherwise arrive looking complete. */
     {
-        path: ".intentic/auth/",
+        path: ".intentic/secrets/auth/",
         invalidates: [],
         why: "AI-provider credentials and runtime homes, plus the capability and extension-settings secret vaults; each account is rendered through owner-gated provider routes.",
         portability: "secret",
@@ -430,25 +450,25 @@ const STATE_FILES = [
      * The memory notes under it (`projects/<slug>/memory/**`) ARE user-facing and the /memory view polls them
      * every 30s, which is the one place in this table where a poll survives a real change feed being available.
      * It stays a poll deliberately: the watcher's exclusion is a DESCENT filter, so reaching those notes means
-     * letting it walk `.intentic/sessions/claude` → `projects` → every project slug. Measured on the live
+     * letting it walk `.intentic/records/sessions/claude` → `projects` → every project slug. Measured on the live
      * workspace that is +119 watched directories against ~593 today (a fifth more), with 314 continuously-
      * rewritten transcripts inside the newly-watched set, to make ONE memory directory live. Notes change at
      * agent-turn cadence, so the poll costs a request a minute and the alternative costs a permanent 20% on the
      * watcher. */
     {
-        path: ".intentic/sessions/claude/",
+        path: ".intentic/records/sessions/claude/",
         invalidates: [],
         why: "Agent session transcripts — see the note above on why the memory notes under it stay polled.",
         portability: "carry",
     },
     {
-        path: ".intentic/artifacts/",
+        path: ".intentic/records/artifacts/",
         invalidates: [],
         why: "Durable outputs owned by conversations and extension runs: attachments, browser captures, generated images, acceptance reports, workflow step reports, voice transcripts, and loop ledgers.",
         portability: "carry",
     },
     {
-        path: ".intentic/cache/",
+        path: ".intentic/local/cache/",
         invalidates: [],
         why: "Rebuildable indexes and caches — the iq index and its vector sidecar, the whisper model; ignored by the watcher and recreated from carried workspace content.",
         portability: "derived",
@@ -459,14 +479,14 @@ const STATE_FILES = [
      * hour-tokens, gateway discovery state: all of it either expires or re-establishes itself, and classifying
      * the root once is what keeps a token an extension caches tomorrow out of bundles without a second edit. */
     {
-        path: ".intentic/runtime/",
+        path: ".intentic/local/runtime/",
         invalidates: [],
         why: "Extension runtime scratch (watermarks, cached short-lived tokens); nothing renders it and gateways re-derive it.",
         portability: "derived",
         outsideWriter: "extensions, through extensionRuntimeDir below",
     },
     {
-        path: ".intentic/tmp/",
+        path: ".intentic/local/tmp/",
         invalidates: [],
         why: "Scratch that agents and tools leave behind (build logs, demo checkouts); nothing reads it after the turn that wrote it. The state janitor empties it at boot.",
         portability: "derived",
@@ -477,59 +497,68 @@ const STATE_FILES = [
      * sources a fresh install rebuilds, which an export must not ship (it reached 1.3 GB on the workspace this
      * entry was written against). */
     {
-        path: ".intentic/.pnpm-store/",
+        path: ".intentic/local/.pnpm-store/",
         invalidates: [],
         why: "pnpm's content-addressable store, auto-created by installs run from under .intentic; the next install rebuilds it.",
         portability: "derived",
         outsideWriter: "pnpm itself, when an install runs from under .intentic",
     },
     {
-        path: ".intentic/newest-run.json",
+        path: ".intentic/local/newest-run.json",
         invalidates: [],
         why: "The newest daemon version that ever ran this workspace (store/newest-run.ts) — a downgrade tripwire, about THIS sandbox the way rule-firings is.",
         portability: "derived",
         note: "The target stamps its own daemon version on first boot.",
     },
     {
-        path: ".intentic/verify.json",
+        path: ".intentic/records/verify.json",
         invalidates: [],
         why: "The dependency verifier's verdict memory; nothing renders it directly — outcomes reach the owner as activity entries and workspace events.",
         portability: "carry",
     },
     {
-        path: ".intentic/verify/",
+        path: ".intentic/local/verify/",
         invalidates: [],
         why: "A running check's wrapper artifacts (log + exit status), read once by the daemon when the panel finishes.",
         portability: "derived",
     },
     {
-        path: ".intentic/ci.json",
+        path: ".intentic/secrets/ci.json",
         invalidates: [],
         why: "Webhook secret + conclusion memory; the Pipelines view reads it through /ci/runs, not off disk.",
         portability: "secret",
         note: "Re-add the CI webhook on the Pipelines view — its secret is per-sandbox.",
     },
+    /* THE ONE ENTRY THAT OPTS OUT OF THE BACKUP, and the reason the flag exists rather than the rule simply
+     * reading `portability !== "derived"`. It is `identity` like the three below it, so the derived answer would
+     * copy it down with them — but where those are a name, a workspace id and a role per row, these are tokens
+     * that AUTHENTICATE against this sandbox from outside it. Hashed, which lowers the stakes and does not
+     * settle them: the point of a backup is to be readable after the thing it backs up is gone, and a file whose
+     * only purpose is to admit callers has no business sitting in one. Nothing is lost by leaving it out — the
+     * entry's own note already says the tokens must be re-minted on any new sandbox, so a copy could never have
+     * been restored anyway. */
     {
-        path: ".intentic/control-tokens.json",
+        path: ".intentic/identity/control-tokens.json",
         invalidates: [],
         why: "Hashed control tokens (the ACP editor bridge, and anything else driving this sandbox from outside), listed on demand by the owner.",
         portability: "identity",
+        backup: false,
         note: "Mint fresh control tokens — the old ones authenticate against the source sandbox.",
     },
     {
-        path: ".intentic/owner.json",
+        path: ".intentic/identity/owner.json",
         invalidates: [],
         why: "Bound once on first use; a change here means the sandbox was re-owned, which re-authenticates anyway.",
         portability: "identity",
     },
     {
-        path: ".intentic/workspace.json",
+        path: ".intentic/identity/workspace.json",
         invalidates: [],
         why: "The workspace identity, read from the /events hello frame rather than as a file.",
         portability: "identity",
     },
     {
-        path: ".intentic/templates.json",
+        path: ".intentic/config/templates.json",
         invalidates: [],
         why: "Scaffold templates, read when the scaffold dialog opens.",
         portability: "carry",
@@ -540,20 +569,20 @@ const STATE_FILES = [
      * constantly and versions against its own build, so carrying them ships bulk that the target's Chromium may
      * refuse anyway. The note is what keeps the loss visible instead of silent. */
     {
-        path: ".intentic/browser/",
+        path: ".intentic/local/browser/",
         invalidates: [],
         why: "Browser-login profiles: Chromium rewrites these constantly. Descent-ignored by the watcher outright.",
         portability: "derived",
         note: "Log the agent's browser back into any site it needs — profiles do not travel.",
     },
     {
-        path: ".intentic/extensions/",
+        path: ".intentic/local/extensions/",
         invalidates: [],
         why: "Extension checkouts — whole git clones. The `extensions` query is driven by the capability manifest above, not by their contents.",
         portability: "derived",
         note: "Extensions re-clone from the capability manifest on the target's next reconcile.",
     },
-    { path: ".intentic/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
+    { path: ".intentic/records/plugins/", invalidates: [], why: "Agent plugin dirs, read by the SDK's loader each turn.", portability: "carry" },
     /* THE SKILLS THE OWNER WROTE THEMSELVES, one directory per skill — the source of truth the reconciler copies
      * into `.agents/skills` for the ones currently switched on (settings.json's `skills` list). It is here rather
      * than in the loaded folder for the reason the plugin dirs are: that tree holds only what is currently ON,
@@ -562,7 +591,7 @@ const STATE_FILES = [
      * `versioned`, like the rest of the config slice: a skill changes how the agent behaves, so it earns a diff
      * in the Changes review and a line in `git log` the same way a rule or a persona does. `carry` for the same
      * reason — it is text the owner wrote, with no credential in it and nothing about this machine. */
-    { path: ".intentic/skills/", invalidates: ["skills"], portability: "carry", versioned: true },
+    { path: ".intentic/config/skills/", invalidates: ["skills"], portability: "carry", versioned: true },
     /* ONE FOLDER PER PERSONA — what a session wearing that card is told, and the skills and tools only it gets.
      * Laid out as a Claude Code plugin (`.claude-plugin/plugin.json`, `skills/`, `agents/`, `commands/`,
      * `hooks/`, `.mcp.json`) so the runtime's own loader reads it and this daemon parses none of it, exactly as
@@ -576,7 +605,7 @@ const STATE_FILES = [
      * `versioned` and `carry` for the same reasons the card and the skills above are: it changes how the agent
      * behaves, it holds no credential, and it belongs in a pull request — which is also what makes it
      * searchable, since every versioned entry already is. */
-    { path: ".intentic/personas/", invalidates: ["personas"], portability: "carry", versioned: true },
+    { path: ".intentic/config/personas/", invalidates: ["personas"], portability: "carry", versioned: true },
 ] as const satisfies readonly WorkspaceStateFile[];
 
 export const WORKSPACE_STATE_FILES: readonly WorkspaceStateFile[] = STATE_FILES;
@@ -608,6 +637,112 @@ export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.f
     (file) => file.path,
 );
 
+/* WHAT KIND OF THING THIS IS, in the one word a person browsing the state dir would use — and the axis the
+ * DIRECTORY LAYOUT is built on, so the folder you open explains itself before you read a table about it.
+ *
+ * It is DERIVED, and that is the whole reason it can be trusted. Forty-nine entries already answer three
+ * questions between them (is it reviewed, is it authored, does it travel), and those answers turn out to nest
+ * perfectly rather than cut across each other: every `versioned` entry is `carry`, every `authored` entry is
+ * `carry`, and nothing is both a credential and a thing a person edits. A nested set of answers is exactly what
+ * a directory tree can express, which is why five folders can carry rules that used to take five hand-kept path
+ * lists — the git exclude, the search allow-list, the sync ignore, the watcher skip, the export bundle.
+ *
+ * Declaring the group on each entry instead would have made it a fourth independent fact to keep in step with
+ * the other three, which is the failure this file exists to argue against. Adding a store still means answering
+ * the same three questions it always did; the group, the folder it belongs in, and every rule that reads them
+ * follow with no further edit. */
+export type StateGroup =
+    /* Reviewed and reviewable: settings, personas, skills, drafts, staged docs, the environment overlay. Tracked
+     * by the root repo, searchable, backed up, and carried into a new sandbox. Two of its members (drafts, staged
+     * docs) are authored content rather than configuration, and the folder is still called `config` — the word
+     * that makes seventeen of the nineteen instantly clear beats one that makes all nineteen vague. */
+    | "config"
+    /* What HAPPENED here — run ledgers, approvals, chores, transcripts, artifacts. Machine-written, so untracked
+     * and unsearchable, but the owner's history all the same: backed up and carried. */
+    | "records"
+    /* Rebuildable from something that does travel: caches, indexes, extension checkouts, scratch, the composed
+     * overlay, browser profiles. Neither backed up nor carried, and the janitor may delete it. `local` in the
+     * sense every other tool uses it — belongs to this machine, is not shared, and losing it costs nothing. */
+    | "local"
+    /* Who owns this sandbox and who may drive it. Backed up so the owner keeps a copy of their own access, never
+     * carried — a list that travelled would let a source sandbox claim the target. */
+    | "identity"
+    /* Credentials. Never backed up; carried only when the owner opts in at export and the bundle records it. */
+    | "secrets";
+
+/* THE FOLDER EACH GROUP LIVES IN.
+ *
+ * The group name IS the directory name — one vocabulary, not a name and a translation of it. That is what lets
+ * the guard in workspace-state.test.ts check the whole layout with one rule ("every entry sits under its own
+ * group's folder") rather than trusting forty-nine literals to have been typed correctly, and it is why renaming
+ * a folder is an edit here plus the literals the compiler then points at, with nothing able to half-move.
+ *
+ * WHICH RULES THE LAYOUT ACTUALLY CARRIES, stated plainly because it is fewer than the tidy version of this
+ * story. The sync backup collapses to two folder names (BACKUP_IGNORES) and workspace search to one, because
+ * "may the owner keep this" and "is this authored text" are exactly what the grouping sorts on. Two others do
+ * NOT collapse, and both are worth knowing about before someone tries:
+ *   - THE GIT EXCLUDE tracks `versioned`, which is eighteen of `config`'s nineteen. The exception is the staged
+ *     docs tree: searchable, deliberately untracked (publishing copies those pages into the repo, so tracking
+ *     the staging copy too would double every one of them). A `config/` prefix would quietly start tracking it.
+ *   - THE WATCHER skips what churns, which is most of `local` but not all of it: the composed overlay and the
+ *     rule-firing stamps are `derived` and therefore `local`, and both still feed a view. A `local/` prefix
+ *     would stop the environment page refreshing when the overlay is recomposed.
+ * Both stay derived from the flags instead, which costs a longer generated list and no correctness. The folders
+ * are the layout; the flags are still the authority. */
+export const STATE_GROUP_DIR: Readonly<Record<StateGroup, string>> = {
+    config: `${STATE_DIR}/config`,
+    records: `${STATE_DIR}/records`,
+    local: `${STATE_DIR}/local`,
+    identity: `${STATE_DIR}/identity`,
+    secrets: `${STATE_DIR}/secrets`,
+};
+
+// Every group, derived off the folder map so the two can never disagree about how many there are. Declaration
+// order is the order a person should read them in: what you wrote, what happened, what can be thrown away, who
+// owns this, and the keys.
+export const STATE_GROUPS = Object.keys(STATE_GROUP_DIR) as readonly StateGroup[];
+
+/* The group each entry falls in. Ordered most-specific-first: a credential is a credential whatever else it is,
+ * and only once those are out of the way does "did a person write this" separate the two `carry` groups. */
+export const stateGroupOf = (file: WorkspaceStateFile): StateGroup => {
+    switch (file.portability) {
+        case "secret":
+            return "secrets";
+        case "identity":
+            return "identity";
+        case "derived":
+            return "local";
+        case "carry":
+            return file.versioned === true || file.authored === true ? "config" : "records";
+    }
+};
+
+// The entries of one group, workspace-root-relative and in declaration order — what each rule that used to keep
+// its own path list now asks for instead.
+export const stateGroupPaths = (group: StateGroup): readonly string[] =>
+    WORKSPACE_STATE_FILES.filter((file) => stateGroupOf(file) === group).map((file) => file.path);
+
+/* THE SLICE DESKTOP-SYNC COPIES DOWN — ordinary state and the records that bind this sandbox to its owner,
+ * minus anything that opted out (see `backup` on the interface).
+ *
+ * The sync used to ignore `.intentic` WHOLE, which is the same conflation the `backup` flag exists to undo: the
+ * dir holds credentials, so the dir was excluded, so a sandbox going away also took every persona, skill,
+ * automation, draft and transcript the owner had. This is the list that makes the owner's machine an actual
+ * backup instead of a copy of the source tree only.
+ *
+ * It is deliberately NOT the same as the export bundle. A bundle asks what may be reconstituted somewhere else;
+ * this asks what the owner may keep. `ownership` is the entries where those differ, and it is in here. */
+export const BACKED_UP_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter(
+    (file) => file.backup !== false && (file.portability === "carry" || file.portability === "identity"),
+).map((file) => file.path);
+
+/* Its complement, which is what a sync ignore list actually needs: everything under the state dir that must NOT
+ * come down. Derived from the same predicate rather than listed, so a store added tomorrow is excluded until its
+ * class says otherwise — the same default-deny the search floor and the portability classes are built on. */
+export const UNBACKED_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => !BACKED_UP_STATE_PATHS.includes(file.path)).map(
+    (file) => file.path,
+);
+
 /* THE ONE WAY AN EXTENSION NAMES ITS SCRATCH HOME — `.intentic/runtime/extensions/<id>`, workspace-relative
  * and forward-slash so the browser bundle can hold it too; callers join it onto whatever root is in force.
  *
@@ -616,7 +751,8 @@ export const SEARCHABLE_STATE_PATHS: readonly string[] = WORKSPACE_STATE_FILES.f
  * classified it. An extension that composes through this helper cannot land outside its own directory, so the
  * runtime/ entry's `derived` covers whatever it writes tomorrow. Extension ids are validated slugs already;
  * the replace is defence in depth against a path ever being built from something else. */
-export const extensionRuntimeDir = (extension: string): string => `${STATE_DIR}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
+export const extensionRuntimeDir = (extension: string): string =>
+    `${STATE_GROUP_DIR.local}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
 
 /* The manifests whose problems the unreadable-manifest notice SHOWS — the handful a person hand-edits — and the
  * one fact that decides it is already in the table above.
@@ -651,9 +787,24 @@ export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFES
  * quarantine doing half its job. Secret and artifact roots stay until an owner removes them by hand: deleting
  * content is not the janitor's call, only deleting what the class already says is disposable. */
 export const RETIRED_WORKSPACE_STATE_DIRS = {
-    secret: ["claude", "codex", "kimi", "opencode", "cliproxy"],
-    derived: ["iq", "extensions-runtime", "whisper", "browser/output"],
-    artifacts: ["attachments", "acceptance", "loops", "workflow-runs", "transcripts"],
+    /* The flat spellings, from before the state dir was grouped into its five folders. Every entry in the table
+     * used to sit directly under `.intentic/`, and a sandbox that predates the move still has those directories
+     * on disk with real contents in them. They are quarantined rather than migrated — the workspace rule is fresh
+     * state and no compatibility layers — but quarantine is exactly what they need, because the alternative is
+     * worse than leaving them: `auth` at the old spelling is a real credential store that the classifier no
+     * longer recognises, so without these names it would read as ordinary workspace content and be indexed by
+     * search, carried by an export and copied down by the backup. Being listed here keeps the old copy as
+     * untouchable as the new one, and lets the janitor delete the rebuildable half. */
+    secret: ["claude", "codex", "kimi", "opencode", "cliproxy", "auth", "ci.json"],
+    /* The ownership records at their OLD flat spelling, and a bucket of their own rather than a few more names
+     * in `secret` — because the two classes differ on exactly the thing that matters for a leftover. A `secret`
+     * travels when the owner opts in at export; an `identity` never travels at all, since a list of who may
+     * drive this sandbox arriving in another one is how a source hands itself the target's ownership. Filed under
+     * `secret` these would have become carryable by ticking a box, which is the one outcome their live entries
+     * are written to prevent. */
+    identity: ["owner.json", "members.json", "workspace.json", "control-tokens.json"],
+    derived: ["iq", "extensions-runtime", "whisper", "browser/output", "browser", "cache", "runtime", "tmp", ".pnpm-store", "extensions", "verify"],
+    artifacts: ["attachments", "acceptance", "loops", "workflow-runs", "transcripts", "artifacts", "sessions"],
 } as const;
 
 /* THE DAEMON'S OWN CONTROL PLANE — the entries directly under the workspace root's `.intentic/` that the file
@@ -668,16 +819,26 @@ export const RETIRED_WORKSPACE_STATE_DIRS = {
  *
  * Naming these to the browser gives nothing away that the tree did not already publish — it listed them, sizes
  * and all. What stays behind the guard is the only thing that ever mattered: the bytes. */
+/* GROUP-RELATIVE NOW, and the one rule the regrouping did NOT simplify — worth saying because every other rule
+ * over this tree collapsed to a prefix and this one could not. What the file API refuses to open cuts ACROSS the
+ * groups: the capability manifest is `config`, the transcripts are `records`, the browser profiles are `local`,
+ * and all of `identity` and `secrets` is in. That is not an accident of the grouping, it is a different question
+ * — "would showing the bytes hand someone something" rather than "what kind of thing is this" — so it keeps an
+ * explicit list, just one that now names the folder each entry lives in. */
 const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
-    "owner.json",
-    "members.json",
-    "capabilities.json",
-    "ci.json",
+    "identity/owner.json",
+    "identity/members.json",
+    "identity/control-tokens.json",
+    "config/capabilities.json",
+    "secrets/ci.json",
+    "secrets/auth",
+    "records/sessions",
+    "local/browser",
+    /* The provider CLI's own home, which this table does not declare and so has no group to move into — it is
+     * written by the agent's runtime rather than by any daemon store. It stays at the state dir's root, and the
+     * two-segment match below still reaches it because a bare name joins to itself. Locked for the reason the
+     * credential entries are: it holds a live session for whatever the agent is signed into. */
     "claude.json",
-    "auth",
-    "sessions",
-    "browser",
-    ...RETIRED_WORKSPACE_STATE_DIRS.secret,
 ]);
 
 /* Whether a workspace-root-relative path lands in that control plane — and so is shown locked rather than
@@ -694,7 +855,18 @@ export const isLockedWorkspacePath = (relPath: string): boolean => {
     if (segments[0] === ".git") {
         return true;
     }
-    return segments.length >= 2 && segments[0] === STATE_DIR && LOCKED_STATE_ENTRIES.has(segments[1] ?? "");
+    if (segments[0] !== STATE_DIR) {
+        return false;
+    }
+    /* Two shapes, because two layouts exist on disk. A current entry is `<group>/<name>`; a leftover from before
+     * the regrouping is a bare name directly under the state dir, and the quarantine record is what still knows
+     * those are credentials. Both are locked — a stale `auth/` full of real tokens is no safer to open than the
+     * live one, and the whole point of quarantining the old spellings was that nothing downstream reclassifies
+     * them as ordinary content. */
+    return (
+        LOCKED_STATE_ENTRIES.has(segments.slice(1, 3).join("/")) ||
+        (segments.length >= 2 && RETIRED_WORKSPACE_STATE_DIRS.secret.includes(segments[1] as never))
+    );
 };
 
 /* THE LOCKED ENTRIES THE ROOT REPO TRACKS — refused by the file API, and diffable anyway.

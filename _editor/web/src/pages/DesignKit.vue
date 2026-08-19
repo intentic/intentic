@@ -122,8 +122,12 @@ const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
     { slug: `work`, name: `work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
 ];
+/* BOTH SESSIONS ON BOTH ROWS, because a pairing now runs two: the workspace sync and the one-way mirror that
+ * carries the sandbox's own state down. The healthy row states its backup explicitly rather than omitting it —
+ * an omitted one reads as "not backed up" and would draw a warning on the sample whose whole job is to show
+ * what a well pairing looks like, which is how a fixture starts lying about the component it demonstrates. */
 const KIT_PAIRINGS: readonly MachineFolderRow[] = [
-    { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching` },
+    { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
     { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
 ];
 /* SEVERAL PORTS, NOT ONE, because one is the case that never went wrong. A sandbox routinely serves three or

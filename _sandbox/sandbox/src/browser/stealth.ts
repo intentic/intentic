@@ -27,7 +27,7 @@ export const STEALTH_INIT = `(() => {
 })();
 `;
 
-const stealthScriptPath = (root: string): string => statePath(root, ".intentic/browser/", "stealth.js");
+const stealthScriptPath = (root: string): string => statePath(root, ".intentic/local/browser/", "stealth.js");
 
 // Write the stealth script to disk (idempotent) so @playwright/mcp can load it via --init-script; returns the path.
 export const ensureStealthScript = async (root: string): Promise<string> => {

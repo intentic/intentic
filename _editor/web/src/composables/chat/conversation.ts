@@ -50,7 +50,7 @@ import { mentionPaths } from "./useMentions";
 export interface PendingAttachment {
     readonly id: string;
     readonly name: string;
-    // Workspace-relative destination: .intentic/artifacts/attachments/<uuid>/<name>.
+    // Workspace-relative destination: .intentic/records/artifacts/attachments/<uuid>/<name>.
     readonly path: string;
     // Object URL for image thumbnails; revoked on remove, handed to the sent message on submit.
     readonly previewUrl?: string;

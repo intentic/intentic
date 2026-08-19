@@ -34,7 +34,7 @@ import { useDrafts } from "./useDrafts";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
- * file per draft into .intentic/drafts/ (taught by the daemon's drafts skill); this page is the owner's
+ * file per draft into .intentic/config/drafts/ (taught by the daemon's drafts skill); this page is the owner's
  * approve / edit / reschedule / reject side. There is no create dialog here — drafts originate with the agent,
  * never the UI.
  *

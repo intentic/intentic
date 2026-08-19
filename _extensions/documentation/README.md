@@ -49,11 +49,11 @@ dependency graph cannot say — a request's path, a state machine, an ordering.
 ├── repo.md                       the repository's own page                    (authored)
 └── index.json                    one-liners, anchors, facts, staleness        (GENERATED — never by hand)
 
-.intentic/docs/<repo>/…           STAGED — the same tails, a draft awaiting the owner
+.intentic/config/docs/<repo>/…           STAGED — the same tails, a draft awaiting the owner
 ```
 
 Staging still mirrors, so publishing is a copy per tail and never a translation — a staged
-`.intentic/docs/intentic/_deploy/graph/README.md` lands at `intentic/_deploy/graph/README.md`. It is a workspace-root
+`.intentic/config/docs/intentic/_deploy/graph/README.md` lands at `intentic/_deploy/graph/README.md`. It is a workspace-root
 path so N isolated agents can write into it at once and it can ride the daemon's file-change push
 (`contributes.files`); an in-repo path cannot, because a manifest is static and repo names are not known when it
 is written. [src/paths.ts](src/paths.ts) holds the one function that decides a tail's destination, and it is the

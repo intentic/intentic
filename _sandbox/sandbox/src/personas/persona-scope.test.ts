@@ -71,7 +71,7 @@ test("a search tool with no path is left alone", async () => {
 
 test("a card that may not change the sandbox is refused its config and its public outbox", async () => {
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
-    expect(await attempt(hooks, "Write", { file_path: "/work/.intentic/settings.json" })).toContain("sandbox's own configuration");
+    expect(await attempt(hooks, "Write", { file_path: "/work/.intentic/config/settings.json" })).toContain("sandbox's own configuration");
     expect(await attempt(hooks, "Edit", { file_path: "/work/public/leak.txt" })).toContain("sandbox's own configuration");
     // Ordinary workspace files are untouched — this switch is about the sandbox, not about editing at all.
     expect(await attempt(hooks, "Write", { file_path: "/work/apps/web/main.ts" })).toBeUndefined();
@@ -81,5 +81,5 @@ test("a card that may not change the sandbox is refused its config and its publi
  * day, and refusing that would break far more than it protects — the switch is "change", not "know about". */
 test("reading the sandbox's own config is still allowed", async () => {
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
-    expect(await attempt(hooks, "Read", { file_path: "/work/.intentic/settings.json" })).toBeUndefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/.intentic/config/settings.json" })).toBeUndefined();
 });

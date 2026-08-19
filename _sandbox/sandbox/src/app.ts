@@ -876,7 +876,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ ok: true });
     });
 
-    // The agent-proposed overlay Dockerfile (.intentic/environment.Dockerfile). Members see the state; only the
+    // The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile). Members see the state; only the
     // owner approves (copying it to the approved file) or rejects (deleting the proposal). The rebuild itself
     // runs OUTSIDE the container — recreate.sh locally, the workspace provider on a server — pinned to the
     // approved hash, so approval here never mutates the running sandbox.

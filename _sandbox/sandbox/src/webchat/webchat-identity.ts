@@ -43,7 +43,7 @@ const verifierFor = (clientId: string): IdTokenVerifier => {
 // The emails that can already reach this sandbox: its owner plus every member. Read per message rather than
 // cached — the set changes from the Members UI, and a stale "member" tag is a lie about who is talking.
 const authorizedEmails = async (services: Pick<Services, "workspace" | "members">): Promise<Set<string>> => {
-    const owner = await fileOwnerStore(statePath(services.workspace.root, ".intentic/owner.json")).read();
+    const owner = await fileOwnerStore(statePath(services.workspace.root, ".intentic/identity/owner.json")).read();
     const members = await services.members.list();
     return new Set([...(owner === undefined ? [] : [owner]), ...members.map(({ email }) => email)].map((email) => email.toLowerCase()));
 };

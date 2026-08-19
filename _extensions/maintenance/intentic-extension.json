@@ -25,6 +25,6 @@
             { "id": "maintenance", "label": "Maintenance", "surface": "rail", "badge": true },
             { "id": "maintenance-repo", "label": "Maintenance", "surface": "directory" }
         ],
-        "files": [{ "path": ".intentic/chores/", "invalidates": ["maintenance-report", "maintenance-runs"] }]
+        "files": [{ "path": ".intentic/records/chores/", "invalidates": ["maintenance-report", "maintenance-runs"] }]
     }
 }

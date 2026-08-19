@@ -90,7 +90,7 @@ test("a turn is told the goal and where its memory is, and nothing about being o
         expect(prompt).toContain("progress.md");
         expect(prompt).not.toContain("Iteration");
         expect(prompt).not.toContain("at most");
-        // The word survives only as a PATH (`.intentic/artifacts/loops/…`), which is a file the turn has to write, not a
+        // The word survives only as a PATH (`.intentic/records/artifacts/loops/…`), which is a file the turn has to write, not a
         // description of the harness — so the assertion is against the prose, not against the letters.
         expect(prompt).not.toContain("a loop");
         expect(prompt).not.toContain("this loop");

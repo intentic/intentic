@@ -37,7 +37,7 @@ const title = computed(() => (postsATitle(draft.platform, draft.target) ? draft.
 const foldable = computed(() => draft.content.length > LONG_POST);
 const expanded = ref(false);
 
-// The file name alone: a media chip has room for `chart.png`, not for `.intentic/drafts/media/chart.png`.
+// The file name alone: a media chip has room for `chart.png`, not for `.intentic/config/drafts/media/chart.png`.
 const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 </script>
 

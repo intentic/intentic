@@ -26,8 +26,8 @@ export const makeFixtureWorkspace = async (): Promise<{ root: string; cleanup: (
     await cp(join(packageRoot(import.meta.url), "src/__fixtures__/workspace"), root, { recursive: true });
     await writeFile(join(root, ".env"), "FIXTURE_SECRET_TOKEN=fixture-secret-value\n");
     await writeFile(join(root, ".env.example"), "FIXTURE_SECRET_TOKEN=\n");
-    await mkdir(join(root, `${STATE_DIR}/cache/iq/spool`), { recursive: true });
-    await writeFile(join(root, `${STATE_DIR}/cache/iq/decoy.txt`), "index dir contents must never be surfaced\n");
+    await mkdir(join(root, `${STATE_DIR}/local/cache/iq/spool`), { recursive: true });
+    await writeFile(join(root, `${STATE_DIR}/local/cache/iq/decoy.txt`), "index dir contents must never be surfaced\n");
     const alpha = join(root, "alpha");
     // The .gitignore'd build artifact — synthesized (alpha's own .gitignore keeps it out of THIS repo too, so it
     // can't ship as a committed fixture file). Written before `git add` so the fixture repo also ignores it.

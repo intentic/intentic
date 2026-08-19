@@ -440,11 +440,13 @@ const harvest = (text, path, name) => {
 };
 
 /* Where the three stores live, from the same environment the daemon set for this turn. AGENT_AUTH_DIR is the
- * provider-credential root (off /work); unset — a dev daemon — puts it under .intentic/auth, which is where
+ * provider-credential root (off /work); unset — a dev daemon — puts it under .intentic/secrets/auth, which is where
  * composition.ts falls back to as well. */
 export const secretValues = (env = process.env) => {
     const authRoot =
-        env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/auth");
+        env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== ""
+            ? env.AGENT_AUTH_DIR
+            : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth");
     const repo = join(env.WORKSPACE_ROOT ?? "/work", "desired-state");
     return [
         ...readIfChanged(join(authRoot, "capability-secrets.json"), (id, field) => `${id}/${field}`),

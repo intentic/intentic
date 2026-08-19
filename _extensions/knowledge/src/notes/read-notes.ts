@@ -33,7 +33,7 @@ export const knowledgeRoot = (workspaceRoot: string, configured: string | undefi
 // silent rather than an error path.
 export const configuredFolder = async (workspaceRoot: string): Promise<string | undefined> => {
     try {
-        const raw = JSON.parse(await readFile(join(workspaceRoot, ".intentic/extension-settings.json"), "utf8")) as Record<
+        const raw = JSON.parse(await readFile(join(workspaceRoot, ".intentic/config/extension-settings.json"), "utf8")) as Record<
             string,
             Record<string, unknown> | undefined
         >;

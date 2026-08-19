@@ -112,6 +112,9 @@ describe("pairingLine", () => {
         mode: "sync",
         localDir: "/home/me/intentic/work",
         mutagenStatus: "watching",
+        // A healthy pairing runs BOTH sessions, so the default fixture has to have both — otherwise every
+        // assertion below would be reading a line that is already shouting about a missing backup.
+        backupStatus: "watching",
         ...overrides,
     });
 
@@ -119,12 +122,26 @@ describe("pairingLine", () => {
      * interpolated whenever it wasn't zero. Every well-behaved sync on every machine printed
      * "[watching, undefined conflict(s)]", which reads as a fault on the line whose job is to say there is none. */
     it("says nothing about conflicts when Mutagen reported none", () => {
-        expect(pairingLine(synced())).toBe("  sandbox-0738cd6b5027-intentic-dev  /home/me/intentic/work  [watching]");
+        expect(pairingLine(synced())).toBe("  sandbox-0738cd6b5027-intentic-dev  /home/me/intentic/work  [watching, backup watching]");
         expect(pairingLine(synced({ conflicts: 0 }))).not.toContain("conflict");
     });
 
     it("prints the count when there IS one, because nothing else in the product ever says so", () => {
-        expect(pairingLine(synced({ conflicts: 3 }))).toContain("[watching, 3 conflict(s)]");
+        expect(pairingLine(synced({ conflicts: 3 }))).toContain("[watching, 3 conflict(s), backup watching]");
+    });
+
+    /* THE BACKUP HAS ITS OWN WORD, and its own shout. The two sessions fail independently: the workspace one
+     * going quiet stops the owner's edits moving and they notice within minutes, while the state backup going
+     * quiet costs them nothing at all until the day the sandbox is gone and their personas, skills, automations
+     * and transcripts turn out never to have been copied. That is the failure the line has to be loud about. */
+    it("shouts when the state backup is not running, even though the folder syncs fine", () => {
+        const line = pairingLine(synced({ backupStatus: undefined }));
+        expect(line).toContain("watching");
+        expect(line).toContain("backup NOT RUNNING — this sandbox's own state is not being copied here");
+    });
+
+    it("names the backup's own status when it has one of its own", () => {
+        expect(pairingLine(synced({ backupStatus: "halted-on-root-emptied" }))).toContain("backup halted-on-root-emptied");
     });
 
     /* The failure this whole line exists for: a pairing whose session was never created has no status, and an

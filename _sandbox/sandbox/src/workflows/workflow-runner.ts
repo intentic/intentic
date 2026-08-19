@@ -53,7 +53,7 @@ const runIdOf = (): string => randomUUID().slice(0, 8);
 const REPORT_KEPT = 4_000;
 // Under artifacts/ because that is what a step's full response is — a durable output owned by a run, exactly
 // the class the artifacts entry names. Its old top-level home (`.intentic/workflow-runs/`) is a retired dir.
-const WORKFLOW_REPORTS_DIR = stateRelPath(".intentic/artifacts/", "workflow-runs");
+const WORKFLOW_REPORTS_DIR = stateRelPath(".intentic/records/artifacts/", "workflow-runs");
 
 const reportPreview = (report: string): string => {
     if (report.length <= REPORT_KEPT) {

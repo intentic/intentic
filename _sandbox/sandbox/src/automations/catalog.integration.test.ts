@@ -31,8 +31,8 @@ const writeManifest = async (dir: string, body: object): Promise<void> => {
 };
 
 const writeEnablement = async (root: string, body: Record<string, boolean>): Promise<void> => {
-    await mkdir(join(root, STATE_DIR), { recursive: true });
-    await writeFile(join(root, STATE_DIR, "extension-enablement.json"), JSON.stringify(body));
+    await mkdir(join(root, STATE_DIR, "config"), { recursive: true });
+    await writeFile(join(root, STATE_DIR, "config", "extension-enablement.json"), JSON.stringify(body));
 };
 
 const pack = (name: string, contributes: object): object => ({

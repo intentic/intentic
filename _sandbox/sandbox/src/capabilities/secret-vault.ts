@@ -4,7 +4,7 @@ import { jsonFile } from "../store/json-file.js";
 /* WHERE A CAPABILITY'S CREDENTIAL VALUES ACTUALLY LIVE — off the workspace, so the manifest the agent reads
  * carries the shape of a connection and never the secret in it.
  *
- * The manifest (.intentic/capabilities.json) was the single home for both, and it had to be readable: an agent
+ * The manifest (.intentic/config/capabilities.json) was the single home for both, and it had to be readable: an agent
  * is regularly asked to find and edit connected services, so the file API's denylist and the search floor both
  * exempt it on purpose. That left every credential one ordinary file read away from the model's context —
  * including the two the product promises are never shown it, a browser account's password and a TOTP seed. The

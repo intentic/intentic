@@ -20,7 +20,7 @@ test("a release build stamps a fresh workspace, and the stamp survives on disk",
     const root = await workspace();
     await recordNewestRun(root, "1.200.0");
     expect(newestRunVersion()).toBe("1.200.0");
-    expect(JSON.parse(await readFile(join(root, ".intentic/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
+    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
 });
 
 test("the stamp only moves forward — a rollback must not erase the evidence it exists to explain", async () => {
@@ -29,7 +29,7 @@ test("the stamp only moves forward — a rollback must not erase the evidence it
     // The rolled-back daemon boots older; the stamp keeps naming the newer run.
     await recordNewestRun(root, "1.199.0");
     expect(newestRunVersion()).toBe("1.200.0");
-    expect(JSON.parse(await readFile(join(root, ".intentic/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
+    expect(JSON.parse(await readFile(join(root, ".intentic/local/newest-run.json"), "utf8"))).toEqual({ version: "1.200.0" });
     // Rolling forward past it moves it again.
     await recordNewestRun(root, "1.201.0");
     expect(newestRunVersion()).toBe("1.201.0");
@@ -48,7 +48,7 @@ test("a dev build records nothing and reads what release builds left", async () 
 test("a mangled stamp reads as absent and re-establishes itself", async () => {
     const root = await workspace();
     await recordNewestRun(root, "1.200.0");
-    await writeFile(join(root, ".intentic/newest-run.json"), "not json");
+    await writeFile(join(root, ".intentic/local/newest-run.json"), "not json");
     await recordNewestRun(root, "1.199.0");
     expect(newestRunVersion()).toBe("1.199.0");
 });

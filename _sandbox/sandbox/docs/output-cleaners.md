@@ -66,7 +66,7 @@ the settings page and a line in the ledger with no payer. `bench:cleaners corpus
 
 ## Toggle + benchmark
 
-The active set is the **`outputCleaners`** per-sandbox setting (`.intentic/settings.json`), an iq-`--features`-style
+The active set is the **`outputCleaners`** per-sandbox setting (`.intentic/config/settings.json`), an iq-`--features`-style
 spec:
 
 - `""` — all cleaners on (default)

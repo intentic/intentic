@@ -306,7 +306,7 @@ export interface Services {
         | undefined;
     // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
     readonly tools: readonly AgentTool[];
-    // The unified capability manifest (.intentic/capabilities.json) — DevOps/mcp/service/integration. Reads also
+    // The unified capability manifest (.intentic/config/capabilities.json) — DevOps/mcp/service/integration. Reads also
     // carry the daemon-provisioned free-trial endpoint when the platform serves one (trial/trial-endpoint.ts);
     // it is never written to the file.
     readonly capabilities: CapabilitiesStore;
@@ -331,54 +331,54 @@ export interface Services {
     // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
-    // Recommendations the owner has declined (.intentic/capability-dismissals.json), so a "no" survives the
+    // Recommendations the owner has declined (.intentic/config/capability-dismissals.json), so a "no" survives the
     // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
     readonly capabilityDismissals: DismissalsStore;
-    // The named personas this sandbox shows the outside world (.intentic/personas.json) — which connected
+    // The named personas this sandbox shows the outside world (.intentic/config/personas.json) — which connected
     // accounts each speaks for. The turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
-    // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
-    // Their run history is the untracked ledger beside it (.intentic/automation-runs.json), joined on read so
+    // Scheduled agent wake-ups (.intentic/config/automations.json) — the scheduler polls it; /automations edits it.
+    // Their run history is the untracked ledger beside it (.intentic/records/automation-runs.json), joined on read so
     // that nothing above this store knows the two are separate files.
     readonly automations: AutomationsStore;
-    // Ralph loops (.intentic/loops.json): the pump drives them, /loops starts and stops them, and the record is
+    // Ralph loops (.intentic/records/loops.json): the pump drives them, /loops starts and stops them, and the record is
     // its own restart journal — a loop still marked `running` at boot is one the daemon died under.
     readonly loops: LoopsStore;
-    // Saved loops (.intentic/loop-designs.json): the manifest half of the same feature — a loop's machinery with
+    // Saved loops (.intentic/config/loop-designs.json): the manifest half of the same feature — a loop's machinery with
     // its goal left out, so the composer can arm one and the message supplies the job.
     readonly loopDesigns: LoopDesignsStore;
-    // Workflow designs (.intentic/workflows.json): a manifest the user authors and edits, changing at human
+    // Workflow designs (.intentic/config/workflows.json): a manifest the user authors and edits, changing at human
     // speed. /workflows edits it; nothing fires it on its own.
     readonly workflows: WorkflowsStore;
-    // Workflow runs (.intentic/workflow-runs.json): the ledger the scheduler writes several times per step.
+    // Workflow runs (.intentic/records/workflow-runs.json): the ledger the scheduler writes several times per step.
     // Kept out of the manifest so a run's writes cannot rewrite the user's designs, and so a run of a deleted
     // workflow stays readable — it snapshotted its definition. Its own restart journal, like the loops one.
     readonly workflowRuns: WorkflowRunsStore;
-    // Maintenance evidence (.intentic/chores/): the probe cache the background runner fills, and the ledger of
+    // Maintenance evidence (.intentic/records/chores/): the probe cache the background runner fills, and the ledger of
     // what has been done about it. /chores reads both; @intentic/sandbox-contract/chores turns them into verdicts, in the
     // browser, where the panel and the rail badge share one computation.
     readonly chores: ChoresStore;
     // The background sweep that keeps the probe cache from expiring. Serialized across the whole sandbox and
     // skipped entirely while any turn is live — maintenance is the least urgent thing this daemon does.
     readonly probeRunner: ProbeRunner;
-    // CI state (.intentic/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
+    // CI state (.intentic/secrets/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
     // success after a failure read as `pipeline_fixed`.
     readonly ciStore: CiStore;
-    // The dependency verifier's memory (.intentic/verify.json): last check verdict per project + consecutive
+    // The dependency verifier's memory (.intentic/records/verify.json): last check verdict per project + consecutive
     // red count — what makes `deps.fixed` an edge and lets a fix chore's guard cap its own retries.
     readonly verifyStore: VerifyStore;
     // The Pipelines view's read model: webhook deliveries freshen it, /ci/runs backfills it when stale.
     readonly ciRuns: RunsCache;
     // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
     readonly ciHooks: CiHookReconciler;
-    // Wakes from `requireApproval` automations, held for the owner (.intentic/approvals/, one file per wake) —
+    // Wakes from `requireApproval` automations, held for the owner (.intentic/records/approvals/, one file per wake) —
     // the /automations pending routes approve (run the held wake) or reject them.
     readonly approvals: ApprovalsStore;
-    // Which sandbox conversation each inbound THREAD owns (.intentic/thread-sessions.json) — a Doorbell
+    // Which sandbox conversation each inbound THREAD owns (.intentic/records/thread-sessions.json) — a Doorbell
     // visitor's chat, a Discord or Slack channel. What makes a stream of messages one agent that remembers
     // instead of one fresh worktree per message; a thread past its TTL starts over.
     readonly threadSessions: ThreadSessionsStore;
-    // Agent-proposed post drafts (.intentic/drafts/, one file per draft) — the agent writes them; /drafts is
+    // Agent-proposed post drafts (.intentic/config/drafts/, one file per draft) — the agent writes them; /drafts is
     // the owner's approve/edit/reject side.
     readonly drafts: DraftsStore;
     // What is in flight right now (historyRoot/turns/, one file per in-flight turn or automation fire). Written
@@ -398,11 +398,11 @@ export interface Services {
     // turn, NEVER pruned — unlike the activity log, whose rolling window makes spend totals shrink over time.
     // streamAgent appends at turn end; /usage/rollup and /system/usage project it.
     readonly usage: UsageStore;
-    // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
+    // Per-sandbox agent settings (.intentic/config/settings.json) — /settings edits it; streamAgent reads it to gate
     // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability) and it carries the
     // owner's rule table (rules/rules.ts).
     readonly sandboxSettings: SandboxSettingsStore;
-    // When each rule last did something (.intentic/rule-firings.json). Beside the settings rather than in them:
+    // When each rule last did something (.intentic/local/rule-firings.json). Beside the settings rather than in them:
     // a firing is not an edit, so it must not make every push a write of the owner's configuration.
     readonly ruleFirings: RuleFiringsStore;
     // Web-push state: this sandbox's VAPID keypair + one entry per subscribed browser. On the HISTORY volume,
@@ -411,7 +411,7 @@ export interface Services {
     // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
     // actively watching; `notify` (the settings test button) always fires.
     readonly pushSender: PushSender;
-    // Claude subscription accounts (one <id>.json per account under .intentic/auth/claude), several per sandbox.
+    // Claude subscription accounts (one <id>.json per account under .intentic/secrets/auth/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
     // Which of those accounts an organization has switched Claude Code off for (claude/seats.json, beside them).
     // Kept apart from the account record because that record is rewritten whole on every token rotation, by every
@@ -685,7 +685,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // stays per-workspace. ponytail: sharing OpenCode's XDG dir also shares its session/snapshot storage, and
     // concurrent sandboxes can race a token refresh (recoverable: reconnect once) — split auth.json out /
     // per-provider locks if either bites.
-    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/auth/");
+    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
     // Base dir under which each Codex account gets its own CODEX_HOME (`<authRoot>/codex/<id>`); also the
     // adapter's default (the OPENAI_API_KEY fallback home when a turn resolved no account).
     const codexBase = join(authRoot, "codex");
@@ -737,7 +737,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
               }
             : undefined;
-    const members = fileMembersStore(statePath(workspace.root, ".intentic/members.json"));
+    const members = fileMembersStore(statePath(workspace.root, ".intentic/identity/members.json"));
     // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
     // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
@@ -748,7 +748,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             ? createAuthorizer({
                   verify: createGoogleVerifier(config.google.clientId),
                   session: sessions.verify,
-                  owner: fileOwnerStore(statePath(workspace.root, ".intentic/owner.json")),
+                  owner: fileOwnerStore(statePath(workspace.root, ".intentic/identity/owner.json")),
                   members,
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
@@ -861,7 +861,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * translator opens the trial's connection itself and verifies the certificate, which a self-signed dev
      * platform cannot satisfy. Opens nothing at all against a deployed platform (platform/local-tunnel.ts). */
     const platformTunnel = startPlatformTunnel(config.platform.url, logger);
-    const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/capabilities.json"), (id, reason) =>
+    const capabilityManifest = fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
         logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
     );
     /* The credential values, off /work (secret-vault.ts). Sited beside the AI-provider logins under
@@ -914,11 +914,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         trial,
         platformTunnel,
     );
-    const personas = filePersonasStore(statePath(workspace.root, ".intentic/personas.json"), (id, reason) =>
+    const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}) — the rest are unaffected`),
     );
-    const ciStore = fileCiStore(statePath(workspace.root, ".intentic/ci.json"));
-    const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/verify.json"));
+    const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
+    const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
     // instance would answer a poll from a file the runner had already moved past.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
@@ -950,7 +950,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     let backlogActive = false;
     const iq = createResidentEngine({
         root: workspace.root,
-        indexDir: statePath(workspace.root, ".intentic/cache/", "iq"),
+        indexDir: statePath(workspace.root, ".intentic/local/cache/", "iq"),
         // An index pass that fails once warm() has settled has no caller to reject — without this the index
         // would stop tracking disk and search would just quietly get older.
         onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
@@ -1039,36 +1039,36 @@ export const createServices = (config: Config, logger: Logger): Services => {
         vaultExtensionSettingSecrets: async () =>
             vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
-        secretUses: fileSecretUses(statePath(workspace.root, ".intentic/secret-uses.json")),
+        secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
         trial,
-        capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/capability-dismissals.json")),
+        capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
-        controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/control-tokens.json")),
+        controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/identity/control-tokens.json")),
         automations: fileAutomationsStore(
-            statePath(workspace.root, ".intentic/automations.json"),
-            statePath(workspace.root, ".intentic/automation-runs.json"),
+            statePath(workspace.root, ".intentic/config/automations.json"),
+            statePath(workspace.root, ".intentic/records/automation-runs.json"),
         ),
-        loops: fileLoopsStore(statePath(workspace.root, ".intentic/loops.json")),
-        loopDesigns: fileLoopDesignsStore(statePath(workspace.root, ".intentic/loop-designs.json")),
-        workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/workflows.json")),
-        workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/workflow-runs.json")),
+        loops: fileLoopsStore(statePath(workspace.root, ".intentic/records/loops.json")),
+        loopDesigns: fileLoopDesignsStore(statePath(workspace.root, ".intentic/config/loop-designs.json")),
+        workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/config/workflows.json")),
+        workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/records/workflow-runs.json")),
         chores,
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
-        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/approvals/")),
-        threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/thread-sessions.json")),
-        drafts: fileDraftsStore(statePath(workspace.root, ".intentic/drafts/")),
+        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/records/approvals/")),
+        threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
+        drafts: fileDraftsStore(statePath(workspace.root, ".intentic/config/drafts/")),
         turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
         // The same instance the transcript reader holds — two would answer a read from a file the other had
         // already moved past, exactly the argument the chores store above makes.
         turnAnchors,
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
-        sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/settings.json")),
-        ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/rule-firings.json")),
+        sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),
+        ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         claudeStore,

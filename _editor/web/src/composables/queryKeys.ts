@@ -80,7 +80,7 @@ export const SUBAGENTS = family(`subagents`);
 export const SUBAGENT_TRANSCRIPT = family(`subagent-transcript`);
 
 /* NOT SANDBOX-SCOPED, and that is the daemon's decision rather than an omission. These three are pushed by
- * name: a write to `.intentic/workflow-runs.json` carries `invalidates: ["workflows","workflow-runs"]` from
+ * name: a write to `.intentic/records/workflow-runs.json` carries `invalidates: ["workflows","workflow-runs"]` from
  * the contract's WORKSPACE_STATE_FILES, and systemEvents invalidates that bare name. The query therefore
  * registers under the same bare name — a scoped key would still be reached by the push (the name is its
  * prefix), but the two spellings would no longer be one fact, which is what this file exists to prevent.
