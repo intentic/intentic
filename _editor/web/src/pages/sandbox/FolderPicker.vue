@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
-import { ui, ResponsiveOverlay } from "@intentic/ui";
+import { ui, ResponsiveOverlay, SkeletonRows } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { WORKSPACE_TREE } from "../../composables/queryKeys";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxQuery } from "../../composables/sandbox/useSandboxQuery";
 
 /* PICKING A FOLDER BY LOOKING AT THE FOLDERS — the control behind both of a persona's location questions.
@@ -51,6 +52,10 @@ const { query } = useSandboxQuery<WorkspaceTreeResponse>({
     queryKey: WORKSPACE_TREE.of(`shared`),
     queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
 });
+
+/* Whether the wait is worth drawing. Sandbox-scoped like every other read behind these panels, so switching
+ * sandboxes drops the outline rather than holding one workspace's shape over another's. */
+const outline = useSandboxOutline(query.isPending);
 
 // Only what can be picked, and only what is worth showing — see the header for why ignored dirs are out.
 const foldersIn = (entries: readonly WorkspaceTreeEntry[]): readonly WorkspaceTreeEntry[] =>
@@ -186,7 +191,13 @@ const remove = (path: string): void => {
              the section heading the field belongs to. It still flips up by itself when the window is too short
              for it, which is the one case above is better. -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" header="Choose a folder" panel-class="w-80 p-1">
-            <div v-if="query.isPending.value" :class="ui.emptyState('py-4 text-xs')"><Icon name="spinner" spin /> Reading your workspace…</div>
+            <!-- A SPINNER AND A SENTENCE where a tree goes: the panel opened at the height of one line and
+                 then jumped to the height of a folder list, under a pointer already on its way to where the
+                 first row was about to be. The rows that are coming hold the panel open instead. -->
+            <div v-if="query.isPending.value" role="status" aria-busy="true">
+                <span class="sr-only">Reading your workspace…</span>
+                <SkeletonRows v-if="outline" :rows="5" density="dense" :control="false" />
+            </div>
             <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
             <div v-else class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">

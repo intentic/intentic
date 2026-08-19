@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Button, ui, Icon, Notice, noticeOf, Page, PageAction, PageHeader, StatusBadge, type IconName } from "@intentic/extension-ui";
+import {
+    Button,
+    ui,
+    Icon,
+    Notice,
+    noticeOf,
+    Page,
+    PageAction,
+    PageHeader,
+    StatusBadge,
+    useLoadingReveal,
+    type IconName,
+} from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
@@ -18,6 +30,8 @@ import { useVitest } from "./useVitest";
 
 const props = defineProps<{ repo: string; monorepo: boolean }>();
 const { apps, templates, error, isLoading, addApps, refresh, startApp, stopApp } = useApps(toRef(props, `repo`));
+// Drawn only once the wait has earned it, and keyed on the repo so switching starts a fresh wait.
+const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
 const { projects, error: testsError, isLoading: testsLoading, runTests: postRunTests } = useVitest(toRef(props, `repo`));
 const openFocused = (session: string): void => host().terminal.open(session);
 
@@ -214,7 +228,24 @@ onUnmounted(() => {
                      own Run-tests when it owns projects; the type icon (globe = frontend, server = backend) is the
                      at-a-glance signal, backed by a kind pill. -->
                 <section v-if="monorepo">
-                    <div v-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
+                    <!-- The scan of the workspace, as the rows it is about to produce. The empty state was
+                         already held back until the answer was in, which left the section blank meanwhile —
+                         correct, and indistinguishable from a repository with no apps in it. -->
+                    <div v-if="isLoading && outline" class="overflow-hidden rounded-lg border border-line bg-card" role="status" aria-busy="true">
+                        <span class="sr-only">Reading this repository's apps…</span>
+                        <div class="flex flex-col divide-y divide-line" aria-hidden="true">
+                            <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2.5">
+                                <span class="skeleton block h-5 w-5 shrink-0" />
+                                <div class="flex min-w-0 flex-1 items-center gap-2">
+                                    <span class="skeleton block h-3.5" :class="[`w-32`, `w-24`, `w-40`][row % 3]" />
+                                    <span class="skeleton block h-3 w-14 shrink-0" />
+                                </div>
+                                <span class="skeleton block h-7 w-20 shrink-0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
                         No apps yet — use “Add app” to scaffold one and get a live preview.
                     </div>
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">

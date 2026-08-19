@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, StatusBadge } from "@intentic/extension-ui";
+import { Button, ui, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, SkeletonRows, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -21,6 +21,11 @@ import { usePorts } from "./usePorts";
  * the header above the tab strip. What would have been the page's description rides the section's InfoHint. */
 
 const { ports, error, isLoading, forward, unforward } = usePorts();
+// Drawn only once the wait has earned it — a procfs scan usually answers inside the reveal delay.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `ports`),
+);
 const workspacePorts = computed(() => ports.value.filter((entry) => entry.kind === `workspace`));
 const systemPorts = computed(() => ports.value.filter((entry) => entry.kind === `system`));
 
@@ -131,7 +136,16 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                 </InfoHint>
             </template>
 
-            <div v-if="workspacePorts.length === 0 && !isLoading" class="flex flex-col items-center gap-2 py-10 text-center">
+            <!-- The scan already knows not to say "nothing is listening" before it has looked — but what it did
+                 instead was say nothing at all, and a group whose body is empty reads as the same answer with
+                 less confidence. The rows that are coming stand in: a port number's block, the command on the
+                 title line, where it runs underneath, and the Preview button. -->
+            <div v-if="isLoading && outline" role="status" aria-busy="true">
+                <span class="sr-only">Scanning for listening ports…</span>
+                <SkeletonRows :rows="3" density="compact" description control />
+            </div>
+
+            <div v-else-if="!isLoading && workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
                 <Icon name="desktop" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing of yours is listening yet.</p>
                 <p class="text-2xs text-subtle">Start a dev server in a terminal and it appears here.</p>

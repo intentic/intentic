@@ -14,7 +14,7 @@ import { lensPersonaId } from "../../composables/workspace/personaReach";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
-import { useLoadingReveal } from "../../composables/loadingReveal";
+import { useLoadingReveal } from "@intentic/ui";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { toAppPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";

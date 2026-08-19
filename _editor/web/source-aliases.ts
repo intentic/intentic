@@ -82,6 +82,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // extension): plain state on vue's reactivity, reached from dozens of composables whose node tests must not
     // boot the component graph — the theme reader touches `document` at module scope — to build a notice.
     "@intentic/ui/async": fromRoot("_editor/ui/src/lib/async.ts"),
+    // And again, for the gate that decides whether a wait is DRAWN. Its two thresholds are the whole of it, so
+    // its test drives fake timers over plain reactivity — and reaching it through the barrel would boot the
+    // component graph (whose theme reader touches `document` at module scope) to ask a question about a clock.
+    "@intentic/ui/loading-reveal": fromRoot("_editor/ui/src/composables/loadingReveal.ts"),
     // And once more, for the icon VOCABULARY rather than the <Icon> that draws it: every icon name arriving
     // from a manifest is an open string, and the tests that check our own extensions name real glyphs read
     // JSON off disk — no components, no DOM, and nothing to gain from booting Picker.vue to get there.

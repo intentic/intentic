@@ -11,6 +11,7 @@ import {
     SearchBar,
     SegmentedControl,
     timeAgo,
+    useLoadingReveal,
 } from "@intentic/extension-ui";
 import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, watch } from "vue";
@@ -384,6 +385,12 @@ const openMenu = (event: Event, commit: GitCommit): void => {
     menuCommit.value = commit;
     menu.value?.show(event);
 };
+// Whether the first read has lasted long enough to be worth drawing — see useLoadingReveal.
+const outline = useLoadingReveal(
+    computed(() => loading.value && commits.value.length === 0),
+    computed(() => `git-history`),
+);
+
 const pending = ref<{ kind: ActionKind; commit: GitCommit } | undefined>(undefined);
 const nameInput = ref(``);
 const resetMode = ref<"soft" | "mixed" | "hard">(`mixed`);
@@ -646,7 +653,21 @@ const runPending = async (): Promise<void> => {
         <!-- The graph: one row per commit (a per-row SVG gutter drawing lanes/edges/node, then metadata). Click a
              row to expand its detail inline (accordion); right-click for the commit action menu. -->
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
-            <p v-if="loading && commits.length === 0" class="px-3 py-3 text-2xs text-subtle">Loading history…</p>
+            <!-- "Loading history…" was one small grey line standing in for a full-height graph, so the panel
+                 was empty in every way that shows and the whole log dropped in at once. The rows the log is
+                 about to draw stand in: the lane gutter on the left, the subject, and the author line under
+                 it. The gutter is a column of dots rather than lanes — the SHAPE of somebody's branch history
+                 is what this view exists to show, and it is the last thing to invent. -->
+            <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
+                <span class="sr-only">Reading this repository's history…</span>
+                <div v-for="row in outline ? 8 : 0" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
+                    <span class="skeleton block h-2 w-2 shrink-0 rounded-full" />
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
+                        <span class="skeleton block h-2.5" :class="[`w-64`, `w-48`, `w-72`, `w-56`][row % 4]" />
+                        <span class="skeleton block h-2" :class="[`w-28`, `w-36`][row % 2]" />
+                    </div>
+                </div>
+            </div>
             <p v-else-if="commits.length === 0" class="px-3 py-3 text-2xs text-subtle">No commits yet in this repository.</p>
             <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
                 No loaded commit matches. Scroll to load more of the history, then search again.
@@ -853,12 +874,7 @@ const runPending = async (): Promise<void> => {
 
         <!-- One dialog for every action: a name input (branch/tag), a mode picker (reset), or a plain confirm.
              Destructive ops carry the auto-checkpoint reassurance; a clean-apply conflict shows inline. -->
-        <Modal
-            :open="pending !== undefined"
-            size="sm"
-            :header="pending ? ACTIONS[pending.kind].header : ''"
-            @update:open="cancelAction"
-        >
+        <Modal :open="pending !== undefined" size="sm" :header="pending ? ACTIONS[pending.kind].header : ''" @update:open="cancelAction">
             <template v-if="pending">
                 <p class="text-xs text-content">
                     {{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span>

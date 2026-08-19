@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Icon, Notice, noticeOf, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, ui, Icon, Notice, noticeOf, StatusBadge, useLoadingReveal, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -14,6 +14,9 @@ const props = defineProps<{ repo: string }>();
 const repo = computed(() => props.repo);
 
 const { panels, error: listError, isLoading, start, stop } = usePanels();
+// Drawn only once the wait has earned it, and keyed on the repo — moving to another repo starts a different
+// wait rather than continuing this one, so the old panel's frame never hangs over the new one.
+const outline = useLoadingReveal(isLoading, repo);
 const openTerminal = (session: string): void => host().terminal.open(session);
 const panel = computed(() => panels.value.find((entry) => entry.repo === repo.value));
 /* THE TERMINAL THERE IS, not the one a Start would have made. `panel-<repo>` is right whenever the daemon runs
@@ -179,8 +182,19 @@ watch(
         <!-- Errors overlay the top edge instead of pushing the preview around. -->
         <Notice v-if="listError ?? actionError" :of="noticeOf(listError ?? actionError ?? ``)" class="absolute inset-x-3 top-16 z-10" />
 
+        <!-- The panel list in flight. This body is a full-bleed iframe, so a blank one is the largest empty
+             rectangle in the app — and the sentence below it ("no repository named…") is an accusation the
+             read has not earned yet. One frame at the size the app will fill, and nothing said. -->
+        <div v-if="isLoading && outline" class="flex flex-1 flex-col gap-3 p-3" role="status" aria-busy="true">
+            <span class="sr-only">Reading this repository's panel…</span>
+            <span class="skeleton block h-full w-full flex-1 rounded-lg" aria-hidden="true" />
+        </div>
+
         <!-- Unknown repo (bad URL) or the panels list hasn't loaded yet. -->
-        <div v-if="panel === undefined && !isLoading" class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-muted">
+        <div
+            v-else-if="panel === undefined && !isLoading"
+            class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-sm text-muted"
+        >
             <p>
                 No repository named <span class="font-mono">{{ repo }}</span> in this workspace.
             </p>

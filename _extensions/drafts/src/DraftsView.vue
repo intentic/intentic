@@ -12,11 +12,13 @@ import {
     NoticeStack,
     Row,
     RowGroup,
+    SkeletonRows,
     SplitView,
     StatusBadge,
     timeAgo,
     type NoticeModel,
     useAsyncAction,
+    useLoadingReveal,
     useNow,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
@@ -85,7 +87,12 @@ import { usePlatformCatalog } from "./usePlatformCatalog";
  * their way deliberately do NOT get it: their "back to review" is the way in, so nothing can be rewritten on
  * the same row the publisher may already be reading. */
 
-const { drafts, invalid, error: listError, save, remove } = useDrafts();
+const { drafts, invalid, isLoading, error: listError, save, remove } = useDrafts();
+// Only drawn once the wait has earned it — a warm queue answers well inside the reveal delay.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `drafts`),
+);
 // The list query knows it failed and nothing else; this page knows what the user came for.
 const listNotice = computed<NoticeModel | undefined>(() =>
     listError.value === undefined ? undefined : { tone: `danger`, title: `Couldn't read your drafts.`, detail: listError.value },
@@ -404,7 +411,18 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 <!-- Nothing proposed, nothing sent, nothing broken. The rail hides its tile in this state, so the
                      page is only reached deliberately — and it owes an explanation of what would ever put
                      something here. -->
-                <p v-if="isEmpty" :class="ui.emptyState(`py-8`)">
+                <!-- Before the queue is read it is indistinguishable from an empty one, and the sentence below
+                     is a claim about the reader's agent that nothing has yet checked. Drawn as the rows that
+                     are coming instead: a queue of posts, each a brand mark, a line of text and a control. -->
+                <template v-if="isLoading">
+                    <RowGroup v-if="outline" role="status" aria-busy="true">
+                        <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
+                        <span class="sr-only">Reading the draft queue…</span>
+                        <SkeletonRows :rows="3" description control />
+                    </RowGroup>
+                </template>
+
+                <p v-else-if="isEmpty" :class="ui.emptyState(`py-8`)">
                     No drafts waiting. Posts your agent proposes land here for you to approve before anything is published.
                 </p>
 

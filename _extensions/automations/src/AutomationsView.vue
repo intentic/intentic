@@ -14,6 +14,8 @@ import {
     RowGroup,
     SearchBar,
     SegmentedControl,
+    SkeletonRows,
+    useLoadingReveal,
 } from "@intentic/extension-ui";
 import { computed, onUnmounted, reactive, ref } from "vue";
 import AutomationComposer from "./AutomationComposer.vue";
@@ -48,7 +50,12 @@ import { useAutomations } from "./useAutomations";
  * asked while writing one are "do I already have this?" and "what did the last one say?", and a modal covers
  * the only thing that answers them. */
 
-const { automations, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
+const { automations, isLoading, pending, error: listError, save, setEnabled, remove, run, approve, reject } = useAutomations();
+// Only draw the wait once it has lasted long enough to be worth seeing — see useLoadingReveal.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `automations`),
+);
 const { sources, templates, error: catalogError } = useCatalog();
 /* The catalogue as this browser can act on it: the daemon says what exists, the live capability facts say what
  * is connected. Resolved once here and handed down, so the row, the composer and the shelves all read one
@@ -331,7 +338,20 @@ const toggleDetail = (id: string): void => {
                 <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
             </div>
 
-            <div v-if="automations.length === 0" :class="ui.emptyState('py-5')">
+            <!-- AN UNREAD LIST IS NOT AN EMPTY ONE. `automations` is `[]` both before the read lands and after
+                 it lands empty, so the sentence below used to greet every single visit — including the ones
+                 where the reader already has a page of automations — and then be replaced a moment later by the
+                 list it had just denied. The outline says the same thing the empty state does about how many
+                 rows are coming (nothing), without claiming anything about whether there are any. -->
+            <template v-if="isLoading">
+                <RowGroup v-if="outline" role="status" aria-busy="true">
+                    <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
+                    <span class="sr-only">Reading your automations…</span>
+                    <SkeletonRows :rows="3" description control />
+                </RowGroup>
+            </template>
+
+            <div v-else-if="automations.length === 0" :class="ui.emptyState('py-5')">
                 No automations yet — turn on a code chore below, or build your own with New automation.
             </div>
             <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">

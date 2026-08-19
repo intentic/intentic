@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CreatorState } from "@intentic-app/api-contract";
-import { Card, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Card, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
@@ -35,6 +35,13 @@ const load = async (): Promise<void> => {
 };
 
 onMounted(load);
+
+/* Whether the wait has lasted long enough to be worth drawing. The subject is fixed because there is only ever
+ * one: this tab reads the signed-in account's creator status and nothing switches underneath it. */
+const outline = useLoadingReveal(
+    computed(() => state.value === null && loadError.value === undefined),
+    computed(() => `creator-status`),
+);
 
 const payouts = computed(() => state.value?.payouts);
 
@@ -98,6 +105,34 @@ const connect = async (): Promise<void> => {
         <div class="mt-3 flex flex-col gap-4">
             <Notice v-if="loadError" :of="loadError" />
             <p v-else-if="state && !state.enabled" class="text-xs text-muted">This platform doesn't run a creator pool.</p>
+
+            <template v-else-if="outline">
+                <!-- THE WAIT IS DRAWN, NOT SKIPPED. The masthead above renders from the first frame, so what the
+                     status read leaves blank is the whole body under it — a titled card with nothing in it, which
+                     reads as "you have nothing here" for as long as the round-trip takes and then contradicts
+                     itself. The two sections below are the two that ALWAYS land once the read does (claiming a
+                     name, and the payout account); earnings and receipts are not promised here because a creator
+                     on their first visit has neither, and an outline that shows blocks which never arrive is a
+                     worse lie than the blank it replaced. -->
+                <div class="flex flex-col gap-4" role="status" aria-busy="true">
+                    <span class="sr-only">Reading your creator status…</span>
+                    <div class="flex flex-col gap-2" aria-hidden="true">
+                        <span class="skeleton block h-3 w-40" />
+                        <span class="skeleton block h-2.5 w-full max-w-lg" />
+                        <!-- The name field and its button, at the height they actually land at. -->
+                        <div class="flex gap-2">
+                            <span class="skeleton block h-8 min-w-0 flex-1" />
+                            <span class="skeleton block h-8 w-16" />
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2 border-t border-line pt-3" aria-hidden="true">
+                        <span class="skeleton block h-3 w-28" />
+                        <span class="skeleton block h-2.5 w-72" />
+                        <span class="skeleton block h-2.5 w-full max-w-md" />
+                        <span class="skeleton block h-8 w-32" />
+                    </div>
+                </div>
+            </template>
 
             <template v-else-if="state">
                 <!-- What you already hold. Absent for most first visits, which is why it renders nothing at all

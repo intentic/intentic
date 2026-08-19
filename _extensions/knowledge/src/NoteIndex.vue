@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { freshness, Icon, type NavGroup, NavRail, Row, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import {
+    freshness,
+    Icon,
+    type NavGroup,
+    NavRail,
+    Row,
+    SkeletonRows,
+    StatusBadge,
+    useLoadingReveal,
+    type StatusVariant,
+} from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { SearchHit } from "./contract";
 import { folderOf, toneOfType } from "./knowledgeNote";
@@ -23,7 +33,7 @@ import { folderOf, toneOfType } from "./knowledgeNote";
  * they answer the query, and cutting them into headed groups would reorder the answer into something the
  * search did not say. */
 
-const { hits, selected } = defineProps<{
+const { hits, selected, isLoading } = defineProps<{
     hits: readonly SearchHit[];
     selected: string | undefined;
     // Whether a query or a filter is in force — an empty result means different things either way.
@@ -32,6 +42,16 @@ const { hits, selected } = defineProps<{
 }>();
 
 const emit = defineEmits<{ pick: [path: string] }>();
+
+/* WHETHER THE WAIT IS WORTH DRAWING. This list re-runs on every keystroke, so it is the one place in the
+ * section where an ungated outline would strobe: a local note search answers in a few milliseconds, and a
+ * placeholder that appears and vanishes under the typing hand is a fault the reader cannot even locate. One
+ * subject, because there is one search — consecutive queries join the outline already on screen rather than
+ * re-arming its delay, which is exactly the behaviour a search field wants. */
+const outline = useLoadingReveal(
+    computed(() => isLoading),
+    computed(() => `note-search`),
+);
 
 // Why a note matched, in the words the reader would use. `all` is the unfiltered browse case, where the answer
 // is "everything" and the row needs no explanation at all.
@@ -103,7 +123,13 @@ const groups = computed<NavGroup<NoteRow>[]>(() => (rows.value.length === 0 ? []
              accuses them of a search they did not run, and answering it while the first one is still in flight
              is wrong for a moment and then wrong-looking after. -->
         <template #empty>
-            <p v-if="isLoading" class="px-2 py-4 text-xs text-subtle">Looking…</p>
+            <!-- "Looking…" was a WORD where a list goes: it says the right thing and shows none of it, so the
+                 rail stays a third of its height and the notes shove the page down as they land. The rows the
+                 search is about to return stand in instead, at the density this rail draws them. -->
+            <div v-if="isLoading" role="status" aria-busy="true">
+                <span class="sr-only">Looking through your notes…</span>
+                <SkeletonRows v-if="outline" :rows="5" density="dense" description />
+            </div>
             <p v-else-if="filtered" class="px-2 py-4 text-xs text-muted">
                 Nothing here matches. The agent's <b>kb</b> command searches the same notes — and a link to a note nobody has written yet is a
                 perfectly good way to leave a gap for later.

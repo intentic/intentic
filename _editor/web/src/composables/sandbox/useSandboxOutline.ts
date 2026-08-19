@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
 import { activeSandboxId } from "./activeSandbox";
-import { useLoadingReveal } from "../loadingReveal";
+import { useLoadingReveal } from "@intentic/ui";
 
 /* Should a sandbox view be drawing its outline right now — the one question every tab in the sandbox hub asks,
  * answered once so no tab has to know the thresholds.

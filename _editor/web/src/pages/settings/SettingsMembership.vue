@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Icon, Notice, Row } from "@intentic/ui";
+import { Card, Icon, Notice, Row, useLoadingReveal } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
@@ -37,6 +37,14 @@ const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
 const loadError = computed(() => (error.value === null ? undefined : errorMessage(error.value, `Couldn't load the membership state.`)));
+
+/* The membership read is SHARED (the account menu is usually already holding its answer by the time this tab
+ * opens), so the common case here is no wait at all — which is exactly the case an ungated outline would ruin
+ * with a flash of grey where the meter belongs. */
+const outline = useLoadingReveal(
+    computed(() => membership.value === undefined && error.value === null),
+    computed(() => `membership`),
+);
 
 /* THE POST-CHECKOUT GAP. Stripe sends the browser back with ?membership=welcome, but the webhook that makes
  * the membership real can land seconds later — so the first read after a completed payment often still says
@@ -379,6 +387,34 @@ const assurances = computed(() => [
                 </div>
             </Card>
         </template>
+
+        <!-- ══ THE WAIT ════════════════════════════════════════════════════════════════════════════════════
+             Every branch above needs the membership state, so before it lands this tab is an empty column —
+             and this is the tab reached by a member who came to check one number, which makes the blank beat
+             the most conspicuous one in the hub.
+
+             ONE MODEST CARD, NOT EITHER REAL ONE. The two outcomes are a compact meter and a full sales page,
+             and there is no way to know which is coming: outlining the offer would flash a hero at a paying
+             member, and outlining the meter would promise a number to somebody about to be sold to. So this
+             promises only what BOTH open with — a masthead row, one large figure or headline, and a couple of
+             supporting lines — and stops there rather than guessing at the half that differs. -->
+        <Card v-else-if="outline" role="status" aria-busy="true">
+            <span class="sr-only">Reading your membership…</span>
+            <Row flush :heading="2" aria-hidden="true">
+                <template #lead><span class="skeleton block h-4.5 w-4.5 shrink-0" /></template>
+                <template #title>
+                    <span class="flex min-h-[1lh] items-center"><span class="skeleton block h-4 w-44" /></span>
+                </template>
+                <template #meta><span class="skeleton block h-2.5 w-28" /></template>
+            </Row>
+            <div class="mt-4 flex flex-col gap-2" aria-hidden="true">
+                <!-- The large figure both branches lead with: the meter's remaining-credits number and the
+                     offer's headline are the same size on screen, so one bar stands in for either. -->
+                <span class="skeleton block h-8 w-56" />
+                <span class="skeleton block h-2.5 w-full max-w-md" />
+                <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
+            </div>
+        </Card>
 
         <Notice v-if="actionError" :of="{ tone: `danger`, title: `Couldn't open the payment page.`, detail: actionError }" />
     </div>

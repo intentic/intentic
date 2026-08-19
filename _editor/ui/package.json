@@ -66,6 +66,10 @@
         "./async": {
             "types": "./src/lib/async.ts",
             "default": "./src/lib/async.ts"
+        },
+        "./loading-reveal": {
+            "types": "./src/composables/loadingReveal.ts",
+            "default": "./src/composables/loadingReveal.ts"
         }
     },
     "scripts": {

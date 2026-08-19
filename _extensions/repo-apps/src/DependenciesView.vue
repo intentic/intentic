@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import { Card, ui, DagGraph, Notice, noticeOf, ToggleSwitch, type DagEdge, type DagNode } from "@intentic/extension-ui";
+import { Card, ui, DagGraph, Notice, noticeOf, ToggleSwitch, useLoadingReveal, type DagEdge, type DagNode } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { useWorkspaceGraph } from "./useWorkspaceGraph";
 
@@ -11,6 +11,8 @@ import { useWorkspaceGraph } from "./useWorkspaceGraph";
 
 const props = defineProps<{ repo: string }>();
 const { packages, edges, error, isLoading } = useWorkspaceGraph(toRef(props, `repo`));
+// Drawn only once the wait has earned it, and keyed on the repo so switching starts a fresh wait.
+const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
 
 const showDev = ref(false);
 const selectedId = ref<string | undefined>(undefined);
@@ -133,7 +135,17 @@ const dagEdges = computed<DagEdge[]>(() =>
                 </label>
             </div>
         </div>
-        <Card v-if="packages.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
+        <!-- The graph fills the pane, so the wait for it is the largest blank in this tab. Drawn as a scatter
+             of package cards at the size the real ones land at — not as a graph: the shape of somebody's
+             dependency tree is the one thing this view exists to show and the last thing to invent. -->
+        <div v-if="isLoading && outline" class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
+            <span class="sr-only">Reading the workspace graph…</span>
+            <div class="flex flex-wrap gap-3" aria-hidden="true">
+                <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
+            </div>
+        </div>
+
+        <Card v-else-if="packages.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
             No workspace packages found — pnpm-workspace.yaml names no package dirs.
         </Card>
         <div v-else class="min-h-0 flex-1">

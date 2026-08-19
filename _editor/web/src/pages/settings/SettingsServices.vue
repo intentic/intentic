@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ProviderService, ProviderServicesState, ServiceProbeResult } from "@intentic-app/api-contract";
-import { Card, ui, type NoticeModel, Notice, Row } from "@intentic/ui";
+import { Card, ui, useLoadingReveal, type NoticeModel, Notice, Row } from "@intentic/ui";
 import { noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, reactive, ref } from "vue";
@@ -47,6 +47,12 @@ const load = async (): Promise<void> => {
 };
 
 onMounted(load);
+
+// Only once the wait has earned it — see the payouts card, which reads the other half of the same account.
+const outline = useLoadingReveal(
+    computed(() => state.value === null && loadError.value === undefined),
+    computed(() => `provider-services`),
+);
 
 const rules = computed(() => state.value?.rules);
 const services = computed(() => state.value?.services ?? []);
@@ -137,6 +143,34 @@ const copySecret = async (): Promise<void> => {
                 This platform doesn't take self-serve service listings. Its catalog is written by its operator.
             </p>
 
+            <template v-else-if="outline">
+                <!-- The same wait the payouts card draws, for the same reason: the masthead is instant and the
+                     body is a round-trip, so a titled card sits empty until the listings answer. What is outlined
+                     is only what every provider gets — the admission rules, which are rendered from the
+                     platform's own numbers and are therefore the one block guaranteed to land. Listings and the
+                     create form are withheld: most providers have neither, and promising rows that never arrive
+                     is worse than promising nothing. -->
+                <div class="flex flex-col gap-2" role="status" aria-busy="true">
+                    <span class="sr-only">Reading your service listings…</span>
+                    <span class="skeleton block h-3 w-36" aria-hidden="true" />
+                    <!-- TWO PARAGRAPHS, SPACED AS TWO. The lines inside a paragraph sit a leading apart and the
+                         paragraphs sit a gap apart, so the outline reads as prose. Given one even gap instead,
+                         six identical bars read as a table nobody is about to see. The last line of each is
+                         short because the last line of a wrapped paragraph is. -->
+                    <div
+                        v-for="(paragraph, block) in [
+                            [`w-full`, `w-full`, `w-4/5`],
+                            [`w-full`, `w-11/12`, `w-3/5`],
+                        ]"
+                        :key="block"
+                        class="flex flex-col gap-1"
+                        aria-hidden="true"
+                    >
+                        <span v-for="(width, line) in paragraph" :key="line" class="skeleton block h-2.5" :class="width" />
+                    </div>
+                </div>
+            </template>
+
             <template v-else-if="state && rules">
                 <!-- The unrecoverable value, in the loudest box on the page. -->
                 <div v-if="shownSecret" class="flex flex-col gap-2 rounded border border-warn/40 bg-warn/5 p-3">
@@ -169,8 +203,8 @@ const copySecret = async (): Promise<void> => {
                     <p class="text-xs text-muted">
                         There's no review queue. You prove a publisher name, connect payouts, and pass a health check — three calls to your endpoint,
                         one correctly signed that has to answer, and two deliberately bad ones that have to be refused. Passing puts you live
-                        immediately, on probation. The check gives your endpoint the same five minutes a paid run gets, so a slow one takes a
-                        while to come back.
+                        immediately, on probation. The check gives your endpoint the same five minutes a paid run gets, so a slow one takes a while to
+                        come back.
                     </p>
                     <p class="text-xs text-muted">
                         Probation caps the price at {{ rules.probationMaxCredits }} credits and badges every listing as new. It lifts after

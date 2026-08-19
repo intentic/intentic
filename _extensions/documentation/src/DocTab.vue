@@ -7,9 +7,10 @@
      route belongs to the Workspace, and two document tabs open at once would fight over one key. A tab's subject
      is the tab's own state, so this takes it as a prop and touches no query at all. -->
 <script setup lang="ts">
-import { Button, ui, Icon, SegmentedControl } from "@intentic/extension-ui";
+import { Button, ui, Icon, SegmentedControl, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import DocPage from "./DocPage.vue";
+import DocSkeleton from "./DocSkeleton.vue";
 import { packageFigures } from "./figures.js";
 import { host } from "./host.js";
 import { splitRepo } from "./paths.js";
@@ -40,6 +41,12 @@ const SOURCES = [
 ];
 
 const { set, isLoading, hasStaged, usePackage } = useDocs(repo, source);
+// Drawn only once the wait has earned it, and keyed on the directory so opening another one starts a fresh
+// wait rather than holding the last page's outline over it.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `${repo.value}:${dir.value ?? ``}`),
+);
 const packageQuery = usePackage(dir);
 
 // A page that exists only as a draft has to show the draft, or the tab renders empty for the one document that is
@@ -75,7 +82,8 @@ const openArea = (): void =>
             </div>
         </div>
 
-        <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted"><Icon name="spinner" class="text-lg" spin /></div>
+        <DocSkeleton v-if="isLoading && outline" />
+        <div v-else-if="isLoading" class="min-h-0 flex-1" />
 
         <!-- Undocumented is the ordinary state of most directories, so it is an invitation rather than an error —
              and the invitation goes where generation actually lives, because a run needs a scope and choosing one

@@ -5,12 +5,25 @@
      staleness counts, publishing — to a strip and a sidebar. Everything shown here is a file that exists; there is
      no documentation service and no server-side state to be out of step with. -->
 <script setup lang="ts">
-import { type AgentRunChoice, Button, ui, Icon, PageAction, ScrollFrame, Picker, type PickerOption, SegmentedControl, SplitView } from "@intentic/extension-ui";
+import {
+    type AgentRunChoice,
+    Button,
+    ui,
+    Icon,
+    PageAction,
+    ScrollFrame,
+    Picker,
+    type PickerOption,
+    SegmentedControl,
+    SplitView,
+    useLoadingReveal,
+} from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledgeStaged } from "./attention.js";
 import { documentAt, refreshDocumentPresence } from "./docPresence.js";
 import DocsNav from "./DocsNav.vue";
 import DocPage from "./DocPage.vue";
+import DocSkeleton from "./DocSkeleton.vue";
 import { packageFigures } from "./figures.js";
 import GenerateDialog from "./GenerateDialog.vue";
 import { host } from "./host.js";
@@ -87,6 +100,8 @@ const SOURCES = [
 ];
 
 const { set, isLoading, hasStaged, usePackage, refresh } = useDocs(repo, source);
+// Drawn only once the wait has earned it, keyed on the repository being read.
+const outline = useLoadingReveal(isLoading, repo);
 const { rows, start, advance, stop } = useRuns(repo);
 const { preflight, publish, discard } = usePublish();
 
@@ -248,9 +263,8 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                 Contents
             </button>
 
-            <div v-if="isLoading" class="flex min-h-0 flex-1 items-center justify-center text-muted">
-                <Icon name="spinner" class="text-lg" spin />
-            </div>
+            <DocSkeleton v-if="isLoading && outline" />
+            <div v-else-if="isLoading" class="min-h-0 flex-1" />
 
             <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting
                  point and this view is where the first set gets made. -->

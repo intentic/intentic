@@ -210,6 +210,13 @@ export { useRailMemory } from "./composables/useRailMemory.js";
  * extension: both are exactly what every view with a live readout or a user-facing mutation hand-rolls, and the
  * app's four independent `now` intervals were the original argument for the first one. */
 export { useNow } from "./composables/useNow.js";
+/* WHEN A WAIT IS ALLOWED TO BE SEEN — the gate every <SkeletonRows> and every hand-drawn outline belongs
+ * behind, and the half of a loading state that is invisible in a screenshot. A warm read answers under the
+ * reveal delay, so the common case paints no placeholder at all; without the gate a 90ms round-trip flashes a
+ * field of grey bars and the eye reads it as a fault. It moved here from the web app for the reason <Row>
+ * ships beside <RowGroup>: the outline was already in the kit and the rule about when to draw it was not, so
+ * every extension that grew a placeholder drew it ungated — three of them, all flashing. */
+export { useLoadingReveal } from "./composables/loadingReveal.js";
 export { errorMessage, noticeFrom, noticeOf, useAsyncAction } from "./composables/useAsyncAction.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
 // The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns

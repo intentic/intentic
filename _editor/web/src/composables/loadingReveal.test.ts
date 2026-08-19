@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick, ref, type Ref } from "vue";
-import { useLoadingReveal } from "./loadingReveal";
+import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 
 // The two thresholds are the whole point of the composable, so they are what this suite pins: nothing is drawn
 // for a wait that resolves inside the delay, and anything drawn stays long enough to be seen.

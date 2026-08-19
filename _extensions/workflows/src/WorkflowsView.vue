@@ -2,6 +2,7 @@
 import {
     AnchoredOverlay,
     Button,
+    Card,
     ui,
     ConfirmDialog,
     Icon,
@@ -15,6 +16,7 @@ import {
     RowGroup,
     StatusBadge,
     timeAgo,
+    useLoadingReveal,
     type StatusVariant,
 } from "@intentic/extension-ui";
 import { type LoopDesign, loopDesignLine, type Workflow, type WorkflowRun, type WorkflowSummary } from "@intentic/sandbox-contract";
@@ -63,7 +65,12 @@ import { useWorkflows } from "./useWorkflows";
  * the old bare-bordered box under a bare "Start from" label said none of it.
  */
 
-const { workflows, runs, runsLoaded, error: listError, remove } = useWorkflows();
+const { workflows, isLoading, runs, runsLoaded, error: listError, remove } = useWorkflows();
+// Only drawn once the wait has earned it — see useLoadingReveal for the two thresholds.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `workflows`),
+);
 // The page's second kind of design — see the saved-loops block below for what one is and why it lives here.
 const { loops, error: loopsError, save: saveLoop, remove: removeLoop } = useLoopDesigns();
 
@@ -398,7 +405,43 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </div>
             </section>
 
-            <section v-if="workflows.length > 0">
+            <!-- The saved library, as the cards that are coming. A workflow card is a title, a two-line
+                 description and a diagram frame, and the frame is most of its height — so an outline that drew
+                 only the text would promise a card a third of the size of the one that lands, and the
+                 templates below it would jump down the page as the real ones arrive. Two, because two is the
+                 shortest library worth drawing and a reader with twenty is no worse served by seeing two. -->
+            <section v-if="isLoading && outline" role="status" aria-busy="true">
+                <span class="sr-only">Reading your workflows…</span>
+                <div class="mb-2 flex items-center gap-2 px-0.5" aria-hidden="true">
+                    <span class="skeleton block h-2.5 w-24" />
+                </div>
+                <div class="flex flex-col gap-3" aria-hidden="true">
+                    <Card v-for="card in 2" :key="card" class="flex flex-col gap-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex min-w-0 flex-col gap-1.5">
+                                <span class="skeleton block h-3.5" :class="card === 1 ? `w-44` : `w-32`" />
+                                <span class="skeleton block h-2.5" :class="card === 1 ? `w-64` : `w-52`" />
+                            </div>
+                            <span class="skeleton block h-6 w-16 shrink-0" />
+                        </div>
+                        <!-- THE FRAME IS THE FRAME, NOT A GREY SLAB. Filled edge to edge with a skeleton, the
+                             picture area came out darker and heavier than the real one, so the outline read as
+                             a card with a hole in it rather than a card about to hold a diagram. The frame
+                             keeps its own wash (WorkflowCard draws the same one) and the bars go INSIDE it, at
+                             a node's size — which is also the honest amount to promise: that a picture is
+                             coming, not what it will be a picture of.
+
+                             h-36 is 9rem, the frame's own height for the two-node graph most saved workflows
+                             are, and on the scale rather than an arbitrary value because an extension may only
+                             use classes the surface promises (see extensionSurface.test.ts). -->
+                        <div class="flex h-36 w-full flex-col items-center justify-center gap-3 rounded-lg bg-content/4">
+                            <span v-for="node in 2" :key="node" class="skeleton block h-14 w-52 rounded-md" />
+                        </div>
+                    </Card>
+                </div>
+            </section>
+
+            <section v-else-if="!isLoading && workflows.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <span :class="ui.sectionLabel()">Your workflows</span>
                     <span class="text-2xs font-medium text-subtle">{{ workflows.length }}</span>
@@ -540,9 +583,12 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">Start from a template</span>
+                    <!-- "Nothing saved yet" is a claim about the reader's own library, and an unread library
+                         answers `[]` exactly like an empty one — so while the read is in flight the caption
+                         says only the part that is true of every visit. -->
                     <span class="min-w-0 text-2xs text-subtle">
                         {{
-                            workflows.length > 0
+                            workflows.length > 0 || isLoading
                                 ? `A ready-made design, opened in the designer — nothing is saved or spent until you say so.`
                                 : `Nothing saved yet. Open a ready-made design and edit it — nothing is saved or spent until you say so.`
                         }}

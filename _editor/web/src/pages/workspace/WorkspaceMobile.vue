@@ -4,7 +4,7 @@ import { BottomSheet, clipboardOf, ConfirmDialog, Modal, type NoticeModel, Notic
 import Button from "primevue/button";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useLoadingReveal } from "../../composables/loadingReveal";
+import { useLoadingReveal } from "@intentic/ui";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";

@@ -152,6 +152,19 @@ export {
     SegmentedControl,
     seriesColor,
     sinceOf,
+    /* The gate <SkeletonRows> and every hand-drawn outline go behind. It ships WITH the outline rather than
+     * after it, because the three extensions that already drew one drew it ungated: a placeholder that flashes
+     * for 90ms on a warm read is worse than no placeholder at all, and that is not a thing anybody notices in
+     * the screenshot they ship. See its note in the kit for the two thresholds. */
+    useLoadingReveal,
+    /* <SkeletonRows> ships beside <RowGroup> for the third time this file makes the argument: the container
+     * without the WAIT is what made three extensions write their own. Pipelines, deployments and maintenance
+     * each hand-rolled a placeholder board, and the row-shaped half of all three is this component — same
+     * bars, same widths walked in order, same `aria-hidden` under the caller's one status region. What they
+     * could not get right by hand is the part that does not show up in a screenshot: a bar is thinner than the
+     * text it replaces, so an outline built out of divs is shorter than the list that lands and the page jumps
+     * as it fills. This one renders REAL <Row>s, so it inherits the tier's padding and keeps the height. */
+    SkeletonRows,
     SplitView,
     StatStrip,
     StatusBadge,

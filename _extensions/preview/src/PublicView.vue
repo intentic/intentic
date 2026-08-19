@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge } from "@intentic/extension-ui";
-import { ref } from "vue";
+import { Button, ui, CopyButton, Icon, InfoHint, Notice, noticeOf, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
+import { computed, ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
 import { usePublic } from "./usePublic";
@@ -19,6 +19,11 @@ import { usePublic } from "./usePublic";
  * the Page and the header above the tab strip. */
 
 const { files, url, servedCount, error, isLoading, unpublish } = usePublic();
+// Drawn only once the wait has earned it — see useLoadingReveal.
+const outline = useLoadingReveal(
+    isLoading,
+    computed(() => `public-files`),
+);
 
 const busy = ref<string>();
 const actionError = ref<string>();
@@ -85,8 +90,25 @@ const size = (bytes: number): string => {
                 This sandbox has no public address, so files can't be published from it.
             </div>
 
+            <!-- The list already knows not to say "nothing is published" before it has looked; what it did
+                 instead was leave the space empty, which says the same thing more quietly. The file rows that
+                 are coming stand in — an icon, the path, and its size on the line below. -->
+            <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
+                <span class="sr-only">Reading your published files…</span>
+                <div class="flex flex-col divide-y divide-line" aria-hidden="true">
+                    <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
+                        <span class="skeleton block h-3.5 w-3.5 shrink-0" />
+                        <div class="flex min-w-0 flex-1 flex-col gap-1">
+                            <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
+                            <span class="skeleton block h-2 w-12" />
+                        </div>
+                        <span class="skeleton block h-3.5 w-10 shrink-0" />
+                    </div>
+                </div>
+            </div>
+
             <div
-                v-if="files.length === 0 && !isLoading"
+                v-else-if="files.length === 0 && !isLoading"
                 class="flex flex-col items-center gap-2 rounded-lg border border-line bg-card py-10 text-center"
             >
                 <Icon name="globe" class="text-2xl text-subtle" />

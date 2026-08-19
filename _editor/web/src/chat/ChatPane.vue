@@ -24,7 +24,7 @@ import { modelLabelFor, providerDisplayLabel, trialStatus } from "../composables
 import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
-import { useLoadingReveal } from "../composables/loadingReveal";
+import { useLoadingReveal } from "@intentic/ui";
 import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { useToolCalls } from "../composables/chat/useToolCalls";
