@@ -5846,6 +5846,13 @@ export const TerminalSessionSchema = z.object({
     running: z.boolean(),
     activityAt: z.number(),
     exitCode: z.number().optional(),
+    /* WHAT THIS SESSION IS RUNNING RIGHT NOW — `pane_current_command` of its live pane — and ABSENT when it is
+     * sitting at its shell prompt. Not a second spelling of `running`: that field says whether a session is a
+     * live thing at all (and for a `web-*` shell it is unconditionally true, prompt or build), whereas this one
+     * says whether anything is HAPPENING in it. Killing a terminal is final, so the panel confirms on this
+     * field before its × ends a session that has work in it, and names the command in the question — see the
+     * daemon's `foreground` (system/system.routes.ts) for why a word rather than a flag. */
+    command: z.string().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
     // The agent has parked on a command that stopped for a PERSON — an OTP prompt, a security-key touch, a

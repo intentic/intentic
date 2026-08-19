@@ -47,6 +47,11 @@ export interface TerminalTab {
     // /extensions start/stop routes (absent on docker and orphaned sessions).
     readonly extensionId?: string;
     readonly processName?: string;
+    // What this session is running RIGHT NOW ("pnpm build", "vim"), absent while it waits at its prompt. The
+    // difference `running` cannot draw — a shell is `running` either way — and therefore the only thing that
+    // tells a × aimed at an idle shell from one about to end a build. The strip marks it and the kill confirms
+    // on it (pages/TerminalPanel.vue).
+    readonly command?: string;
 }
 
 // The surfaces WORK runs on, as opposed to the PLACES the user keeps: an agent's Bash shell and the daemon's
@@ -163,10 +168,14 @@ export interface TerminalTabs {
     // Move one session out of its split group into its own tab, right after the group.
     readonly unsplit: (name: string) => void;
     readonly newTab?: () => void;
-    readonly closeTab?: (name: string) => void;
     // Open a fresh shell INSIDE the named session's group, splitting the pane (VSCode's Split Terminal).
     readonly splitTab?: (name: string) => void;
-    // Kill several sessions at once (the strip's multi-selection).
+    /* END SESSIONS — one at a time or a whole selection, and the ONLY way out of here to do it.
+     *
+     * A per-tab `closeTab` used to sit beside this, and it is deliberately gone. Killing a session is
+     * irreversible, so the panel guards it (a confirm when something is running in there — pages/
+     * TerminalPanel.vue), and a second, quieter door straight to the same act is precisely how a future call
+     * site walks around that guard without anyone noticing. A single kill is a set of one. */
     readonly killTabs?: (names: string[]) => void;
     readonly restart?: () => void;
 }
@@ -798,20 +807,21 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         persistGroups();
         mount(tab.name);
     };
-    // Close a tab (its × button): kill the tmux session for good, then drop its client state. A process log
-    // view only hides — stopping a background process is the popover's explicit Stop, never a tab close. The
-    // kill runs unawaited: the strip is right immediately (endSession), and the source settles the shared
-    // session list once the daemon confirms.
-    const closeTab = (name: string): void => {
+    // End ONE tab: kill the tmux session for good, then drop its client state. A process log view only hides —
+    // stopping a background process is the popover's explicit Stop, never a tab close. The kill runs unawaited:
+    // the strip is right immediately (endSession), and the source settles the shared session list once the
+    // daemon confirms. Internal on purpose — the published door is `killTabs`, so nothing reaches an
+    // irreversible kill by a route the panel's confirm doesn't cover.
+    const endTab = (name: string): void => {
         if (!viewedProcesses.has(name)) {
             void kill(name);
         }
         endSession(name);
     };
-    // The strip's multi-selection kill — one closeTab per name; endSession refocuses as the set shrinks.
+    // The strip's kill, of one pill or a whole selection — endSession refocuses as the set shrinks.
     const killTabs = (names: string[]): void => {
         for (const name of names) {
-            closeTab(name);
+            endTab(name);
         }
     };
     // Restart the active shell: kill its session and open a fresh one IN ITS PLACE — same group, same slot —
@@ -853,7 +863,6 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         joinTabs,
         unsplit,
         newTab,
-        closeTab,
         splitTab,
         killTabs,
         restart,

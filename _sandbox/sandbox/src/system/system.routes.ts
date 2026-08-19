@@ -49,11 +49,20 @@ const execFileAsync = promisify(execFile);
 // every line of a session carries the same value; 0 stands for "tmux didn't say", and both consumers (the work
 // popover's "how long since this said anything", the retention sweep's clock) read that as unknown rather than
 // as 1970.
+//
+// `liveCommand` is the same field read for a different question, and the distinction is the whole of why it is
+// separate. `command` is the LAST pane's, dead or alive — a finished command's ghost, which is exactly what
+// makes it right for an exit status and wrong for "is anything happening in here". A window-per-command session
+// (agent-*, job-*) keeps its finished panes on purpose (remain-on-exit, so their output stays readable), so its
+// last pane is normally a corpse while a live one runs beside it. This one skips the corpses.
 export interface PaneState {
     readonly command: string;
     readonly live: boolean;
     readonly exitCode: number | undefined;
     readonly activityAt: number;
+    // The foreground command of the last pane that is still ALIVE — undefined when every pane in the session is
+    // dead. What "something is running in here" is read off (see `foreground` below).
+    readonly liveCommand: string | undefined;
 }
 
 export const paneStates = (stdout: string): Map<string, PaneState> => {
@@ -65,15 +74,38 @@ export const paneStates = (stdout: string): Map<string, PaneState> => {
         }
         const exitCode = Number.parseInt(status ?? "", 10);
         const activitySeconds = Number(activity);
+        // Unparseable `pane_dead` reads as alive, the same safe direction the sweep takes.
+        const alive = dead !== "1";
+        const prior = states.get(name);
         states.set(name, {
             command,
-            live: dead !== "1" || states.get(name)?.live === true,
+            live: alive || prior?.live === true,
             exitCode: Number.isFinite(exitCode) ? exitCode : undefined,
             activityAt: Number.isFinite(activitySeconds) && activitySeconds > 0 ? activitySeconds * 1000 : 0,
+            liveCommand: alive ? command : prior?.liveCommand,
         });
     }
     return states;
 };
+
+/* WHAT IS RUNNING IN A SESSION RIGHT NOW, in one word — or nothing at all, when it is sitting at its prompt.
+ *
+ * This is the difference the terminals list could not previously state, and the gap was a data loss the user
+ * paid for. Every `web-*` shell reports `running: true` whether it holds a two-minute build or a bare prompt
+ * (see the handler below), so the panel's × had nothing to tell those two apart with — and it kills a tmux
+ * session for good. One mis-aimed click on the pill next to the one you meant, and the build, the test run, or
+ * the editor holding unsaved buffers went with it, silently and with no way back.
+ *
+ * tmux was answering this all along: `pane_current_command` is the shell itself at an idle prompt and the
+ * foreground process otherwise. The list already asked for it and threw it away for every kind but `process`.
+ * The browser confirms on this field and labels the pill with it (web/pages/TerminalPanel.vue).
+ *
+ * Deliberately not a boolean. "Kill the running terminal?" is a question the user cannot answer; "pnpm build"
+ * is one they can — and it costs nothing over a flag, because the word is what tmux hands us. An editor or a
+ * pager counts as busy on the same terms as a build: it is a foreground process with state in it, and it is
+ * the honest reading of "something is going on in here". */
+const foreground = (liveCommand: string | undefined): string | undefined =>
+    liveCommand === undefined || liveCommand === SHELL ? undefined : liveCommand;
 
 // Long-lived events stream the browser holds open: heartbeat frames every ~2s (detect the sandbox dying — the
 // tunnel drops the proxied response when the origin goes away — and trip a client watchdog) INTERLEAVED with
@@ -379,10 +411,16 @@ export const createSystemRoutes = (services: Services) => {
                         return session === undefined ? [] : [session];
                     }),
                 );
-                const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt }]): TerminalsList["sessions"] => {
-                    // Every row carries the session's clock and its last window's status; what differs per kind is
-                    // only what `running` means.
-                    const seen = { activityAt, ...(exitCode !== undefined ? { exitCode } : {}) };
+                const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
+                    // Every row carries the session's clock, its last window's status, and — when its live pane is
+                    // off doing something rather than sitting at a prompt — what that something is. What differs
+                    // per kind is only what `running` means.
+                    const busy = foreground(liveCommand);
+                    const seen = {
+                        activityAt,
+                        ...(exitCode !== undefined ? { exitCode } : {}),
+                        ...(busy !== undefined ? { command: busy } : {}),
+                    };
                     if (name.startsWith(WEB_SESSION_PREFIX)) {
                         return [{ name, kind: "shell" as const, running: true, ...seen }];
                     }

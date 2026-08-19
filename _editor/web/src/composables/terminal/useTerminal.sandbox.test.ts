@@ -303,7 +303,7 @@ test("a killed session does not linger in the remembered arrangement", async () 
     await attach();
     tabs.joinTabs([`web-1`, `web-2`]);
 
-    tabs.closeTab?.(`web-2`);
+    tabs.killTabs?.([`web-2`]);
     daemonLists([shell(`web-1`)]);
     await tabs.refresh();
 

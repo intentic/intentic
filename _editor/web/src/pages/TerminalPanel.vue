@@ -60,7 +60,7 @@ const {
 const emit = defineEmits<{ close: [] }>();
 
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
-const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, closeTab, splitTab, killTabs, restart } = tabs;
+const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, splitTab, killTabs, restart } = tabs;
 
 /* WHAT THE PANEL SHOWS BEFORE IT KNOWS ANYTHING — the shapes of the strip this sandbox was left with.
  *
@@ -188,16 +188,20 @@ const segmentTooltip = (name: string): string | undefined => {
     if (tab === undefined) {
         return undefined;
     }
-    if (tab.kind === `agent`) {
-        return tab.running === false ? `AI terminal — finished` : `AI terminal`;
-    }
-    if (tab.kind === `job`) {
-        return `Job terminal`;
-    }
     if (tab.kind === `process`) {
         return `Background process — read-only logs`;
     }
-    return tab.running === false ? `finished` : undefined;
+    // What it is running leads, whatever kind it is: on a crowded strip the label is a number and the command is
+    // the only thing that identifies the terminal to the person about to close it. The full command, untruncated
+    // — the pill clips it, and the tooltip is where the clipped end is meant to be readable.
+    const doing = tab.command === undefined ? undefined : `Running ${tab.command}`;
+    if (tab.kind === `agent`) {
+        return doing ?? (tab.running === false ? `AI terminal — finished` : `AI terminal`);
+    }
+    if (tab.kind === `job`) {
+        return doing ?? `Job terminal`;
+    }
+    return doing ?? (tab.running === false ? `finished` : undefined);
 };
 
 // --- Multi-selection (VSCode's terminal list): Shift extends, Ctrl toggles, plain click activates ----------
@@ -230,26 +234,71 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
     switchTab(name);
 };
 
-// --- Killing in bulk ---------------------------------------------------------------------------
-// `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
-// lifecycle belongs to the processes popover (the sweep above draws the same line, and for the same reason —
-// killing one there would be a no-op that lied about the count).
-//
-// A bulk kill ENDS whatever those sessions are running, so it stops at a confirm listing the live ones. That is
-// the rule the other two strips already follow — the chat's "stop N running agents?", the workspace's
-// unsaved-edits dialog. A single × (and the menu's "Kill terminal") stays silent: that pill is under the
-// pointer, the one being killed.
+// --- Killing ---------------------------------------------------------------------------------
+/* EVERY KILL COMES THROUGH HERE — the pill's ×, the menu's row, the chord, the mass actions — because a tmux
+ * session that is killed is gone, and which gesture reached for it changes nothing about that.
+ *
+ * `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
+ * lifecycle belongs to the processes popover (killing one there would be a no-op that lied about the count).
+ *
+ * TWO THINGS STOP A KILL, and they are different questions asked of the same set:
+ *
+ *   · BUSY — something is actually running in that session (`command`: "pnpm build", "vim"). This one stops a
+ *     SINGLE × too, and it is the reason this section was rewritten. A single close used to go through in
+ *     silence on the reasoning that the pill is under the pointer and named in the gesture — true of the pill,
+ *     and no help at all about what is INSIDE it. The strip is a row of near-identical pills; the one beside
+ *     the one you meant holds a build half an hour in, or an editor with unsaved buffers, and there is no undo
+ *     for either. `running` could not have caught it: a shell reports `running: true` at a bare prompt just as
+ *     it does mid-build, so a confirm keyed on that would have fired on every close and taught the user to
+ *     click through it — which is worse than no confirm at all. The daemon now says what the pane is running
+ *     (system.routes.ts `foreground`), so the dialog only appears when there is something to lose and can name
+ *     it. An idle shell still closes on one click, exactly as before.
+ *
+ *   · BULK — more than one session at once, any of them live. The gesture names a count, not the terminals, so
+ *     the dialog is where the user finds out which they are. The rule the other two strips already follow (the
+ *     chat's "stop N running agents?", the workspace's unsaved-edits dialog).
+ *
+ * A background process's × merely hides its read-only log view, so it is never either. */
 const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
 const pendingKill = ref<string[]>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
-const pendingKillRunning = computed(() => (pendingKill.value === undefined ? [] : runningIn(pendingKill.value)));
+// The tabs with work in them. `process` is excluded on its own terms — its × closes a view, not a session — so
+// a dev server's log tab never asks a question about a thing the click does not do.
+const busyIn = (names: string[]): TerminalTab[] =>
+    order.value.filter((tab) => names.includes(tab.name) && tab.kind !== `process` && tab.command !== undefined);
+const isBusy = (name: string): boolean => {
+    const tab = tabByName.value.get(name);
+    return tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
+};
+// What the dialog LISTS: the busy ones when that is why it opened, else the live ones a bulk kill is ending.
+// Never both — a mixed set would ask two questions in one list, and the busy ones are the answer that matters.
+const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value)));
+const pendingKillItems = computed(() =>
+    pendingKillBusy.value.length > 0 ? pendingKillBusy.value : pendingKill.value === undefined ? [] : runningIn(pendingKill.value),
+);
+const killHeader = computed(() => {
+    const busy = pendingKillBusy.value;
+    if (busy.length === 1) {
+        // The command IS the question — "Kill the terminal running pnpm build?" is answerable; "are you sure?"
+        // is not. Truncated because a pill's session can be running something with a very long name.
+        return `Kill the terminal running ${(busy[0]?.command ?? ``).slice(0, 24)}?`;
+    }
+    if (busy.length > 1) {
+        return `Kill ${busy.length} busy terminals?`;
+    }
+    return pendingKillItems.value.length === 1 ? `Kill the running terminal?` : `Kill ${pendingKillItems.value.length} running terminals?`;
+});
+const killBody = computed(() =>
+    pendingKillBusy.value.length > 0
+        ? `This stops what ${pendingKillBusy.value.length === 1 ? `it is` : `they are`} doing. Scrollback goes with it, and there is no undo.`
+        : `Killing these ends whatever they are running. Scrollback goes with them.`,
+);
 const requestKill = (names: string[]): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // One session is the single-kill case however it was reached — a lone selected pill, or "kill all" with one
-    // terminal left. It is on screen and named in the gesture, so it goes without a dialog.
-    if (names.length === 1 || runningIn(names).length === 0) {
+    // Nothing running in any of them, and nothing bulk about the gesture — the click is the whole decision.
+    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
         killTabs(names);
         selectedKeys.value = [];
         return;
@@ -409,13 +458,15 @@ const menuItems = computed<MenuItem[]>(() => {
         { label: `Change color…`, shortcut: commandShortcut(`terminal.changeColor`), command: () => openCustomize(name, `color`) },
         { label: `Change icon…`, shortcut: commandShortcut(`terminal.changeIcon`), command: () => openCustomize(name, `icon`) },
     );
-    if (closeTab !== undefined) {
+    if (killTabs !== undefined) {
         items.push(
             { separator: true },
             {
                 label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`,
                 shortcut: commandShortcut(`terminal.kill`),
-                command: () => closeTab(name),
+                // Through requestKill like every other kill — a menu row aimed at a busy terminal is no more
+                // informed about what is inside it than the × is.
+                command: () => requestKill([name]),
             },
         );
     }
@@ -690,7 +741,7 @@ const registerPanelCommands = (): void => {
             },
         });
     }
-    if (closeTab !== undefined) {
+    if (killTabs !== undefined) {
         entries.push({
             command: `terminal.kill`,
             title: `Kill Terminal`,
@@ -699,18 +750,18 @@ const registerPanelCommands = (): void => {
             when: `tabSurface == 'terminal'`,
             handler: (): void => {
                 // A selection is what the chord aims at when there is one (the menu's mass row does the same);
-                // requestKill is what turns two or more live sessions into a confirm.
-                if (killTabs !== undefined && selectedNames.value.length > 0) {
+                // requestKill is what turns a busy session — or two or more live ones — into a confirm. The
+                // chord is the gesture with the LEAST aim of the three: it kills whatever happens to be focused,
+                // from a keyboard, without the pointer ever being over the pill.
+                if (selectedNames.value.length > 0) {
                     requestKill(selectedNames.value);
                     return;
                 }
                 if (activeName.value !== undefined) {
-                    closeTab(activeName.value);
+                    requestKill([activeName.value]);
                 }
             },
         });
-    }
-    if (killTabs !== undefined) {
         entries.push({
             command: `terminal.killAll`,
             title: `Kill All Terminals`,
@@ -1041,11 +1092,24 @@ const endResize = (event: PointerEvent): void => {
                                 @vue:mounted="focusRename"
                             />
                             <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
+                            <!-- WHAT IT IS RUNNING, on the pill, while it runs it. The confirm behind the × is
+                                 the net; this is the thing that means the user rarely reaches it, because a
+                                 mis-close starts with a strip of pills that all look alike and no way to tell
+                                 the shell you are done with from the one holding a build. The command sits in
+                                 mono beside the label (it is a program's name, not prose) and is dropped on the
+                                 horizontal strip once the pill is a split segment — there is no room, and the
+                                 dot alone still says "busy". Vertical pills are wide, so it stays. -->
                             <span
-                                v-if="closeTab !== undefined && renamingName !== name"
+                                v-if="isBusy(name) && (vertical || group.length === 1)"
+                                class="min-w-0 max-w-24 shrink truncate font-mono text-[0.6rem] text-muted"
+                                >{{ tabByName.get(name)?.command }}</span
+                            >
+                            <span v-if="isBusy(name)" class="size-1.5 shrink-0 animate-pulse rounded-full bg-link" aria-hidden="true"></span>
+                            <span
+                                v-if="killTabs !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
-                                @click.stop="closeTab(name)"
-                                aria-label="Kill terminal"
+                                @click.stop="requestKill([name])"
+                                :aria-label="isBusy(name) ? `Kill terminal — running ${tabByName.get(name)?.command}` : `Kill terminal`"
                             >
                                 <Icon
                                     name="times"
@@ -1269,23 +1333,26 @@ const endResize = (event: PointerEvent): void => {
             </div>
         </Modal>
 
-        <!-- The confirm a bulk kill gets when it would end sessions that are still running — this panel's
-             counterpart of the chat's "stop N running agents?" and the workspace's unsaved-edits dialog. -->
+        <!-- The confirm a kill gets when there is something to lose: a terminal with work running in it (however
+             it was aimed at — ×, menu row, chord), or a bulk kill of sessions the gesture never named. Each row
+             carries what that terminal is DOING, because on a strip of numbered pills the command is the only
+             thing that tells the user which terminal this actually is. -->
         <ConfirmDialog
             :open="pendingKill !== undefined"
-            :header="pendingKillRunning.length === 1 ? 'Kill the running terminal?' : `Kill ${pendingKillRunning.length} running terminals?`"
+            :header="killHeader"
             confirm-label="Kill anyway"
             confirm-icon="trash"
-            :items="pendingKillRunning"
+            :items="pendingKillItems"
             :append-to="popout.overlayTarget.value"
             @cancel="pendingKill = undefined"
             @confirm="confirmKill"
         >
             <template #item="{ item }">
                 <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
-                <span class="truncate text-content">{{ segmentLabel(item.name) }}</span>
+                <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
+                <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">Killing these ends whatever they are running. Scrollback goes with them.</p>
+            <p class="mt-3 text-xs text-muted">{{ killBody }}</p>
         </ConfirmDialog>
 
         <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
