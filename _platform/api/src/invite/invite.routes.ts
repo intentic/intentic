@@ -26,19 +26,23 @@ const listInvites = async (context: OrpcContext, sandboxId: string) => {
  *
  * So every outcome comes back as data, with the link itself, and the caller says the true thing: invited, and
  * here is how the link travelled. `refused` is the send that was attempted and rejected (a bad key, a quota, a
- * domain that isn't verified) — logged as an incident here, because it is one, while the user-facing half stays
- * a sentence about an invite that stands. */
+ * domain that isn't verified) — logged as an incident here, because it is one, AND carried back as `reason`:
+ * the route is owner-only, the platform is the owner's own, and every one of those causes is fixed by the
+ * person reading the card. Leaving it in the server log is what made this undiagnosable from the product. */
+const REASON_LIMIT = 300;
+
 const deliverInvite = async (
     context: OrpcContext,
     invite: { to: string; sandboxName: string; inviterName: string; token: string },
-): Promise<{ link: string; delivery: InviteDelivery }> => {
+): Promise<{ link: string; delivery: InviteDelivery; reason?: string }> => {
     const { to, sandboxName, inviterName, token } = invite;
     const link = inviteLink(context.config, token);
     try {
         return { link, delivery: await sendInviteEmail(context.config, context.logger, { to, sandboxName, inviterName, link }) };
     } catch (error) {
-        context.logger.error({ err: error, to: invite.to }, `invite email refused — the invite stands, the link did not travel`);
-        return { link, delivery: `refused` };
+        context.logger.error({ err: error, to }, `invite email refused — the invite stands, the link did not travel`);
+        const said = error instanceof Error ? error.message : String(error);
+        return { link, delivery: `refused`, reason: said.slice(0, REASON_LIMIT) };
     }
 };
 

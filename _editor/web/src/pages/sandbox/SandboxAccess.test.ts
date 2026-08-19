@@ -126,3 +126,20 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     await nextTick();
     expect(writeText).toHaveBeenCalledWith(`https://localhost:47145/invite/tok`);
 });
+
+/* And when the provider REFUSED it, what it said is on the card. The owner's platform is the owner's to fix —
+ * a quota, a key, an unverified domain — and none of that is actionable from "internal server error". */
+it(`shows what the mail provider said when it refused`, async () => {
+    create.mockResolvedValue({
+        members: [],
+        link: `https://app.test/invite/tok`,
+        delivery: `refused`,
+        reason: `Resend rejected the email (429): daily quota reached`,
+    });
+    mount();
+    await inviteEmail(`guest@example.com`);
+
+    expect(shown()).toContain(`The email was refused`);
+    expect(shown()).toContain(`daily quota reached`);
+    expect(shown()).toContain(`https://app.test/invite/tok`);
+});

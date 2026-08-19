@@ -114,7 +114,11 @@ describe(`invite routes`, () => {
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(result.delivery).toBe(`refused`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
-        // The refusal is an incident on the server even though the request succeeded.
+        // WHAT THE PROVIDER SAID, carried to the owner. Without it the card can only say "the email was
+        // refused", which is where three rounds of "why is it failing" came from — the answer existed the
+        // whole time, in a console on somebody else's machine.
+        expect(result.reason).toContain(`422`);
+        // And it is still an incident on the server even though the request succeeded.
         expect(logger.error).toHaveBeenCalled();
         vi.unstubAllGlobals();
     });

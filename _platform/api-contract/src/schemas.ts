@@ -659,6 +659,11 @@ export const InviteSentSchema = z.object({
     // The accept link just minted, for the owner to hand over when the mail didn't (or couldn't) carry it.
     link: z.string(),
     delivery: InviteDeliverySchema,
+    /* What the mail provider said when it refused, verbatim-ish, for `refused` only. This is the owner's own
+     * platform rejecting their own send — a quota, a key, an unverified domain — and every one of those is
+     * fixed by the person reading the card. It used to be reachable only in the server's console, which is why
+     * the same invite could fail all afternoon with nothing on screen but "internal server error". */
+    reason: z.string().optional(),
 });
 
 // What the public accept page renders from an invite token (no session needed). `invalid` = no such token;

@@ -59,6 +59,18 @@ const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
 const notice = ref<NoticeModel>();
+
+// The accept link the owner has to carry, whenever the mail didn't. Beside `notice` rather than inside it: a
+// link is markup (it wraps, it is selected, it is never shortened), which the plain-string model can't hold.
+const handover = ref<string>();
+
+// Both together, always: a link with no sentence over it is noise, and a sentence about a link that is no
+// longer shown is worse. Every action starts here.
+const clearNotice = (): void => {
+    notice.value = undefined;
+    handover.value = undefined;
+};
+
 const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
@@ -85,7 +97,7 @@ const load = async (): Promise<void> => {
         listing.value = false;
         return;
     }
-    notice.value = undefined;
+    clearNotice();
     try {
         members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
@@ -111,32 +123,36 @@ onMounted(() => {
 });
 
 /* What to say when the link did not travel by mail. Not an error — the person IS invited, on the daemon and in
- * the record — so the sentence is about the delivery and the way out is the link itself, sitting in `detail`
- * where it can be selected, with one button that copies it. `sent` needs nothing said: the mail is the message. */
+ * the record — so the sentence is about the delivery, `detail` carries what the mail provider actually said,
+ * and the way out is the link itself: shown below (selectable, and the one thing here that must never be
+ * truncated) with a button that copies it. `sent` needs nothing said: the mail is the message. */
 const DELIVERY_NOTE: Record<Exclude<InviteDelivery, "sent">, string> = {
     unconfigured: `Invited. Email isn't set up on this platform, so send them this link yourself:`,
     "local-link": `Invited. This platform only answers on your own machine, so an emailed link would go nowhere. Send them this one yourself:`,
     refused: `Invited. The email was refused, so send them this link yourself:`,
 };
 
-const deliveryNotice = (result: { link: string; delivery: InviteDelivery }): NoticeModel | undefined =>
-    result.delivery === `sent`
-        ? undefined
-        : {
-              tone: `warning`,
-              title: DELIVERY_NOTE[result.delivery],
-              detail: result.link,
-              action: {
-                  label: `Copy link`,
-                  /* Through the clicked button's own window: this panel can be popped out, and the module-global
-                   * clipboard there belongs to a document that isn't focused (see clipboardOf).
-                   *
-                   * Best-effort on purpose. A platform served without TLS has no clipboard API at all, and the
-                   * copy is a convenience over a link that is already on screen to select — so a refusal here
-                   * must not become an error about an invite that succeeded. */
-                  run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
-              },
-          };
+const showDelivery = (result: { link: string; delivery: InviteDelivery; reason?: string }): void => {
+    handover.value = result.delivery === `sent` ? undefined : result.link;
+    notice.value =
+        result.delivery === `sent`
+            ? undefined
+            : {
+                  tone: `warning`,
+                  title: DELIVERY_NOTE[result.delivery],
+                  detail: result.reason,
+                  action: {
+                      label: `Copy link`,
+                      /* Through the clicked button's own window: this panel can be popped out, and the
+                       * module-global clipboard there belongs to a document that isn't focused (clipboardOf).
+                       *
+                       * Best-effort on purpose. A platform served without TLS has no clipboard API at all, and
+                       * the copy is a convenience over a link that is already on screen to select — so a refusal
+                       * here must not become an error about an invite that succeeded. */
+                      run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
+                  },
+              };
+};
 
 const invite = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
@@ -145,7 +161,7 @@ const invite = async (): Promise<void> => {
         return;
     }
     busy.value = true;
-    notice.value = undefined;
+    clearNotice();
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
         // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent —
@@ -163,7 +179,7 @@ const invite = async (): Promise<void> => {
         members.value = result.members;
         email.value = ``;
         emailTouched.value = false;
-        notice.value = deliveryNotice(result);
+        showDelivery(result);
     } catch (err) {
         // The sandbox took the grant and the platform then refused to record it: resync so the roster shows
         // whatever it actually holds rather than what this call assumed.
@@ -180,11 +196,11 @@ const resend = async (target: string): Promise<void> => {
         return;
     }
     busy.value = true;
-    notice.value = undefined;
+    clearNotice();
     try {
         const result = await apiClient.invite.resend({ sandboxId: id, email: target });
         members.value = result.members;
-        notice.value = deliveryNotice(result);
+        showDelivery(result);
     } catch (err) {
         notice.value = noticeFrom(err, `Couldn't resend the invite.`);
     } finally {
@@ -205,7 +221,7 @@ const revokeSessions = async (): Promise<void> => {
         return;
     }
     revokingSessions.value = true;
-    notice.value = undefined;
+    clearNotice();
     sessionsRevoked.value = false;
     try {
         await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
@@ -225,7 +241,7 @@ const setRole = async (target: string, role: GrantedRole): Promise<void> => {
         return;
     }
     busy.value = true;
-    notice.value = undefined;
+    clearNotice();
     try {
         // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
         try {
@@ -249,7 +265,7 @@ const revoke = async (target: string): Promise<void> => {
         return;
     }
     busy.value = true;
-    notice.value = undefined;
+    clearNotice();
     try {
         // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
         // dropped — a daemon that rejects/is offline surfaces an error instead of a member who still has access.
@@ -332,7 +348,11 @@ const revoke = async (target: string): Promise<void> => {
                         People you invite get an email to open
                         <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> and sign in with their own Google account.
                     </p>
-                    <Notice v-if="notice" :of="notice" />
+                    <!-- The link goes in the slot, not in the model: it must wrap rather than run out of the
+                         box, and it is the one thing on this card a person copies by hand. -->
+                    <Notice v-if="notice" :of="notice">
+                        <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
+                    </Notice>
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
                         <!-- The tier goes with the address: an invite IS a role decision, and the sentence
                              under the picker is where the model is taught. Collaborator preselected. -->
