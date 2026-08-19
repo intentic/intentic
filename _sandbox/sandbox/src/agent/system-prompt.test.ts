@@ -97,6 +97,9 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: false });
     expect(codex.systemAppend).toContain("`refs/`");
     expect(codex.systemAppend).toContain("`public/`");
+    // How work leaves the session is the third of them: a runtime told nothing ends every turn offering to
+    // commit, which is the one thing the land route exists to make unnecessary.
+    expect(codex.systemAppend).toContain("commit only when asked");
     // And nothing that names a mechanism only the Claude Code loop wires — a Codex turn has no question card,
     // no ToolSearch, no browser server to reach for.
     expect(codex.systemAppend).not.toContain("AskUserQuestion");

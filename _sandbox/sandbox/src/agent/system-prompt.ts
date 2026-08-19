@@ -96,6 +96,12 @@ const PUBLIC_GUIDANCE =
     "deleting it stops. Everywhere else `public/` INSIDE a repo (a Vite or Next assets folder) is ordinary " +
     "project content and none of this applies.";
 
+/* HOW WORK LEAVES A SESSION (agents/land.ts). A conversation runs in its own worktree and its delta reaches the
+ * owner when they press Land — as UNCOMMITTED changes in their workspace, where their own commit is the review
+ * boundary. An agent that commits on its own is not helping: it moves that boundary and buys nothing. Left
+ * untold, every session ends by offering to commit, so the owner answers the same question forever. */
+const LANDING_GUIDANCE = "The owner lands uncommitted work; commit only when asked.";
+
 /* The secret reference language (secrets/secret-registry.ts and the seams around it). One stable paragraph,
  * because every half of the machinery is invisible until named: the agent SEES `{{secret:name}}` tokens the
  * masking minted and has to know they are usable rather than damage; the write path exists only if the agent
@@ -153,12 +159,12 @@ const browserGuidance = (outputDir: string): string =>
 const TERSE_NOTE =
     "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision. This governs your PROSE, not your work: never skip a step, a check or a tool call to make a turn shorter.";
 
-/* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Both describe a directory whose
- * behaviour is enforced elsewhere — the scanners that exclude `refs/`, the server that publishes `public/` — so
- * they are as true of a Codex turn as of a Claude one, and a runtime that has never been told is one that will
- * eventually commit a clone or publish a log. Everything else in this file names a mechanism only the Claude
- * Code loop is wired for; these two are why the split exists. */
-const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE];
+/* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Each describes something enforced
+ * elsewhere — the scanners that exclude `refs/`, the server that publishes `public/`, the land route that moves
+ * a worktree's delta into the owner's tree — so they are as true of a Codex turn as of a Claude one, and a
+ * runtime that has never been told is one that will eventually commit a clone or publish a log. Everything else
+ * in this file names a mechanism only the Claude Code loop is wired for; these are why the split exists. */
+const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE];
 
 export interface TurnPromptInput {
     // The record for the pair serving this turn: `instructions` decides what may be placed at all, and the
