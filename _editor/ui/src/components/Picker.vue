@@ -1,6 +1,7 @@
 <!-- Design-system single-select — the replacement for native <select> / PrimeVue Select everywhere a choice
-     deserves more than OS chrome: token-styled rows with icon · label · quiet description · check, group
-     headers, wrap-around keyboard navigation, and a filter box that appears by itself once the list is long.
+     deserves more than OS chrome: token-styled rows with icon · label · quiet description (or a wrapping hint
+     sentence, for options that have to be taught rather than named) · check, group headers, wrap-around
+     keyboard navigation, and a filter box that appears by itself once the list is long.
      The closed trigger is a real button (bordered `input` variant for forms/settings rows, borderless `ghost`
      for toolbars); the open panel is <ResponsiveOverlay> — anchored on desktop, a thumb-reachable sheet on a
      phone. The #icon scoped slot lets a site draw brand marks (provider logos) the icon set can't.
@@ -141,13 +142,7 @@ const applyPick = (option: PickerOption<T>): void => {
         <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-4xs` : `text-2xs`" aria-hidden="true" />
     </button>
 
-    <ResponsiveOverlay
-        v-model="open"
-        :anchor="triggerEl ?? undefined"
-        :header="header ?? ariaLabel"
-        side="bottom"
-        panel-class="w-max max-w-96"
-    >
+    <ResponsiveOverlay v-model="open" :anchor="triggerEl ?? undefined" :header="header ?? ariaLabel" side="bottom" panel-class="w-max max-w-96">
         <!-- The trigger-width floor is the DESKTOP panel's, and only its. A sheet is already as wide as the
              phone, and a min-width taken from a full-width trigger would push it wider than the screen. -->
         <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px` }">

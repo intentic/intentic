@@ -9,6 +9,12 @@ export interface PickerOption<T extends string = string> {
     readonly label: string;
     /** Quiet right-aligned annotation on the row (what Auto resolves to, a host's region, …). */
     readonly description?: string;
+    /* A SENTENCE under the label, for a choice whose options have to be TAUGHT rather than merely named —
+     * access tiers, permission postures, anything where picking wrong is the expensive move. `description` is
+     * the wrong slot for these: it is a trailing annotation that truncates, so a sentence arrived at the right
+     * edge of the row with its verb cut off. A hint wraps instead, and only the row shows it — the closed
+     * trigger stays one word wide. */
+    readonly hint?: string;
     /** Leading glyph for the row and the closed trigger. */
     readonly icon?: IconName;
     /** Monospace label — domains, repo paths, other machine names. */

@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { Avatar, clipboardOf, ui, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import {
+    Avatar,
+    clipboardOf,
+    ui,
+    Notice,
+    type NoticeModel,
+    NoticeStack,
+    Picker,
+    type PickerOption,
+    RowGroup,
+    SegmentedControl,
+    SkeletonRows,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
-import Select from "primevue/select";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
@@ -43,17 +54,22 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const members = ref<InviteRecord[]>([]);
 const email = ref(``);
 
-// The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model.
-const ROLE_OPTIONS: readonly { label: string; value: GrantedRole }[] = [
-    { label: `Viewer`, value: `viewer` },
-    { label: `Collaborator`, value: `collaborator` },
-    { label: `Maintainer`, value: `maintainer` },
+/* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model — ONE
+ * list, read by both controls that hand a tier out. The form asks with a segmented control (three options, all
+ * worth seeing at once, and the sentence for the pending choice sits under it); a roster row asks with the
+ * design system's <Picker>, which shows the same sentences ON the options, because there is no room beside a
+ * member's address for a paragraph and no reason to re-grade someone blind. */
+const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
+    { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything — agents, chats, files. Can't change anything.` },
+    {
+        label: `Collaborator`,
+        value: `collaborator`,
+        icon: `users`,
+        hint: `Can drive agents and review work. Landing and publishing become requests.`,
+    },
+    { label: `Maintainer`, value: `maintainer`, icon: `wrench`, hint: `Can ship and operate: land work, approve drafts, use the terminal.` },
 ];
-const ROLE_BLURB: Record<GrantedRole, string> = {
-    viewer: `Can watch everything — agents, chats, files. Can't change anything.`,
-    collaborator: `Can drive agents and review work. Landing and publishing become requests.`,
-    maintainer: `Can ship and operate: land work, approve drafts, use the terminal.`,
-};
+const roleHint = (role: GrantedRole): string => ROLE_OPTIONS.find((option) => option.value === role)?.hint ?? ``;
 const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
@@ -305,17 +321,18 @@ const revoke = async (target: string): Promise<void> => {
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
                     <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
-                         tiers), so it must not cost a revoke + re-invite. -->
-                    <Select
+                         tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box —
+                         the row already has a framed address, a status pill and two buttons on it, and a
+                         second box among them read as a form field that had wandered into a list. -->
+                    <Picker
                         :model-value="member.role"
-                        :options="[...ROLE_OPTIONS]"
-                        option-label="label"
-                        option-value="value"
-                        size="small"
-                        class="shrink-0 text-xs"
+                        :options="ROLE_OPTIONS"
+                        variant="ghost"
                         :disabled="busy"
+                        class="shrink-0"
                         :aria-label="`Role for ${member.email}`"
-                        @update:model-value="(role: GrantedRole) => setRole(member.email, role)"
+                        :header="`Role for ${member.email}`"
+                        @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
                     />
                     <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
                         badge(member.status).label
@@ -356,8 +373,8 @@ const revoke = async (target: string): Promise<void> => {
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
                         <!-- The tier goes with the address: an invite IS a role decision, and the sentence
                              under the picker is where the model is taught. Collaborator preselected. -->
-                        <SegmentedControl v-model="inviteRole" :options="[...ROLE_OPTIONS]" />
-                        <span class="text-xs text-muted">{{ ROLE_BLURB[inviteRole] }}</span>
+                        <SegmentedControl v-model="inviteRole" :options="ROLE_OPTIONS.map(({ label, value }) => ({ label, value }))" />
+                        <span class="text-xs text-muted">{{ roleHint(inviteRole) }}</span>
                         <div class="flex items-center gap-2">
                             <input
                                 v-model="email"

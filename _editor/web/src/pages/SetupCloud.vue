@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { CloudOptions, CloudProvider, SandboxSummary } from "@intentic-app/api-contract";
-import { ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, useDevice } from "@intentic/ui";
+import { ui, Notice, type NoticeModel, NoticeStack, Picker, type PickerOption, SegmentedControl, useDevice } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
-import Select from "primevue/select";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
@@ -90,8 +89,11 @@ watch(
     { immediate: true },
 );
 
-const locationOptions = computed(() => options.value?.locations.map((entry) => ({ label: entry.label, value: entry.id })) ?? []);
-const sizeOptions = computed(() => options.value?.sizes.map((entry) => ({ label: sizeLabel(entry), value: entry.id })) ?? []);
+/* A provider's own catalog, as picker rows. Both lists are long enough at some providers that the <Picker>'s
+ * filter box lets itself in — which is the point of asking with it rather than a drop-down: nobody scrolls
+ * thirty regions looking for the one nearest them. */
+const locationOptions = computed<PickerOption[]>(() => options.value?.locations.map((entry) => ({ label: entry.label, value: entry.id })) ?? []);
+const sizeOptions = computed<PickerOption[]>(() => options.value?.sizes.map((entry) => ({ label: sizeLabel(entry), value: entry.id })) ?? []);
 
 const provisioning = ref(false);
 const provisionError = ref<NoticeModel | undefined>(undefined);
@@ -267,18 +269,16 @@ watch(keepTrying, (on) => {
             <div class="flex flex-col gap-2 md:flex-row">
                 <label class="ui-field md:flex-1">
                     <span class="ui-field-label">{{ provider === `oracle` ? `Availability domain` : `Region` }}</span>
-                    <Select
+                    <Picker
                         v-model="location"
                         :options="locationOptions"
-                        option-label="label"
-                        option-value="value"
-                        size="small"
                         class="w-full text-xs"
+                        :aria-label="provider === `oracle` ? `Availability domain` : `Region`"
                     />
                 </label>
                 <label class="ui-field md:flex-1">
                     <span class="ui-field-label">Size</span>
-                    <Select v-model="size" :options="sizeOptions" option-label="label" option-value="value" size="small" class="w-full text-xs" />
+                    <Picker v-model="size" :options="sizeOptions" class="w-full text-xs" aria-label="Size" />
                 </label>
             </div>
 

@@ -47,6 +47,7 @@ import {
     PageHeader,
     ScrollFrame,
     Picker,
+    type PickerOption,
     ProgressRing,
     ProseField,
     ResponsiveOverlay,
@@ -166,6 +167,19 @@ const PICKER_OPTIONS = [
     { value: `opus`, label: `Claude Opus 5`, description: `For the hard ones` },
     { value: `haiku`, label: `Claude Haiku 5` },
 ];
+// The hinted variant, side by side with the annotated one above: a choice whose options are TAUGHT on the row
+// rather than named and left. Access tiers are the case it was built for.
+const PICKER_HINTED = [
+    { value: `viewer`, label: `Viewer`, icon: `eye`, hint: `Can watch everything — agents, chats, files. Can't change anything.` },
+    {
+        value: `collaborator`,
+        label: `Collaborator`,
+        icon: `users`,
+        hint: `Can drive agents and review work. Landing and publishing become requests.`,
+    },
+    { value: `maintainer`, label: `Maintainer`, icon: `wrench`, hint: `Can ship and operate: land work, approve drafts, use the terminal.` },
+] as const satisfies readonly PickerOption[];
+const pickedTier = ref(`collaborator`);
 </script>
 
 <template>
@@ -439,6 +453,12 @@ const PICKER_OPTIONS = [
                         <span class="ui-field-label">Picker</span>
                         <Picker v-model="picked" :options="PICKER_OPTIONS" aria-label="Model" class="w-full" />
                     </label>
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">Picker — hinted rows, ghost trigger</span>
+                        <div>
+                            <Picker v-model="pickedTier" :options="PICKER_HINTED" variant="ghost" aria-label="Access tier" header="Access tier" />
+                        </div>
+                    </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">SearchBar</span>
                         <SearchBar v-model="query" placeholder="Filter files…" />

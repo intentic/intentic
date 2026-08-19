@@ -45,13 +45,19 @@ const shown = computed(() => {
             label: group.label,
             rows: group.options
                 .filter(
-                    (option) => needle === `` || `${group.label ?? ``} ${option.label} ${option.description ?? ``}`.toLowerCase().includes(needle),
+                    (option) =>
+                        needle === `` ||
+                        `${group.label ?? ``} ${option.label} ${option.description ?? ``} ${option.hint ?? ``}`.toLowerCase().includes(needle),
                 )
                 .map((option) => ({ option, index: index++ })),
         }))
         .filter((group) => group.rows.length > 0);
 });
 const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((group) => group.rows.map((row) => row.option)));
+
+/* Hinted rows are two lines, so the whole LIST switches to top-alignment — per-row would step the icons and
+ * checks up and down the column as the reader's eye travels it. One list, one baseline. */
+const hinted = computed(() => flat.value.some((option) => option.hint !== undefined));
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (option) => option.value);
 
@@ -143,8 +149,8 @@ onMounted(() => {
                     type="button"
                     role="option"
                     :aria-selected="row.option.value === selectedValue"
-                    class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
-                    :class="{ 'ui-row-select-on': row.index === activeIndex }"
+                    class="ui-row-select flex w-full gap-2 px-3 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
+                    :class="[{ 'ui-row-select-on': row.index === activeIndex }, hinted ? `items-start py-2` : `items-center py-1.5`]"
                     :disabled="row.option.disabled === true"
                     @click="pick(row.option)"
                     @mouseenter="activeIndex = row.index"
@@ -154,15 +160,22 @@ onMounted(() => {
                             v-if="row.option.icon !== undefined"
                             :name="row.option.icon"
                             class="shrink-0 text-xs"
-                            :class="row.option.value === selectedValue ? `text-primary-500` : `text-muted`"
+                            :class="[row.option.value === selectedValue ? `text-primary-500` : `text-muted`, hinted ? `mt-0.5` : ``]"
                             aria-hidden="true"
                         />
                     </slot>
-                    <span
-                        class="min-w-0 shrink truncate text-sm md:text-xs"
-                        :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``]"
-                        >{{ row.option.label }}</span
-                    >
+                    <!-- Label and its sentence are ONE column: the hint belongs under the words it explains,
+                         not under the icon, and a check landing beside a two-line row has to clear both. -->
+                    <span class="flex min-w-0 shrink flex-col gap-0.5">
+                        <span
+                            class="truncate text-sm md:text-xs"
+                            :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``]"
+                            >{{ row.option.label }}</span
+                        >
+                        <!-- Wraps on purpose — a sentence cut off mid-clause teaches nothing, and the panel is
+                             already width-capped, so the only thing left to spend is height. -->
+                        <span v-if="row.option.hint !== undefined" class="text-2xs leading-snug text-subtle">{{ row.option.hint }}</span>
+                    </span>
                     <span v-if="row.option.description !== undefined" class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{
                         row.option.description
                     }}</span>
@@ -170,6 +183,7 @@ onMounted(() => {
                         v-if="row.option.value === selectedValue"
                         name="check"
                         class="ml-auto shrink-0 text-2xs text-primary-500"
+                        :class="hinted ? `mt-0.5` : ``"
                         aria-hidden="true"
                     />
                 </button>
