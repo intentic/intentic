@@ -89,6 +89,39 @@
 .chat-prompt-pinned {
     background: var(--color-card);
 }
+/* WHAT AN UNSENT EDIT WOULD THROW AWAY (ChatPane's `doomed`) — the edited prompt and everything under it, drawn
+   as already gone while still entirely there.
+
+   Fade AND strike, not one or the other. Fading alone is the vocabulary this transcript already spends on
+   "quiet": the meta tier, a settled tool row, the timestamps. Read at a glance, a faded turn says "less
+   important", which is the opposite of what this row needs to say — it is about to be deleted. The strike is
+   the half that means removal, and it is the half that survives being glanced at rather than read.
+
+   Kept LEGIBLE at 55% rather than pushed to the edge of visible: the whole reason the rows stay on screen is
+   that the count of what is being spent is the number nobody holds in their head, and a strip of grey mush is
+   not a count. The user has to be able to read the answer they are about to discard — that is often what
+   settles whether they discard it.
+
+   line-through is inherited by the text and skipped by everything that draws its own box: `text-decoration` does
+   not cross into a nested block formatting context, so the struck rows keep readable tool cards, diffs and code
+   blocks inside a struck turn instead of ruling a line through a syntax-highlighted panel.
+
+   THE RULE IS currentColor, so it is exactly as present as whatever it crosses — and it has to be stated,
+   because the obvious choice is wrong here. A border token (--color-line-strong) is built to sit UNDER text at
+   about 40% lightness; drawn across prose at 98% on a dark pane it came out a faint smudge between the words,
+   which reads as a rendering artefact rather than as a line through a sentence. Tracking the text also means
+   the strike lands correctly on every tier it passes over in one turn — prose, the meta rows, a code chip — and
+   in both themes, with no second token to keep in step.
+
+   Pointer events stay ON. A doomed row is still a row: its tool cards open, its code copies, its clamped prompt
+   expands. Nothing here has happened yet, and disabling a transcript the user is reading in order to decide
+   would be the one thing that makes the preview useless. */
+.chat-doomed {
+    opacity: 0.55;
+    text-decoration: line-through;
+    text-decoration-color: currentColor;
+    transition: opacity 120ms ease-out;
+}
 .chat-prompt-pinned::after {
     content: "";
     position: absolute;

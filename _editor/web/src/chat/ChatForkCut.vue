@@ -36,11 +36,21 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
  * user could not tell which of the two halves of their state — the conversation, and the files on disk — any of
  * them would move. So the rows below are exactly that choice, spelled out, in one menu:
  *
+ *   Edit            THIS chat · this prompt asked again · everything from it down replaced · files as they were
  *   Fork            new chat · history up to here · the files as they were here (in a checkout of its own)
  *   Fork chat only  new chat · history up to here · the files as they are now
  *   Rewind          THIS chat · everything after here dropped · the files as they were here
  *
- * Only the third destroys anything, so only the third arms before it fires. */
+ * EDIT LEADS because it is the common one — most returns to a point in a conversation are "I asked that badly",
+ * not "I want both paths" — and because it is the only row here that answers for the message the cut sits
+ * above rather than for the boundary itself. Its own affordance is the pencil on that message (see
+ * ChatMessageView), which is where the hand goes; the row exists so a user who came to this menu looking for
+ * all the ways back finds it among them instead of concluding it does not exist.
+ *
+ * Two of the four destroy something, and they arm differently. The rewind fires from this menu, so it arms
+ * here — two presses, with the count of what goes on the second. The edit does not fire from here at all: it
+ * arms the COMPOSER and destroys nothing until a send, so its confirmation is the replacement prompt itself
+ * and there is nothing for this menu to guard (see Conversation.editing). */
 
 const props = defineProps<{
     /* THE LINE ITSELF — the count of bubbles above it, which is also the index of the first bubble below it.
@@ -49,7 +59,7 @@ const props = defineProps<{
     cut: number;
 }>();
 
-const { conversation, messages, forkAt, streaming: conversationStreaming } = usePaneView();
+const { conversation, messages, forkAt, beginEdit, editing, streaming: conversationStreaming } = usePaneView();
 const { overlayTarget } = useChatPopout();
 const { mobile } = useDevice();
 const queryClient = useQueryClient();
@@ -188,6 +198,37 @@ const forkRows = computed<MenuItem[]>(() =>
           ],
 );
 
+/* ASK THIS PROMPT AGAIN — the row for the message the cut sits above, offered only where that message IS one
+ * of the user's. A cut can land above an assistant bubble (a turn the reducer opened without a prompt of its
+ * own), and "edit" over the agent's words means something else entirely — that is what the agent's VOICE is
+ * for, down on the composer.
+ *
+ * The refusals are the same two the file rows carry, said in the same words, because they are the same
+ * refusals: no checkpoint means the files cannot come back, and a running turn means the daemon will not let
+ * anything move them. The difference is only WHEN they bite — the fork rows are refusing a press, this one is
+ * refusing to arm a mode that would then be unable to send. */
+const editRow = computed<MenuItem[]>(() => {
+    const target = below.value;
+    if (target?.role !== `user` || editing.value?.id === target.id) {
+        return [];
+    }
+    return [
+        {
+            label: `Edit this message`,
+            icon: `pencil`,
+            hint: !anchored.value
+                ? `No saved state for this point`
+                : filesBusy.value
+                  ? `Old files have to wait for the turn to finish`
+                  : `Ask it differently — replaces this and everything below`,
+            disabled: !anchored.value || filesBusy.value,
+            command: () => {
+                beginEdit(target);
+            },
+        },
+    ];
+});
+
 const rewindRow = computed<MenuItem[]>(() => [
     {
         label: armed.value ? `Click again — drops ${dropped.value} message${dropped.value === 1 ? `` : `s`}` : `Rewind this chat`,
@@ -226,7 +267,9 @@ const openRows = computed<MenuItem[]>(() =>
 // already taken from it, with a rule between whichever groups are present. So no menu ever opens on a separator
 // or wears two in a row.
 const items = computed<MenuItem[]>(() => {
-    const groups = [...(whole.value ? [wholeRow.value] : [forkRows.value, rewindRow.value]), openRows.value].filter((group) => group.length > 0);
+    const groups = [...(whole.value ? [wholeRow.value] : [editRow.value, forkRows.value, rewindRow.value]), openRows.value].filter(
+        (group) => group.length > 0,
+    );
     const rows: MenuItem[] = [];
     for (const group of groups) {
         if (rows.length > 0) {

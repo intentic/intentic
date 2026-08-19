@@ -512,6 +512,28 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.attachments.value = value;
         },
     }),
+    /* ASK THIS TURN AGAIN, DIFFERENTLY — the composer aimed at a message already in the transcript.
+     *
+     * The third way back, beside the two the cut already offered, and the one the other two were standing in
+     * for: a fork answers "keep both paths" and a rewind answers "drop what followed", and neither is what a
+     * user means when they simply mistyped a filename. Forking for that costs a tab per typo; rewinding first
+     * and retyping from memory costs the words themselves. So this is the light path — and it is only light
+     * because it commits nothing until the send (see Conversation.editing).
+     *
+     * `editing` is read by the transcript (to strike the rows the send would drop) and by the composer (to say
+     * whose message it is holding), which is why it is on the view rather than private to one surface. */
+    editing: computed<ChatMessage | undefined>(() => {
+        const edit = conversation.value.editing.value;
+        return edit === undefined ? undefined : conversation.value.messages.value.find((message) => message.id === edit.id);
+    }),
+    beginEdit: (message: ChatMessage): boolean => conversation.value.beginEdit(message),
+    cancelEdit: (): void => {
+        conversation.value.cancelEdit();
+    },
+    submitEdit: (text: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<boolean> => {
+        track(`message_edited`, { agent: conversation.value.provider.value });
+        return conversation.value.submitEdit(text, staged, editorContext);
+    },
     send: (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
         // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
         track(`message_sent`, { agent: conversation.value.provider.value, queued: conversation.value.streaming.value });
@@ -534,10 +556,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * it, or replace it entirely — which is what makes forking without editing possible at all, and what stops a
      * half-considered prompt from running the moment the tab appears. The old edit-then-auto-send did the
      * opposite on both counts. */
-    forkAt: (cut: number, files: "then" | "now"): void => {
+    forkAt: (cut: number, files: "then" | "now"): Conversation | undefined => {
         const source = conversation.value;
         if (cut < 0 || cut > source.messages.value.length) {
-            return;
+            return undefined;
         }
         /* A RUNNING TURN DOES NOT BLOCK THE CHAT HALF OF THIS. Copying the turns above the cut into a new tab
          * takes nothing away from the run still writing below it, and a turn that has been going twenty
@@ -546,7 +568,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
          * checkpoint back underneath an agent writing to those same files is a different act, so that half
          * waits for the turn to end. */
         if (files === `then` && source.streaming.value) {
-            return;
+            return undefined;
         }
         const fork = new Conversation();
         fork.forkFrom(source, cut, files);
@@ -558,6 +580,11 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         }
         setConversations([...conversations.value, fork], fork.conversationId, `fork`);
         track(`conversation_forked`, { agent: fork.provider.value, files, whole: cut === source.messages.value.length });
+        /* HANDED BACK rather than left to be fished out of the tab list, because one caller needs to say
+         * something about the fork it just made: the edit's "keep both instead" puts the half-typed replacement
+         * into it (see ChatPane's forkInsteadOfEdit). Finding it by position would work today and break the
+         * first time a fork lands anywhere but the end of the list. */
+        return fork;
     },
     // Approving runs the plan (under bypassPermissions — the daemon's call, not the card's); a rejection leaves
     // the agent in plan mode to revise, with the composer's text and staged files as the feedback.

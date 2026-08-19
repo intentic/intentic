@@ -2769,6 +2769,153 @@ describe(`the transcript's clock`, () => {
     });
 });
 
+/* ASKING A TURN AGAIN, DIFFERENTLY (Conversation.beginEdit / cancelEdit / submitEdit).
+ *
+ * THE WHOLE FEATURE IS THE ORDER OF EVENTS, so that is what these assert. Arming destroys nothing and sends
+ * nothing — that is what buys cancel its promise of costing nothing, and what lets the transcript keep drawing
+ * the doomed turns while the replacement is being typed. Only the send spends the rewind, and only if the
+ * rewind lands does anything go out. */
+describe(`Conversation editing a sent message`, () => {
+    // One turn, checkpointed, with the session live — the state every edit starts from.
+    const settled = async (id: string): Promise<Conversation> => {
+        const conversation = new Conversation(id);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                { kind: `checkpoint`, id: `cp-1`, index: 0 },
+                { kind: `delta`, text: `done` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`frist`, settings);
+        return conversation;
+    };
+
+    it(`arms without touching the transcript, the files or the session`, async () => {
+        const conversation = await settled(`c-edit-arm`);
+        conversation.draft.value = `something half-written`;
+        const before = [...conversation.messages.value];
+        sandboxRequestMock.mockClear();
+
+        expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(true);
+
+        // The old words are in the box, the transcript is exactly as it was, and the daemon has not been asked
+        // for anything at all — there is nothing yet to undo.
+        expect(conversation.draft.value).toBe(`frist`);
+        expect(conversation.messages.value).toEqual(before);
+        expect(conversation.session.value).toBeDefined();
+        expect(sandboxRequestMock).not.toHaveBeenCalled();
+    });
+
+    // Entering an edit must not eat a half-written message — the one thing on this screen the app cannot
+    // recover (see `unsent`).
+    it(`gives the displaced draft back on cancel`, async () => {
+        const conversation = await settled(`c-edit-cancel`);
+        conversation.draft.value = `something half-written`;
+
+        conversation.beginEdit(conversation.messages.value[0]!);
+        conversation.draft.value = `retyped`;
+        conversation.cancelEdit();
+
+        expect(conversation.draft.value).toBe(`something half-written`);
+        expect(conversation.editing.value).toBeUndefined();
+    });
+
+    it(`refuses to arm on a message with no state to go back to`, async () => {
+        const conversation = new Conversation(`c-edit-unanchored`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi` }, { kind: `done` }]));
+        await conversation.send(`first`, settings);
+
+        // No checkpoint frame, so no anchor: the files could not come back, and an edit that kept today's files
+        // would start the replacement turn on the very work it was meant to discard.
+        expect(conversation.messages.value[0]?.rewindIndex).toBeUndefined();
+        expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(false);
+        expect(conversation.editing.value).toBeUndefined();
+    });
+
+    /* THE SEND, and the order that survives a failure between its halves: rewind first, send only if it landed.
+     * Backwards, the replacement would go out against a workspace still holding the turns it was meant to
+     * replace, and the rewind behind it would then cut the transcript out from under a running turn. */
+    it(`rewinds to the message and sends the replacement in its place`, async () => {
+        const conversation = await settled(`c-edit-send`);
+        conversation.beginEdit(conversation.messages.value[0]!);
+        conversation.draft.value = `first`;
+
+        const calls: string[] = [];
+        const turn = sseResponse([{ kind: `delta`, text: `better` }, { kind: `done` }]);
+        sandboxRequestMock.mockImplementation(async (path: string, init?: RequestInit) => {
+            calls.push(path);
+            return path === `/agent/rewind` ? new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }) : turn(path, init);
+        });
+
+        expect(await conversation.submitEdit(`first`)).toBe(true);
+
+        // The rewind went first, and the turn only after it.
+        expect(calls[0]).toBe(`/agent/rewind`);
+        expect(calls.slice(1).some((path) => path !== `/agent/rewind`)).toBe(true);
+        expect(conversation.editing.value).toBeUndefined();
+        /* The line between them names the EDIT rather than the rewind underneath it. Same mechanism, different
+         * sentence: "went back to here" over a prompt the reader is re-asking describes the machinery and
+         * leaves the transcript looking like a rewind and a fresh prompt that happened to land together. */
+        expect(conversation.messages.value[0]).toMatchObject({
+            role: `notice`,
+            text: `Edited this message — 2 messages dropped and the files restored to this point.`,
+        });
+        expect(conversation.messages.value[1]).toMatchObject({ role: `user`, text: `first` });
+    });
+
+    // A refused rewind (a turn is running, the checkpoint is gone) leaves the chat untouched with its reason on
+    // screen — and the edit still armed, so the press works the moment the turn ends.
+    it(`sends nothing and stays armed when the rewind is refused`, async () => {
+        const conversation = await settled(`c-edit-refused`);
+        conversation.beginEdit(conversation.messages.value[0]!);
+        const before = [...conversation.messages.value];
+
+        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
+        expect(await conversation.submitEdit(`try again`)).toBe(false);
+
+        expect(conversation.messages.value).toEqual(before);
+        expect(conversation.editing.value).toBeDefined();
+        expect(conversation.error.value).toContain(`running a turn`);
+    });
+
+    /* THE ID TRAP, asserted so it cannot come back. Message ids restart from zero on every transcript rebuild,
+     * so a replayed record hands the SAME ids to entirely different messages — and an edit that resolved by id
+     * alone would sail straight through and replace whichever turn had inherited its number. Disarming on the
+     * replacement is the guard (see `editing`); the failure it prevents is silent, which is why this test looks
+     * for the mode being gone rather than for an error. */
+    it(`disarms when the transcript underneath it is replaced wholesale`, async () => {
+        const conversation = await settled(`c-edit-replaced`);
+        conversation.beginEdit(conversation.messages.value[0]!);
+        expect(conversation.editing.value).toBeDefined();
+
+        // A different record, whose first message carries the id the edit was armed on.
+        conversation.restoreMessages([{ role: `user`, text: `a different conversation entirely` }]);
+        sandboxRequestMock.mockClear();
+
+        expect(conversation.editing.value).toBeUndefined();
+        expect(await conversation.submitEdit(`replacement`)).toBe(false);
+        expect(sandboxRequestMock).not.toHaveBeenCalled();
+        expect(conversation.messages.value).toEqual([expect.objectContaining({ text: `a different conversation entirely` })]);
+    });
+
+    // The same guard on the other path that replaces a transcript: a plain rewind renumbers everything that
+    // survives it, so an edit armed on one of the survivors cannot be left pointing into it.
+    it(`disarms when a plain rewind renumbers the messages under it`, async () => {
+        const conversation = await settled(`c-edit-rewound`);
+        conversation.beginEdit(conversation.messages.value[0]!);
+
+        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }));
+        expect(await conversation.rewindTo(conversation.messages.value[0]!)).toBe(true);
+
+        expect(conversation.editing.value).toBeUndefined();
+        // And it is the REWIND's own sentence, not the edit's — nobody edited anything here.
+        expect(conversation.messages.value[0]).toMatchObject({
+            text: `Went back to here — 2 messages dropped and the files restored to this point.`,
+        });
+    });
+});
+
 /* SPEAKING AS THE AGENT (Conversation.placeAsAgent) — the tab's half of agents.place. The daemon appends the
  * row to its record and forgets the provider session; these check the tab then agrees on both halves, and that
  * a refusal moves NOTHING — a bubble drawn for a row the record never took would be the transcript lying. */

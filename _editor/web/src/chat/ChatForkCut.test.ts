@@ -12,10 +12,13 @@ import type { ChatMessage } from "../composables/chat/transcript";
 
 const forkAt = vi.hoisted(() => vi.fn());
 const rewindTo = vi.hoisted(() => vi.fn(async () => true));
+const beginEdit = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({
     messages: [] as ChatMessage[],
     streaming: false,
     isolated: true,
+    // The message an edit is already armed on, if any — the row for it drops out of its own cut's menu.
+    editing: undefined as ChatMessage | undefined,
     fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[],
 }));
 const opened = vi.hoisted(() => ({ ids: [] as string[] }));
@@ -76,6 +79,8 @@ vi.mock("../composables/chat/useChat", async () => {
             messages: computed(() => state.messages),
             streaming: computed(() => state.streaming),
             forkAt,
+            beginEdit,
+            editing: computed(() => state.editing),
         }),
         useChat: () => ({ conversations: computed(() => []), setActive: (id: string) => opened.ids.push(id) }),
         openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id),
@@ -119,11 +124,13 @@ beforeEach(() => {
     vi.useFakeTimers();
     forkAt.mockClear();
     rewindTo.mockClear();
+    beginEdit.mockClear();
     shown.model = [];
     shown.opened = 0;
     state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, anchored(2), { id: 3, role: `assistant`, text: `answer` }];
     state.streaming = false;
     state.isolated = true;
+    state.editing = undefined;
     state.fleet = [];
     opened.ids = [];
 });
@@ -182,6 +189,69 @@ describe(`the fork cut`, () => {
         expect(shown.model.map((item) => item.label)).toEqual([`Fork the whole conversation`]);
         row(`Fork the whole conversation`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         expect(forkAt).toHaveBeenCalledWith(4, `now`);
+    });
+
+    /* THE EDIT ROW leads the menu, and it is the only row here that answers for the MESSAGE the cut sits above
+     * rather than for the boundary. It arms the composer and fires nothing, so unlike the rewind beneath it
+     * there is no second press to guard — the send is the confirmation (see Conversation.editing). */
+    it(`leads with editing the prompt the cut sits above, and arms rather than fires`, async () => {
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(shown.model[0]?.label).toBe(`Edit this message`);
+        expect(row(`Edit`)?.disabled).toBe(false);
+
+        row(`Edit`)?.command?.({ originalEvent: new Event(`click`), item: {} });
+        // The MESSAGE, not the cut's number: an edit is aimed at a row, and the row is what survives the
+        // transcript being renumbered under an open editor.
+        expect(beginEdit).toHaveBeenCalledWith(state.messages[2]);
+        expect(rewindTo).not.toHaveBeenCalled();
+        expect(forkAt).not.toHaveBeenCalled();
+    });
+
+    // The same two refusals the file rows carry, for the same two reasons — an edit that could not put the files
+    // back would start the replacement turn on the very work it was meant to discard.
+    it(`refuses the edit where the files cannot come back, and while a turn holds them`, async () => {
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, unanchored(2)];
+        const element = mount(2);
+        await openMenu(element);
+        expect(row(`Edit`)?.disabled).toBe(true);
+        expect(row(`Edit`)?.[`hint`]).toBe(`No saved state for this point`);
+        app?.unmount();
+
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, anchored(2)];
+        state.streaming = true;
+        const running = mount(2);
+        await openMenu(running);
+        expect(row(`Edit`)?.disabled).toBe(true);
+        expect(row(`Edit`)?.[`hint`]).toBe(`Old files have to wait for the turn to finish`);
+    });
+
+    /* A cut can land above the agent's words — a turn the reducer opened without a prompt of its own. "Edit"
+     * over those means something else entirely (that is what the composer's agent voice is for), so the row is
+     * absent rather than disabled: a greyed row would advertise a thing this menu does not do. */
+    it(`offers no edit where the cut sits above the agent's own words`, async () => {
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, { id: 2, role: `assistant`, text: `more` }];
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(row(`Edit`)).toBeUndefined();
+        expect(row(`Fork`)).toBeDefined();
+    });
+
+    // The composer is already holding it, and a menu offering to start what is running is a menu describing a
+    // state the user left a moment ago.
+    it(`drops the edit row from the cut whose own edit is already armed`, async () => {
+        state.editing = state.messages[2];
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(row(`Edit`)).toBeUndefined();
+        // The cut ABOVE is a different message and still offers its own.
+        app?.unmount();
+        const other = mount(0);
+        await openMenu(other);
+        expect(row(`Edit`)).toBeDefined();
     });
 
     // Anywhere else that row would be a second name for the cut the mark already is.

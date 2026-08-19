@@ -7,6 +7,11 @@ import type { ChatMessage } from "../composables/chat/transcript";
 
 const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
 const roster = vi.hoisted(() => ({ running: 0 }));
+/* The pane state the EDIT pencil reads. Both matter to whether it is offered at all: a chat mid-turn hides it
+ * (the daemon will not move files under a running agent) and a message whose own edit is armed hides it (the
+ * composer is already holding that one) — so both are settable rather than baked into the stub. */
+const pane = vi.hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
+const beginEdit = vi.hoisted(() => vi.fn());
 // What the markdown engine hands this row for the message under test — prose runs, and the figures between them
 // (see useMarkdown). Empty for every test that is not about the answer's body.
 const markdown = vi.hoisted(() => ({
@@ -94,7 +99,7 @@ vi.mock("./ChatToolGroup.vue", () => ({ default: { render: () => undefined } }))
 // The row reads its PANE's conversation, not the focused one (useChat's PANE_VIEW) — so what stands in for the
 // store here is the pane's view, and `conversation` is the chat this row belongs to.
 vi.mock("../composables/chat/useChat", async () => {
-    const { ref, shallowRef } = await import("vue");
+    const { computed, ref, shallowRef } = await import("vue");
     const conversation = shallowRef({
         conversationId: `agent-1`,
         providerRetry: ref(undefined),
@@ -111,8 +116,10 @@ vi.mock("../composables/chat/useChat", async () => {
             answerQuestion: vi.fn(),
             cancelQuestion: vi.fn(),
             decidePermission: vi.fn(),
-            streaming: ref(true),
+            streaming: computed(() => pane.streaming),
             awaitingDecision: ref(false),
+            editing: computed(() => pane.editing),
+            beginEdit,
         }),
     };
 });
@@ -138,10 +145,10 @@ const { default: ChatMessageView } = await import("./ChatMessageView.vue");
 const message: ChatMessage = { id: 1, role: `assistant`, text: `` };
 let app: App | undefined;
 
-const mount = (subject: ChatMessage = message): HTMLElement => {
+const mount = (subject: ChatMessage = message, extra: { doomed?: boolean } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true }) });
+    app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true, ...extra }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
     app.component(
         `Icon`,
@@ -160,6 +167,9 @@ beforeEach(() => {
     clock.turnStartedAt = Date.now() - 35_000;
     roster.running = 0;
     markdown.parts = [];
+    pane.streaming = true;
+    pane.editing = undefined;
+    beginEdit.mockClear();
 });
 
 afterEach(() => {
@@ -408,5 +418,74 @@ describe(`ChatMessageView sent time`, () => {
     // no label at all rather than a plausible-looking time.
     it(`draws nothing for a message with no stamp`, () => {
         expect(mount({ id: 7, role: `user`, text: `fix the bug` }).querySelector(`.group-hover\\:opacity-100`)).toBeNull();
+    });
+});
+
+/* THE EDIT PENCIL — "ask this turn again, differently", on the user's own bubble.
+ *
+ * It is deliberately NOT the pencil that was removed from here once: that one forked the chat into a new tab
+ * and left the files alone while calling itself an edit. This one arms the composer against this message and
+ * commits nothing (see Conversation.editing), which is why these assert that a click merely ARMS. */
+describe(`ChatMessageView edit control`, () => {
+    // Anchored (the daemon still holds a state for it) and settled — the two conditions an edit needs.
+    const prompt: ChatMessage = { id: 8, role: `user`, text: `fix the bug`, rewindIndex: 2 };
+    const pencil = (element: HTMLElement): HTMLElement | null => element.querySelector(`button[aria-label="Edit this message"]`);
+
+    it(`offers the pencil in the margin of a settled prompt, and only arms`, () => {
+        pane.streaming = false;
+        const button = pencil(mount(prompt));
+
+        expect(button).not.toBeNull();
+        // In the column's RIGHT margin, the same gutter the fork mark stands in at the other end of the turn —
+        // and out of flow, so a prompt is exactly as tall with this control as without it.
+        expect(button?.className).toContain(`absolute`);
+        expect(button?.className).toContain(`left-full`);
+        expect(button?.className).toContain(`opacity-0`);
+
+        button?.click();
+        expect(beginEdit).toHaveBeenCalledWith(prompt);
+    });
+
+    /* No checkpoint means the files cannot come back to this point, and an edit that quietly kept today's files
+     * would start the replacement turn on the very work it was meant to discard. Hidden rather than disabled: a
+     * margin mark is invisible until hovered anyway, so there is no gap for a greyed one to explain. */
+    it(`offers nothing where the files could not come back`, () => {
+        pane.streaming = false;
+        expect(pencil(mount({ id: 9, role: `user`, text: `fix the bug` }))).toBeNull();
+    });
+
+    // A rewind under a running agent is the one interleaving the daemon's lease exists to refuse, so the control
+    // is not offered while the chat is mid-turn.
+    it(`offers nothing while a turn is running`, () => {
+        pane.streaming = true;
+        expect(pencil(mount(prompt))).toBeNull();
+    });
+
+    // The composer is already holding this one — a second way to start what is running describes a state the
+    // user left a moment ago.
+    it(`offers nothing on the message whose own edit is armed`, () => {
+        pane.streaming = false;
+        pane.editing = prompt;
+        expect(pencil(mount(prompt))).toBeNull();
+
+        // A different prompt in the same chat still gets its own.
+        app?.unmount();
+        expect(pencil(mount({ id: 10, role: `user`, text: `and this`, rewindIndex: 4 }))).not.toBeNull();
+    });
+
+    // The agent's words are not the user's to rewrite — that is what the composer's agent voice is for.
+    it(`offers nothing on the agent's own bubble`, () => {
+        pane.streaming = false;
+        expect(pencil(mount({ id: 11, role: `assistant`, text: `done`, rewindIndex: 2 }))).toBeNull();
+    });
+
+    /* WHAT AN ARMED EDIT WOULD SPEND, drawn on the rows themselves — struck AND faded, because fading alone is
+     * this transcript's word for "quiet" and the thing these rows need to say is "about to be deleted".
+     * Nothing has happened to them: the class is a preview, and cancelling restores them in place. */
+    it(`strikes the rows an armed edit would replace`, () => {
+        pane.streaming = false;
+        expect(mount(prompt, { doomed: true }).querySelector(`.chat-doomed`)).not.toBeNull();
+        app?.unmount();
+        expect(mount(prompt).querySelector(`.chat-doomed`)).toBeNull();
     });
 });

@@ -42,6 +42,10 @@ const props = defineProps<{
     // What turnsOf folded into this turn — the user's "continue"-style nudges and the app's errands. Set only
     // on the turn's opening message, which renders them as its "↳ … ×N" trailer (see ChatTurn.folded).
     folded?: readonly ChatMessage[];
+    /* This row is at or below the message an unsent edit is aimed at, and would go if that edit were sent
+     * (ChatPane's `doomed`). Drawn faded and struck through — a preview, not a state: nothing has happened to
+     * this message, and cancelling the edit restores it in place. */
+    doomed?: boolean;
 }>();
 
 const {
@@ -55,6 +59,9 @@ const {
     declineBrowserHelp,
     declineTerminalHelp,
     awaitingDecision,
+    editing,
+    beginEdit,
+    streaming: conversationStreaming,
 } = usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
@@ -479,7 +486,45 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
 /* GOING BACK lives in the column's margin now, beside the answer rather than on the bubble — see ChatForkCut.
  * The two controls that used to hang off a user message (a history icon that rewound in place, a pencil that
  * copied the chat into a new tab) were the same decision asked twice in different words, and neither said what
- * would happen to the files. One mark, one menu, three named outcomes. */
+ * would happen to the files. One mark, one menu, three named outcomes.
+ *
+ * --- EXCEPT FOR THE ONE THAT IS ABOUT THIS MESSAGE --------------------------------------------------------
+ *
+ * A pencil is back, and the distinction is worth stating because the old one was removed on purpose. That
+ * pencil was a FORK wearing an edit's clothes: it copied the chat into a new tab, left the files where they
+ * were, and called it editing — the mislabelling was the whole complaint against it. This one edits. It aims
+ * the composer at this message; the send it eventually gets rewinds to this point, files and all, before the
+ * new prompt goes out. Nothing at all happens on the click — see Conversation.editing.
+ *
+ * IT IS ON THE PROMPT because that is where the hand goes. The cut's mark stands level with the END of an
+ * answer, which is exactly right for "carry on from there another way" and exactly wrong for "I named the
+ * wrong file": a reader fixing their own sentence looks at their own sentence, finds nothing there, and either
+ * retypes it from scratch or never finds the affordance at all. So the two marks now bracket the turn — the
+ * edit at the prompt that opened it, the fork menu at the close of the answer — and they share the one gutter
+ * column, so the pair reads as one idea rather than as two controls that happen to both be near a turn.
+ *
+ * What the cut GREYS OUT, this HIDES, and the difference is deliberate: a menu row that vanished would leave a
+ * menu whose shape changed under the reader, while a margin mark is invisible until hovered anyway — there is
+ * no gap to explain. No checkpoint behind the message means the files cannot come back to it, and an edit that
+ * quietly kept today's files would start the new turn on the very work it was meant to discard. Mid-turn it
+ * goes for the reason the cut's file rows wait: a rewind under a running agent is the one interleaving the
+ * daemon's lease exists to refuse (agent/rewind.ts). And a prompt whose OWN edit is already armed offers no
+ * pencil, because the composer is holding it.
+ *
+ * An ERRAND — a prompt the app composed and sent on the user's behalf — is excluded by the BRANCH this control
+ * lives in rather than by a condition of its own: those render as their own row (see `errand` below) and never
+ * reach the prompt bubble the pencil hangs off. Editing one would mean editing our prose anyway. */
+const editable = computed(
+    () =>
+        props.message.role === `user` &&
+        props.message.rewindIndex !== undefined &&
+        !conversationStreaming.value &&
+        editing.value?.id !== props.message.id,
+);
+
+const startEdit = (): void => {
+    beginEdit(props.message);
+};
 
 // --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
 // The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
@@ -764,6 +809,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             'items-end': message.role === 'user' && errand === undefined,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
+            'chat-doomed': doomed,
         }"
         @click="onMarkdownClick"
         @pointerdown="copyCodeFromEvent"
@@ -880,6 +926,42 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
                 >{{ sentClock }}</span
             >
+            <!-- ASK THIS AGAIN, DIFFERENTLY — in the column's RIGHT margin, level with the prompt, which is the
+                 same gutter the fork mark stands in at the other end of the turn (see ChatForkCut and the
+                 EXCEPT-FOR note above). Real column, not negative space borrowed from the scroller, so it
+                 cannot be clipped or push a horizontal scrollbar at any panel width.
+
+                 EXACTLY the gutter wide and flush to the column's content edge, with no nudge of its own. A
+                 prompt caps at 85% of the column and is right-aligned, so `left-full` IS that edge and the
+                 gutter is the padding beyond it: one --chat-gutter of width drops the mark into precisely the
+                 strip the fork mark stands in, and the pair measures to the same x. A margin on top of that —
+                 even four pixels — spends room the column does not have and hangs the mark past the panel's own
+                 edge, which is why the fork mark carries none either.
+
+                 It costs the row NO HEIGHT and no width: absolute, inside padding the column was already
+                 carrying, opposite a clock in the left margin — so a prompt is exactly as tall with this control
+                 as without it, which is the budget .chat-prompt-text's clamp is defending.
+
+                 Pinned to the message's TOP rather than centred on it like the clock opposite, because the two
+                 are answering different questions. The clock labels the whole message, so it points at the
+                 middle of it; this acts on the message's first line — the words the reader is about to rewrite —
+                 and against a six-line clamped prompt a centred pencil drifts into the middle of the margin with
+                 nothing beside it to explain what it belongs to.
+
+                 Revealed by hovering the MESSAGE (this bubble's own `group`), not the button, so there is
+                 nothing to hunt for with the pointer; on touch there is no hover to reveal anything, so it
+                 stands at low opacity the way the fork mark does there. -->
+            <button
+                v-if="editable"
+                type="button"
+                class="absolute top-0 left-full flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md text-subtle transition-opacity hover:bg-overlay hover:text-content"
+                :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
+                v-tooltip.right="`Edit this message — replaces it and everything after`"
+                aria-label="Edit this message"
+                @click.stop="startEdit"
+            >
+                <Icon name="pencil" class="text-2xs" />
+            </button>
         </div>
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"

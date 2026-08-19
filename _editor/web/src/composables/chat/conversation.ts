@@ -312,6 +312,34 @@ export class Conversation {
     readonly draft = ref(``);
     readonly attachments = ref<PendingAttachment[]>([]);
 
+    /* ASKING THIS TURN AGAIN, IN DIFFERENT WORDS — the composer aimed at a message already in the transcript
+     * rather than at the end of it. Set by beginEdit, cleared by cancelEdit or by the send that spends it.
+     *
+     * IT HOLDS THE CHAT UNCHANGED UNTIL THE SEND. Everything the edit is going to destroy — the old prompt, the
+     * turns under it, the files those turns wrote — is still there while the box is being typed into, and the
+     * transcript merely draws the doomed rows struck through (ChatPane's `doomed`). That is the whole shape of
+     * this feature and the reason it is a MODE rather than a button: a rewind that fired on the pencil would
+     * demand a confirm of its own before the user had even decided what to say instead, and an edit abandoned
+     * halfway would have already thrown the answer away. Here, cancelling costs nothing because nothing has
+     * happened yet, and the send is its own confirmation — the user re-states the prompt in the act of
+     * replacing it.
+     *
+     * `restore` is the draft the mode displaced, put back verbatim on cancel: entering an edit must not eat a
+     * half-written message, which is the one thing on this screen the app cannot recover (see `unsent`).
+     * `attachments` is the same promise for the staged files.
+     *
+     * Keyed by the message's own id rather than its position, because an append renumbers nothing while an
+     * insert would shift every index under an open editor.
+     *
+     * IDS ARE ONLY UNIQUE WITHIN ONE TRANSCRIPT, though, which is the trap this has to be read alongside:
+     * TranscriptClock.rebuild starts its allocator over from zero, so a wholesale replacement can hand id 1 to a
+     * message that has nothing to do with the one an edit was armed on — and an edit that resolved by id alone
+     * would then replace the wrong turn without a word. So every path that REPLACES this conversation's
+     * transcript disarms the edit on its way through (rewindTo and restoreMessages below; forkFrom and
+     * paintCached cannot be reached with one armed — the first builds a conversation that has not existed yet,
+     * the second refuses on any transcript that already has a message in it). */
+    readonly editing = ref<{ readonly id: number; readonly restore: string; readonly attachments: readonly PendingAttachment[] } | undefined>();
+
     // Messages submitted while a turn was running and not yet delivered — see enqueue/drainQueue. Rendered
     // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
     readonly queued = ref<QueuedMessage[]>([]);
@@ -666,7 +694,7 @@ export class Conversation {
      * rather than resuming one whose context still describes the edits just rolled back. Returns false when
      * the daemon refused (a turn is running, or that message has no checkpoint) — the tab is left untouched,
      * because a transcript cut against a workspace that never moved is the one state with no way back. */
-    async rewindTo(message: ChatMessage): Promise<boolean> {
+    async rewindTo(message: ChatMessage, reason: "rewind" | "edit" = `rewind`): Promise<boolean> {
         const index = message.rewindIndex;
         const bubble = this.messages.value.indexOf(message);
         if (index === undefined || bubble < 0) {
@@ -679,19 +707,112 @@ export class Conversation {
             return false;
         }
         const dropped = this.messages.value.length - bubble;
+        /* THE REBUILD BELOW RENUMBERS EVERY SURVIVING BUBBLE FROM ZERO, so an edit armed on one of them is now
+         * pointing at an id that means something else — see `editing`. Disarmed here rather than left to be
+         * noticed later, because the failure it prevents is silent: the edit would still find "a" message and
+         * replace the wrong turn. submitEdit's own rewind comes through here too, which is harmless — it has
+         * already read what it needed and clears the mode itself a line later. */
+        this.editing.value = undefined;
         this.transcript.rebuild(this.messages.value.slice(0, bubble));
         /* SAY WHAT JUST HAPPENED TO THE FILES, in the place the dropped messages used to be. A rewind is the one
          * move here that changes the workspace without anything on screen showing it: the bubbles simply end,
          * and a transcript that merely stops is indistinguishable from one that was always that short. The line
          * names both halves — what left the conversation and what happened on disk — because it is the only
          * record either of them ever gets. */
+        /* An EDIT says so in its own words. The two moves are the same underneath and must not read the same on
+         * screen: "went back to here" over a line the user is about to re-ask describes the mechanism rather
+         * than the intent, and leaves the transcript looking as though a rewind and a fresh prompt happened to
+         * land together. Named for what the reader did, the line is the only record that the prompt below it
+         * replaced one — the old wording is kept exactly for the rewind that really is just going back. */
         this.transcript.append({
             role: `notice`,
-            text: `Went back to here — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
+            text:
+                reason === `edit`
+                    ? `Edited this message — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`
+                    : `Went back to here — ${dropped} message${dropped === 1 ? `` : `s`} dropped and the files restored to this point.`,
         });
         this.session.value = undefined;
         this.error.value = null;
         this.persist(true);
+        return true;
+    }
+
+    /* AIM THE COMPOSER AT A MESSAGE ALREADY SENT. Nothing is destroyed here and nothing is sent — see `editing`
+     * for why the whole gesture hangs on that. What this does is move the old prompt and its files back into the
+     * box, stash whatever they displaced, and let the transcript draw what the send would drop.
+     *
+     * Refused for a message with no checkpoint behind it: an edit whose files could not go back would leave the
+     * new turn reasoning about a workspace the restated prompt never produced, which is exactly the incoherent
+     * half-measure the daemon's rewind refuses to perform (agent/rewind.ts). The surfaces grey the control out
+     * for the same reason, so reaching this branch is a race rather than a click. */
+    beginEdit(message: ChatMessage): boolean {
+        if (message.role !== `user` || message.rewindIndex === undefined || !this.messages.value.includes(message)) {
+            return false;
+        }
+        this.editing.value = { id: message.id, restore: this.draft.value, attachments: this.attachments.value };
+        this.draft.value = message.text;
+        /* The prompt's OWN files come back with its words — a message is what was attached as much as what was
+         * typed, and an edit that silently dropped the screenshot would re-ask the question without the half of
+         * it that made it answerable. They are already on disk (the send that placed them uploaded them), so
+         * they are re-staged as finished chips rather than re-uploaded. `previewUrl` rides along where the
+         * bubble still has one; a tab restored from the record has none, and the chip falls back to its name. */
+        this.attachments.value = (message.attachments ?? []).map((attachment): PendingAttachment => ({
+            id: crypto.randomUUID(),
+            name: attachment.name,
+            path: attachment.path,
+            previewUrl: attachment.previewUrl,
+            status: `done`,
+            progress: 100,
+        }));
+        return true;
+    }
+
+    /* PUT IT ALL BACK. The draft and the chips return to exactly what they were before the pencil, because the
+     * mode's promise is that abandoning it costs nothing — and a composer that came back empty would have eaten
+     * a message the user was part-way through writing.
+     *
+     * The re-staged chips are NOT revoked on the way out: their preview URLs belong to the transcript bubble
+     * this edit borrowed them from, which is still on screen and still drawing them. */
+    cancelEdit(): void {
+        const edit = this.editing.value;
+        if (edit === undefined) {
+            return;
+        }
+        this.draft.value = edit.restore;
+        this.attachments.value = [...edit.attachments];
+        this.editing.value = undefined;
+    }
+
+    /* SPEND THE EDIT — the one press that destroys anything, and it does the two halves in the order that
+     * survives a failure between them: rewind first, send only if it landed.
+     *
+     * Backwards would be unrecoverable. A message sent against a workspace still holding the turns it was meant
+     * to replace starts an agent on the wrong files, and the rewind that followed would then cut the transcript
+     * out from under a running turn — the exact interleaving the daemon's rewind lease exists to make
+     * impossible. This way a refused rewind (a turn is running, the checkpoint is gone) leaves the chat
+     * untouched with its reason on screen, and the edit is still armed for another try.
+     *
+     * The mode is cleared BETWEEN the two, so the send appends to a transcript that is no longer drawing
+     * anything as doomed. */
+    async submitEdit(text: string, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<boolean> {
+        const edit = this.editing.value;
+        if (edit === undefined) {
+            return false;
+        }
+        const message = this.messages.value.find((candidate) => candidate.id === edit.id);
+        if (message === undefined) {
+            // The row left the transcript under an open editor — another window rewound, or a watch replayed a
+            // shorter record. There is nothing to edit any more, so the mode ends rather than aiming at whatever
+            // has since taken that place.
+            this.editing.value = undefined;
+            this.error.value = `That message is no longer in this conversation.`;
+            return false;
+        }
+        if (!(await this.rewindTo(message, `edit`))) {
+            return false;
+        }
+        this.editing.value = undefined;
+        await this.enqueue(text, attachments, editorContext);
         return true;
     }
 
@@ -744,6 +865,10 @@ export class Conversation {
     // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
     // would quietly move an isolated agent's next turn onto the main tree.
     restoreMessages(messages: readonly RestoredMessage[]): void {
+        // A replayed record is a different transcript wearing the same ids (see `editing`), so an edit armed
+        // against the one being replaced cannot survive it — the message it named may not be in the new record
+        // at all, and the id it named certainly means something else now.
+        this.editing.value = undefined;
         this.transcript.rebuild(
             messages.map((message, index) => ({
                 role: message.role,

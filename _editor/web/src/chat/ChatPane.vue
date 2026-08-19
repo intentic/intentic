@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } fr
 import { useRoute, useRouter } from "vue-router";
 import {
     type AgentCommand,
+    type EditorContext,
     isTrialProvider,
     type LoopDesign,
     loopDesignLine,
@@ -154,6 +155,10 @@ const {
     stop,
     decidePlan,
     availableCommands,
+    editing,
+    cancelEdit,
+    submitEdit,
+    forkAt,
 } = paneView;
 // The shell-wide signals the composer answers, and the only things this pane reads off the store rather than
 // off its own conversation.
@@ -534,6 +539,72 @@ const dayMarks = computed(() => dayMarksOf(turns.value));
  * note is about, arriving by a different road. */
 const forkCuts = computed(() => forkCutsOf(turns.value));
 
+/* WHAT AN EDIT IN PROGRESS WOULD THROW AWAY — the id of every row from the edited message down, so the
+ * transcript can draw them as already gone while they are still entirely there.
+ *
+ * THIS IS THE HALF THAT MAKES THE MODE HONEST. An edit is the one gesture here that destroys turns without the
+ * user naming a number: they click a pencil three prompts up and the cost is however much has happened since,
+ * which is exactly the quantity nobody holds in their head. Rewind answers this with an arming step that
+ * counts the messages in a menu row; an edit cannot borrow that, because the count has to stay legible for as
+ * long as it takes to type a new prompt — so it is shown on the messages THEMSELVES, and stays shown until the
+ * send or the cancel. Nothing is dropped to draw this; the rows are struck, not removed.
+ *
+ * A set of ids rather than an index, because it is read per row by a component that knows its message and not
+ * its position — and because the id survives the reducer rebuilding `turns` under a streaming turn, which an
+ * index would not. Empty whenever nothing is being edited, which is the ordinary case and costs one compare. */
+const doomed = computed<ReadonlySet<number>>(() => {
+    const target = editing.value;
+    if (target === undefined) {
+        return new Set();
+    }
+    const from = messages.value.indexOf(target);
+    return from < 0 ? new Set() : new Set(messages.value.slice(from).map((message) => message.id));
+});
+
+// How many bubbles the armed edit would take with it, the edited prompt included — the number the Send names
+// and the strip counts. Derived from `doomed` rather than counted again, so the strip can never disagree with
+// what the transcript has struck through.
+const editDropped = computed(() => doomed.value.size);
+
+/* KEEP BOTH INSTEAD — the fork, offered from inside the edit, at the one moment it is most wanted and least
+ * reachable: half-way through retyping the prompt, having just read the answer they are about to throw away
+ * and thought better of it. The alternative is cancel, hunt for the mark in the margin at the end of that
+ * answer, fork, and type the whole thing again from memory — which is enough friction that the honest
+ * prediction is they simply spend the answer instead.
+ *
+ * It forks at the SAME cut the edit was aimed at, so the new tab inherits everything above the edited prompt
+ * and opens with that prompt in its composer (see forkAt) — where this pane's half-written replacement then
+ * replaces it. Nothing is dropped here and nothing is sent: the source keeps its turns, the fork carries the
+ * words, and the user is left in the new tab exactly where they were in this one.
+ *
+ * `now` and not `then`, deliberately, because this is the escape hatch from a DESTRUCTIVE act and it must not
+ * be destructive itself: the files-as-they-were fork turns the new chat isolated and demands the source be
+ * settled, which are two more conditions to explain in a strip that exists to be pressed without thinking. The
+ * full three-way choice is where it always was, on the mark at the end of the answer. */
+const forkInsteadOfEdit = (): void => {
+    const target = editing.value;
+    if (target === undefined) {
+        return;
+    }
+    const cut = messages.value.indexOf(target);
+    if (cut < 0) {
+        return;
+    }
+    const carried = draft.value;
+    const staged = attachments.value;
+    // Ends the edit first, which puts THIS pane's composer back to whatever the pencil displaced — the fork
+    // gets the words, and the tab being left behind is returned to the state it was in before any of this.
+    cancelEdit();
+    const fork = forkAt(cut, `now`);
+    // The fork opens holding the ORIGINAL prompt (forkAt seeds it from the cut). What the user has actually
+    // been typing is the replacement, so it wins — the whole reason to reach for this instead of cancelling is
+    // that the half-written words are worth keeping.
+    if (fork !== undefined) {
+        fork.draft.value = carried;
+        fork.attachments.value = [...staged];
+    }
+};
+
 // --- Composer --------------------------------------------------------------------------------
 const modeLabel = computed(() => modeMeta(mode.value).label);
 const modeIcon = computed(() => modeMeta(mode.value).icon);
@@ -786,6 +857,27 @@ const staged = computed(() => draft.value.trim().length > 0 || attachments.value
  * Offered only where it can land: the route is keyed on the registry, so a draft chat that has never run a
  * turn has nowhere to place into — the pill appears with the first turn, like the agent itself does. */
 const voiceAgent = ref(false);
+/* NOTHING ELSE THAT REWRITES WHAT SEND MEANS SURVIVES AN EDIT BEING ARMED — the voice, and the run-through
+ * badge's two picks. All three answer the same question the edit does ("what happens when I press send") with
+ * answers that cannot both hold, and submit() has to pick one; every arrangement where the loser stays LIT is a
+ * composer showing a promise it will not keep.
+ *
+ * THE EDIT WINS, in every direction, because it is the most specific act of the four: the user pointed at one
+ * message in this transcript. The others are standing postures that cost a single click to put back, and
+ * clearing them VISIBLY — the pill goes quiet, the badge goes neutral — is what makes the precedence something
+ * the user sees rather than something they discover by pressing Send.
+ *
+ * Cleared here rather than by disabling the controls, which is also why the run-through badge is untouched
+ * above: a running loop is stopped from that badge, and a disabled one would leave the loop no way out but the
+ * fleet board. Its PICK goes; its press stays. */
+watch(editing, (armed) => {
+    if (armed === undefined) {
+        return;
+    }
+    voiceAgent.value = false;
+    props.conversation.workflowId.value = undefined;
+    props.conversation.loopId.value = undefined;
+});
 const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
 /* WHY SEND IS REFUSING, in the user's words — undefined when the press will land. The only thing that can hold
  * a staged message back is an attachment that isn't on disk yet, and until now that greyed the button out and
@@ -810,6 +902,14 @@ const sendBlock = computed(() => {
         if (attachments.value.length > 0) {
             return `An attachment can't be placed as the agent's words — remove it (×) or switch back to your own voice.`;
         }
+    }
+    /* An edit spends a rewind, and the daemon refuses one while a turn holds the conversation (agent/rewind.ts).
+     * Said HERE rather than by grefying the button silently: the pencil is only offered on a settled chat, so a
+     * user who reaches this state armed an edit and then something started — an auto-continue, a queued message
+     * going out, a colleague's press — and the composer is the only thing on screen that can explain why the
+     * send it is holding will not land. The edit stays armed; the press works the moment the turn ends. */
+    if (editing.value !== undefined && streaming.value) {
+        return `The agent is running — this edit can be sent once the turn ends.`;
     }
     if (attachments.value.some((entry) => entry.status === `uploading`)) {
         return `Waiting for the attachment to finish uploading…`;
@@ -856,6 +956,12 @@ const canSend = computed(() => {
     if (voiceAgent.value) {
         return staged.value;
     }
+    /* An edit replaces a prompt, so it needs one: an empty box would drop the turns and then ask nothing, which
+     * is a rewind the user did not ask for wearing an edit's confirmation. Cancel is how an edit ends with
+     * nothing sent, and it is on screen the whole time (see the editing strip). */
+    if (editing.value !== undefined) {
+        return staged.value;
+    }
     return staged.value || continueOffer.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
 });
 const sendHint = computed(() => {
@@ -867,6 +973,11 @@ const sendHint = computed(() => {
     }
     if (voiceAgent.value) {
         return `Place into the transcript as ${providerName.value} — no reply`;
+    }
+    // Names the COST, because this is the press that pays it and the count is the thing the struck rows are on
+    // screen to make legible. Singular where only the edited prompt itself goes.
+    if (editing.value !== undefined) {
+        return editDropped.value === 1 ? `Replace this message` : `Replace this message and the ${editDropped.value - 1} below it`;
     }
     if (pendingPlanMessage.value) {
         return `Send as feedback (keep planning)`;
@@ -903,6 +1014,11 @@ const composerPlaceholder = computed(() => {
     // does, and the placeholder is where a composer says whose words it is holding.
     if (voiceAgent.value) {
         return `Write as ${providerName.value} — placed into the transcript, no reply…`;
+    }
+    // An edit arrives with the old prompt already in the box, so this placeholder is only ever read once the
+    // user has cleared it — which is precisely the moment "what was I doing?" needs answering.
+    if (editing.value !== undefined) {
+        return `Ask this turn again, differently…`;
     }
     if (pendingPlanMessage.value) {
         return `Reply to revise the plan…`;
@@ -1014,6 +1130,22 @@ const composerHint = computed(() => {
 // shows the same thumbnail the chip did without re-reading the bytes.
 const snapshotAttachments = (): ChatAttachment[] =>
     attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({ name, path, ...(previewUrl !== undefined ? { previewUrl } : {}) }));
+
+/* The editor chip this send carries, or nothing — extracted because an EDIT sends by a different path than an
+ * ordinary message (see submit) and the two must not disagree about what "the file I'm looking at" means. The
+ * selection is capped at the same 20k it always was: a prompt is not a place to paste a whole file. */
+const editorContextForSend = (): EditorContext | undefined => {
+    const target = editorTarget.value;
+    if (!includeEditorContext.value || target === undefined) {
+        return undefined;
+    }
+    return {
+        file: target.file,
+        ...(target.selection !== undefined
+            ? { startLine: target.startLine, endLine: target.endLine, selection: target.selection.slice(0, 20_000) }
+            : {}),
+    };
+};
 
 /* --- The workflow this composer is aimed at ------------------------------------------------------
  * A pick, held on the conversation (Conversation.workflowId) beside the model and the effort, because that is
@@ -1237,6 +1369,39 @@ const submit = (): void => {
         }
         return;
     }
+    /* AN ARMED EDIT INTERCEPTS NEXT, and for the same reason the voice above it does: this press is not a new
+     * message at the end of the conversation, so none of the gates below — a plan to revise, a turn to steer, a
+     * queue to flush, a stopped turn to continue — is asking about the right thing. It rewinds to the message
+     * being edited and sends the box in its place (Conversation.submitEdit), and it RETURNS either way, because
+     * falling through would let a press meant as "replace that prompt" become an ordinary send appended to the
+     * very turns the user was replacing.
+     *
+     * THE SEND IS THE CONFIRMATION. Everything the edit destroys is destroyed here and nowhere earlier, which is
+     * what buys the mode its cancel-costs-nothing promise — and why there is no second "are you sure" on top of
+     * it: the user has just restated the prompt with the casualties struck through on screen in front of them.
+     * An empty box is refused by `canSend` above, so a stray Enter cannot spend an edit on nothing. */
+    if (editing.value !== undefined) {
+        /* Gated exactly as the voice above is, and for the same three reasons — no daemon means nothing to send
+         * to, an empty box means an edit that would drop the turns and then ask nothing (a rewind the user never
+         * asked for, wearing an edit's confirmation), and a refusal is a refusal. It has to be checked HERE
+         * rather than left to `canSend` further down, because this branch returns before reaching it: the Send
+         * button greys itself out, but Enter arrives straight into this function. */
+        if (!connected.value || !staged.value || sendBlock.value !== undefined) {
+            return;
+        }
+        const replacement = draft.value.trim();
+        void submitEdit(replacement, snapshotAttachments(), editorContextForSend());
+        attachments.value = [];
+        includeEditorContext.value = false;
+        history.value?.record(replacement);
+        pin();
+        draft.value = ``;
+        void nextTick(() => {
+            grow();
+            input.value?.focus();
+        });
+        return;
+    }
     /* THE BADGE INTERCEPTS THE SEND, ahead of every gate below it — those are about a TURN on this
      * conversation (a pending plan, a running turn to steer, staged attachments), and this message is not one.
      * It goes to a graph of sessions that are not this chat, so none of the machinery for putting words into
@@ -1281,20 +1446,10 @@ const submit = (): void => {
         void decidePlan(pendingPlan, false, text, snapshotAttachments());
         attachments.value = [];
     } else {
-        const target = editorTarget.value;
-        const editorContext =
-            includeEditorContext.value && target !== undefined
-                ? {
-                      file: target.file,
-                      ...(target.selection !== undefined
-                          ? { startLine: target.startLine, endLine: target.endLine, selection: target.selection.slice(0, 20_000) }
-                          : {}),
-                  }
-                : undefined;
         // One path whether or not a turn is running — the conversation delivers it into the running turn or
         // queues it (see Conversation.enqueue). Snapshot the chips onto the message, then clear WITHOUT
         // revoking preview URLs — the thumbnails now live on the queued/sent message.
-        void send(text, snapshotAttachments(), editorContext);
+        void send(text, snapshotAttachments(), editorContextForSend());
         attachments.value = [];
         includeEditorContext.value = false;
     }
@@ -1463,6 +1618,18 @@ const onKeydown = (event: KeyboardEvent): void => {
     if (event.key === `Escape` && (voiceOn.value || voiceSendArmed.value)) {
         event.preventDefault();
         quitVoice();
+        return;
+    }
+    /* Escape's next claim is an armed EDIT, which it abandons — the key's plainest meaning ("get me out of this
+     * mode"), and it is free to obey here because abandoning costs nothing: the transcript is intact, the files
+     * are untouched, and the composer goes back to whatever the pencil displaced (Conversation.cancelEdit).
+     *
+     * Ahead of the turn-stop below, on the same reasoning that puts the voice ahead of it: with an edit armed,
+     * the mode the user is escaping is the edit, and stopping a turn instead would be a much larger action than
+     * the key meant. The two cannot both claim the key anyway — an edit cannot be armed on a streaming chat. */
+    if (event.key === `Escape` && editing.value !== undefined) {
+        event.preventDefault();
+        cancelEdit();
         return;
     }
     // Escape interrupts the turn (Claude Code's shortcut), once the popovers and message recall have had their
@@ -1753,13 +1920,18 @@ watch(
                                      redraw one bubble. The key lists exactly what the row renders from — a
                                      message keeps its identity through the reducer unless that message changed,
                                      and `folded` holds still per turn (see ChatTurn.folded). -->
+                                <!-- `doomed` joins the memo key for the same reason every other input does: a
+                                     row that has just been struck (or unstruck by a cancel) renders
+                                     differently, and a memo that did not list it would leave the transcript
+                                     showing the previous edit's casualties. -->
                                 <ChatMessageView
                                     v-for="message in turn.messages"
                                     :key="message.id"
-                                    v-memo="[message, isStreaming(message), turn.folded]"
+                                    v-memo="[message, isStreaming(message), turn.folded, doomed.has(message.id)]"
                                     :message="message"
                                     :streaming="isStreaming(message)"
                                     :folded="message.id === turn.id ? turn.folded : undefined"
+                                    :doomed="doomed.has(message.id)"
                                 />
                                 <!-- THE FORK POINT of this turn, in the column's MARGIN at the end of the answer:
                                      everything down to here is what a fork keeps, and everything after it is
@@ -2012,6 +2184,49 @@ watch(
                                     </button>
                                 </div>
                                 <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
+                            </div>
+                            <!-- AN EDIT IN FLIGHT, said in the one place the user is certainly looking: directly
+                                 over the box they are typing the replacement into. The struck rows up in the
+                                 transcript are the count; this is the LABEL — which message, and the two ways
+                                 out of it — and it has to be here rather than only up there because an edit
+                                 aimed twenty turns back leaves nothing struck anywhere near the composer, and a
+                                 box that has silently changed what Send does with no mark on it is the trap
+                                 this whole mode is arranged to avoid.
+                                 It sits LAST of the strips, closest to the box, because it is the only one of
+                                 them that describes what the box itself is now for; the others describe what
+                                 the conversation is doing.
+                                 In the accent rather than the muted grey the strips above wear: those report a
+                                 state the chat arrived at by itself, and this reports a mode the user armed and
+                                 must be able to see they are still in. -->
+                            <div
+                                v-if="editing !== undefined"
+                                class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-primary-600/10 px-3 py-2 text-2xs text-muted"
+                            >
+                                <Icon name="pencil" class="shrink-0 text-link" />
+                                <span class="min-w-0 flex-1">
+                                    Editing this message —
+                                    <template v-if="editDropped > 1">it and the {{ editDropped - 1 }} below it are replaced when you send.</template>
+                                    <template v-else>it is replaced when you send.</template>
+                                </span>
+                                <!-- The way out that keeps the answer. Deliberately BEFORE Cancel: a user
+                                     hesitating over this strip is weighing "do I really want to lose that", and
+                                     the offer that answers it should be the one their eye reaches first. -->
+                                <button
+                                    type="button"
+                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
+                                    v-tooltip.top="'Open a new chat from here with what you have typed — this one keeps its answer'"
+                                    @click="forkInsteadOfEdit"
+                                >
+                                    Keep both instead
+                                </button>
+                                <button
+                                    type="button"
+                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                    v-tooltip.top="'Leave everything as it is — nothing has been changed yet'"
+                                    @click="cancelEdit"
+                                >
+                                    Cancel
+                                </button>
                             </div>
                             <!-- The whole box changes standing when the agent's voice is armed (.composer-voice):
                                  being in this mode by accident is the one mistake worth paint, because the words
@@ -2287,12 +2502,14 @@ watch(
                                                 'composer-active': voiceAgent && pickedWorkflow === undefined,
                                                 'composer-steered': pickedWorkflow !== undefined,
                                             }"
-                                            :disabled="pickedWorkflow !== undefined"
+                                            :disabled="pickedWorkflow !== undefined || editing !== undefined"
                                             @click="voiceAgent = !voiceAgent"
                                             v-tooltip.top="
-                                                voiceAgent
-                                                    ? `Writing as the agent — Send places the words into the transcript, no reply`
-                                                    : `Write as the agent — place words into the transcript in its voice`
+                                                editing !== undefined
+                                                    ? `Finish or cancel the edit first — this box is holding a message to replace`
+                                                    : voiceAgent
+                                                      ? `Writing as the agent — Send places the words into the transcript, no reply`
+                                                      : `Write as the agent — place words into the transcript in its voice`
                                             "
                                             :aria-pressed="voiceAgent"
                                             aria-label="Write as the agent"
