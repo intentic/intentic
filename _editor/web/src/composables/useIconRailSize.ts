@@ -2,6 +2,14 @@ import { ref, watch, type Ref } from "vue";
 
 export type IconRailSize = "compact" | "comfortable";
 
+/* THE RAIL'S WIDTH, written down once. The shell draws the column at this many rem divided back out of the
+ * text size (ShellDesktop's `rail()` — the rail is chrome and does not take the app's text size), which makes
+ * it a constant number of SCREEN pixels: 56 compact, 64 comfortable. Anything that has to know how much of the
+ * window the rail has already spent — the chat column's width clamp in useLayout is the one that does — reads
+ * it from here rather than growing a second copy of the number to drift from. */
+export const ICON_RAIL_WIDTH_REM: Record<IconRailSize, number> = { compact: 3.5, comfortable: 4 };
+export const iconRailScreenPx = (size: IconRailSize): number => ICON_RAIL_WIDTH_REM[size] * 16;
+
 const STORAGE_KEY = `ui-icon-rail-size`;
 
 /* Owns the desktop icon rail's width and control spacing as a module-level singleton. The shell reads the

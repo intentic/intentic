@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { activeSandboxId } from "./sandbox/activeSandbox";
+import { iconRailScreenPx, useIconRailSize } from "./useIconRailSize";
 import { toAppPx } from "./uiScale";
 import { readWindowState, writeWindowState } from "./windowStore";
 
@@ -149,9 +150,13 @@ const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
  * application layout concepts, not generic @intentic/ui primitives. */
 
 // Clamp chat width to a floor and to ~95% of the viewport (leaving a sliver of workspace); otherwise unlimited.
-// The viewport is the one bound that arrives in screen pixels, so it converts before it is compared.
+// The viewport is the one bound that arrives in screen pixels, so it converts before it is compared — and the
+// rail comes off it first: the chat column sits BESIDE the rail in the shell's grid, so a cap of 95% of the
+// whole window spends 5% on the sliver and then overflows by the rail's width on any window under ~1.2kpx,
+// which put the column's right edge (the composer's margin) past the window and under .shell's clip.
+const { iconRailSize } = useIconRailSize();
 const clampWidth = (px: number): number => {
-    const viewportMax = toAppPx(window.innerWidth * 0.95);
+    const viewportMax = toAppPx((window.innerWidth - iconRailScreenPx(iconRailSize.value)) * 0.95);
     const max = Math.min(MAX_CHAT_WIDTH, viewportMax);
     return Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(px, max)));
 };

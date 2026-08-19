@@ -22,7 +22,7 @@ import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
 import { uiLength } from "../composables/uiScale";
-import { useIconRailSize } from "../composables/useIconRailSize";
+import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "../composables/useIconRailSize";
 import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
@@ -429,7 +429,7 @@ const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
         "--chat-width": poppedOut.value || chatRestoring.value || chatOnRail.value ? `0px` : uiLength(layout.chatWidth.value),
-        "--icon-rail-width": rail(compact ? `3.5rem` : `4rem`),
+        "--icon-rail-width": rail(`${ICON_RAIL_WIDTH_REM[iconRailSize.value]}rem`),
         "--icon-rail-tile-size": rail(compact ? `2.5rem` : `2.75rem`),
         "--icon-rail-account-size": rail(compact ? `2rem` : `2.25rem`),
         "--icon-rail-divider-width": rail(compact ? `1.75rem` : `2rem`),
@@ -665,7 +665,11 @@ useKeybindings();
 
 <style scoped>
 .shell {
-    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) var(--chat-width, 22rem);
+    /* The chat track's floor is 0, not its asked width: the stored column width (useLayout) was clamped against
+     * the window at the moment it was dragged, so a window shrunk since — or a restore onto a smaller screen —
+     * would otherwise push the column past the right edge and let overflow:hidden take the composer's margin
+     * with it. minmax lets the track shrink to what is left beside the rail instead of clipping. */
+    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--chat-width, 22rem));
     /* One real row fills 100vh; a stray fixed-position overlay anchor landing in an implicit row would let 1fr
      * starve it to 0 and split the height (see CLAUDE.md post-mortem). Pin a single explicit row so none can. */
     grid-template-rows: minmax(0, 1fr);
