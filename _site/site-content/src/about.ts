@@ -93,7 +93,7 @@ export const aboutHero = {
 export const trustCards: TrustCard[] = [
     {
         title: "Why trust intentic?",
-        body: "Run the sandbox on your own hardware and the platform stores only your identity and the sandbox's URL. It never receives your code or keys. If we host the sandbox, its files stay on the hosting provider's disk and are not exposed through the platform.",
+        body: "Runs on hardware you own. The platform holds only your identity and sandbox URL, never your code or keys.",
         href: productHref("host"),
         linkLabel: "What the platform actually holds",
     },
@@ -105,7 +105,7 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "It builds itself",
-        body: "Agents built most of intentic in public.",
+        body: "Agents wrote most of intentic in public, and every commit they made sits in the log.",
         stat: "commits",
         href: `${githubUrl}/commits/main`,
         linkLabel: "Read the commit log",
