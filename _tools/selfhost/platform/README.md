@@ -54,8 +54,11 @@ volume self-initializes and an image bump self-migrates — no manual db step.
 
 ## Notes
 
-- **Email / analytics are optional.** Invites log server-side and analytics stay off until their env vars are
-  set. Google + the tunnel + the secrets are the only hard requirements.
+- **Email / analytics are optional.** Without mail credentials an invite still stands — the accept link comes
+  back to the owner in the Access tab (with a Copy button) and is logged server-side; analytics stay off until
+  their env vars are set. Google + the tunnel + the secrets are the only hard requirements. The same handover
+  happens when `WEB_ORIGIN` is a localhost address: a link only this machine can open is never mailed, because
+  the recipient would get an invitation whose button lands on their own empty localhost.
 - **Reaching sandboxes** needs `ZROK_ADMIN_TOKEN` (+ `ZROK_API_ENDPOINT`, `ZROK_ZONE`) — the self-hosted hub in
   [`_tools/selfhost/zrok`](../zrok). The platform mints one account per sandbox on it; each box enables with its
   own and answers under `sandbox-<id>.<zone>`. Without the token, setup can only attach a sandbox the user

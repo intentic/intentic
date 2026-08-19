@@ -64,7 +64,10 @@ const boxClass = computed(() => twMerge(NOTICE_BOX[shown.value], attrs[`class`] 
                  small needs, so the one line carrying the raw cause was the least legible thing in the box.
                  Dimming it at all only ever bought a few percent of apparent weight, and `text-2xs` against
                  the title's `text-xs` says "secondary" more clearly than the fade did. -->
-            <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block text-2xs">{{ of.detail }}</span>
+            <!-- `break-words` because the detail is where the UNBROKEN strings live — a URL, a sha, a token —
+                 and one of those is wider than this box on any narrow panel. Without it the line does not wrap
+                 at all: it runs out of the tint and pushes the layout it sits in. -->
+            <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block break-words text-2xs">{{ of.detail }}</span>
             <slot />
         </span>
         <button v-if="of?.action !== undefined" type="button" :class="ui.linkButton(`shrink-0 font-medium`)" @click="of.action.run()">

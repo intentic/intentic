@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { apiContract } from "@intentic-app/api-contract";
+import { apiContract, type InviteDelivery } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
-import { sendInviteEmail } from "./email.js";
+import { inviteLink, sendInviteEmail } from "./email.js";
 import { INVITE_TTL_MS, inviteAcceptDecision, inviteStatus, toInviteRecord } from "./invites.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
@@ -16,6 +16,32 @@ const listInvites = async (context: OrpcContext, sandboxId: string) => {
     return { members: members.map((member) => toInviteRecord(member, now)) };
 };
 
+/* THE MAIL IS A COURIER, NOT THE GRANT — which is the whole shape of `create`/`resend` below.
+ *
+ * By the time this runs the invitee is already granted: the owner's browser pushed them to the daemon (the
+ * enforcer) and the row here is written. So a send that fails is one delivery attempt failing, and letting it
+ * throw made the request a 500 — which the browser could only report as the invite not happening at all, over a
+ * roster that already showed the person pending. The owner's own account of it was "it says the sandbox is
+ * offline", about a sandbox that had just answered.
+ *
+ * So every outcome comes back as data, with the link itself, and the caller says the true thing: invited, and
+ * here is how the link travelled. `refused` is the send that was attempted and rejected (a bad key, a quota, a
+ * domain that isn't verified) — logged as an incident here, because it is one, while the user-facing half stays
+ * a sentence about an invite that stands. */
+const deliverInvite = async (
+    context: OrpcContext,
+    invite: { to: string; sandboxName: string; inviterName: string; token: string },
+): Promise<{ link: string; delivery: InviteDelivery }> => {
+    const { to, sandboxName, inviterName, token } = invite;
+    const link = inviteLink(context.config, token);
+    try {
+        return { link, delivery: await sendInviteEmail(context.config, context.logger, { to, sandboxName, inviterName, link }) };
+    } catch (error) {
+        context.logger.error({ err: error, to: invite.to }, `invite email refused — the invite stands, the link did not travel`);
+        return { link, delivery: `refused` };
+    }
+};
+
 export const inviteRoutes = {
     // The owner's access roster for an owned sandbox: every invited email plus its derived state. The daemon's
     // own authorized list is pushed separately by the owner's browser — the server can't call the daemon.
@@ -25,9 +51,9 @@ export const inviteRoutes = {
     }),
     // Invite an email: record a PENDING grant with its role and a one-shot token, and email the accept link.
     // Idempotent for a still-pending/expired invitee (re-mints the link, re-grades the role); rejects if they
-    // already accepted (setRole is the re-grade for an active member). The row is written before the email so a
-    // send failure leaves a resendable pending invite. The owner's browser separately pushes this grant to the
-    // daemon so an accepted invitee has access immediately.
+    // already accepted (setRole is the re-grade for an active member). The row is written before the email, and
+    // the send's outcome rides the answer rather than deciding it (deliverInvite). The owner's browser separately
+    // pushes this grant to the daemon so an accepted invitee has access immediately.
     create: os.invite.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
@@ -43,8 +69,8 @@ export const inviteRoutes = {
             create: { sandboxId: sandbox.id, email, role: input.role, inviteToken: token, inviteExpiresAt },
             update: { role: input.role, inviteToken: token, inviteExpiresAt },
         });
-        await sendInviteEmail(context.config, context.logger, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
-        return listInvites(context, sandbox.id);
+        const delivered = await deliverInvite(context, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
+        return { ...(await listInvites(context, sandbox.id)), ...delivered };
     }),
     // Re-send an invite: mint a fresh token + expiry and email again. Only for a not-yet-accepted invitee.
     resend: os.invite.resend.handler(async ({ context, input }) => {
@@ -61,8 +87,8 @@ export const inviteRoutes = {
         const token = randomBytes(32).toString(`base64url`);
         const inviteExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
         await context.prisma.sandboxMember.update({ where: { id: existing.id }, data: { inviteToken: token, inviteExpiresAt } });
-        await sendInviteEmail(context.config, context.logger, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
-        return listInvites(context, sandbox.id);
+        const delivered = await deliverInvite(context, { to: email, sandboxName: sandbox.name, inviterName: user.name, token });
+        return { ...(await listInvites(context, sandbox.id)), ...delivered };
     }),
     // Re-grade an existing invitee (pending or accepted) to a different role. The owner's browser separately
     // pushes the same grant to the daemon — whose list is the enforced one, applied on the member's next

@@ -23,6 +23,16 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         ...overrides,
     }) as OrpcContext;
 
+// A platform WITH mail credentials — the only way to reach the two outcomes that exist once a send is
+// attempted (refused) or deliberately skipped (a link nobody else could open).
+const mailConfig = (webOrigin: string) =>
+    ({
+        webOrigin,
+        intenticCloudflare: { apiToken: ``, zone: `` },
+        secrets: { key: `` },
+        email: { apiKey: `re_test`, from: `intentic <invites@app.test>` },
+    }) as OrpcContext[`config`];
+
 const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
     const error = await promise.then(
         () => undefined,
@@ -76,6 +86,57 @@ describe(`invite routes`, () => {
                 expiresAt: `2099-01-01T00:00:00.000Z`,
             },
         ]);
+        // No mail credentials in this context: the invite still stands and the link comes back for the owner
+        // to carry. `delivery` is the whole point — the caller must be able to tell that apart from a send.
+        expect(result.delivery).toBe(`unconfigured`);
+        expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
+    });
+
+    /* THE MAIL IS NOT THE GRANT. Both tests below cover the same regression from opposite ends: a send that
+     * fails used to throw out of the handler, so the browser got a 500 over a roster that already showed the
+     * person pending — reported to the user as "is the sandbox online?" about a sandbox that was fine. */
+    it(`invite.create survives a refused email and hands back the link`, async () => {
+        const findMany = vi.fn().mockResolvedValue([]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
+            sandboxMember: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), findMany },
+        });
+        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const fetchMock = vi.fn().mockResolvedValue(new Response(`nope`, { status: 422 }));
+        vi.stubGlobal(`fetch`, fetchMock);
+
+        const result = await call(
+            inviteRoutes.create,
+            { sandboxId: `s1`, email: `guest@example.com`, role: `viewer` },
+            { context: context({ prisma, logger, config: mailConfig(`https://app.test`) } as unknown as Partial<OrpcContext>) },
+        );
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(result.delivery).toBe(`refused`);
+        expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
+        // The refusal is an incident on the server even though the request succeeded.
+        expect(logger.error).toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+
+    it(`invite.create doesn't email a link that only resolves on this machine`, async () => {
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
+            sandboxMember: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
+        });
+        const fetchMock = vi.fn();
+        vi.stubGlobal(`fetch`, fetchMock);
+
+        const result = await call(
+            inviteRoutes.create,
+            { sandboxId: `s1`, email: `guest@example.com`, role: `viewer` },
+            { context: context({ prisma, config: mailConfig(`https://localhost:47145`) } as Partial<OrpcContext>) },
+        );
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(result.delivery).toBe(`local-link`);
+        expect(result.link).toBe(`https://localhost:47145/invite/${result.link.split(`/`).pop() ?? ``}`);
+        vi.unstubAllGlobals();
     });
 
     it(`invite.accept flips a valid invite for the invited address and is email-locked`, async () => {

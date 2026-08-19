@@ -645,6 +645,22 @@ export const InviteRecordSchema = z.object({
 export type InviteRecord = z.infer<typeof InviteRecordSchema>;
 export const InviteListSchema = z.object({ members: z.array(InviteRecordSchema) });
 
+/* HOW THE LINK TRAVELLED — the answer to an invite/resend, beside the roster.
+ *
+ * The grant is done before the mail is attempted (the daemon holds it, the row is written), so delivery is a
+ * separate fact and not the verdict on the mutation. `sent` is the ordinary path. `unconfigured` is a platform
+ * with no mail credentials, `local-link` one whose own address only resolves on the machine running it — both
+ * are this platform declining to send something nobody could act on. `refused` is the send that was made and
+ * rejected. In every case but the first the owner is the courier, which is why `link` always comes back. */
+export const InviteDeliverySchema = z.enum(["sent", "unconfigured", "local-link", "refused"]);
+export type InviteDelivery = z.infer<typeof InviteDeliverySchema>;
+export const InviteSentSchema = z.object({
+    members: z.array(InviteRecordSchema),
+    // The accept link just minted, for the owner to hand over when the mail didn't (or couldn't) carry it.
+    link: z.string(),
+    delivery: InviteDeliverySchema,
+});
+
 // What the public accept page renders from an invite token (no session needed). `invalid` = no such token;
 // otherwise the sandbox name + the invited address so the page can prompt sign-in as the right account. Name and
 // email are omitted for an invalid token (nothing to show).

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { InviteRecord } from "@intentic-app/api-contract";
+import type { InviteDelivery, InviteRecord } from "@intentic-app/api-contract";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { Avatar, ui, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import { Avatar, clipboardOf, ui, Notice, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Select from "primevue/select";
@@ -20,6 +20,15 @@ import { presenceActivity, presenceOthers } from "../../composables/usePresence"
  * daemon) then the platform invite record + email. sandboxJson throws on any non-2xx, so a grant the enforcer
  * never got is never recorded (fail closed). Members see a read-only view. "Here now" (live presence) shows for
  * everyone.
+ *
+ * TWO WRITES, TWO SENTENCES. They used to share one catch, so a platform-side failure read as "is the sandbox
+ * online?" — asked about a sandbox that had just answered the write immediately before. Each half now says what
+ * it is: the daemon is the one that can be offline, and the platform is the one that records the invite.
+ *
+ * And the mail is the THIRD thing, which is not a failure at all: by the time it is attempted the invitee is
+ * granted on the daemon and recorded here, so a send that was declined (no mail credentials, or a platform
+ * whose own address only resolves on this machine) or refused comes back as an outcome plus the link. The owner
+ * becomes the courier — which is the only thing that works at all when running the platform locally.
  *
  * EVERY GRANT IS A ROLE. The invite form asks which tier it is handing out (collaborator preselected — safe to
  * give without thinking, useful enough that nobody feels locked out), and each roster row re-grades in place
@@ -48,7 +57,8 @@ const ROLE_BLURB: Record<GrantedRole, string> = {
 const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);
 const inviteRole = ref<GrantedRole>(`collaborator`);
 const busy = ref(false);
-const error = ref<NoticeModel>();
+// The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
+const notice = ref<NoticeModel>();
 const emailTouched = ref(false);
 
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
@@ -75,11 +85,11 @@ const load = async (): Promise<void> => {
         listing.value = false;
         return;
     }
-    error.value = undefined;
+    notice.value = undefined;
     try {
         members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't load the access list.`);
+        notice.value = noticeFrom(err, `Couldn't load the access list.`);
     } finally {
         listing.value = false;
     }
@@ -100,6 +110,34 @@ onMounted(() => {
     listing.value = false;
 });
 
+/* What to say when the link did not travel by mail. Not an error — the person IS invited, on the daemon and in
+ * the record — so the sentence is about the delivery and the way out is the link itself, sitting in `detail`
+ * where it can be selected, with one button that copies it. `sent` needs nothing said: the mail is the message. */
+const DELIVERY_NOTE: Record<Exclude<InviteDelivery, "sent">, string> = {
+    unconfigured: `Invited. Email isn't set up on this platform, so send them this link yourself:`,
+    "local-link": `Invited. This platform only answers on your own machine, so an emailed link would go nowhere. Send them this one yourself:`,
+    refused: `Invited. The email was refused, so send them this link yourself:`,
+};
+
+const deliveryNotice = (result: { link: string; delivery: InviteDelivery }): NoticeModel | undefined =>
+    result.delivery === `sent`
+        ? undefined
+        : {
+              tone: `warning`,
+              title: DELIVERY_NOTE[result.delivery],
+              detail: result.link,
+              action: {
+                  label: `Copy link`,
+                  /* Through the clicked button's own window: this panel can be popped out, and the module-global
+                   * clipboard there belongs to a document that isn't focused (see clipboardOf).
+                   *
+                   * Best-effort on purpose. A platform served without TLS has no clipboard API at all, and the
+                   * copy is a convenience over a link that is already on screen to select — so a refusal here
+                   * must not become an error about an invite that succeeded. */
+                  run: () => void Promise.resolve(clipboardOf(document.activeElement)?.writeText(result.link)).catch(() => undefined),
+              },
+          };
+
 const invite = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     const value = email.value.trim().toLowerCase();
@@ -107,22 +145,30 @@ const invite = async (): Promise<void> => {
         return;
     }
     busy.value = true;
-    error.value = undefined;
+    notice.value = undefined;
     try {
         // Push to the daemon first (owner-gated, enforced), then record the invite + send the email. sandboxJson
-        // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent.
-        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
-            `/members`,
-            jsonBody(`POST`, { email: value, role: inviteRole.value }),
-        );
-        members.value = (await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value })).members;
+        // throws on a non-2xx daemon reply (403/401/offline), so an unenforced grant is never recorded as sent —
+        // and its own catch keeps that failure from being reported as anything else.
+        try {
+            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(
+                `/members`,
+                jsonBody(`POST`, { email: value, role: inviteRole.value }),
+            );
+        } catch (err) {
+            notice.value = noticeFrom(err, `Couldn't grant access on the sandbox — is it online?`);
+            return;
+        }
+        const result = await apiClient.invite.create({ sandboxId: id, email: value, role: inviteRole.value });
+        members.value = result.members;
         email.value = ``;
         emailTouched.value = false;
+        notice.value = deliveryNotice(result);
     } catch (err) {
-        // The daemon push (or an offline sandbox) can fail before the invite is recorded; resync so a pending
-        // invite created just before an email failure still shows with a Resend action.
+        // The sandbox took the grant and the platform then refused to record it: resync so the roster shows
+        // whatever it actually holds rather than what this call assumed.
         void load();
-        error.value = noticeFrom(err, `Couldn't send the invite — is the sandbox online?`);
+        notice.value = noticeFrom(err, `The sandbox granted access, but recording the invite failed.`);
     } finally {
         busy.value = false;
     }
@@ -134,11 +180,13 @@ const resend = async (target: string): Promise<void> => {
         return;
     }
     busy.value = true;
-    error.value = undefined;
+    notice.value = undefined;
     try {
-        members.value = (await apiClient.invite.resend({ sandboxId: id, email: target })).members;
+        const result = await apiClient.invite.resend({ sandboxId: id, email: target });
+        members.value = result.members;
+        notice.value = deliveryNotice(result);
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't resend the invite.`);
+        notice.value = noticeFrom(err, `Couldn't resend the invite.`);
     } finally {
         busy.value = false;
     }
@@ -157,13 +205,13 @@ const revokeSessions = async (): Promise<void> => {
         return;
     }
     revokingSessions.value = true;
-    error.value = undefined;
+    notice.value = undefined;
     sessionsRevoked.value = false;
     try {
         await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
         sessionsRevoked.value = true;
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't sign other browsers out — is the sandbox online?`);
+        notice.value = noticeFrom(err, `Couldn't sign other browsers out — is the sandbox online?`);
     } finally {
         revokingSessions.value = false;
     }
@@ -177,13 +225,19 @@ const setRole = async (target: string, role: GrantedRole): Promise<void> => {
         return;
     }
     busy.value = true;
-    error.value = undefined;
+    notice.value = undefined;
     try {
-        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: target, role }));
+        // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
+        try {
+            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`POST`, { email: target, role }));
+        } catch (err) {
+            notice.value = noticeFrom(err, `Couldn't change the role on the sandbox — is it online?`);
+            return;
+        }
         members.value = (await apiClient.invite.setRole({ sandboxId: id, email: target, role })).members;
     } catch (err) {
         void load();
-        error.value = noticeFrom(err, `Couldn't change the role — is the sandbox online?`);
+        notice.value = noticeFrom(err, `The sandbox took the new role, but recording it failed.`);
     } finally {
         busy.value = false;
     }
@@ -195,14 +249,20 @@ const revoke = async (target: string): Promise<void> => {
         return;
     }
     busy.value = true;
-    error.value = undefined;
+    notice.value = undefined;
     try {
         // sandboxJson throws on a non-2xx daemon reply, so revoke reaches the enforcer before the platform row is
         // dropped — a daemon that rejects/is offline surfaces an error instead of a member who still has access.
-        await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
+        try {
+            await sandboxJson<{ members: { email: string; role: GrantedRole }[] }>(`/members`, jsonBody(`DELETE`, { email: target }));
+        } catch (err) {
+            notice.value = noticeFrom(err, `Couldn't take access away on the sandbox — is it online?`);
+            return;
+        }
         members.value = (await apiClient.invite.revoke({ sandboxId: id, email: target })).members;
     } catch (err) {
-        error.value = noticeFrom(err, `Couldn't revoke access — is the sandbox online?`);
+        void load();
+        notice.value = noticeFrom(err, `Access is gone on the sandbox, but clearing the record failed.`);
     } finally {
         busy.value = false;
     }
@@ -272,7 +332,7 @@ const revoke = async (target: string): Promise<void> => {
                         People you invite get an email to open
                         <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> and sign in with their own Google account.
                     </p>
-                    <Notice v-if="error" :of="error" />
+                    <Notice v-if="notice" :of="notice" />
                     <form class="flex flex-col gap-2" @submit.prevent="invite">
                         <!-- The tier goes with the address: an invite IS a role decision, and the sentence
                              under the picker is where the model is taught. Collaborator preselected. -->
