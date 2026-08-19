@@ -174,7 +174,7 @@ is in `about.ts` because `/about/` shares it.
    button into the live demo in the app window's top-right corner, which is the one band all three
    of its screens leave clear. (P1, P2, P6)
 
-   **Both frames cycle** (recorded decision 2026-08-19), roughly every four seconds and on alternate
+   **Both frames cycle** (recorded decision 2026-08-19), roughly every six seconds and on alternate
    beats, so the pair takes six steps to repeat rather than two. The lists are in `landing.ts`
    (`hero.screens`): the app window walks `/agents` → `/workspace` (Changes, grouped by repository,
    with a diff open) → `/pipelines`; the chat window walks its Agents cut → its Personas cut. Order

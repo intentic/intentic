@@ -750,7 +750,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
          * already on, so this is only ever a change to a picture that is already correct. If the script never
          * runs, the hero is the still image it used to be.
          */
-        const STEP_MS = 4000;
+        const STEP_MS = 6000;
         const frames = ["app", "chat"] as const;
         const shown = { app: 0, chat: 0 };
         const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
