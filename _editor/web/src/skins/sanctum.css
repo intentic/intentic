@@ -22,15 +22,19 @@
  * are on the WALL, never on a plate. Character comes from the material, the line weights and the type, which is
  * where it survives being shrunk.
  *
- * ── THE TWO MARKS IT DOES MAKE ────────────────────────────────────────────────────────────────────────────
- * A plate is framed TWICE: the border itself, and a second gilded hairline set five pixels inside it. That is a
- * carved moulding, it is two lines, and it is the entire ornament budget. It is drawn with `outline` +
- * `outline-offset`, which needs no pseudo-element, no stacking context and no positioning — a lesson from the
- * version that needed all three.
+ * ── WHERE THE ORNAMENT IS ─────────────────────────────────────────────────────────────────────────────────
+ * ONE line round a plate, never two — a second hairline set inside the border reads as a frame arguing with
+ * itself, and the gap between them becomes a third shape nobody drew. Depth comes from a CHAMFER instead: a lit
+ * hairline along the top inside edge and a dark one along the bottom, hard against the border, so a card reads
+ * as a block with thickness.
  *
- * The other is the HORIZON: a small, distant temple standing on the floor of the window, in the wall's own
- * colour rather than the gilding's. It is part of the backdrop, so it only shows where the app has put nothing
- * in front of it, and no code has to know whether a screen is empty.
+ * The decoration proper is three small things, and they are small on purpose:
+ *   · the HORIZON — a distant temple standing on the floor of the window, in the wall's colour rather than the
+ *     gilding's. Part of the backdrop, so it shows only where the app has put nothing in front of it and no code
+ *     has to know whether a screen is empty;
+ *   · a LOZENGE before every section label, the mark a mason cuts to start a line of inscription;
+ *   · GRAIN down the navigation rail, which is the one column in the app with no prose in it and can therefore
+ *     afford a texture.
  *
  * ── EVERYTHING ELSE ───────────────────────────────────────────────────────────────────────────────────────
  * As in the HUD: the surface ramp, the role tokens and the radius scale are restated, which repaints Tailwind's
@@ -45,18 +49,18 @@
 [data-skin="sanctum"] {
     color-scheme: dark;
 
-    --color-surface-0: oklch(97% 0.011 68);
-    --color-surface-50: oklch(94% 0.015 66);
-    --color-surface-100: oklch(89% 0.019 64);
-    --color-surface-200: oklch(81% 0.023 62);
-    --color-surface-300: oklch(71% 0.027 61);
-    --color-surface-400: oklch(61% 0.03 60);
-    --color-surface-500: oklch(51% 0.032 59);
-    --color-surface-600: oklch(42% 0.033 58);
-    --color-surface-700: oklch(34% 0.032 58);
-    --color-surface-800: oklch(29% 0.033 58);
-    --color-surface-900: oklch(24% 0.031 58);
-    --color-surface-950: oklch(19% 0.028 58);
+    --color-surface-0: oklch(97% 0.01 74);
+    --color-surface-50: oklch(94% 0.014 72);
+    --color-surface-100: oklch(89% 0.018 70);
+    --color-surface-200: oklch(81% 0.022 68);
+    --color-surface-300: oklch(71% 0.026 66);
+    --color-surface-400: oklch(61% 0.028 64);
+    --color-surface-500: oklch(51% 0.03 63);
+    --color-surface-600: oklch(42% 0.03 62);
+    --color-surface-700: oklch(34% 0.028 62);
+    --color-surface-800: oklch(27% 0.026 62);
+    --color-surface-900: oklch(21% 0.022 62);
+    --color-surface-950: oklch(15% 0.018 62);
 
     /* THE GILDING, as two steps of the accent rather than a gradient between them. The picker retextures the
      * metal without this file knowing which colour it picked: Brass gilds it properly, Lagoon inlays jade. */
@@ -64,20 +68,19 @@
     --sanctum-gold-bright: var(--color-primary-200);
 
     /* The three weights every line in the file is drawn at, named once so a hairline in the rail and a hairline
-     * round a dialog can never drift apart. `rim` is a plate's own border, `inlay` the moulding set inside it,
-     * `whisper` the seam between two things that are already touching.
+     * round a dialog can never drift apart. `rim` is a plate's own border, `whisper` the seam between two things
+     * that are already touching.
      *
      * A LINE HERE IS A SEAM IN THE WOOD, NOT A LIT EDGE, and getting that wrong is what made the first version
      * of this skin tiring to sit in front of. The rim was 30% of the accent mixed into a mid-brown, which
      * resolves to about oklch(42% 0.056) — a light, saturated orange — drawn round every card, every lane and
      * every slab on a near-black ground. Fifty bright rectangles is not ornament, it is a page shouting.
      *
-     * Ten per cent is the whole change. The rim now lands near oklch(31% 0.026): fifteen points above the canvas
-     * rather than twenty-nine, at half the chroma — close enough to its surface to read as a joint between two
-     * boards, far enough to read at all. The accent still SETS the hue, so the picker still tints the timber;
-     * what it no longer does is light it. */
-    --sanctum-rim: color-mix(in oklab, var(--sanctum-gold) 10%, oklch(32% 0.022 58));
-    --sanctum-inlay: color-mix(in oklab, var(--sanctum-gold) 8%, transparent);
+     * Ten per cent is the whole change, and it is the ONLY change that was needed. The rim now lands near
+     * oklch(31% 0.031): eighteen points above the canvas rather than twenty-nine, at half the chroma — close
+     * enough to its surface to read as a joint between two boards, far enough to read at all. The accent still
+     * SETS the hue, so the picker still tints the timber; what it no longer does is light it. */
+    --sanctum-rim: color-mix(in oklab, var(--sanctum-gold) 10%, oklch(26% 0.02 62));
     --sanctum-whisper: color-mix(in oklab, var(--sanctum-gold) 5%, transparent);
 
     /* GRAIN — the mineral in the rock, and the most over-cookable value in this file. One fine, high-frequency
@@ -103,7 +106,7 @@
      * It is a background layer, not an element, which is what makes it behave: every plate in this skin is
      * opaque, so the temple is simply occluded by whatever the app has put in front of it. A full board hides it
      * completely and an empty pane is all horizon, with no condition anywhere for somebody to maintain. */
-    --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23b0855a' fill-opacity='0.18' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
+    --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23b0855a' fill-opacity='0.3' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
 
     /* The display face — Roman inscriptional capitals, the closest a webfont comes to letters cut into a wall.
      * Headings and the small tracked labels only; body text stays Inter, because a screen read for eight hours
@@ -115,19 +118,18 @@
      * Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. Every one of these is
      * OPAQUE, which is the readability rule at the token tier — a plate you can see the wall through is not a
      * plate, and it is also what lets sticky headers and menus occlude what slides under them. */
-    /* THE GROUND SITS AT A FIFTH, NOT A TENTH, and that number is the difference between "wood" and "black".
-     * An earlier cut put the canvas at 13% with a heavy vignette on it, and the corners fell to near-black — an
-     * app in a tunnel, with lit rectangles floating in it. Walnut is a MID tone; the whole ladder moved up so
-     * the wall reads as a material you could put a hand on, and the plates step above it rather than glowing
-     * out of it. Ivory text on the card still measures about 10:1, so none of the lift is paid for in reading. */
-    --role-canvas: oklch(20.5% 0.031 58);
-    --role-card: oklch(24.5% 0.035 58);
-    --role-overlay: oklch(28.5% 0.037 58);
+    /* THE GROUND IS DEEP AND STAYS DEEP. A tuning pass once tried to answer "the borders are too bright" by
+     * raising the whole ladder toward mid-brown, on the theory that a lighter wall would stop the lines popping
+     * off it. It does not: it makes a dark theme muddy, and the lines were the problem all along. The fix for a
+     * loud line is a quieter line. */
+    --role-canvas: oklch(13% 0.015 62);
+    --role-card: oklch(18.5% 0.019 62);
+    --role-overlay: oklch(22.5% 0.021 62);
     /* A SEAM, NOT A LINE. Hairlines here are gold bled into the stone rather than a lighter grey, because a
      * carved edge is where the gilding has caught. That one substitution is most of why the app stops reading as
      * "dark mode" and starts reading as a material — and it costs nothing anyone has to look at. */
     --role-line: var(--sanctum-rim);
-    --role-line-strong: color-mix(in oklab, var(--sanctum-gold) 16%, oklch(39% 0.026 58));
+    --role-line-strong: color-mix(in oklab, var(--sanctum-gold) 16%, oklch(34% 0.024 62));
     /* Warm ivory, not white: paper and bone against basalt. Over 13:1 on the card, so the warmth costs nothing
      * anyone can read. */
     --role-content: oklch(94% 0.018 84);
@@ -146,11 +148,11 @@
     --role-success-fill: var(--color-success-400);
     --role-warning-fill: var(--color-warning-400);
     --role-danger-fill: var(--color-danger-400);
-    --role-fill-content: oklch(17% 0.026 58);
+    --role-fill-content: oklch(16% 0.02 62);
 
     /* The terminal takes the ground's warmth, or it sits in the wall as a rectangle of a different rock. Must
      * stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). */
-    --color-terminal: #15100a;
+    --color-terminal: #100c07;
 
     /* ── TIER 2 · THE GEOMETRY ────────────────────────────────────────────────────────────────────────────
      * Barely rounded — a cut plate, not a pill. Everything steps down in proportion from the design system's
@@ -172,11 +174,6 @@
      * a second at the bottom made the wall a lit stage rather than a wall, and made two panels the same colour
      * look like two different colours depending on where they sat.
      *
-     * AND IT IS A WHISPER. At 45% over a 13% canvas the corners fell to near-black, and the whole app read as a
-     * tunnel with lit rectangles in it rather than as timber in a room — the other half of "too heavy", after
-     * the borders. A quarter, starting at half the radius, is enough to stop a large window feeling flat and not
-     * enough to make the same plate look like two colours depending on where it sits.
-     *
      * PAINTED ON THE CANVAS, wherever the canvas is: the body, the route element that covers it, and every
      * surface wearing `bg-canvas`. `background-attachment: fixed` anchors all of them to the viewport, which is
      * what makes them read as ONE wall — the grain does not slide when a column scrolls, and the horizon stands
@@ -185,7 +182,7 @@
     [data-skin="sanctum"] #app > :first-child,
     [data-skin="sanctum"] .bg-canvas {
         background-image:
-            radial-gradient(150% 120% at 50% 40%, transparent 52%, oklch(10% 0.02 58 / 0.26) 100%),
+            radial-gradient(140% 110% at 50% 38%, transparent 38%, oklch(7% 0.012 62 / 0.55) 100%),
             var(--sanctum-horizon),
             var(--sanctum-grain);
         background-repeat: no-repeat, no-repeat, repeat;
@@ -221,14 +218,19 @@
         background-color: var(--color-card);
         background-image: none;
         border-color: var(--sanctum-rim);
-        outline: 1px solid var(--sanctum-inlay);
-        outline-offset: -5px;
-        box-shadow: 0 2px 12px oklch(6% 0.012 58 / 0.4);
+        /* A CHAMFER, NOT A SECOND BORDER. The moulding used to be a real inner line five pixels in, and two
+         * concentric rectangles round every card is a frame arguing with itself — the eye reads the gap between
+         * them as a third shape. What is left is the thing a cut edge actually does: catch the light along its
+         * top and lose it along its bottom. Two inset hairlines hard against the border, so the plate reads as a
+         * block with thickness rather than as an outlined rectangle, and there is still only ONE line round it. */
+        box-shadow:
+            inset 0 1px 0 color-mix(in oklab, var(--sanctum-gold-bright) 9%, transparent),
+            inset 0 -1px 0 oklch(6% 0.01 62 / 0.5),
+            0 2px 12px oklch(5% 0.008 62 / 0.5);
     }
 
-    /* A dashed card is a PLACE for something, not a thing — no moulding on an empty niche. */
+    /* A dashed card is a PLACE for something, not a thing — no chamfer on an empty niche. */
     [data-skin="sanctum"] .ui-card-dashed {
-        outline: none;
         box-shadow: none;
         border-color: color-mix(in oklab, var(--sanctum-gold) 14%, transparent);
     }
@@ -246,7 +248,7 @@
      * off its own lane is a seam across the slab. */
     [data-skin="sanctum"] .lane,
     [data-skin="sanctum"] .lane-header {
-        --lane-fill: oklch(17% 0.029 58);
+        --lane-fill: oklch(10.5% 0.013 62);
     }
     /* ONE EDGE, NOT TWO. The lane used to wear the plates' inner moulding as well as its own rim, and on a
      * board that is three tall rectangles side by side the doubled line was most of what the screen was made
@@ -267,11 +269,25 @@
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }
 
-    /* The navigation rail as the carved pillar it is: a darker column of the same rock, gilded down its inner
-     * edge. Flat, because a rail is a column of targets and every one of them wants the same ground. */
+    /* THE RAIL IS THE ONE COLUMN THAT CAN AFFORD A TEXTURE, and it is where this skin spends its ornament
+     * budget most cheaply: it is 48px wide, it holds icons rather than prose, and nothing in it is read as a
+     * sentence. So it gets the end-grain of a plank — fine vertical lines, irregularly spaced so they read as
+     * timber rather than as a ruler, at an alpha where they are felt before they are seen.
+     *
+     * Everywhere else in the file a texture would sit under words and is therefore banned; here there are none
+     * to sit under. */
     [data-skin="sanctum"] .icon-rail {
-        background-color: oklch(16.5% 0.028 58);
-        background-image: none;
+        background-color: oklch(10% 0.012 62);
+        background-image: repeating-linear-gradient(
+            90deg,
+            transparent 0 7px,
+            color-mix(in oklab, var(--sanctum-gold-bright) 5.5%, transparent) 7px 8px,
+            transparent 8px 17px,
+            color-mix(in oklab, var(--sanctum-gold-bright) 3.5%, transparent) 17px 18px,
+            transparent 18px 23px,
+            color-mix(in oklab, var(--sanctum-gold-bright) 7%, transparent) 23px 24px,
+            transparent 24px 34px
+        );
         border-right-color: var(--sanctum-rim);
     }
 
@@ -287,25 +303,25 @@
     [data-skin="sanctum"] .p-multiselect-overlay,
     [data-skin="sanctum"] .p-autocomplete-overlay,
     [data-skin="sanctum"] .ui-anchored-surface {
-        background-color: oklch(26.5% 0.036 58);
+        background-color: oklch(20.5% 0.02 62);
         background-image: none;
         border: 1px solid var(--sanctum-rim);
-        box-shadow: 0 18px 50px oklch(5% 0.012 58 / 0.62);
+        box-shadow: 0 18px 50px oklch(4% 0.008 62 / 0.75);
     }
 
     /* The dialog is the one overlay big enough for the moulding, and it takes it from the plate rule above. Its
      * own fill is a step lighter than a card, so it is restated here rather than inherited. */
     [data-skin="sanctum"] .p-dialog {
-        background-color: oklch(26.5% 0.036 58);
-        box-shadow: 0 24px 60px oklch(5% 0.012 58 / 0.68);
+        background-color: oklch(20.5% 0.02 62);
+        box-shadow: 0 24px 60px oklch(4% 0.008 62 / 0.8);
     }
 
     [data-skin="sanctum"] .p-dialog-mask {
-        background: oklch(7% 0.014 58 / 0.74);
+        background: oklch(6% 0.01 62 / 0.78);
     }
 
     [data-skin="sanctum"] .ui-tooltip-body {
-        background-color: oklch(23% 0.034 58);
+        background-color: oklch(17% 0.02 62);
         border: 1px solid var(--sanctum-rim);
     }
 
@@ -320,9 +336,9 @@
     [data-skin="sanctum"] input[type="email"],
     [data-skin="sanctum"] input[type="password"],
     [data-skin="sanctum"] input[type="number"] {
-        background-color: oklch(15.5% 0.026 58);
-        border-color: color-mix(in oklab, var(--sanctum-gold) 12%, oklch(24% 0.015 58));
-        box-shadow: inset 0 1px 3px oklch(5% 0.01 58 / 0.6);
+        background-color: oklch(10% 0.012 62);
+        border-color: color-mix(in oklab, var(--sanctum-gold) 12%, oklch(22% 0.016 62));
+        box-shadow: inset 0 1px 3px oklch(4% 0.006 62 / 0.7);
     }
 
     [data-skin="sanctum"] .p-inputtext:enabled:hover {
@@ -367,8 +383,8 @@
      * plate like a field, and the ticked one is the metal filling it. */
     [data-skin="sanctum"] .p-checkbox-box,
     [data-skin="sanctum"] .p-radiobutton-box {
-        background-color: oklch(15.5% 0.026 58);
-        box-shadow: inset 0 1px 2px oklch(5% 0.01 58 / 0.5);
+        background-color: oklch(10% 0.012 62);
+        box-shadow: inset 0 1px 2px oklch(4% 0.006 62 / 0.6);
     }
 
     /* A picked row in any of the app's walkable lists: a flat warm wash and a gilded bar down the edge it is
@@ -384,8 +400,8 @@
     }
 
     [data-skin="sanctum"] .p-progressbar {
-        background-color: oklch(15.5% 0.026 58);
-        box-shadow: inset 0 1px 2px oklch(5% 0.01 58 / 0.6);
+        background-color: oklch(10% 0.012 62);
+        box-shadow: inset 0 1px 2px oklch(4% 0.006 62 / 0.7);
     }
 
     /* ── TYPE ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -460,4 +476,24 @@
     font-family: var(--sanctum-display);
     letter-spacing: 0.18em;
     color: color-mix(in oklab, var(--sanctum-gold) 30%, var(--color-subtle));
+}
+
+/* THE LOZENGE — the mark a mason cuts to open a line of inscription, and the one piece of ornament in this skin
+ * that appears at the top of nearly every screen. Four pixels of gilt, set before the label with a hair of space
+ * after it, drawn as a clipped square rather than a glyph so its size and weight are ours rather than whichever
+ * font happened to load.
+ *
+ * IT IS THE WHOLE ARGUMENT FOR SMALL ORNAMENT. The version of this skin that carved an arcade along every panel
+ * edge had, at a glance, less character than this does — because an arcade at 14px is texture, and texture reads
+ * as noise, while one deliberate mark at the head of a line reads as a hand. `vertical-align` rather than a flex
+ * change, so it cannot disturb a label's own layout. */
+[data-skin="sanctum"] .font-semibold.uppercase.tracking-wide::before {
+    content: "";
+    display: inline-block;
+    width: 0.34em;
+    height: 0.34em;
+    margin-right: 0.7em;
+    vertical-align: 0.08em;
+    background: color-mix(in oklab, var(--sanctum-gold) 72%, transparent);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
