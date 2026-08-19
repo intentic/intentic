@@ -102,17 +102,18 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                 visual's. */}
             <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-6 pt-32 pb-20 lg:grid-cols-[minmax(0,26rem)_1fr] lg:pt-40 lg:pb-28">
                 <div class="animate-fade-in-up">
-                    {/* One authored line per block, not one <br>-joined run: a line that has to wrap then
-                        wraps inside its own box, and `text-balance` splits it evenly instead of leaving the
-                        last word alone under a full line.
+                    {/* One authored line per block, and each must sit on ONE typeset line on desktop: the
+                        first block is "You delegate. Agents work." and a reader seeing it break mid-line
+                        reads it as a line that ran out of room, not as the deliberate two-beat it is.
 
-                        In this column the first line WRAPS, and that is the point of balancing it: at 26rem
-                        "You delegate. Agents work." does not fit on one line at display size, and an even
-                        split lands the break exactly on the full stop — so the heading reads as three short
-                        sentences rather than as a line that ran out of room. Keeping the type at 44px and
-                        letting it wrap beats dropping it to 30px to fit: this is the brand line, and the
-                        column was widened for the screenshots beside it, not to shrink the words. */}
-                    <h1 class="text-4xl leading-tight font-semibold tracking-tight text-balance xl:text-[2.75rem]">
+                        So the size is set by that constraint. At 26rem the block is ~555px at the old 44px,
+                        and the column is 416; 32px is the largest step that fits it whole with a little slack,
+                        so that is the size — one uniform value, no per-breakpoint bump, because the column is
+                        the same 416px at every desktop width and a bigger size at any of them would wrap.
+                        Below the grid (phones) it is a single full-width column and the line wraps because no
+                        readable size fits 555px into ~340; `text-balance` splits it on its own full stop
+                        there rather than orphaning a word, which is the graceful version of the same line. */}
+                    <h1 class="text-[2rem] leading-tight font-semibold tracking-tight text-balance">
                         {content.hero.headlineLines.map((line) => (
                             <span class="block text-balance">{line}</span>
                         ))}
@@ -257,8 +258,13 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                              it is tall reads as a cropped panel instead. Inert to the pointer: the press
                              underneath is the page's one call, and a second target stacked on it would only
                              make that one harder to hit. -->
+                        <!-- `lg:right-[1.4%]` slides the window a few px off the frame's right edge at the
+                             widest layouts, purely so its opaque left edge covers the pipelines run-row
+                             accent it would otherwise slice (see `.hero-chat-frame` in global.css). Below lg
+                             the window's edge lands on dark app, so it stays flush at right-0 and tucks into
+                             the corner. -->
                         <div
-                            class="hero-chat-frame pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card"
+                            class="hero-chat-frame pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card lg:right-[1.4%]"
                             aria-hidden="true"
                         >
                             <div class="flex items-center gap-1.5 border-b border-line bg-overlay/50 px-2.5 py-1.5">

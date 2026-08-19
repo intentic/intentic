@@ -661,27 +661,23 @@
     }
 }
 
-/* The smaller frame casts a WIDE shadow to its left, and that side of it is doing real work rather than
- * decoration. It sits over the app window, so its left edge slices whatever row it lands on — and on the
- * pipelines screen that row is a CI run, whose leftmost few pixels are a saturated red/green/blue status
- * accent. Sliced there, the picture was a stack of bare colour bars poking out from behind the window with
- * no row attached to them: the one thing in the composition that read as a rendering fault.
+/* The smaller frame overlaps the app window, so its left edge slices whatever row it lands on. On the
+ * pipelines screen at the widest layout that row is a CI run, whose leftmost pixels are a saturated
+ * red/green status accent — and a bare colour bar with its row hidden behind the window was the "weird
+ * colours" poking out. Two things handle it together, and neither is the heavy scrim that replaced this:
  *
- * A tight shadow cannot fix that, because the problem is the hard edge itself. This one reaches ~60px left
- * with a soft falloff, so the app screen dims into the window instead of ending at it, whatever it happens
- * to be showing — which is the point: it holds for all three screens and every breakpoint, where nudging the
- * window until it happened to cover the accents would hold for exactly one of each. */
+ *   1. The window's own left edge is nudged a hair further left at that layout (`lg:right-[1.4%]` in the
+ *      markup), so its OPAQUE body covers the accent rather than the shadow having to erase it. A soft
+ *      shadow cannot erase a fully-saturated bar without going near-opaque, and a near-opaque band 40px
+ *      wide is exactly the blob this used to be.
+ *   2. This shadow, which is now an ordinary window shadow: a soft falloff to the left and a plain drop.
+ *      It gives the frame depth and mops up the dimmer status icons further in; it is not asked to hide a
+ *      solid colour on its own, so it stays subtle. */
 .hero-chat-frame {
     box-shadow:
-        /* The wide falloff: reaches ~65px left, so the app screen dims INTO the window. */
-        -2.75rem 0 4rem -0.5rem rgb(0 0 0 / 0.9),
-        /* The near band, which is the one that actually kills the accent bars. Its spread matches its
-         * offset on purpose: that puts the solid part of this layer's rectangle flush against the window's
-         * own left edge, so the first pixel outside the frame is already at full strength instead of
-         * halfway down a blur — which is exactly where a 6px-wide status accent was surviving. */
-        -1rem 0 1.5rem 1.25rem rgb(0 0 0 / 0.97),
-        /* Plain drop shadow, for the two sides that overhang the page rather than the app window. */
-        0 1.5rem 3rem -0.75rem rgb(0 0 0 / 0.6);
+        -0.9rem 0 1.4rem -0.35rem rgb(0 0 0 / 0.62),
+        -1.9rem 0 2.5rem -0.7rem rgb(0 0 0 / 0.4),
+        0 1.25rem 2.5rem -0.75rem rgb(0 0 0 / 0.5);
 }
 
 /* ── Hero floating orbs ──────────────────────────────── */
