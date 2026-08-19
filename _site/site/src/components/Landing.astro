@@ -117,7 +117,13 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                             <span class="block text-balance">{line}</span>
                         ))}
                     </h1>
-                    <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                    {/* BALANCED, like the heading above and for a sharper reason. This column is 26rem and
+                        this sentence is 26rem plus four words, so the natural break left "of sight." alone on
+                        a line under a full one — a two-word orphan directly under the brand line, which is the
+                        most looked-at inch of the page. Balancing splits it on its own full stop instead, one
+                        clause per line, and the summary under it stops breaking "git" away from "worktree".
+                        Browsers without `balance` wrap as they did before; nothing depends on it. */}
+                    <p class="mt-4 max-w-copy text-base leading-relaxed text-balance text-muted">
                         {content.hero.subhead}
                     </p>
                     {/* The literal restatement. Quieter than the subhead on purpose: a reader who is already
@@ -125,7 +131,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                         ordinary crawlable prose in the first screen rather than a chip, because the concepts
                         it carries (parallel agents, a container each, reviewing the diff) are phrases, and a
                         phrase split across three bullets is not the phrase any more. */}
-                    <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
+                    <p class="mt-3 max-w-copy text-sm leading-relaxed text-balance text-subtle">
                         {content.hero.summary}
                     </p>
 
@@ -252,7 +258,7 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                              underneath is the page's one call, and a second target stacked on it would only
                              make that one harder to hit. -->
                         <div
-                            class="pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card shadow-2xl shadow-black/60"
+                            class="hero-chat-frame pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card"
                             aria-hidden="true"
                         >
                             <div class="flex items-center gap-1.5 border-b border-line bg-overlay/50 px-2.5 py-1.5">
