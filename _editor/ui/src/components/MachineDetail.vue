@@ -113,23 +113,19 @@ watch(
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
-/* A PORT IS AN ADDRESS, NOT A STATUS, so it wears a chip of its own rather than a StatusBadge: monospaced, so
- * numbers line up down the column and 8788 cannot be misread as 8788o, and square, because the pill shape is
- * this app's word for a state. The tint is the outcome — green is a port you can open right now, and on a card
- * where nothing else is green any more, that is a thing the eye finds rather than one more coloured pill.
+/* A PORT IS AN ADDRESS, NOT A STATUS — which is why it no longer wears a chip.
  *
- * And only a port that MADE IT says "localhost". Every port used to, including the ones the row went on to
- * explain had never reached it, which is the one thing a reader must not skim past. */
-const PORT_CHIP: Record<MachinePortRow[`state`], string> = {
-    mirrored: `bg-success/10 text-success`,
-    "held-by-sandbox": `bg-warning/10 text-warning`,
-    busy: `bg-subtle/10 text-subtle`,
-};
-
-// The ports split by outcome, because they are read differently: the ones that worked are a row of addresses to
-// scan, and each one that did not needs a sentence naming what to do about it.
-const reachable = (group: MachineSandboxGroup): MachinePortRow[] => group.ports.filter((port) => port.state === `mirrored`);
-const blocked = (group: MachineSandboxGroup): MachinePortRow[] => group.ports.filter((port) => port.state !== `mirrored`);
+ * Each one used to be a tinted, rounded pill: green for reachable, amber for contested, grey for busy. On a
+ * sandbox serving three ports that is three filled shapes in a four-line block that also holds a path, a
+ * program name, a sentence and an image — and the green was on the RESTING state, so a healthy card was mostly
+ * green and green had stopped carrying a signal. Ink says it instead, and the block has no backgrounds left.
+ *
+ * Only a port that MADE IT says "localhost". Every port used to, including the ones the row went on to explain
+ * had never reached it, which is the one thing a reader must not skim past. `group.ports` is already sorted
+ * outcome-first (machineDetail.ts), so the ones you can open lead the list without a second pass over it.
+ *
+ * `held-by-sandbox` and `busy` differ in their SENTENCE, not their treatment: both are a number that is not on
+ * localhost, and what to do about each is what the note says. */
 
 /* A HEALTHY SYNC SAYS NOTHING IN COLOUR. Mutagen's resting word is "watching", and it was drawn as a green pill
  * beside the path on every row of every healthy machine — next to a green watcher badge, green port chips and a
@@ -307,11 +303,12 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             </span>
                             <span v-else class="text-xs text-subtle">no folder synced</span>
                             <CopyButton v-if="group.folder.localDir" :text="group.folder.localDir" v-tooltip.top="`Copy path`" />
-                            <span v-if="folderState(group.folder) && restingSync(group.folder)" class="text-2xs text-subtle">
-                                {{ folderState(group.folder) }}
-                            </span>
+                            <!-- A HEALTHY SYNC SAYS NOTHING AT ALL NOW. Mutagen's resting word is "watching", and
+                                 it was printed beside every path on every healthy machine — one more small grey
+                                 word in a block already full of them, saying what the machine's own "sync agent
+                                 running" line says once for all of them. Only the states worth looking at speak. -->
                             <StatusBadge
-                                v-else-if="folderState(group.folder)"
+                                v-if="folderState(group.folder) && !restingSync(group.folder)"
                                 :variant="folderTone(folderState(group.folder))"
                                 size="xs"
                                 :label="folderState(group.folder) ?? ``"
@@ -330,48 +327,35 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 
                     <template v-if="group.ports.length > 0">
                         <span class="text-2xs text-subtle">Ports</span>
-                        <div class="flex min-w-0 flex-col gap-1.5">
-                            <!-- THE ONES YOU CAN OPEN, as one wrapping row. Each is three words long and there
-                                 are often five of them, so a line apiece turned the answer to "which port did I
-                                 get" into a column to read top to bottom. -->
-                            <div v-if="reachable(group).length > 0" class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                                <span
-                                    v-for="port in reachable(group)"
-                                    :key="`${port.port}:${port.state}`"
-                                    class="flex min-w-0 items-baseline gap-1.5"
+                        <!-- ONE PORT PER LINE, IN TWO ALIGNED COLUMNS — the address, then what is on it or why
+                             it never arrived.
+                             It used to be a wrapping row of tinted chips, each trailed by a program name in a
+                             smaller mono: three addresses and three programs ran together as one string, and
+                             the eye had no edge to work from. Alignment is what makes a list of pairs readable,
+                             which is the same argument the label column beside it already makes.
+                             AND NO FILLS. Every healthy port wore a green wash, so on a card with three of them
+                             plus a green running dot, green had stopped meaning anything at all — it was just
+                             the colour ports are. The ink carries it now: content for one you can open, warning
+                             for one you cannot, and nothing in this block has a background any more. -->
+                        <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
+                            <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
+                                <!-- Only a port that MADE IT says "localhost". One that never reached it is a
+                                     bare number, not an address nobody can open. -->
+                                <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
+                                    >{{ port.state === `mirrored` ? `localhost:` : `` }}{{ port.port }}</span
                                 >
-                                    <span class="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium" :class="PORT_CHIP[port.state]">
-                                        localhost:{{ port.port }}
-                                    </span>
-                                    <!-- What is listening on the sandbox side, named rather than quoted — the
-                                         whole command line is on the hover, where its width costs nothing. -->
-                                    <span v-if="shortCommand(port.command)" class="truncate font-mono text-2xs text-subtle" :title="port.command">
-                                        {{ shortCommand(port.command) }}
-                                    </span>
-                                </span>
-                            </div>
-                            <!-- AND THE ONES THAT DID NOT MAKE IT, one per line: each is a different sentence
-                                 about a different thing to go and do. -->
-                            <!-- The number stays put and the sentence wraps BESIDE it rather than under it: a
-                                 narrow column otherwise left the port alone on a line of its own, which is the
-                                 one thing on the row that never needed a line to itself. -->
-                            <div v-for="port in blocked(group)" :key="`${port.port}:${port.state}`" class="flex min-w-0 items-baseline gap-2">
-                                <span class="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium" :class="PORT_CHIP[port.state]">
-                                    {{ port.port }}
-                                </span>
-                                <p class="min-w-0 flex-1 text-xs text-muted">
-                                    {{ portNote(port, portHolder(groups, port)) }}
-                                    <!-- What is listening on the sandbox side, named rather than quoted — the
-                                         whole command line is on the hover, where its width costs nothing. -->
-                                    <span v-if="shortCommand(port.command)" class="font-mono text-2xs text-subtle" :title="port.command">
-                                        · {{ shortCommand(port.command) }}
-                                    </span>
-                                    <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence has always named the
-                                         winner and stopped there, which left a reader who wanted their port back
-                                         with a name and no idea it was a row on this very card — so the note
-                                         ended as a fact about the past. This is the link between the two: it goes
-                                         to the holder's block, where its Stop button is, and stopping it hands
-                                         the number back on the next sync tick.
+                                <!-- What is listening on the sandbox side, named rather than quoted — the whole
+                                     command line is on the hover, where its width costs nothing. -->
+                                <span v-if="port.state === `mirrored`" class="min-w-0 truncate font-mono text-xs text-subtle" :title="port.command">{{
+                                    shortCommand(port.command)
+                                }}</span>
+                                <span v-else class="min-w-0 text-xs text-muted">
+                                    {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
+                                    <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence names the winner and
+                                         used to stop there, which left a reader who wanted their port back with a
+                                         name and no idea it was a row on this very card. This goes to the
+                                         holder's block, where its Stop button is, and stopping it hands the
+                                         number back on the next sync tick.
 
                                          Inline and underlined rather than a button, because it belongs to the
                                          sentence: a button here would sit in the column of verbs that act on THIS
@@ -386,17 +370,19 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     >
                                         show it
                                     </button>
-                                </p>
-                            </div>
+                                </span>
+                            </template>
                         </div>
                     </template>
 
                     <!-- WHICH IMAGE it is on — the fact an Update is about, and the only way to see that one
                          sandbox on this machine runs something older than its neighbour. Last, and in the
-                         quietest ink on the row: it is the longest string here and the least often read. -->
+                         quietest ink here: it is the longest string in the block and the least often read.
+                         At the block's one value size rather than a fourth of its own — this block had six type
+                         treatments in four lines, and half of them differed by a pixel nobody could name. -->
                     <template v-if="group.sandbox">
                         <span class="text-2xs text-subtle">Image</span>
-                        <span class="truncate font-mono text-2xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>
+                        <span class="truncate font-mono text-xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>
                     </template>
                 </div>
 

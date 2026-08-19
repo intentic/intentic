@@ -126,8 +126,15 @@ const KIT_PAIRINGS: readonly MachineFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching` },
     { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
 ];
+/* SEVERAL PORTS, NOT ONE, because one is the case that never went wrong. A sandbox routinely serves three or
+ * four, and the layout that broke was exactly that: a wrapping row of tinted chips each trailed by a program
+ * name, running together as a single string. A kit fixture that shows one port per sandbox hides the only
+ * arrangement worth checking on this page. */
 const KIT_PORTS: readonly MachinePortRow[] = [
     { port: 5173, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/node_modules/.bin/vite` },
+    { port: 33177, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `/usr/bin/node /work/backend-host-main.js` },
+    { port: 33679, sandboxId: `work-intentic-dev`, state: `mirrored`, command: `node main.js` },
+    { port: 6379, sandboxId: `work-intentic-dev`, state: `busy`, command: `/usr/bin/docker-proxy -proto tcp -host-port 6379` },
     { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
 ];
 

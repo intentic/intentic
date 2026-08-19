@@ -256,14 +256,20 @@ export const portHolder = (groups: readonly MachineSandboxGroup[], port: Machine
  * raw asked someone to recognise a string they have never typed; where the holder is a block on this card, its
  * own title is the name on that block and on the switcher. The id survives as the fallback — a wrong-looking
  * name is worse than an unfamiliar one. */
-export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | undefined): string | undefined => {
+/* ONE SENTENCE, AND THE PROGRAM IS IN IT. The note used to end at "another program on this computer already has
+ * it" and the program's own name was appended AFTER it in a second font — eleven words of prose plus a mono
+ * suffix, on a line whose neighbours are addresses. The name is the useful half, so it goes where the sentence
+ * says "who", and the rest gets out of the way. */
+export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | undefined, program?: string | undefined): string | undefined => {
     if (port.state === `mirrored`) {
         return undefined;
     }
+    // The command on a contended port belongs to the SANDBOX's own listener, not to whoever won the number, so
+    // it is never the answer to "who has it" — only a busy port's command is the program holding it.
     if (port.heldBy === undefined) {
-        return `not on localhost — another program on this computer already has it`;
+        return `not on localhost — ${program ?? `another program here`} has it`;
     }
-    return `not on localhost — ${holder?.title ?? port.heldBy} got there first`;
+    return `not on localhost — ${holder?.title ?? port.heldBy} has it`;
 };
 
 // Interpreters are the only commands whose real subject is their ARGUMENT: `node` on its own says nothing about
