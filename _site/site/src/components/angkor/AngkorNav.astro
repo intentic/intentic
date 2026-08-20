@@ -261,27 +261,38 @@ import Lotus from "./Lotus.astro";
     .a-menu {
         position: relative;
     }
+    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE. Same three parts, same order: the element's own
+       background is the rule, a second box inset one pixel is the face, and the face carries a warm lip
+       along its top edge because the light on this page comes from above.
+       It used to be a 165-degree gradient from warm brown to near-black under a nine-slice outline. The
+       gradient is the tell — a lit pane rather than a cut stone, and the one thing on the page that was
+       shaded from a corner rather than from the top. The face is flat now, sampled off the plate's own
+       carved column (#21160c), and what makes it read as a slab is the lip and the shadow it throws.
+       The shadow is a `filter` rather than a `box-shadow`: `clip-path` clips everything the element
+       paints, a box-shadow included, so the only way to cast one from a notched panel is to cast it from
+       the clipped result. It follows the octagon exactly, corners and all. */
     .a-menu-panel {
+        --a-cut: 10px;
+        --a-cut-in: calc(var(--a-cut) - 0.586px);
+
         position: absolute;
         top: calc(100% + 0.55rem);
         left: 50%;
         z-index: 10;
         min-width: 22rem;
         padding: 1.1rem 1.15rem 0.9rem;
-        background: linear-gradient(165deg, rgba(38, 28, 18, 0.97), rgba(16, 11, 8, 0.985));
-        box-shadow: 0 26px 60px -18px rgba(0, 0, 0, 0.9);
-        backdrop-filter: blur(10px);
-        /* THE FRAME HAS TO TURN THE CORNER. A plain 1px border plus a clip-path is the one combination
-           that cannot work here: the clip removes the square corner and takes the border's corner with
-           it, leaving four gaps where the notch is — the panel read as an outline that had been snipped.
-           So the outline is a nine-slice frame drawn WITH the notch in it, exactly as the buttons do it,
-           and the clip is set to the same diagonal so the two agree. */
-        border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6L47.4 8.4V39.6L39.6 47.4H8.4L0.6 39.6V8.4Z' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M10.22 5H37.78L43 10.22V37.78L37.78 43H10.22L5 37.78V10.22Z' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3C/svg%3E");
-        border-image-slice: 16;
-        border-image-width: 16px;
-        border-image-repeat: stretch;
-        clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
+        background-color: rgba(201, 160, 92, 0.55);
+        clip-path: polygon(
+            var(--a-cut) 0,
+            calc(100% - var(--a-cut)) 0,
+            100% var(--a-cut),
+            100% calc(100% - var(--a-cut)),
+            calc(100% - var(--a-cut)) 100%,
+            var(--a-cut) 100%,
+            0 calc(100% - var(--a-cut)),
+            0 var(--a-cut)
+        );
+        filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
         opacity: 0;
         visibility: hidden;
         transform: translate(-50%, -0.4rem);
@@ -289,6 +300,27 @@ import Lotus from "./Lotus.astro";
             opacity 0.18s ease,
             transform 0.18s ease,
             visibility 0s linear 0.18s;
+    }
+    .a-menu-panel::before {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        background-color: #1c1409;
+        box-shadow:
+            inset 0 1px 0 rgba(235, 187, 96, 0.14),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+        clip-path: polygon(
+            var(--a-cut-in) 0,
+            calc(100% - var(--a-cut-in)) 0,
+            100% var(--a-cut-in),
+            100% calc(100% - var(--a-cut-in)),
+            calc(100% - var(--a-cut-in)) 100%,
+            var(--a-cut-in) 100%,
+            0 calc(100% - var(--a-cut-in)),
+            0 var(--a-cut-in)
+        );
+        pointer-events: none;
+        z-index: -1;
     }
     .a-menu:hover .a-menu-panel,
     .a-menu:focus-within .a-menu-panel,

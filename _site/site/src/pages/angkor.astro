@@ -261,8 +261,8 @@ const GITHUB_MARK =
                                     on a touch screen. It sits top-right because the wing on the left
                                     overlaps this frame's other free corner. */}
                                 <a class="a-play" href={DEMO_PATH}>
-                                    <span class="a-play-pill">
-                                        <svg viewBox="0 0 24 24" class="a-play-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                                    <span class="a-btn a-btn-sm">
+                                        <svg viewBox="0 0 24 24" class="a-btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
                                         <span>{content.hero.demo.playLabel}</span>
                                     </span>
                                 </a>
@@ -865,10 +865,26 @@ const GITHUB_MARK =
         font-weight: 500;
     }
 
-    /* ── 1 · The first screen ────────────────────────────── */
+    /* ── 1 · The first screen ─────────────────────────────
+       THE FIRST SCREEN IS A POSTER, AND ABOVE 90rem IT IS ENLARGED RATHER THAN RE-LAID.
+       Everything else on this page is a column that fills the window and caps its measure. This band
+       cannot be, because it is a picture with copy standing in it: the plate is a plaque with a figure in
+       each outer third, and where those figures land is decided by the plate's width alone. Let the plate
+       track the window while the copy stops at 84rem and the two drift apart — at 2560 the figures are
+       out at the far edges with an acre of empty wall between them and the product frames nowhere near.
+       Capping the plate instead keeps the arrangement but leaves bare canvas down both sides, which is a
+       letterbox on a picture that is meant to be the wall.
+       `zoom` is the third answer and the right one: the band lays itself out at 90rem and is then scaled
+       to fill the window. Every proportion inside it — the figures against the frames, the headline
+       against the plaque's carved border, the gap under the buttons — is the one it was drawn at, at
+       every width, and the art still runs edge to edge. Only above 90rem: below it, the band already
+       fills the window and scaling down would shrink the type.
+       The bar is not inside this band, so it does not scale with it. It does not need to: the script at
+       the foot of this file measures the plate as PAINTED and fits the bar's height to that. */
     .a-page .a-hero {
         position: relative;
         overflow: hidden;
+        zoom: max(1, calc(100vw / var(--a-design-w)));
     }
     /* ONE AXIS, and the picture is why. The plate behind this band is a framed plaque with a figure
        standing in each outer third and a deliberately empty middle; the copy sits on that middle and the
@@ -1086,55 +1102,19 @@ const GITHUB_MARK =
     .a-page .a-play:focus-visible {
         background: rgba(10, 7, 5, 0.42);
     }
-    /* THE LABEL SITS ON A SCREENSHOT rather than on the page, which is what makes it different from every
-       other control here: what is behind it is busy, bright in places, and not ours. So it is the quietest
-       thing that can still be read — sans, small, tight, on a near-solid plate — and it borrows the
-       buttons' cut corners so it still belongs to the page. Set in the titling serif it read as a caption
-       on the picture instead of as something to press.
-       The frame is a nine-slice drawn WITH the notch, like the buttons: a plain 1px border under a
-       clip-path loses its corners exactly where the notch is and arrives in four disconnected pieces. */
-    .a-page .a-play-pill {
-        --a-cut: 5.4px;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.45)' stroke-width='1.3'/%3E%3C/svg%3E");
-        border-image-slice: 15;
-        border-image-width: 11px;
-        border-image-repeat: stretch;
-        background: rgba(10, 7, 5, 0.88);
-        padding: 0.42rem 0.85rem;
-        font-family: var(--font-sans);
-        font-size: 0.8125rem;
-        font-weight: 500;
-        letter-spacing: 0.01em;
-        color: var(--a-muted);
-        clip-path: polygon(
-            var(--a-cut) 0,
-            calc(100% - var(--a-cut)) 0,
-            100% var(--a-cut),
-            100% calc(100% - var(--a-cut)),
-            calc(100% - var(--a-cut)) 100%,
-            var(--a-cut) 100%,
-            0 calc(100% - var(--a-cut)),
-            0 var(--a-cut)
-        );
-        transition:
-            color 0.22s ease,
-            background-color 0.22s ease;
-    }
-    .a-page .a-play:hover .a-play-pill,
-    .a-page .a-play:focus-visible .a-play-pill {
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(245,155,63,0.9)' stroke-width='1.3'/%3E%3C/svg%3E");
-        background: rgba(10, 7, 5, 0.96);
-        color: var(--a-ember-bright);
-    }
-    .a-page .a-play-icon {
-        display: block;
-        flex: none;
-        width: 0.7rem;
-        height: 0.7rem;
+    /* THE PRESS IS THE PAGE'S OWN SMALL BUTTON, borrowed whole. It used to be a bespoke pill with its own
+       outline, its own colours and its own hover — three copies of a recipe that already existed, and the
+       one place on the page where the frame visibly changed colour at the notches, because its outline was
+       a resampled nine-slice. Using the real control removes all of that and the fault with it.
+       What is left here is only what a button ON A PICTURE needs that one on the page does not: the whole
+       frame is the target, so the anchor covers it, and hovering anywhere on the picture has to light the
+       button even though the pointer is nowhere near it. */
+    .a-page .a-play:hover .a-btn,
+    .a-page .a-play:focus-visible .a-btn {
+        --a-rule: rgba(242, 210, 150, 0.95);
+        --a-face: rgba(38, 28, 18, 0.92);
+        --a-lip: rgba(245, 212, 148, 0.28);
+        color: #ffd6a1;
     }
 
     /* ── 2 · The verbs ───────────────────────────────────── */

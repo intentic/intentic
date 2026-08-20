@@ -212,26 +212,13 @@
      * formula that stood here measured up to 48px out at the extremes.
      *
      * So this value is now correct on its own, and the observer in angkor.astro only refines it for the
-     * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 of the plate's width. */
-    --a-plate-band: clamp(3.4rem, calc(var(--a-plate-w) * 0.053125), 7.1rem);
+     * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 = 5.3125vw. */
+    --a-plate-band: clamp(3.4rem, 5.3125vw, 7.1rem);
 
-    /* THE PLATE'S WIDTH, AND IT GROWS SLOWER THAN THE WINDOW ON PURPOSE.
-     *
-     * Laid edge to edge, the art tracks the viewport exactly: every pixel the window gains pushes the two
-     * figures 0.18 of a pixel further apart, and the wall between them opens by the rest. On a wide screen
-     * that leaves them stranded against the outer edges with an acre of empty stone across the middle,
-     * while the copy and the product frames stay where their own 84rem cap puts them. The picture stops
-     * being a setting for the page and becomes a mural the page happens to be standing in front of.
-     *
-     * So the plate follows the window one for one up to 90rem — every laptop, and the width this treatment
-     * was drawn at — and past that it takes 38 pixels of every hundred. The devatas stay flanking the two
-     * side frames at 1440, at 1920 and at 2560 instead of sliding out from under them, and the art still
-     * grows enough that a big monitor does not get a small picture in a large black room.
-     *
-     * `max-width: 100%` on the plate itself is what keeps the narrow end honest: `100vw` counts a
-     * scrollbar the plate's own box does not have, and without the clamp the plaque would be painted a
-     * scrollbar too wide and lose a sliver of its carved side rails to the crop. */
-    --a-plate-w: min(100vw, calc(90rem + (100vw - 90rem) * 0.38));
+    /* THE WIDTH THE FIRST SCREEN IS DRAWN AT. Above it the whole band is scaled rather than re-laid —
+     * see `.a-hero` in angkor.astro. Named here because the plate, the bar and the hero all have to
+     * agree on which width is the design's. */
+    --a-design-w: 90rem;
 
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
@@ -445,45 +432,66 @@ body:has(.a-page) {
 }
 
 /* ── Buttons ─────────────────────────────────────────────
- * CARTOUCHES WITH THE CORNERS CUT OUT OF THEM. The reference art's button is an octagon: two thin
- * concentric gold rules, each with a 45-degree notch taken out of all four corners, like a corner
- * chamfered off a stone slab.
+ * A CUT BLOCK, NOT A LIT PANE.
  *
- * TWO PROPERTIES DRAW IT, and they have to agree.
+ * The button used to be a dark rectangle with an orange radial glow rising through it and a soft orange
+ * halo around the outside. That is the house style of every dark SaaS page shipped since about 2021, and
+ * on THIS page it was also wrong on the facts: the brightest ember anywhere in the temple art measures
+ * #a95f1a, and the button's glow ran well past it. A control lit brighter than the fire in the picture
+ * behind it does not read as a control, it reads as a sticker.
  *
- *   `clip-path` cuts the octagon out of everything the element paints — the fill, and on the primary
- *   the lit ember interior, which is the half that actually shows: a square corner glowing outside a
- *   notched rule is the whole illusion gone.
+ * So the button is a material instead of a light. Every colour below is sampled off the plate:
  *
- *   `border-image` draws the two rules. Not a border and not a pseudo-element, because the corner is
- *   the one part of this frame that must NOT stretch: a nine-slice keeps all four corner tiles at their
- *   drawn size and stretches only the straight runs between them, so a 320px button and a 90px button
- *   get the same notch. `border-width` stays 1px so layout reserves almost nothing, while
- *   `border-image-width` paints 13px inward.
+ *   #17120c   the empty wall between the two figures — the unfilled control's face
+ *   #2b1b0e   the ember-lit temple spires along the foot — the primary's face, one step warmer
+ *   #ebbb60   the brightest gold on a carved edge — the lip that catches the light
  *
- * The chamfer is set in two places that must match: the SVG's geometry and `--a-cut` for the clip.
+ * and the light model is the plate's own: everything is lit from above. So a filled control gets a one
+ * pixel warm lip along its top inside edge and a one pixel shadow along the bottom, which is what a cut
+ * block does under a lamp. No gradient, no halo. The ember stays in the page's budget where it belongs —
+ * the primary's label, the full stop on each headline beat, the lotus bullets.
  *
- * ── WHY HOVER IS AN OPACITY CROSS-FADE AND NOTHING ELSE ──
+ * ── HOW THE OCTAGON IS DRAWN, AND WHY IT IS NOT A NINE-SLICE ANY MORE ──
  *
- * The first version swapped `border-image-source` for a brighter copy on hover and animated the
- * `background` gradient and the `box-shadow` under it. All three are among the worst things to put in a
- * transition. A new `border-image-source` is a new image: the browser cannot interpolate between two
- * images, so it decodes and repaints the frame on the first hovered frame — the "lag" — and then the
- * bright frame simply appears rather than arriving. A `background` that is a radial-gradient cannot
- * interpolate either when its stops differ, so it also snaps. And a large blurred `box-shadow` repaints
- * the whole button every animation frame.
+ * The shape is a rectangle with a 45-degree notch cut off all four corners. It used to be drawn by a
+ * `border-image` nine-slice: an SVG of the notched outline, its corner tiles pinned and its straight runs
+ * stretched, with a `clip-path` cutting the fill to the same diagonal.
  *
- * So the lit state is a SECOND, COMPLETE FRAME stacked on top at `opacity: 0`. Both images decode when
- * the page loads, and hover animates one compositor-friendly property. Nothing repaints, nothing snaps,
- * and the fade runs on the compositor. The glow moves onto its own layer for the same reason: a static
- * `box-shadow` whose opacity is animated costs nothing per frame.
+ * It was measurably wrong at the corners. The corner tile is 15 source units painted into 11px, so the
+ * outline is resampled at 0.73 — and a 45-degree stroke loses far more to that filtering than a
+ * horizontal or vertical one does. Measured on the demo press: 63 units of luminance along the straight
+ * edges and 29 across the chamfers. Less than half. The frame visibly changed colour wherever it turned.
+ *
+ * There is no stroke here now. The element's own background IS the rule, and the face is a second box
+ * inset one pixel with its own clip. What you see as a hairline is the sliver of the first box the second
+ * does not cover, so it is exactly one pixel everywhere, at any size, on the diagonal as much as on the
+ * straight — a clip edge cannot resample. It also costs two data URIs less per button.
+ *
+ * The inner clip's corner is NOT the outer one minus a pixel. Insetting a diagonal by one pixel
+ * perpendicular moves it √2 along each axis, and the inner box's own origin has already moved 1, so the
+ * corner lands at `cut + √2 - 2`, which is `cut - 0.586`.
+ *
+ * ── HOVER, AND FOCUS ──
+ *
+ * Both are colour: the rule brightens, the face warms, the label lifts. Colours interpolate, so the
+ * transition runs without a repaint and nothing snaps — which is the reason the old version needed a
+ * second complete frame stacked underneath at zero opacity, and why this one does not.
+ *
+ * Focus has to be drawn INSIDE the shape. `clip-path` clips everything the element paints, an outline
+ * included, so a ring outside the box is simply invisible here. Focus therefore takes the rule from one
+ * pixel to two and brightens it — a change of shape as well as of colour, which is what a keyboard user
+ * needs and what a two-pixel gold band on warm black gives them.
  *
  * The label is SANS — see the type note at the top of this file for why a control is the one place the
  * serif does not go. */
 .a-page .a-btn {
-    /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at
-       x+y≈7.3 in the artwork's units, which map 1:1 to px here. */
-    --a-cut: 7.3px;
+    --a-cut: 8px;
+    --a-cut-in: calc(var(--a-cut) - 0.586px);
+    --a-cut-in2: calc(var(--a-cut) - 1.172px);
+
+    --a-rule: rgba(201, 160, 92, 0.5);
+    --a-face: rgba(23, 18, 12, 0.72);
+    --a-lip: rgba(235, 187, 96, 0.12);
 
     position: relative;
     display: inline-flex;
@@ -501,12 +509,7 @@ body:has(.a-page) {
     text-decoration: none;
     white-space: nowrap;
 
-    background-color: rgba(20, 14, 10, 0.5);
-    border: 1px solid transparent;
-    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3C/svg%3E");
-    border-image-slice: 13;
-    border-image-width: 13px;
-    border-image-repeat: stretch;
+    background-color: var(--a-rule);
     clip-path: polygon(
         var(--a-cut) 0,
         calc(100% - var(--a-cut)) 0,
@@ -517,55 +520,66 @@ body:has(.a-page) {
         0 calc(100% - var(--a-cut)),
         0 var(--a-cut)
     );
-    /* Colour is the only paint property that transitions here, and it interpolates cleanly. */
-    transition: color 0.22s ease;
-    /* A stacking context, so the two overlay layers below can sit at `z-index: -1`: inside one, a
-       negative layer paints after the element's own background and border but BEFORE its inline
-       content. That is exactly where a wash belongs — over the frame, under the label. Without it the
-       positioned pseudo-elements paint above the text, and the hover wash tints the words. */
+    transition:
+        background-color 0.22s ease,
+        color 0.22s ease;
+    /* A stacking context, so the face below can sit at `z-index: -1`: inside one, a negative layer paints
+       after the element's own background but BEFORE its inline content. That is exactly where the face
+       belongs — over the rule, under the label. */
     z-index: 0;
 }
 
-/* The lit frame, stacked and faded in. Inherits `--a-cut`, so its notch can never drift from the one
- * the button is clipped to. `inset: -1px` because the frame is painted in the border box, which the
- * pseudo-element's own box would otherwise sit one pixel inside. */
+/* THE FACE. One pixel in from the rule on every side, including the diagonals. */
 .a-page .a-btn::before {
     content: "";
     position: absolute;
-    inset: -1px;
-    border: 1px solid transparent;
-    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3C/svg%3E");
-    border-image-slice: 13;
-    border-image-width: 13px;
-    border-image-repeat: stretch;
-    clip-path: inherit;
-    opacity: 0;
+    inset: 1px;
+    background-color: var(--a-face);
+    /* The lamp is above, as it is everywhere else on this page. */
+    box-shadow:
+        inset 0 1px 0 var(--a-lip),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+    clip-path: polygon(
+        var(--a-cut-in) 0,
+        calc(100% - var(--a-cut-in)) 0,
+        100% var(--a-cut-in),
+        100% calc(100% - var(--a-cut-in)),
+        calc(100% - var(--a-cut-in)) 100%,
+        var(--a-cut-in) 100%,
+        0 calc(100% - var(--a-cut-in)),
+        0 var(--a-cut-in)
+    );
     pointer-events: none;
-    transition: opacity 0.22s ease;
+    transition: background-color 0.22s ease;
     z-index: -1;
-}
-.a-page .a-btn:hover::before,
-.a-page .a-btn:focus-visible::before {
-    opacity: 1;
 }
 
-/* The wash and the glow, on their own layer for the same reason, and under the label. */
-.a-page .a-btn::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(70, 50, 30, 0.4);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.22s ease;
-    z-index: -1;
-}
-.a-page .a-btn:hover::after,
-.a-page .a-btn:focus-visible::after {
-    opacity: 1;
-}
 .a-page .a-btn:hover {
+    --a-rule: rgba(226, 186, 120, 0.85);
+    --a-face: rgba(38, 28, 18, 0.86);
+    --a-lip: rgba(235, 187, 96, 0.2);
     color: #fff6e6;
+}
+
+/* Two pixels of bright rule rather than one dim one: a change the eye reads as a different SHAPE, which
+ * is what a focus ring has to be when it cannot be drawn outside the button. */
+.a-page .a-btn:focus-visible {
+    --a-rule: rgba(243, 212, 152, 0.95);
+    --a-face: rgba(38, 28, 18, 0.86);
+    color: #fff6e6;
+}
+.a-page .a-btn:focus-visible::before {
+    inset: 2px;
+    clip-path: polygon(
+        var(--a-cut-in2) 0,
+        calc(100% - var(--a-cut-in2)) 0,
+        100% var(--a-cut-in2),
+        100% calc(100% - var(--a-cut-in2)),
+        calc(100% - var(--a-cut-in2)) 100%,
+        var(--a-cut-in2) 100%,
+        0 calc(100% - var(--a-cut-in2)),
+        0 var(--a-cut-in2)
+    );
 }
 
 /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text
@@ -576,30 +590,27 @@ body:has(.a-page) {
     flex: none;
 }
 
+/* THE ONE FILLED THING ON THE PAGE. Its face is the lit stone off the foot of the plate rather than the
+ * wall between the figures, its rule is a warmer gold, and its label is the only ember on a control. That
+ * is the whole difference: same block, cut from a warmer piece. */
 .a-page .a-btn-primary {
-    color: var(--a-ember-bright);
-    background-color: rgba(28, 17, 9, 0.72);
-    background-image: radial-gradient(120% 160% at 50% 120%, rgba(224, 123, 39, 0.26) 0%, rgba(224, 123, 39, 0.07) 45%, transparent 75%);
-    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='1.15'/%3E%3C/svg%3E");
-    box-shadow: 0 0 22px rgba(224, 123, 39, 0.16);
-}
-.a-page .a-btn-primary::before {
-    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='1.15'/%3E%3C/svg%3E");
-}
-/* The primary's hover wash is ember rather than stone, and it carries the brighter glow with it — one
- * layer, one opacity, so the lift and the light arrive together. */
-.a-page .a-btn-primary::after {
-    background: radial-gradient(120% 160% at 50% 120%, rgba(245, 155, 63, 0.3) 0%, rgba(245, 155, 63, 0.1) 48%, transparent 78%);
-    box-shadow: inset 0 0 26px rgba(245, 155, 63, 0.18);
+    --a-rule: rgba(224, 180, 110, 0.78);
+    --a-face: rgba(48, 30, 15, 0.92);
+    --a-lip: rgba(238, 198, 124, 0.2);
+    color: #f0bd7d;
 }
 .a-page .a-btn-primary:hover {
-    color: #ffcf95;
+    --a-rule: rgba(242, 210, 150, 0.95);
+    --a-face: rgba(62, 39, 18, 0.95);
+    --a-lip: rgba(245, 212, 148, 0.28);
+    color: #ffd6a1;
+}
+.a-page .a-btn-primary:focus-visible {
+    --a-rule: rgba(248, 220, 165, 1);
+    --a-face: rgba(62, 39, 18, 0.95);
+    color: #ffd6a1;
 }
 
-/* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
- * with it: 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px. */
-/* A glyph inside a button. An inline SVG with no intrinsic size fills whatever box it is given, which on
- * a flex button is the button, so the size is set here rather than left to the sprite. */
 .a-page .a-btn-icon {
     flex: none;
     width: 0.95rem;
@@ -607,22 +618,17 @@ body:has(.a-page) {
     opacity: 0.85;
 }
 
+/* The compact cartouche, for the bar, for the press on the hero's picture, and for secondary rows further
+ * down. Only two numbers change: the chamfer shrinks with the block, and the label with it. */
 .a-page .a-btn-sm {
-    --a-cut: 5.4px;
+    --a-cut: 6px;
     padding: 0.55rem 1.05rem;
     font-size: 0.875rem;
-    border-image-slice: 15;
-    border-image-width: 11px;
-}
-.a-page .a-btn-sm::before {
-    border-image-slice: 15;
-    border-image-width: 11px;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .a-page .a-btn,
-    .a-page .a-btn::before,
-    .a-page .a-btn::after {
+    .a-page .a-btn::before {
         transition: none;
     }
 }
@@ -657,12 +663,8 @@ body:has(.a-page) {
 .a-page .a-plate-img {
     position: absolute;
     top: 0;
-    /* Centred and capped rather than pinned to both edges — see `--a-plate-w` for why it grows slower
-     * than the window. Below the cap the two are the same thing and this behaves exactly as `inset` did. */
-    left: 50%;
-    width: var(--a-plate-w);
-    max-width: 100%;
-    transform: translateX(-50%);
+    right: 0;
+    left: 0;
     /* THE BOX IS THE ART'S OWN SHAPE. That is the whole trick, and it is what makes the `cover` below an
      * exact fit rather than a crop: matching ratios leave nothing to cut on either axis.
      *
