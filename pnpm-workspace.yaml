@@ -81,6 +81,7 @@ allowBuilds:
   "@ast-grep/lang-java": true
   "@ast-grep/lang-python": true
   "@ast-grep/lang-rust": true
+  '@discordjs/opus': true
   # The workspace watcher's native backend. Its `install` script only builds from source; the platform binding
   # ships as a prebuilt optional dependency (@parcel/watcher-linux-x64-glibc and friends), so skipping the
   # script still yields a working native watcher — verified by loading it with scripts disabled.
