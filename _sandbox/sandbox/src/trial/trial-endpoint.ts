@@ -1,5 +1,6 @@
-import { type Capability, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
+import { type Capability, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
+import type { CompatEntry } from "../endpoints/endpoint-translator.js";
 import type { Config } from "../env.config.js";
 import type { PlatformTunnel } from "../platform/local-tunnel.js";
 import type { TrialService } from "./trial.js";
@@ -26,11 +27,13 @@ import type { TrialService } from "./trial.js";
  * the bundled translator, which is a Go binary that verifies certificates and cannot be told not to, so a
  * self-signed dev platform failed every turn on it (platform/local-tunnel.ts has the whole account). A deployed
  * platform opens no tunnel and this reads exactly as it always did. */
+const trialBaseUrl = (config: Config, tunnel: PlatformTunnel): string => new URL("/trial/v1", tunnel.url() ?? config.platform.url).toString();
+
 const trialCapability = (config: Config, tunnel: PlatformTunnel): Capability => ({
     id: TRIAL_ENDPOINT_ID,
     kind: "endpoint",
     config: {
-        baseUrl: new URL("/trial/v1", tunnel.url() ?? config.platform.url).toString(),
+        baseUrl: trialBaseUrl(config, tunnel),
         protocol: "openai",
         // The sandbox's connect token, spent as a bearer, the platform resolves it to the account whose
         // allowance this turn costs. It is the same credential the daemon already presents to /sandbox/announce,
@@ -38,6 +41,42 @@ const trialCapability = (config: Config, tunnel: PlatformTunnel): Capability => 
         apiKey: config.connectToken,
     },
 });
+
+/* THE TRIAL'S ROUTING ENTRY, and the deliberate asymmetry against the capability above: the capability exists
+ * while the platform SAYS the trial does (probed, cached, offered), the routing entry exists whenever the
+ * sandbox is CONFIGURED to have a platform at all.
+ *
+ * The two used to be one, and that one dependency is the bug this split removes. The translator writes its
+ * routing table when it spawns, and the availability probe is an HTTPS round trip fired beside it, so on a
+ * fresh install the table was written before the probe answered and the trial was offered but not routable:
+ * every first message died with "unknown provider for model free-trial/auto" until an unrelated event (a
+ * capability edit, a proxy crash) happened to rewrite the table. Rendering the entry from probe state made the
+ * routing table a function of TIMING; rendering it from configuration makes it a constant, and a constant
+ * cannot race, drift, or need re-syncing.
+ *
+ * Everything in the entry is known at boot: the platform's address (or the dev tunnel's, see trialCapability),
+ * the connect token, and the one synthetic model id the trial publishes (TRIAL_MODEL_ID — the platform picks
+ * the real model per message). Nothing is discovered, so unlike every user-added endpoint no catalog is
+ * fetched to build it.
+ *
+ * A sandbox whose platform serves no trial carries the entry anyway, and that is harmless by construction:
+ * nothing routes to it, because every surface that OFFERS the trial still reads the probe. If something is
+ * sent regardless, the platform answers its own 404, which is the honest refusal from the party that owns the
+ * decision. `undefined` only for a sandbox with no platform or no token — a loopback or test daemon — where
+ * there is nothing to point the entry at. */
+export const trialCompatEntry = (config: Config, tunnel: PlatformTunnel): CompatEntry | undefined => {
+    if (config.platform.url === "" || config.connectToken === "") {
+        return undefined;
+    }
+    return {
+        name: TRIAL_ENDPOINT_ID,
+        prefix: TRIAL_ENDPOINT_ID,
+        "base-url": trialBaseUrl(config, tunnel),
+        headers: {},
+        "api-key-entries": [{ "api-key": config.connectToken }],
+        models: [{ name: TRIAL_MODEL_ID, alias: TRIAL_MODEL_ID }],
+    };
+};
 
 /* Lay the trial over a capabilities store. Reads see it; writes cannot touch it.
  *

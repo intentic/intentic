@@ -38,10 +38,15 @@ export interface PlatformTunnel {
      * `undefined` on a deployed platform (there is nothing to work around) and before the listener binds, and
      * both mean the same thing to a caller: use the platform's own URL. */
     readonly url: () => string | undefined;
+    /* Settles once `url()` has its final answer: the listener bound, failed to bind, or was never needed.
+     * For the one caller that WRITES `url()` down rather than reading it fresh per call — the translator's
+     * config render bakes the trial's base URL into a file at boot — awaiting this is what makes the baked
+     * address deterministic instead of a race against a loopback bind that is merely almost always faster. */
+    readonly ready: Promise<void>;
     readonly close: () => void;
 }
 
-const NO_TUNNEL: PlatformTunnel = { url: () => undefined, close: () => undefined };
+const NO_TUNNEL: PlatformTunnel = { url: () => undefined, ready: Promise.resolve(), close: () => undefined };
 
 /* Open the tunnel if this platform needs one. Non-throwing and non-blocking, like every other boot-time
  * best-effort here: a listener that cannot bind leaves `url()` undefined, which is precisely the behaviour of
@@ -81,9 +86,16 @@ export const startPlatformTunnel = (platformUrl: string, logger: Logger): Platfo
         upstream.pipe(downstream);
     });
 
+    // Settled on bind AND on failure: a caller waiting for the final answer must hear "there is none" too, or
+    // a port that cannot bind would hold the translator's config render for the daemon's lifetime.
+    let settle: () => void;
+    const ready = new Promise<void>((resolve) => {
+        settle = resolve;
+    });
     server.on("error", (error: unknown) => {
         bound = undefined;
         logger.warn({ err: error }, "platform tunnel: could not listen — the trial will use the platform URL directly");
+        settle();
     });
     // Port 0: the OS picks. Nothing outside this container may reach it, so it is bound to loopback only and
     // there is no port to reserve, publish or collide on.
@@ -91,11 +103,13 @@ export const startPlatformTunnel = (platformUrl: string, logger: Logger): Platfo
         const address = server.address();
         bound = typeof address === "object" && address !== null ? address.port : undefined;
         logger.info({ port: bound, platform: target.host }, "platform tunnel: terminating TLS for a local dev platform");
+        settle();
     });
     server.unref();
 
     return {
         url: () => (bound === undefined ? undefined : `http://127.0.0.1:${bound}`),
+        ready,
         close: () => server.close(),
     };
 };

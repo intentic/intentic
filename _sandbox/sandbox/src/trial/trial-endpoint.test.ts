@@ -1,10 +1,10 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import { TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
+import { TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Config } from "../env.config.js";
 import type { PlatformTunnel } from "../platform/local-tunnel.js";
-import { withTrialEndpoint } from "./trial-endpoint.js";
+import { trialCompatEntry, withTrialEndpoint } from "./trial-endpoint.js";
 import type { TrialService } from "./trial.js";
 
 /* The trial is a capability nobody added, and the two things worth pinning are the two halves of that: reads
@@ -20,7 +20,7 @@ const trialService = (available: boolean): TrialService => ({
 });
 
 // A deployed platform opens none; the dev case is its own test below.
-const noTunnel: PlatformTunnel = { url: () => undefined, close: () => undefined };
+const noTunnel: PlatformTunnel = { url: () => undefined, ready: Promise.resolve(), close: () => undefined };
 
 const memoryStore = (seed: Capability[] = []): CapabilitiesStore => {
     let entries = [...seed];
@@ -61,7 +61,7 @@ describe("the free-trial endpoint", () => {
      * CLIProxyAPI as a 500 and reached the reader as "The model provider is not responding". The daemon
      * terminates that TLS itself (platform/local-tunnel.ts) and the card points at the loopback end of it. */
     it("points at the local tunnel when one is open, so the translator never has to verify a dev certificate", async () => {
-        const tunnel: PlatformTunnel = { url: () => `http://127.0.0.1:41234`, close: () => undefined };
+        const tunnel: PlatformTunnel = { url: () => `http://127.0.0.1:41234`, ready: Promise.resolve(), close: () => undefined };
         const store = withTrialEndpoint(
             memoryStore(),
             { ...config, platform: { url: `https://host.docker.internal:6480` } } as Config,
@@ -112,5 +112,36 @@ describe("the free-trial endpoint", () => {
 
         expect(await file.list()).toEqual([ollama]);
         expect(await store.remove(`ollama`)).toBe(true);
+    });
+});
+
+/* The routing entry is the OTHER half of the trial, and the property worth pinning is its independence: it
+ * takes no TrialService at all, so it CANNOT be built from probe state. That is the fresh-install fix — the
+ * translator writes its routing table when it spawns, before the availability probe has answered, and an entry
+ * derived from the probe was therefore missing exactly on the boot that mattered, refusing every first message
+ * with "unknown provider for model free-trial/auto" until an unrelated rewrite healed it. */
+describe("the free-trial routing entry", () => {
+    it("is a constant of configuration — platform address, connect token, the one synthetic model", () => {
+        const entry = trialCompatEntry(config, noTunnel);
+
+        expect(entry).toEqual({
+            name: TRIAL_ENDPOINT_ID,
+            prefix: TRIAL_ENDPOINT_ID,
+            "base-url": `https://platform.test/trial/v1`,
+            headers: {},
+            "api-key-entries": [{ "api-key": `tok` }],
+            models: [{ name: TRIAL_MODEL_ID, alias: TRIAL_MODEL_ID }],
+        });
+    });
+
+    it("points at the local tunnel when one is open, the same address the capability card carries", () => {
+        const tunnel: PlatformTunnel = { url: () => `http://127.0.0.1:41234`, ready: Promise.resolve(), close: () => undefined };
+
+        expect(trialCompatEntry(config, tunnel)?.["base-url"]).toBe(`http://127.0.0.1:41234/trial/v1`);
+    });
+
+    it("is absent only where there is nothing to point it at — no platform, or no token", () => {
+        expect(trialCompatEntry({ platform: { url: `` }, connectToken: `tok` } as Config, noTunnel)).toBeUndefined();
+        expect(trialCompatEntry({ platform: { url: `https://platform.test/` }, connectToken: `` } as Config, noTunnel)).toBeUndefined();
     });
 });

@@ -221,6 +221,11 @@ export const startTranslator = (services: Services): void => {
     const start = async (): Promise<void> => {
         await mkdir(authDir, { recursive: true });
         await mkdir(dirname(configPath), { recursive: true });
+        // The trial's entry bakes the platform's address into the config, and on a dev machine that address is
+        // the loopback tunnel's, which binds concurrently with this spawn. Waiting for its final answer (bound,
+        // failed, or not needed — settled either way, see PlatformTunnel.ready) is what makes the rendered
+        // config deterministic instead of almost-always-right.
+        await services.platformTunnel.ready;
         // The user's own endpoints, resolved before the spawn so the proxy comes up already serving them. Their
         // catalogs fall back to a persisted list, so a model server that happens to be down right now keeps its
         // entry instead of being rendered out of the config until something asks again.

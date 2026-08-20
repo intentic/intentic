@@ -1,8 +1,8 @@
-import { type ProviderRefusal, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
+import { type ProviderRefusal, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import type { SeatRefusal } from "../claude/claude-seats.js";
-import { services, withTranslator } from "../route-testing.js";
+import { memoryCapabilitiesStore, services, withTranslator } from "../route-testing.js";
 import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
 /* What a harness process is told about models, and the reason it matters beyond the turn's own `--model`: a
@@ -47,25 +47,51 @@ test("a free-trial turn uses the platform's bounded key walk instead of the long
     expect(env["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
 });
 
-test("the reserved free-trial endpoint carries its bounded policy into the resolved credential", async () => {
-    const sandbox = services({
-        config: withTranslator,
-        endpointModels: {
-            models: async () => ({ models: [{ id: "gemini-flash-latest", label: "Gemini Flash" }], default: "gemini-flash-latest" }),
-            forget: async () => {},
-        },
-    });
+test("a free-trial turn resolves from constants — the synthetic model id, no catalog fetch, bounded policy", async () => {
+    // `endpointModels` deliberately unstubbed: the trial's model is a known constant, so a resolution that
+    // reaches for a catalog would throw here — which is the regression this pins. The fetch used to refuse
+    // turns whenever the platform blipped, as "its model catalog could not be read".
+    const sandbox = services({ config: withTranslator });
     await sandbox.capabilities.upsert({
         id: TRIAL_ENDPOINT_ID,
         kind: "endpoint",
         config: { baseUrl: "https://platform.test/trial/v1", protocol: "openai", apiKey: "connect-token" },
     });
-    const result = await resolveHarnessCredentials(
-        sandbox,
-        { agent: `endpoint/${TRIAL_ENDPOINT_ID}`, model: "gemini-flash-latest" },
-    );
+    const result = await resolveHarnessCredentials(sandbox, { agent: `endpoint/${TRIAL_ENDPOINT_ID}`, model: "whatever-the-picker-held" });
 
     expect(result.ok && result.credentials.trial).toBe(true);
+    // The one id the translator's static entry routes; the platform picks the real model per message.
+    expect(result.ok && result.credentials.endpoint?.model).toBe(`${TRIAL_ENDPOINT_ID}/${TRIAL_MODEL_ID}`);
+});
+
+test("a trial turn on a cold availability cache re-probes once instead of refusing on an unanswered question", async () => {
+    // Boot fires the availability probe without awaiting it, so a turn can arrive first. The capability layer
+    // then hides the trial (available() false) — the resolver must ask the platform on the turn's own clock
+    // rather than turn the user away with "no longer available".
+    let probed = 0;
+    const store = memoryCapabilitiesStore();
+    const sandbox = services({
+        config: withTranslator,
+        capabilities: {
+            ...store,
+            get: async (id) =>
+                (await store.get(id)) ??
+                (id === TRIAL_ENDPOINT_ID && probed > 0
+                    ? { id: TRIAL_ENDPOINT_ID, kind: "endpoint", config: { baseUrl: "https://platform.test/trial/v1", protocol: "openai" } }
+                    : undefined),
+        },
+        trial: {
+            available: () => probed > 0,
+            status: () => undefined,
+            refresh: async () => {
+                probed += 1;
+            },
+        },
+    });
+    const result = await resolveHarnessCredentials(sandbox, { agent: `endpoint/${TRIAL_ENDPOINT_ID}` });
+
+    expect(probed).toBe(1);
+    expect(result.ok && result.credentials.endpoint?.model).toBe(`${TRIAL_ENDPOINT_ID}/${TRIAL_MODEL_ID}`);
 });
 
 test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {

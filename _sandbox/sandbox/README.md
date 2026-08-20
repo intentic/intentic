@@ -372,6 +372,13 @@ conversation's worktree instead of a path that still reaches the shared checkout
   certificate name. `src/platform/local-tunnel.ts` terminates that TLS on its behalf: a loopback listener the
   trial's base URL points at instead. Opened **only** for a platform on that same closed host list; a deployed
   one gets none of it and the URL is unchanged.
+- **The free trial is offered by probe but routed by constant.** Whether the picker shows the trial follows the
+  platform's live answer (`src/trial/trial.ts`, layered over the capability store); whether the translator can
+  route `free-trial/auto` follows nothing but configuration (`trialCompatEntry` in `src/trial/trial-endpoint.ts`:
+  platform address, connect token, one synthetic model id). The two were once one, and the one dependency was a
+  boot race — the routing table rendered before the availability probe answered, so a fresh install offered a
+  trial it could not route and every first message died with "unknown provider for model". Anything new about
+  the trial keeps this split: offer surfaces may read the probe, the turn path and the routing table must not.
 - Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
   purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
   Claude session files; provider-native state that still shares an auth home is never guessed at destructively.

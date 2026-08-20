@@ -6,6 +6,7 @@ import {
     type NativeProvider,
     PROVIDER_VENDOR,
     TRIAL_ENDPOINT_ID,
+    TRIAL_MODEL_ID,
 } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { unversionedBase } from "../endpoints/endpoint-config.js";
@@ -238,17 +239,55 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
  * that has published nothing has no default to fall back to, and that is a refusal rather than a turn sent with
  * an empty model, which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
  * never heard of it. */
+/* THE TRIAL RESOLVES FROM CONSTANTS, not from discovery, because everything about it IS constant: the model id
+ * is synthetic and never changes (TRIAL_MODEL_ID — the platform picks the real model per message), and the
+ * route is the translator's static `free-trial` entry, written whenever a platform is configured at all
+ * (trial-endpoint.ts, trialCompatEntry). So no catalog is fetched here — the fetch bought nothing (the answer
+ * is a known constant) and sold a failure mode: a platform blip at resolve time refused a turn the translator
+ * could have served, as "its model catalog could not be read".
+ *
+ * The capability read is what still gates, and it reads the platform's cached answer about whether a trial is
+ * OFFERED. A cold cache — a turn arriving before boot's fire-and-forget probe has landed — is re-probed once,
+ * on the turn's own clock, so the refusal below is only ever given on the platform's actual word and never on
+ * an unanswered question. */
+const resolveTrialCredentials = async (services: Services): Promise<HarnessCredentialsResult> => {
+    if ((await services.capabilities.get(TRIAL_ENDPOINT_ID)) === undefined) {
+        await services.trial.refresh();
+    }
+    const capability = await services.capabilities.get(TRIAL_ENDPOINT_ID);
+    if (capability === undefined || capability.kind !== "endpoint") {
+        return {
+            ok: false,
+            code: "trial-unavailable",
+            message: "The free trial is no longer available from this sandbox. Connect Google in Sandbox ▸ Agent to keep going for free.",
+        };
+    }
+    if (services.config.translator.url === "") {
+        return {
+            ok: false,
+            code: "trial-unavailable",
+            message: "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent.",
+        };
+    }
+    return {
+        ok: true,
+        credentials: {
+            endpoint: {
+                baseUrl: services.config.translator.url,
+                authToken: services.config.translator.token,
+                model: endpointModelId(TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID),
+            },
+            trial: true,
+        },
+    };
+};
+
 const resolveEndpointCredentials = async (services: Services, id: string, model: string | undefined): Promise<HarnessCredentialsResult> => {
-    const trial = id === TRIAL_ENDPOINT_ID;
+    if (id === TRIAL_ENDPOINT_ID) {
+        return resolveTrialCredentials(services);
+    }
     const capability = await services.capabilities.get(id);
     if (capability === undefined || capability.kind !== "endpoint") {
-        if (trial) {
-            return {
-                ok: false,
-                code: "trial-unavailable",
-                message: "The free trial is no longer available from this sandbox. Connect Google in Sandbox ▸ Agent to keep going for free.",
-            };
-        }
         return { ok: false, message: `Unknown model endpoint "${id}" — add it as an Endpoint capability first.` };
     }
     const config = capability.config;
@@ -256,10 +295,7 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (catalog.models.length === 0) {
         return {
             ok: false,
-            ...(trial ? { code: "trial-unavailable" as const } : {}),
-            message: trial
-                ? "Free trial temporarily unavailable — its model catalog could not be read. Retry shortly or connect Google in Sandbox ▸ Agent."
-                : `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
+            message: `${id} has published no models — check the server is running at ${config.baseUrl} and has a model loaded.`,
         };
     }
     const resolved = routedModel(catalog, model);
@@ -272,11 +308,7 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
     if (services.config.translator.url === "") {
         return {
             ok: false,
-            ...(trial ? { code: "trial-unavailable" as const } : {}),
-            message:
-                trial
-                    ? "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent."
-                    : "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
+            message: "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
         };
     }
     return {
@@ -287,7 +319,6 @@ const resolveEndpointCredentials = async (services: Services, id: string, model:
                 authToken: services.config.translator.token,
                 model: endpointModelId(id, resolved),
             },
-            ...(trial ? { trial: true } : {}),
         },
     };
 };

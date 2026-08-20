@@ -1,6 +1,7 @@
-import type { Capability, EndpointConfig } from "@intentic/sandbox-contract";
+import { type Capability, type EndpointConfig, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { cliProxyManagementUrl } from "../agent/translator.js";
+import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
 
 /* AN OPENAI-COMPATIBLE ENDPOINT, EXPRESSED AS A CLIPROXYAPI PROVIDER, the whole of what makes a self-configured
@@ -45,10 +46,16 @@ export interface CompatEntry {
 }
 
 // Only openai-protocol endpoints ride the translator. An anthropic-protocol one already speaks the harness's own
-// wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list.
+// wire, so it is pointed at directly (harness-credentials.ts) and has no business in this list. The trial is
+// excluded here because its entry is STATIC (trialCompatEntry, appended below): deriving it from the capability
+// list would tie the routing table back to the availability probe's timing, which is the fresh-install race this
+// split exists to end — and when the probe HAS answered, the layered capability would mint a second entry on the
+// same prefix.
 export const translatedEndpoints = (capabilities: readonly Capability[]): { id: string; config: EndpointConfig }[] =>
     capabilities.flatMap((capability) =>
-        capability.kind === "endpoint" && capability.config.protocol === "openai" ? [{ id: capability.id, config: capability.config }] : [],
+        capability.kind === "endpoint" && capability.config.protocol === "openai" && capability.id !== TRIAL_ENDPOINT_ID
+            ? [{ id: capability.id, config: capability.config }]
+            : [],
     );
 
 /* One entry per endpoint, its models taken from the live catalog (which falls back to the last list this
@@ -63,7 +70,7 @@ export const translatedEndpoints = (capabilities: readonly Capability[]): { id: 
  * ordinary case for one on the docker host) then receives an empty bearer, which it ignores. */
 export const endpointCompatEntries = async (services: Services): Promise<CompatEntry[]> => {
     const endpoints = translatedEndpoints(await services.capabilities.list());
-    return Promise.all(
+    const entries = await Promise.all(
         endpoints.map(async ({ id, config }) => {
             const catalog = await services.endpointModels.models(id, config).catch(() => ({ models: [], default: "" }));
             return {
@@ -76,6 +83,11 @@ export const endpointCompatEntries = async (services: Services): Promise<CompatE
             };
         }),
     );
+    /* The trial's entry, ALWAYS, on any platform-connected sandbox — never derived from the probe-gated
+     * capability the picker reads. Routability is a constant of the sandbox's configuration; whether the trial
+     * is OFFERED stays the probe's business (trial-endpoint.ts has the whole argument). */
+    const trial = trialCompatEntry(services.config, services.platformTunnel);
+    return trial === undefined ? entries : [...entries, trial];
 };
 
 // The `openai-compatibility:` block of the rendered config, or "" when there is nothing to serve. Written as text

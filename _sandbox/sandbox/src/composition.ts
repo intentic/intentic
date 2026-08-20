@@ -183,7 +183,7 @@ import { type Announcer, createAnnouncer } from "./platform/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/reach-report.js";
 import { type BootTracker, createBootTracker } from "./platform/boot.js";
 import { DAEMON_OWNER } from "./platform/leftovers.js";
-import { startPlatformTunnel } from "./platform/local-tunnel.js";
+import { type PlatformTunnel, startPlatformTunnel } from "./platform/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/reaper.js";
 import { createPerfTracker, type PerfTracker } from "./platform/perf.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -344,6 +344,11 @@ export interface Services {
     // Whether this sandbox can chat before any AI account is connected, and how much of today's allowance is
     // left. Answered by the platform, so a sandbox with no platform never has one.
     readonly trial: TrialService;
+    // The loopback TLS terminator for a dev platform (platform/local-tunnel.ts). Read wherever the trial's
+    // platform address is written down — the trial capability and the translator's static routing entry — and
+    // awaited (`ready`) by the translator's config render so the baked address is deterministic, not a race
+    // against the loopback bind.
+    readonly platformTunnel: PlatformTunnel;
     // Recommendations the owner has declined (.intentic/config/capability-dismissals.json), so a "no" survives the
     // page load that would otherwise re-derive the same suggestion straight back onto the catalog.
     readonly capabilityDismissals: DismissalsStore;
@@ -886,10 +891,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // resource series, they are the structures whose silent growth was once the daemon's memory leak.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): every consumer of
-     * `capabilities`, the translator's compat entries, the endpoint catalog, the picker's provider list,
-     * therefore sees the trial as an ordinary endpoint and needs no knowledge of it, while the file on disk
-     * stays exactly what the user put there. Availability is the platform's answer, probed on boot below. */
+    /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): the OFFER surfaces —
+     * the endpoint catalog, the picker's provider list, the capability card — see the trial as an ordinary
+     * endpoint exactly while the platform says one exists, and the file on disk stays what the user put there.
+     * The one consumer deliberately NOT fed from this layer is the translator's routing table, which carries
+     * the trial's static entry whenever a platform is configured at all (trialCompatEntry): routing must be a
+     * constant of configuration, not a function of the probe's timing. Availability is probed on boot below. */
     const trial = createTrialService(config);
     /* And the one thing between the trial and a platform running on the developer's own machine: the bundled
      * translator opens the trial's connection itself and verifies the certificate, which a self-signed dev
@@ -1089,6 +1096,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
         walletLedger: fileWalletLedger(statePath(workspace.root, ".intentic/records/wallet-ledger.json")),
         trial,
+        platformTunnel,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,
         ciStore,
