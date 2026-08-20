@@ -4,9 +4,11 @@ import { computed, type Ref } from "vue";
 import { usePanels } from "../extensions/usePanels";
 import { APPS } from "../queryKeys";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { usePorts } from "../sandbox/usePorts";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { usePublicOutbox } from "../workspace/usePublicOutbox";
-import { appTargets, type PreviewTarget, publicTarget, repoTargets } from "./previewModel";
+import { addressTarget, appTargets, mergeTargets, portTargets, type PreviewTarget, publicTarget, repoTargets } from "./previewModel";
+import { previewAddress } from "./previewSurface";
 
 /* The live list. `active` gates the per-monorepo apps fan-out to while the preview panel is actually mounted —
  * the same economy useWorkspaceApps applies — while panels and the outbox ride reads the shell already holds.
@@ -16,6 +18,8 @@ export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();
     const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo } = usePanels();
     const { files: publicFiles, settled: publicSettled } = usePublicOutbox();
+    // The forwarded ports the shell already reads for its exposure indicator — this adds no request.
+    const { forwarded } = usePorts();
 
     const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
     const { query: appsQuery } = useSandboxQuery({
@@ -34,11 +38,15 @@ export function usePreviewTargets(active: Ref<boolean>) {
         enabled: active,
     });
 
-    const targets = computed<readonly PreviewTarget[]>(() => [
-        ...(appsQuery.data.value ?? []).flatMap(({ repo, apps }) => appTargets(repo, apps)),
-        ...repoTargets(panels.value),
-        ...(publicTarget(publicFiles.value) === undefined ? [] : [publicTarget(publicFiles.value)!]),
-    ]);
+    const targets = computed<readonly PreviewTarget[]>(() =>
+        mergeTargets(
+            repoTargets(panels.value),
+            (appsQuery.data.value ?? []).flatMap(({ repo, apps }) => appTargets(repo, apps)),
+            portTargets(forwarded.value),
+            publicTarget(publicFiles.value),
+            addressTarget(previewAddress.value),
+        ),
+    );
 
     // One verb for both process kinds; the public page has no process and falls through to nothing.
     const act = async (target: PreviewTarget, verb: `start` | `stop`): Promise<void> => {

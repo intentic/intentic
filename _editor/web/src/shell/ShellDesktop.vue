@@ -170,17 +170,22 @@ const chatAway = computed(() => poppedOut.value || chatRestoring.value);
 const chatTileSeated = computed(() => chatOnRail.value && (!chatAway.value || route.name === `chat`));
 
 /* Preview closes the Work band: start a turn (Chat), read what it did (Agents/Workspace), LOOK at the running
- * app. Evidence-driven like every extension tile — it appears once the workspace has anything a live iframe
- * can show (a runnable repo, a monorepo's apps, a served public page) and is absent on a box with none, where
- * it could only open an empty state. An `eye` among the Work band's face/bubble/tree: what this tile does is
- * look. The badge counts repos actually ANSWERING right now — neutral, because "your app is up" is inventory,
- * not a debt (viewBadge.ts). */
+ * app. Evidence-driven like every extension tile — it appears once the workspace has anything a live iframe can
+ * show (a runnable repo, a monorepo's apps, a forwarded port, a served public page) and is absent on a box with
+ * none, where it could only open an empty state. An `eye` among the Work band's face/bubble/tree: what this
+ * tile does is look. The badge counts what is actually ANSWERING right now — neutral, because "your app is up"
+ * is inventory, not a debt (viewBadge.ts).
+ *
+ * BOTH READINGS COME FROM THE PANEL'S OWN BUILDERS (previewModel.railTargets), never from a second opinion
+ * about what counts as previewable. The first cut of this tile had one: it counted a monorepo as evidence while
+ * the panel only listed such a repo's `_apps/` instances, so a monorepo whose root `dev` runs turbo — with no
+ * `_apps/` at all — badged "1 running" over a screen saying there was nothing to preview. */
 const { files: publicFiles } = usePublicOutbox();
 const previewTile = computed<AreaTile | undefined>(() => {
-    if (!previewEvidence(panels.value, publicFiles.value)) {
+    if (!previewEvidence(panels.value, forwardedPorts.value, publicFiles.value)) {
         return undefined;
     }
-    const healthy = previewHealthyCount(panels.value);
+    const healthy = previewHealthyCount(panels.value, forwardedPorts.value, publicFiles.value);
     return {
         id: `preview`,
         to: `/preview`,

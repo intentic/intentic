@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { CopyButton, Notice, noticeOf, Picker, type PickerGroup, SegmentedControl, StatusBadge, type StatusVariant } from "@intentic/ui";
 import Button from "primevue/button";
-import { computed, onUnmounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { RouterLink, useRouter } from "vue-router";
 import { pickTarget, type PreviewTarget } from "../composables/preview/previewModel";
 import { usePreviewTargets } from "../composables/preview/usePreviewTargets";
-import { previewOpened, previewSelectedId, selectPreviewTarget } from "../composables/preview/previewSurface";
+import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "../composables/preview/previewSurface";
 import { togglePreviewPopout, usePreviewPopout } from "../composables/preview/usePreviewPopout";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
@@ -33,21 +33,32 @@ const { poppedOut } = usePreviewPopout();
 const terminal = useTerminalPanel();
 
 // --- The switcher -------------------------------------------------------------------------------
-// Grouped by repo — an app row wears its own name under its repo's heading — with the public page last under
-// its own heading. The row's annotation is its live state, so the list answers "what is up?" before a click.
+/* Grouped by where a row comes FROM — one heading per repo (an app wears its own name under its repo's), then
+ * the forwarded ports, then the workspace's page, then the address the user typed. The row's annotation is its
+ * live state, so the list answers "what is up?" before anything is clicked. */
 const stateOf = (entry: PreviewTarget): string =>
-    entry.kind === `public` ? `live` : entry.healthy ? `running` : entry.running ? `starting` : `stopped`;
+    entry.kind === `repo` || entry.kind === `app` ? (entry.healthy ? `running` : entry.running ? `starting` : `stopped`) : `live`;
+const rowOf = (entry: PreviewTarget) => ({
+    value: entry.id,
+    label: entry.label,
+    description: entry.detail === undefined ? stateOf(entry) : `${entry.detail} · ${stateOf(entry)}`,
+});
 const pickerGroups = computed<readonly PickerGroup[]>(() => {
     const repos = [...new Set(targets.value.flatMap((entry) => (entry.repo === undefined ? [] : [entry.repo])))];
     const groups: PickerGroup[] = repos.map((repo) => ({
         label: repo,
-        options: targets.value
-            .filter((entry) => entry.repo === repo)
-            .map((entry) => ({ value: entry.id, label: entry.label, description: stateOf(entry) })),
+        options: targets.value.filter((entry) => entry.repo === repo).map(rowOf),
     }));
-    const outbox = targets.value.find((entry) => entry.kind === `public`);
-    if (outbox !== undefined) {
-        groups.push({ label: `Workspace`, options: [{ value: outbox.id, label: outbox.label, icon: `globe`, description: stateOf(outbox) }] });
+    const grouped: readonly { readonly label: string; readonly kind: PreviewTarget[`kind`] }[] = [
+        { label: `Forwarded ports`, kind: `port` },
+        { label: `Workspace`, kind: `public` },
+        { label: `Address`, kind: `address` },
+    ];
+    for (const { label, kind } of grouped) {
+        const rows = targets.value.filter((entry) => entry.kind === kind);
+        if (rows.length > 0) {
+            groups.push({ label, options: rows.map(rowOf) });
+        }
     }
     return groups;
 });
@@ -61,6 +72,42 @@ const selected = computed<string | undefined>({
 });
 
 const statusVariant = computed<StatusVariant>(() => (target.value?.healthy ? `success` : target.value?.running ? `info` : `neutral`));
+// What copying this target's URL actually gets you. Everything the sandbox serves answers at a public preview
+// hostname, so "public link" is the truth there — and a typed address is somebody else's page, where claiming
+// anything about who can open it would be a guess.
+const copyHint = computed(() => (target.value?.kind === `address` ? `Copy the address` : `Copy the public link`));
+
+/* --- THE ADDRESS BAR, which is a bar only while it is wanted -----------------------------------------
+ * Everything the switcher lists was discovered, and a discovered list is a closed one — so the panel takes a
+ * typed address too (a staging URL, another route of the app, a page on another box). It is a TOGGLE rather
+ * than a permanent field because this panel's whole design is that the app under preview owns every pixel
+ * below one 40px strip, and an always-open URL box would spend a third of that strip on a control most looks
+ * never touch. Opened by the link button, by picking the Address row, and by nothing else.
+ *
+ * The field starts on whatever is on screen, so "the same page one path deeper" is an edit rather than a
+ * retype. Enter commits; Escape leaves what was showing alone. */
+const addressOpen = ref(false);
+const addressDraft = ref(``);
+const addressField = ref<HTMLInputElement | undefined>(undefined);
+
+const openAddress = (): void => {
+    addressDraft.value = previewAddress.value ?? target.value?.url ?? ``;
+    addressOpen.value = true;
+    void nextTick(() => addressField.value?.select());
+};
+const commitAddress = (): void => {
+    setPreviewAddress(addressDraft.value);
+    addressOpen.value = false;
+};
+// Picking the Address row with nothing typed yet is a request for the field, not for a blank frame.
+watch(
+    () => target.value?.kind,
+    (kind) => {
+        if (kind === `address` && previewAddress.value === undefined) {
+            openAddress();
+        }
+    },
+);
 
 // --- Start / stop -------------------------------------------------------------------------------
 const busy = ref(false);
@@ -136,7 +183,11 @@ const resolvePreview = (): void => {
         probeFailed.value = false;
         return;
     }
-    if (entry.kind === `public`) {
+    /* Only a freshly minted preview hostname is worth waiting on. A forwarded port, the outbox and a typed
+     * address are all addresses that already exist — probing them would turn a site that simply refuses this
+     * browser's fetch into a preview that never appears, and a wrong address into a three-minute spinner
+     * instead of the browser's own plain "this didn't load". */
+    if (entry.kind !== `repo` && entry.kind !== `app`) {
         probeGeneration += 1;
         previewSrc.value = entry.url;
         return;
@@ -178,17 +229,54 @@ const fit = ref<`full` | `phone`>(`full`);
 
 <template>
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
-        <!-- The strip. One row, h-10: switcher + status on the left, verbs on the right. -->
+        <!-- The strip. One row, h-10: switcher + status on the left, verbs on the right — or, while an address
+             is being typed, the field takes the left half and the verbs stay put. -->
         <div class="flex h-10 shrink-0 items-center gap-1 border-b border-line bg-card px-1.5">
-            <Picker
-                v-if="pickerGroups.length > 0"
-                v-model="selected"
-                :options="pickerGroups"
-                variant="ghost"
-                aria-label="Which app to preview"
-                header="Preview"
-            />
-            <StatusBadge v-if="target && target.startable" :variant="statusVariant" :label="stateOf(target)" size="xs" />
+            <template v-if="addressOpen">
+                <input
+                    ref="addressField"
+                    v-model="addressDraft"
+                    type="url"
+                    inputmode="url"
+                    spellcheck="false"
+                    placeholder="localhost:3000, or any address"
+                    aria-label="Address to preview"
+                    class="min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 py-1 font-mono text-xs text-content placeholder:text-subtle focus:border-primary-500 focus:outline-none"
+                    @keydown.enter.prevent="commitAddress"
+                    @keydown.esc.prevent="addressOpen = false"
+                />
+                <Button label="Go" size="small" :disabled="addressDraft.trim().length === 0" @click="commitAddress" />
+                <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                    aria-label="Cancel"
+                    @click="addressOpen = false"
+                >
+                    <Icon name="times" />
+                </button>
+            </template>
+            <template v-else>
+                <Picker
+                    v-if="pickerGroups.length > 0"
+                    v-model="selected"
+                    :options="pickerGroups"
+                    variant="ghost"
+                    aria-label="Which app to preview"
+                    header="Preview"
+                />
+                <StatusBadge v-if="target && target.startable" :variant="statusVariant" :label="stateOf(target)" size="xs" />
+                <!-- Point it somewhere of your own. Always offered, including with nothing discovered at all:
+                     that is exactly the state where a typed address is the only preview there can be. -->
+                <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                    aria-label="Preview another address"
+                    v-tooltip.bottom="'Preview another address'"
+                    @click="openAddress"
+                >
+                    <Icon name="link" />
+                </button>
+            </template>
 
             <span class="flex-1"></span>
 
@@ -229,10 +317,13 @@ const fit = ref<`full` | `phone`>(`full`);
                 >
                     <Icon name="code" />
                 </button>
-                <!-- The link is public the moment the server answers — a live demo anyone can open. Offered
-                     only while something is actually up, so a copied link never 502s on arrival. -->
+                <!-- A dev server's link is public the moment it answers — a live demo anyone can open — so the
+                     copy says so; a typed address is just an address and must not be described as shareable.
+                     Offered only while something is actually up, so a copied link never 502s on arrival.
+                     `arrow-up-right` for the new tab, because `external-link` belongs to the pop-out below and
+                     one bar may not spell two different verbs with one glyph. -->
                 <template v-if="target.url && target.healthy">
-                    <CopyButton :text="target.url" aria-label="Copy the public link" v-tooltip.bottom="'Copy the public link'" />
+                    <CopyButton :text="target.url" :aria-label="copyHint" v-tooltip.bottom="copyHint" />
                     <a
                         :href="target.url"
                         target="_blank"
@@ -241,11 +332,14 @@ const fit = ref<`full` | `phone`>(`full`);
                         :aria-label="`Open ${target.label} in a new tab`"
                         v-tooltip.bottom="'Open in new tab'"
                     >
-                        <Icon name="external-link" />
+                        <Icon name="arrow-up-right" />
                     </a>
                 </template>
             </template>
 
+            <!-- `external-link`, the glyph the chat's own pop-out button wears (ChatTabs.vue) — one gesture,
+                 one icon. `window-maximize` was here first and read as fullscreen, which is a different
+                 promise entirely: the press opens a separate OS window, it does not grow this one. -->
             <button
                 type="button"
                 class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
@@ -253,7 +347,7 @@ const fit = ref<`full` | `phone`>(`full`);
                 v-tooltip.bottom="poppedOut ? 'Dock back' : 'Move into new window'"
                 @click="togglePreviewPopout(router)"
             >
-                <Icon :name="poppedOut ? 'sign-in' : 'window-maximize'" />
+                <Icon :name="poppedOut ? 'sign-in' : 'external-link'" />
             </button>
         </div>
 
@@ -261,13 +355,17 @@ const fit = ref<`full` | `phone`>(`full`);
         <div class="relative flex min-h-0 flex-1 flex-col">
             <Notice v-if="actionError" :of="noticeOf(actionError)" class="absolute inset-x-3 top-3 z-10" />
 
-            <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered. -->
-            <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+            <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered — and it always offers
+                 the one preview that needs nothing discovered, which is an address the user knows themselves. -->
+            <div v-if="!target && settled" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="eye" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing to preview yet.</p>
                 <p class="max-w-sm text-2xs text-subtle">
                     Start a dev server in a repository, or ask the agent to build an app — its live preview appears here the moment it answers.
                 </p>
+                <Button label="Preview an address" size="small" severity="secondary" @click="openAddress">
+                    <template #icon><Icon name="link" /></template>
+                </Button>
             </div>
             <div v-else-if="!target" class="flex flex-1 items-center justify-center" role="status" aria-busy="true">
                 <span class="sr-only">Reading what can be previewed…</span>
@@ -284,12 +382,31 @@ const fit = ref<`full` | `phone`>(`full`);
                     :key="`${previewEpoch}-${previewSrc}`"
                     :src="previewSrc"
                     :title="`${target.label} preview`"
-                    :sandbox="target.kind === `public` ? `allow-scripts` : undefined"
+                    :sandbox="target.kind === `public` || target.kind === `address` ? `allow-scripts allow-forms allow-popups` : undefined"
                     class="h-full min-h-0 flex-1 bg-white"
                     :class="fit === `phone` ? `max-w-[390px] border-x border-line` : ``"
                 ></iframe>
             </div>
 
+            <!-- ANSWERING, BUT NOT THROUGH ANYTHING THIS PANEL CAN REACH: a dev server started in a terminal
+                 binds a port the preview proxy was never told about, so the repo's own preview hostname routes
+                 to nothing. Both ways out are here, and the ports page is the one that keeps the running
+                 server (starting it from here would leave two). -->
+            <div v-else-if="target.healthy && !target.url" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <Icon name="globe" class="text-2xl text-subtle" />
+                <p class="text-sm text-muted">
+                    <span class="font-mono">{{ target.label }}</span> is answering, but not from a preview this panel can open.
+                </p>
+                <p class="max-w-sm text-2xs text-subtle">
+                    Something started it outside this panel — a terminal, a container. Forward its port and it appears here as its own entry.
+                </p>
+                <RouterLink
+                    to="/sandbox/ports"
+                    class="rounded-md border border-line px-2.5 py-1 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
+                >
+                    Open Ports
+                </RouterLink>
+            </div>
             <div v-else-if="target.running && probeFailed" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Icon name="exclamation-triangle" class="text-muted" />
                 <p class="text-sm text-muted">The preview address didn't come up.</p>

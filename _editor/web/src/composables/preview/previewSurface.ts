@@ -2,6 +2,7 @@ import { ref } from "vue";
 import type { Router } from "vue-router";
 import { storedValue, storeValue } from "../browserStorage";
 import { useSandbox } from "../sandbox/useSandbox";
+import { ADDRESS_TARGET_ID } from "./previewModel";
 
 /* THE ONE PREVIEW PANEL'S OWN STATE — which target it shows and whether it exists at all — as a module-level
  * singleton like useChat/useLayout, because the panel is mounted above the router (shell/PoppablePanels) and
@@ -16,14 +17,19 @@ import { useSandbox } from "../sandbox/useSandbox";
 
 const opened = ref(false);
 const selectedId = ref<string | undefined>(undefined);
+const address = ref<string | undefined>(undefined);
 
-/* Which target this SANDBOX was left showing — a fact about the box (its repos, its apps), so it is keyed by
- * sandbox and comes back on a reload. The id is re-validated against the live target list on every read
- * (previewTargets.pickTarget), so a stored id naming a deleted repo simply falls back to the best evidence. */
-const storageKey = (sandboxId: string | undefined): string => `intentic-preview-target:${sandboxId ?? ``}`;
+/* Which target this SANDBOX was left showing, and the address it was last pointed at by hand — facts about the
+ * box (its repos, its apps, the staging URL its owner keeps checking), so both are keyed by sandbox and come
+ * back on a reload. The id is re-validated against the live target list on every read (previewModel.pickTarget),
+ * so a stored id naming a deleted repo simply falls back to the best evidence. */
+const targetKey = (sandboxId: string | undefined): string => `intentic-preview-target:${sandboxId ?? ``}`;
+const addressKey = (sandboxId: string | undefined): string => `intentic-preview-address:${sandboxId ?? ``}`;
 
 const restore = (): void => {
-    selectedId.value = storedValue(storageKey(useSandbox().activeSandboxId.value));
+    const sandboxId = useSandbox().activeSandboxId.value;
+    selectedId.value = storedValue(targetKey(sandboxId));
+    address.value = storedValue(addressKey(sandboxId));
 };
 restore();
 
@@ -37,10 +43,25 @@ export const resetPreviewSurface = (): void => {
 
 export const previewOpened = opened;
 export const previewSelectedId = selectedId;
+// The address the user typed, as text — turned into a target (or refused) by previewModel.addressTarget.
+export const previewAddress = address;
 
 export const selectPreviewTarget = (id: string): void => {
     selectedId.value = id;
-    storeValue(storageKey(useSandbox().activeSandboxId.value), id);
+    storeValue(targetKey(useSandbox().activeSandboxId.value), id);
+};
+
+/* POINT THE PREVIEW SOMEWHERE OF YOUR OWN — a staging URL, another route of the app, a page on a different
+ * box. Storing the raw text rather than a parsed URL keeps what the user typed in the field they typed it in;
+ * whether it names anything is addressTarget's judgement, and an empty box simply retires the row. Selecting
+ * it here too, because typing an address IS asking to see it. */
+export const setPreviewAddress = (typed: string): void => {
+    const trimmed = typed.trim();
+    address.value = trimmed === `` ? undefined : trimmed;
+    storeValue(addressKey(useSandbox().activeSandboxId.value), address.value ?? ``);
+    if (address.value !== undefined) {
+        selectPreviewTarget(ADDRESS_TARGET_ID);
+    }
 };
 
 export const markPreviewOpened = (): void => {
