@@ -212,8 +212,26 @@
      * formula that stood here measured up to 48px out at the extremes.
      *
      * So this value is now correct on its own, and the observer in angkor.astro only refines it for the
-     * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 = 5.3125vw. */
-    --a-plate-band: clamp(3.4rem, 5.3125vw, 7.1rem);
+     * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 of the plate's width. */
+    --a-plate-band: clamp(3.4rem, calc(var(--a-plate-w) * 0.053125), 7.1rem);
+
+    /* THE PLATE'S WIDTH, AND IT GROWS SLOWER THAN THE WINDOW ON PURPOSE.
+     *
+     * Laid edge to edge, the art tracks the viewport exactly: every pixel the window gains pushes the two
+     * figures 0.18 of a pixel further apart, and the wall between them opens by the rest. On a wide screen
+     * that leaves them stranded against the outer edges with an acre of empty stone across the middle,
+     * while the copy and the product frames stay where their own 84rem cap puts them. The picture stops
+     * being a setting for the page and becomes a mural the page happens to be standing in front of.
+     *
+     * So the plate follows the window one for one up to 90rem — every laptop, and the width this treatment
+     * was drawn at — and past that it takes 38 pixels of every hundred. The devatas stay flanking the two
+     * side frames at 1440, at 1920 and at 2560 instead of sliding out from under them, and the art still
+     * grows enough that a big monitor does not get a small picture in a large black room.
+     *
+     * `max-width: 100%` on the plate itself is what keeps the narrow end honest: `100vw` counts a
+     * scrollbar the plate's own box does not have, and without the clamp the plaque would be painted a
+     * scrollbar too wide and lose a sliver of its carved side rails to the crop. */
+    --a-plate-w: min(100vw, calc(90rem + (100vw - 90rem) * 0.38));
 
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
@@ -639,8 +657,12 @@ body:has(.a-page) {
 .a-page .a-plate-img {
     position: absolute;
     top: 0;
-    right: 0;
-    left: 0;
+    /* Centred and capped rather than pinned to both edges — see `--a-plate-w` for why it grows slower
+     * than the window. Below the cap the two are the same thing and this behaves exactly as `inset` did. */
+    left: 50%;
+    width: var(--a-plate-w);
+    max-width: 100%;
+    transform: translateX(-50%);
     /* THE BOX IS THE ART'S OWN SHAPE. That is the whole trick, and it is what makes the `cover` below an
      * exact fit rather than a crop: matching ratios leave nothing to cut on either axis.
      *
@@ -795,7 +817,20 @@ body:has(.a-page) {
 }
 
 /* ── Product frames ──────────────────────────────────────
- * A screenshot inside the metalwork. The rail carries the address pill; the finial sits on top of it. */
+ * ONE FRAME, AND EVERY SCREENSHOT ON THE PAGE IS IN IT. The recipe is four things and none of them is
+ * optional: a `--a-line-mid` hairline on all four sides, a ledge one ornament deep across the top, a
+ * turned corner at each of the four corners, and the shadow below.
+ *
+ * It was three recipes. The hero's centre frame turned all four corners and its two wings turned the
+ * diagonal pair, which is the rule for a card in a grid — and in a collage where the wings overlap the
+ * centre, the diagonal pair means ONE surviving ornament per wing, in a different place on each side. The
+ * verb cards drew a third version, at the fainter card hairline, with no edge of their own around the
+ * picture at all. Side by side that reads as frames that sometimes have a border, sometimes only on one
+ * side, which is exactly what it was.
+ *
+ * The rule now has no exceptions to remember: if the box holds a screenshot of the product, it is drawn
+ * like this. Cards that hold WORDS keep the quieter card treatment — that difference is meaningful, and
+ * it is the only one. */
 .a-page .a-window {
     position: relative;
     background: #0f0b08;
@@ -803,6 +838,15 @@ body:has(.a-page) {
     box-shadow:
         0 2px 0 rgba(201, 160, 92, 0.06),
         0 24px 60px -12px rgba(0, 0, 0, 0.85);
+    transition:
+        border-color 0.25s ease,
+        transform 0.25s ease;
+}
+/* A frame that is also a link — the four in the verbs grid. It lifts on hover like the cards do, because
+ * that is how everything clickable on this page answers a pointer. */
+.a-page a.a-window:hover {
+    border-color: var(--a-line-strong);
+    transform: translateY(-2px);
 }
 /* THE RAIL IS A LEDGE, AND IT IS EMPTY. It has carried two things and lost both.
  *

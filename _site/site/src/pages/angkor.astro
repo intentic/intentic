@@ -222,7 +222,7 @@ const GITHUB_MARK =
                     <figure class="a-hero-visual">
                         <div class="a-hero-stack">
                             <div class="a-window a-window-plan" aria-hidden="true">
-                                <Corners set="diag" />
+                                <Corners />
                                 <div class="a-window-rail"></div>
                                 <div class="a-window-crop a-window-crop-plan">
                                     <Image src={shotAsset("chat-plan")} alt="" widths={SHOT_WIDTHS} sizes={planSizes} loading="lazy" decoding="async" class="a-screen a-screen-plan" />
@@ -269,7 +269,7 @@ const GITHUB_MARK =
                             </div>
 
                             <div class="a-window a-window-chat" aria-hidden="true">
-                                <Corners set="diag" />
+                                <Corners />
                                 <div class="a-window-rail"></div>
                                 <div class="a-window-crop a-window-crop-chat">
                                     <Image src={chatStill} alt="" widths={SHOT_WIDTHS} sizes={chatSizes} loading="lazy" decoding="async" class="a-screen a-screen-chat" />
@@ -332,21 +332,22 @@ const GITHUB_MARK =
                     <div class="a-verb-grid">
                         {
                             verbCards.map((item) => (
-                                <a href={item.href} class="a-card a-verb-card">
-                                    <Corners set="diag" />
+                                <a href={item.href} class="a-window a-verb-card">
+                                    <Corners />
+                                    {/* THE LEDGE IS THE FRAME'S, NOT THE PICTURE'S, so it is drawn before the
+                                        branch below and every card in this grid opens on the same lip —
+                                        including the one whose picture is a list. */}
+                                    <div class="a-window-rail"></div>
                                     {item.shot ? (
-                                        <div class="a-verb-shot">
-                                            <div class="a-window-rail"></div>
-                                            <div class="a-verb-crop">
-                                                <Image
-                                                    src={shotAsset(item.shot.name)}
-                                                    alt={item.shot.alt}
-                                                    widths={SHOT_WIDTHS}
-                                                    sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
-                                                    loading="lazy"
-                                                    decoding="async"
-                                                />
-                                            </div>
+                                        <div class="a-verb-crop">
+                                            <Image
+                                                src={shotAsset(item.shot.name)}
+                                                alt={item.shot.alt}
+                                                widths={SHOT_WIDTHS}
+                                                sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
+                                                loading="lazy"
+                                                decoding="async"
+                                            />
                                         </div>
                                     ) : (
                                         /* Automate has no honest screenshot, so its picture is the events it
@@ -1191,7 +1192,6 @@ const GITHUB_MARK =
     .a-page .a-verb-card {
         display: flex;
         flex-direction: column;
-        overflow: hidden;
         text-decoration: none;
         color: inherit;
     }
