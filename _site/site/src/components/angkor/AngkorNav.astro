@@ -15,8 +15,8 @@
  * on hover or focus-within as well. Escape closes, a click outside closes, and with no JavaScript at all
  * hover and keyboard focus still work.
  *
- * The wordmark is set in the ONE face on this page that exists for it alone: a rounded geometric with cut
- * terminals and an angled `t`. See `--a-font-mark` in angkor.css.
+ * The wordmark, the bar's labels and the panel's rows are all set in the brand face — a rounded geometric
+ * with cut terminals and an angled `t`. See `--a-font-mark` in angkor.css.
  */
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
@@ -261,13 +261,9 @@ import Lotus from "./Lotus.astro";
     .a-menu {
         position: relative;
     }
-    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE. Same three parts, same order: the element's own
-       background is the rule, a second box inset one pixel is the face, and the face carries a warm lip
-       along its top edge because the light on this page comes from above.
-       It used to be a 165-degree gradient from warm brown to near-black under a nine-slice outline. The
-       gradient is the tell — a lit pane rather than a cut stone, and the one thing on the page that was
-       shaded from a corner rather than from the top. The face is flat now, sampled off the plate's own
-       carved column (#21160c), and what makes it read as a slab is the lip and the shadow it throws.
+    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE, and like the button it carries its face on its OWN
+       background rather than on a pseudo-element. That is not a style preference, it is the only order
+       that lets the double rule survive — see the note on the border below.
        The shadow is a `filter` rather than a `box-shadow`: `clip-path` clips everything the element
        paints, a box-shadow included, so the only way to cast one from a notched panel is to cast it from
        the clipped result. It follows the octagon exactly, corners and all. */
@@ -280,9 +276,37 @@ import Lotus from "./Lotus.astro";
         z-index: 10;
         min-width: 22rem;
         padding: 1.1rem 1.15rem 0.9rem;
+        /* THE CLOTH THE PANEL IS FACED IN. A dark warm linen rather than a fill: a woven ground reads as
+           a hanging stretched over the opening, which is what a menu on this page should be, and it is
+           the one material vocabulary the page did not already own — the walls are stone, the frames are
+           gold, the primary control is timber.
+           It is woven rather than photographed. Three turbulence fields in one tile: a slow cloud for the
+           fibre, then a warp and a weft — the same noise stretched hard along each axis, so one becomes
+           horizontal threads and the other vertical, and where they cross the eye reads a weave. Both
+           thread fields are the same warm tan at low alpha, because what varies across cloth is which
+           fibres catch the light, not their colour.
+           TILED, NOT STRETCHED, and that is the difference from the button's timber. A plank is cut to
+           the board, so its grain scales with it; cloth is woven at a fixed gauge and then cut, so the
+           thread count has to stay put whatever size the panel opens at. `stitchTiles` makes the field
+           seamless so a 200px tile can repeat without showing its joins. The vignette under it is the
+           only gradient left, and it is there to pull the four edges down so the cloth reads as stretched
+           over a frame rather than printed flat. */
+        background-color: #1f1710;
+        background-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E"),
+            radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
+        background-repeat: repeat, no-repeat;
+        background-size: 200px 200px, cover;
         /* THE SAME DOUBLE RULE THE BUTTONS WEAR, drawn the same way and for the same reason — a panel and
            a control that both sit in this page's metalwork should be framed by one vocabulary. The
-           chamfers are the heavier paths again; see the note on `.a-btn` in angkor.css. */
+           chamfers are the heavier paths again; see the note on `.a-btn` in angkor.css.
+           THE RULE IS 16px OF INWARD IMAGE ON A 1px BORDER, which is what makes the pair of lines: the
+           outer runs on the border itself and the inner is drawn 5 units in, INSIDE the padding box. So
+           anything opaque covering the padding box covers the inner line and leaves a single hairline —
+           which is exactly what an `inset: 0` face on a pseudo-element did here, because `filter` above
+           makes this a stacking context and a negative-z-index child paints AFTER the element's own
+           border. Hence the face being a background rather than a layer: backgrounds paint under the
+           border, so the rule survives. Do not move it back onto a child. */
         border: 1px solid transparent;
         border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
         border-image-slice: 16;
@@ -306,24 +330,6 @@ import Lotus from "./Lotus.astro";
             opacity 0.18s ease,
             transform 0.18s ease,
             visibility 0s linear 0.18s;
-    }
-    /* The face carries the same stone grain the buttons do — see the note on `.a-btn::before` in
-       angkor.css for the filter, the blend and why the colour under it has to be opaque. A panel this
-       size is where a flat fill reads most plainly as a flat fill. */
-    .a-menu-panel::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background-color: #1c1409;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.3' intercept='0.35'/%3E%3CfeFuncG type='linear' slope='0.3' intercept='0.35'/%3E%3CfeFuncB type='linear' slope='0.3' intercept='0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
-        background-size: 160px 160px;
-        background-blend-mode: overlay;
-        box-shadow:
-            inset 0 1px 0 rgba(235, 187, 96, 0.14),
-            inset 0 -1px 0 rgba(0, 0, 0, 0.55);
-        clip-path: inherit;
-        pointer-events: none;
-        z-index: -1;
     }
     .a-menu:hover .a-menu-panel,
     .a-menu:focus-within .a-menu-panel,
@@ -362,7 +368,7 @@ import Lotus from "./Lotus.astro";
     }
     .a-menu-item-label {
         display: block;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 0.9375rem;
         font-weight: 600;
         color: var(--a-cream);

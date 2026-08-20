@@ -11,9 +11,9 @@
  * engraved display type with an ember full stop on each beat, gold rules and turned corners in place of
  * hairline borders, and a lotus wherever the live page sets a bullet dot.
  *
- * THREE FACES, EACH FENCED TO A SIZE BAND — Playfair above ~28px, Spectral from 13 to 24, Inter for
- * running copy. `styles/angkor.css` sets that out at length and explains what went wrong when it was
- * two. The short version: if you are adding something between 13 and 24px, it is `--a-font-title`.
+ * THREE FACES, EACH FENCED TO A SIZE BAND — Playfair above ~28px, Baloo 2 from 13 to 24 and in the bar,
+ * Inter for running copy. `styles/angkor.css` sets that out at length and explains why the titling tier
+ * is no longer a second serif. The short version: between 13 and 24px, it is `--a-font-mark`.
  *
  * NOINDEX, and excluded from the sitemap in astro.config.mjs. It is a second dress on the same body:
  * left crawlable it would be a duplicate of the home page, which is the one thing a marketing site must
@@ -1153,7 +1153,7 @@ const GITHUB_MARK =
         align-items: center;
         gap: 0.6rem;
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.375rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1215,7 +1215,7 @@ const GITHUB_MARK =
     }
     .a-page .a-verb-body h3 {
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.1875rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1306,7 +1306,7 @@ const GITHUB_MARK =
     }
     .a-page .a-compare-head h3 {
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.25rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1400,7 +1400,7 @@ const GITHUB_MARK =
         border-bottom: 0;
     }
     .a-page .a-account-name {
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1rem;
         font-weight: 600;
     }
@@ -1475,7 +1475,7 @@ const GITHUB_MARK =
         align-items: center;
         gap: 0.6rem;
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1495,7 +1495,7 @@ const GITHUB_MARK =
        at body size in the muted grey, the exact opposite of a headline number. */
     .a-page .a-trust-card p.a-trust-stat {
         margin: 0.9rem 0 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.75rem;
         line-height: 1.2;
         font-weight: 600;
@@ -1541,7 +1541,7 @@ const GITHUB_MARK =
     }
     .a-page .a-step h3 {
         margin: 0.75rem 0 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1592,7 +1592,7 @@ const GITHUB_MARK =
     }
     .a-page .a-desktop-lead {
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1620,7 +1620,7 @@ const GITHUB_MARK =
     }
     .a-page .a-faq-group-head h3 {
         margin: 0;
-        font-family: var(--a-font-title);
+        font-family: var(--a-font-mark);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);

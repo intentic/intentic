@@ -20,42 +20,45 @@
 
 /* ── THE THREE FACES, AND THE SIZE BAND EACH IS ALLOWED IN ──────────────────────────────────────────
  *
- * This page started with two and that was one too few. Playfair is a DISPLAY face: its whole character
- * is the jump between a thick stem and a hairline, and a hairline is a fraction of a pixel once the type
- * is under about 20px. Below that it does not look elegant, it looks broken — the strokes drop out, and
- * BOLD makes it worse rather than better, because weight is added to the stems the hairlines have to
- * hold up. Every complaint about this page's small type was a Playfair heading at 13–20px, semibold, on
- * a dark ground: card titles, buttons, and a 13px letterspaced "RUN" that had almost nothing left of it.
+ * Playfair is a DISPLAY face: its whole character is the jump between a thick stem and a hairline, and a
+ * hairline is a fraction of a pixel once the type is under about 20px. Below that it does not look
+ * elegant, it looks broken — the strokes drop out, and BOLD makes it worse rather than better, because
+ * weight is added to the stems the hairlines have to hold up. Every complaint about this page's small
+ * type began there: card titles, buttons, and a 13px letterspaced "RUN" with almost nothing left of it.
  *
  * So the faces are split by JOB and each is fenced to a size band:
  *
  *   Playfair Display  — display only, and nothing under ~28px: the hero's three beats, the section
  *                       headings, the step numerals. This is where the contrast pays.
- *   Spectral          — the titling tier, 13–24px: card headings and list labels. A screen-first text
- *                       serif with moderate contrast and sturdy wedge serifs, so it keeps the carved
- *                       character exactly where Playfair loses it. 500 and 600 only.
+ *   Baloo 2           — the wordmark, the bar, and the titling tier from 13 to 24px: card headings,
+ *                       list labels, menu rows. See below.
  *   Inter             — running copy, all small print, AND EVERY BUTTON LABEL. See below.
- *   Baloo 2           — the wordmark, and the navigation labels. See below.
  *
- * If a new element is between 13 and 24px, it is Spectral. That is the whole rule.
+ * If a new element is between 13 and 24px, it is `--a-font-mark`. That is the whole rule.
+ *
+ * THE TITLING TIER WAS A SECOND SERIF AND IS NOT ANY MORE. Spectral sat here on the theory that a
+ * screen-first text serif keeps the carved character at sizes where Playfair loses it. It does, on a
+ * specimen sheet. On this page it did not: at 15px, semibold, cream on a dark warm ground, in rows of
+ * five, its moderate contrast and wedge serifs closed the counters up and the labels stopped being
+ * scannable — worst of all in the navigation panel, which is a list you read by flicking down it. Two
+ * serifs a few sizes apart was also a distinction almost nobody could see, so it bought nothing to pay
+ * for it. The tier now takes the bar's face, and the page ships one serif rather than two.
  *
  * BUTTONS ARE SANS, and that is a deliberate exception to the band above. A button label is not
  * titling — it is an instruction, read at a glance, in a box the eye has already decided to look at.
- * Set in the titling serif they read as ornament rather than as something to press, and the reference
- * art sets them in a sans for exactly that reason. So the one serif that survives inside a control is
- * none: `--font-sans`, medium weight, a touch of tracking to hold the small caps-height open.
+ * Set in a titling face they read as ornament rather than as something to press, and the reference art
+ * sets them in a sans for exactly that reason. So: `--font-sans`, medium weight, a touch of tracking to
+ * hold the small caps-height open.
  *
- * THE WORDMARK IS ITS OWN FACE, because a wordmark is a drawing rather than a setting. Baloo 2 is the
+ * THE WORDMARK IS THIS FACE FIRST, because a wordmark is a drawing rather than a setting. Baloo 2 is the
  * rounded geometric with the cut terminals and the angled `t` the brand art uses — a serif version of
  * this word is a different company's logo.
  *
- * AND IT IS THE BAR'S FACE TOO, which took two wrong answers to arrive at. The nav was Inter and read
- * as another site's furniture bolted onto this one; it was then the titling serif, and six labels of
- * high-contrast serif at 15px is a row you have to look at twice. The bar is the one strip of the page
- * that is pure brand — a logo and six words — so it takes the logo's own face. A rounded geometric is
- * about as legible as small type gets (open counters, tall x-height, no contrast to lose), and it makes
- * the bar read as one object rather than as a mark with a menu beside it. Nothing else may use it: the
- * moment a card heading asks for the brand face, it stops being the brand's. */
+ * AND IT IS THE BAR'S FACE TOO, which took two wrong answers to arrive at. The nav was Inter and read as
+ * another site's furniture bolted onto this one; it was then the titling serif, and six labels of
+ * high-contrast serif at 15px is a row you have to look at twice. A rounded geometric is about as
+ * legible as small type gets — open counters, tall x-height, no contrast to lose — which is precisely
+ * why the titling tier has since been handed to it as well. */
 @font-face {
     font-family: "Playfair Display";
     font-style: normal;
@@ -75,47 +78,8 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* Spectral ships static weights rather than a variable axis, so the two the page uses are two files
- * each. Nothing asks for 400 or 700: a weight the page never sets is a download nobody needs. */
-@font-face {
-    font-family: "Spectral";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("/fonts/spectral-500-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Spectral";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("/fonts/spectral-500-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
-        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-    font-family: "Spectral";
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-    src: url("/fonts/spectral-600-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Spectral";
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-    src: url("/fonts/spectral-600-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
-        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-/* The wordmark's face, and the only thing on the page allowed to ask for it. One weight: a logo has
- * no second weight, and shipping one would only invite something else to use it. */
+/* The brand face: the wordmark, the bar, and every title between 13 and 24px. 500 for the wordmark and
+ * running labels, 600 where a row has to hold its own against a dark ground. */
 @font-face {
     font-family: "Baloo 2";
     font-style: normal;
@@ -155,10 +119,9 @@
 }
 
 .a-page {
-    /* The two serifs, named by the job rather than by the typeface, so a call site says which TIER it
-     * belongs to and the fence above is enforced by which variable it reaches for. */
+    /* Named by the job rather than by the typeface, so a call site says which TIER it belongs to and the
+     * fence above is enforced by which variable it reaches for. */
     --a-font-display: "Playfair Display", Georgia, "Times New Roman", serif;
-    --a-font-title: "Spectral", Georgia, "Times New Roman", serif;
     --a-font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
 
     /* ── The metals ──────────────────────────────────────
