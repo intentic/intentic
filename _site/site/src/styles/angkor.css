@@ -1,0 +1,610 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * THE ANGKOR TREATMENT — an alternative skin for the home page, served at /angkor/.
+ *
+ * The live landing is a flat, modern, hairline-and-tint page. This is the same page told as carved
+ * stone: a photographed temple wall behind the first screen, engraved serif display type, gold rules
+ * and lozenges where the live page uses 1px borders, and a lotus where it uses a bullet dot.
+ *
+ * IT SHARES NOTHING WITH THE LIVE PAGE'S STYLING ON PURPOSE. Every rule here is scoped under `.a-page`,
+ * every token is prefixed `--a-`, and global.css is left entirely alone — so this can be as opinionated
+ * as it likes and cannot leak onto the twenty other pages that global.css dresses.
+ *
+ * THE BACKGROUND IS THE HARD PART. The source art is a dark plate, but "dark" is not "safe to set text
+ * on": its left third holds a lit devata, its lower half an entire temple, and its sky three glowing
+ * mandalas — all of them in the same warm range as the cream the headline is set in. So the plate is
+ * never used raw. It is laid down at `--a-plate-dim` opacity under a three-part scrim (a flat wash, a
+ * left-to-right ramp under the copy column, and a vignette), and the numbers below are set so that the
+ * darkest cream on the page still clears 7:1 against the brightest pixel it can land on. Tune the
+ * plate with the two variables at the top of the block rather than by editing the layers.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Playfair Display — the display face, and ONLY the display face: headings, the buttons, the numerals
+ * and the wordmark's companion. Body copy stays Inter (already self-hosted by global.css), because the
+ * reference art sets its paragraphs in a sans too, and a whole page of high-contrast serif at 14px is
+ * a page nobody finishes. Same two subsets and the same variable-weight range as the site's Inter. */
+@font-face {
+    font-family: "Playfair Display";
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url("/fonts/playfair-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Playfair Display";
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url("/fonts/playfair-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+.a-page {
+    /* ── The metals ──────────────────────────────────────
+     * Two of them, and the page is built on the difference. GOLD is structure: every rule, frame,
+     * corner and lozenge. EMBER is the brand's own orange and it is spent, never spread — the one
+     * primary button, the full stop at the end of each headline beat, the lotus bullets, a link. The
+     * reference art does exactly this, and it is why a page that is 90% brown does not read as muddy:
+     * the eye has one saturated thing to find on each screen. */
+    --a-gold: #c9a05c;
+    --a-gold-bright: #e5c489;
+    --a-ember: #e07b27;
+    --a-ember-bright: #f59b3f;
+
+    /* Ink. Cream rather than white: white on this plate reads as a hole cut in it. */
+    --a-cream: #efe3cd;
+    --a-muted: #b7a68d;
+    --a-subtle: #8e7f69;
+
+    /* Ground. Warm near-black — the plate's own darkest value, so a section with no plate behind it
+     * still belongs to the same wall as one that has. */
+    --a-canvas: #0c0907;
+    --a-panel: rgba(30, 22, 15, 0.55);
+    --a-panel-solid: #15100b;
+
+    /* Rules, in three weights. Everything structural on this page is one of these. */
+    --a-line: rgba(201, 160, 92, 0.16);
+    --a-line-mid: rgba(201, 160, 92, 0.3);
+    --a-line-strong: rgba(201, 160, 92, 0.5);
+
+    /* ── The plate, and the two dials that tame it ───────
+     * `--a-plate-dim`  how much of the photograph survives at all.
+     * `--a-plate-scrim` the flat wash of canvas laid over whatever did.
+     * Raise either and the art recedes; the layered gradients below keep their proportions. */
+    --a-plate-dim: 1;
+    --a-plate-scrim: 0.12;
+
+    background: var(--a-canvas);
+    color: var(--a-cream);
+    font-family: var(--font-sans);
+}
+
+/* The page owns the document's background too, so an overscroll bounce or a short viewport shows warm
+ * black rather than the live site's neutral canvas. */
+html:has(.a-page),
+body:has(.a-page) {
+    background: #0c0907;
+}
+
+/* ── Display type ────────────────────────────────────────
+ * Carved, not printed. The letterform is Playfair; the metal is a top-lit gradient clipped to the
+ * glyphs; the relief is two drop-shadows on the element (a hard black offset for the cut edge, a soft
+ * one for the shadow it throws). `filter` rather than `text-shadow` because the fill is a clipped
+ * background, which text-shadow paints straight over. */
+.a-page .a-display {
+    font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    background: linear-gradient(178deg, #fbf3e2 0%, #ecdcbd 38%, #cbb086 72%, #a98c60 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+}
+
+/* The full stop that ends each headline beat, and the only ember on the first screen apart from the
+ * one button. Set as its own span so it escapes the clipped gradient above. */
+.a-page .a-stop {
+    -webkit-text-fill-color: var(--a-ember);
+    color: var(--a-ember);
+    filter: drop-shadow(0 0 14px rgba(224, 123, 39, 0.55));
+}
+
+.a-page .a-eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--a-gold);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+/* A hairline running out of the eyebrow to the right, fading. Marks a band's opening without a box. */
+.a-page .a-eyebrow::after {
+    content: "";
+    width: 3.5rem;
+    height: 1px;
+    background: linear-gradient(90deg, var(--a-line-strong), transparent);
+}
+
+/* ── The lotus ───────────────────────────────────────────
+ * The page's bullet, its wordmark companion and the finial on every frame. One size class per job so
+ * a caller never sets width and height by hand. */
+.a-page .a-lotus {
+    display: inline-block;
+    flex: none;
+    color: var(--a-ember);
+}
+.a-page .a-lotus svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.a-page .a-lotus-sm {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+.a-page .a-lotus-md {
+    width: 1.6rem;
+    height: 1.6rem;
+}
+.a-page .a-lotus-lg {
+    width: 2.2rem;
+    height: 2.2rem;
+}
+
+/* ── Frames ──────────────────────────────────────────────
+ * A double rule with a lozenged corner turned into each of the four corners, and — where a caller asks
+ * for it — a lotus finial centred on the top rail, sitting astride it. The corners are elements rather
+ * than a border-image because they must keep their drawn weight at any frame size; a stretched
+ * border-image goes soft on a wide window and heavy on a small card. */
+.a-page .a-frame {
+    position: relative;
+    border: 1px solid var(--a-line-mid);
+    background: var(--a-panel);
+}
+.a-page .a-frame::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid var(--a-line);
+    pointer-events: none;
+}
+.a-page .a-corner {
+    position: absolute;
+    width: 1.7rem;
+    height: 1.7rem;
+    color: var(--a-gold);
+    opacity: 0.95;
+    pointer-events: none;
+}
+.a-page .a-corner svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.a-page .a-corner-tl {
+    top: -1px;
+    left: -1px;
+}
+.a-page .a-corner-tr {
+    top: -1px;
+    right: -1px;
+    transform: scaleX(-1);
+}
+.a-page .a-corner-bl {
+    bottom: -1px;
+    left: -1px;
+    transform: scaleY(-1);
+}
+.a-page .a-corner-br {
+    right: -1px;
+    bottom: -1px;
+    transform: scale(-1);
+}
+
+/* The finial. Sits astride the top rail, and carries NO plate of its own: a filled box behind it read as
+ * a black sticker punched through the temple wall the frame is standing on. What separates it from the
+ * rail instead is a glow of its own colour, which the rail passes behind without being cut. */
+.a-page .a-finial {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    transform: translate(-50%, -55%);
+    filter: drop-shadow(0 0 6px rgba(12, 9, 7, 0.95)) drop-shadow(0 0 16px rgba(224, 123, 39, 0.35));
+    pointer-events: none;
+}
+
+/* ── Divider ─────────────────────────────────────────────
+ * The horizontal breath between a block of copy and the thing it leads to. */
+.a-page .a-divider {
+    display: block;
+    width: 100%;
+    max-width: 15rem;
+    height: 1rem;
+    color: var(--a-gold);
+    opacity: 0.85;
+}
+.a-page .a-divider svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Buttons ─────────────────────────────────────────────
+ * Cartouches. A double rule, a lozenge turned into each corner (the same drawn corner as the frames,
+ * at button scale), serif lettering, and — for the primary only — a lit ember interior. The reference
+ * art gives the page exactly one lit button per screen and that restraint is what makes it read as
+ * gold rather than as a Christmas tree. */
+.a-page .a-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1.65rem;
+    border: 1px solid var(--a-line-mid);
+    border-radius: 3px;
+    font-family: "Playfair Display", Georgia, serif;
+    font-size: 1.0625rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--a-cream);
+    text-decoration: none;
+    white-space: nowrap;
+    background: rgba(20, 14, 10, 0.5);
+    transition:
+        border-color 0.25s ease,
+        background-color 0.25s ease,
+        color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+.a-page .a-btn::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: 1px solid var(--a-line);
+    border-radius: 2px;
+    pointer-events: none;
+}
+.a-page .a-btn:hover {
+    border-color: var(--a-line-strong);
+    background: rgba(38, 27, 17, 0.6);
+    color: #fff6e6;
+}
+.a-page .a-btn .a-corner {
+    width: 0.85rem;
+    height: 0.85rem;
+    opacity: 0.85;
+}
+
+.a-page .a-btn-primary {
+    color: var(--a-ember-bright);
+    border-color: rgba(224, 123, 39, 0.55);
+    background:
+        radial-gradient(120% 160% at 50% 120%, rgba(224, 123, 39, 0.28) 0%, rgba(224, 123, 39, 0.08) 45%, transparent 75%),
+        rgba(28, 17, 9, 0.72);
+    box-shadow:
+        0 0 22px rgba(224, 123, 39, 0.18),
+        inset 0 0 22px rgba(224, 123, 39, 0.12);
+}
+.a-page .a-btn-primary::before {
+    border-color: rgba(224, 123, 39, 0.35);
+}
+.a-page .a-btn-primary .a-corner {
+    color: var(--a-ember);
+    opacity: 1;
+}
+.a-page .a-btn-primary:hover {
+    color: #ffcf95;
+    border-color: rgba(245, 155, 63, 0.8);
+    box-shadow:
+        0 0 32px rgba(224, 123, 39, 0.3),
+        inset 0 0 26px rgba(224, 123, 39, 0.18);
+}
+
+/* The compact cartouche, for the bar and for secondary rows further down the page. */
+.a-page .a-btn-sm {
+    padding: 0.5rem 1.05rem;
+    font-size: 0.9375rem;
+}
+.a-page .a-btn-sm .a-corner {
+    width: 0.7rem;
+    height: 0.7rem;
+}
+
+/* ── Links ───────────────────────────────────────────────── */
+.a-page .a-link {
+    color: var(--a-gold-bright);
+    text-decoration: none;
+    text-underline-offset: 3px;
+    transition: color 0.2s ease;
+}
+.a-page .a-link:hover {
+    color: var(--a-ember-bright);
+    text-decoration: underline;
+}
+
+/* ── The plate ───────────────────────────────────────────
+ * One element, three jobs, in this order: the photograph, the scrim that holds it down, and the ramp
+ * that clears the copy column. It is `position:absolute; inset:0` inside whatever band wants it.
+ *
+ * The image is chosen by width rather than by `srcset`, because it is a background: three rungs, the
+ * middle one carrying almost every laptop. */
+.a-page .a-plate {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.a-page .a-plate-img {
+    position: absolute;
+    inset: 0;
+    background-image: url("/assets/angkor/temple-1600.webp");
+    background-position: 50% 42%;
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: var(--a-plate-dim);
+}
+@media (max-width: 40rem) {
+    .a-page .a-plate-img {
+        background-image: url("/assets/angkor/temple-900.webp");
+        /* On a phone the plate is cropped hard, and its left third — the lit devata — is exactly where
+         * the headline now sits. Slide the frame right so the copy lands on the sky instead. */
+        background-position: 68% 40%;
+    }
+}
+@media (min-width: 100rem) {
+    .a-page .a-plate-img {
+        background-image: url("/assets/angkor/temple-2400.webp");
+    }
+}
+
+/* The scrim. A flat wash, then a ramp that is heavy where the copy is and clears entirely over the
+ * right half where the product windows sit, then a vignette that keeps the eye off the edges. Three
+ * gradients on one element: they composite in a single paint, and separating them into three stacked
+ * divs bought nothing but nodes. */
+.a-page .a-plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        /* NOT a simple left-to-right ramp: it peaks at 14%, not at 0. The heaviest part has to sit under
+           the copy column, which starts an inch in — and the strip to the LEFT of the copy is where the
+           plate's lit devata stands, the single most recognisable thing in the art. A ramp that was
+           darkest at the edge spent all its ink erasing her and still had to dim the text area anyway. */
+            linear-gradient(
+                100deg,
+                rgba(9, 6, 4, 0.4) 0%,
+                rgba(9, 6, 4, 0.66) 14%,
+                rgba(9, 6, 4, 0.52) 30%,
+                rgba(9, 6, 4, 0.24) 52%,
+                rgba(9, 6, 4, 0.06) 74%,
+                transparent 100%
+            ),
+        radial-gradient(130% 110% at 50% 45%, transparent 48%, rgba(9, 6, 4, 0.4) 100%),
+        rgba(12, 9, 7, var(--a-plate-scrim));
+}
+/* Below the columns break there is no copy column to clear, so the ramp becomes a plain top-down one. */
+@media (max-width: 64rem) {
+    .a-page .a-plate::after {
+        background:
+            linear-gradient(180deg, rgba(10, 7, 5, 0.86) 0%, rgba(10, 7, 5, 0.7) 45%, rgba(10, 7, 5, 0.5) 70%, rgba(10, 7, 5, 0.8) 100%),
+            rgba(12, 9, 7, calc(var(--a-plate-scrim) + 0.08));
+    }
+}
+
+/* The seam at the foot of a plated band: the photograph does not stop, it dissolves into the canvas.
+ * Shallow and late, because the bottom eighth of the plate is where its temple and its carved lower
+ * border are — a fade tall enough to be comfortable erased the one part of the art the first screen is
+ * actually showing. It only has to swallow the last inch. */
+.a-page .a-plate-fade {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 7rem;
+    background: linear-gradient(180deg, transparent, rgba(12, 9, 7, 0.6) 55%, var(--a-canvas) 96%);
+    pointer-events: none;
+}
+
+/* ── Sky ornaments ───────────────────────────────────────
+ * The ringed stars, laid over the plate at low opacity and slowly breathing. Decorative in the strict
+ * sense: `aria-hidden`, no layout, and the first thing reduced-motion switches off. */
+.a-page .a-sky {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.a-page .a-mandala {
+    position: absolute;
+    color: var(--a-ember);
+    opacity: 0.14;
+    filter: drop-shadow(0 0 18px rgba(224, 123, 39, 0.5));
+    animation: a-breathe 14s ease-in-out infinite;
+}
+.a-page .a-mandala svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.a-page .a-mandala-1 {
+    top: 12%;
+    left: 6%;
+    width: 9rem;
+    height: 9rem;
+    opacity: 0.11;
+}
+.a-page .a-mandala-2 {
+    top: 6%;
+    left: 34%;
+    width: 6rem;
+    height: 6rem;
+    opacity: 0.09;
+    animation-delay: -4s;
+}
+.a-page .a-mandala-3 {
+    top: 9%;
+    right: 5%;
+    width: 13rem;
+    height: 13rem;
+    opacity: 0.2;
+    animation-delay: -8s;
+}
+@keyframes a-breathe {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: var(--a-breathe-lo, 0.1);
+    }
+    50% {
+        transform: scale(1.06);
+        opacity: var(--a-breathe-hi, 0.2);
+    }
+}
+/* The sky is sized in rem, so on a phone the same three figures that sat in the empty upper third of a
+ * desktop hero land squarely behind the headline — 13rem of concentric rings through "Agents work". The
+ * copy column is the whole width down here and there is no empty sky left to decorate, so two of them go
+ * and the survivor shrinks to a glint in the corner. */
+@media (max-width: 48rem) {
+    .a-page .a-mandala-1,
+    .a-page .a-mandala-2 {
+        display: none;
+    }
+    .a-page .a-mandala-3 {
+        top: 4%;
+        right: -3rem;
+        width: 8rem;
+        height: 8rem;
+        opacity: 0.12;
+    }
+}
+
+/* ── Cards ───────────────────────────────────────────────
+ * The frame, at content scale: a single rule, a warm translucent panel, and a corner turned into the
+ * two corners that read (top-left and bottom-right — four on every card in a grid of eight is lace). */
+.a-page .a-card {
+    position: relative;
+    border: 1px solid var(--a-line);
+    background: linear-gradient(160deg, rgba(34, 25, 17, 0.6), rgba(18, 13, 9, 0.55));
+    transition:
+        border-color 0.25s ease,
+        transform 0.25s ease;
+}
+.a-page .a-card:hover {
+    border-color: var(--a-line-mid);
+}
+.a-page a.a-card:hover {
+    transform: translateY(-2px);
+}
+
+/* ── The wall ────────────────────────────────────────────
+ * What the bands below the hero sit on. Not the photograph again — a second full plate would compete
+ * with the first and there is nothing left to say with it — but the geometry underneath it: a warm
+ * grid at the weight of a pencil line, masked so it never reaches an edge. */
+.a-page .a-wall {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(201, 160, 92, 0.032) 1px, transparent 1px), linear-gradient(90deg, rgba(201, 160, 92, 0.032) 1px, transparent 1px);
+    background-size: 84px 84px;
+    mask-image: radial-gradient(ellipse 85% 62% at 50% 0%, rgba(0, 0, 0, 0.85), transparent 72%);
+}
+
+/* The hairline between bands: gold, and fading out at both ends rather than running wall to wall. */
+.a-page .a-band + .a-band {
+    border-top: 1px solid transparent;
+    border-image: linear-gradient(90deg, transparent, var(--a-line-mid) 22%, var(--a-line-mid) 78%, transparent) 1;
+}
+
+/* ── Product frames ──────────────────────────────────────
+ * A screenshot inside the metalwork. The rail carries the address pill; the finial sits on top of it. */
+.a-page .a-window {
+    position: relative;
+    background: #0f0b08;
+    border: 1px solid var(--a-line-mid);
+    box-shadow:
+        0 2px 0 rgba(201, 160, 92, 0.06),
+        0 24px 60px -12px rgba(0, 0, 0, 0.85);
+}
+.a-page .a-window-rail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--a-line);
+    background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
+}
+.a-page .a-window-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border: 1px solid var(--a-line-strong);
+    transform: rotate(45deg);
+}
+.a-page .a-pill {
+    border: 1px solid var(--a-line);
+    background: rgba(10, 7, 5, 0.6);
+    padding: 0.2rem 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--a-muted);
+}
+
+/* Each screen is stacked in one box and cross-faded, exactly as the live hero does it, so a reader who
+ * watches sees the product's several surfaces instead of one still. */
+.a-page .a-screen {
+    opacity: 0;
+    transition: opacity 0.7s ease;
+}
+.a-page .a-screen.is-on {
+    opacity: 1;
+}
+
+/* ── Prose defaults inside the page ──────────────────────── */
+.a-page h1,
+.a-page h2,
+.a-page h3 {
+    text-wrap: balance;
+}
+.a-page p {
+    text-wrap: pretty;
+}
+.a-page ::selection {
+    background: rgba(224, 123, 39, 0.32);
+}
+
+/* ── Motion ──────────────────────────────────────────────
+ * The band reveal and the sky. The frames' cross-fade becomes a cut rather than stopping, for the same
+ * reason the live page gives: what those frames hold is content, not decoration. */
+.a-page .a-reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+        opacity 0.7s ease,
+        transform 0.7s ease;
+}
+.a-page .a-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .a-page .a-reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+    .a-page .a-mandala {
+        animation: none;
+    }
+    .a-page .a-screen {
+        transition: none;
+    }
+}

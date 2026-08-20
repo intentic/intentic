@@ -1,0 +1,175 @@
+---
+/* THE BAR, in the Angkor treatment.
+ *
+ * Deliberately NOT the live site's Nav. That one carries three mega-menus with a screenshot rail, and a
+ * panel of preview imagery is the one thing that cannot be dressed as carved stone — it would open a
+ * bright modern card over a temple wall. So the labels here are the same six, in the same order, each
+ * pointing at the destination its menu's first row points at. It is a skin of the same navigation, not
+ * a second one, and every href comes from nav.ts so the two cannot name different pages.
+ *
+ * The wordmark is set rather than drawn: the reference art letters "intentic" in the same high-contrast
+ * serif as the headline, which the geometric brand mark cannot be made to do. That is the one place this
+ * page departs from the real brand, and it departs there on purpose — the wordmark is the loudest
+ * statement of what the treatment IS.
+ */
+import { navEntries } from "@intentic-dev/site-content/nav";
+import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import Corners from "./Corners.astro";
+import DiscordIcon from "../DiscordIcon.astro";
+import Lotus from "./Lotus.astro";
+
+/* A menu entry has no href of its own — its `prefix` is the section, and the section's index page is
+ * where the trigger should land somebody who clicks rather than hovers. A bare link already has one. */
+const links = navEntries.map((entry) => ({
+    label: entry.label,
+    href: entry.type === "link" ? entry.href : `${entry.prefix}/`,
+    hasMenu: entry.type === "menu",
+}));
+---
+
+<header class="a-bar">
+    <div class="a-bar-inner">
+        <a href="/angkor/" class="a-brand" aria-label="intentic">
+            <Lotus size="lg" />
+            <span class="a-wordmark">intentic</span>
+        </a>
+
+        <nav class="a-bar-links" aria-label="Main">
+            {
+                links.map((link) => (
+                    <a href={link.href} class="a-bar-link">
+                        {link.label}
+                        {link.hasMenu && (
+                            <svg width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                                <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        )}
+                    </a>
+                ))
+            }
+        </nav>
+
+        <div class="a-bar-end">
+            <a href={githubUrl} target="_blank" rel="noopener" class="a-bar-icon" aria-label="GitHub repository" title="GitHub repository">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+                    <path
+                        d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                    />
+                </svg>
+            </a>
+            <a href={discordUrl} target="_blank" rel="noopener" class="a-bar-icon" aria-label="Discord community" title="Discord community">
+                <DiscordIcon size={17} />
+            </a>
+            <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm">
+                <Corners />
+                Get started free
+            </a>
+        </div>
+    </div>
+</header>
+
+<style>
+    /* Transparent, so the plate runs behind it exactly as the reference art has it: the temple's own top
+       border becomes the bar's. It only takes a background once the page has scrolled past the hero,
+       which the page script flags with `data-lifted`. */
+    .a-bar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 100;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease,
+            backdrop-filter 0.3s ease;
+        border-bottom: 1px solid transparent;
+    }
+    .a-bar[data-lifted] {
+        background: rgba(10, 7, 5, 0.82);
+        border-bottom-color: var(--a-line);
+        backdrop-filter: blur(14px);
+    }
+
+    .a-bar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem;
+        max-width: 84rem;
+        margin: 0 auto;
+        padding: 0.9rem 1.5rem;
+    }
+
+    .a-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        text-decoration: none;
+        flex: none;
+    }
+    .a-wordmark {
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.85rem;
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: 0.01em;
+        color: var(--a-ember);
+        text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
+    }
+
+    .a-bar-links {
+        display: flex;
+        align-items: center;
+        gap: 1.6rem;
+    }
+    .a-bar-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.9375rem;
+        color: var(--a-cream);
+        text-decoration: none;
+        opacity: 0.86;
+        transition:
+            color 0.2s ease,
+            opacity 0.2s ease;
+    }
+    .a-bar-link:hover {
+        color: var(--a-ember-bright);
+        opacity: 1;
+    }
+
+    .a-bar-end {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex: none;
+    }
+    .a-bar-icon {
+        display: inline-flex;
+        color: var(--a-muted);
+        transition: color 0.2s ease;
+    }
+    .a-bar-icon:hover {
+        color: var(--a-ember-bright);
+    }
+
+    /* The bar holds six labels, two marks and a cartouche; below 68rem it cannot, so the labels go and
+       what stays is the brand and the one thing the bar is for. The same six live in the footer. */
+    @media (max-width: 68rem) {
+        .a-bar-links {
+            display: none;
+        }
+    }
+    @media (max-width: 30rem) {
+        .a-bar-icon {
+            display: none;
+        }
+        .a-wordmark {
+            font-size: 1.5rem;
+        }
+        .a-bar-inner {
+            padding: 0.75rem 1.1rem;
+        }
+    }
+</style>

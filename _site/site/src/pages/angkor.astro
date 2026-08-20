@@ -1,0 +1,1585 @@
+---
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * /angkor/ — THE HOME PAGE, TOLD AS CARVED STONE.
+ *
+ * An alternative treatment of the landing page, parked on its own URL so it can be looked at beside the
+ * live one. It is a SKIN, not a fork of the argument: every word on it comes from the same content
+ * modules the live page reads (`landing.ts`, `about.ts`, `faq.ts`, `nav.ts`), so the two pages can never
+ * end up making different claims, and a copy change lands on both.
+ *
+ * What is different is everything around the words: a photographed temple wall behind the first screen,
+ * engraved Playfair display type with an ember full stop on each beat, gold rules and turned corners in
+ * place of hairline borders, and a lotus wherever the live page sets a bullet dot.
+ *
+ * NOINDEX, and excluded from the sitemap in astro.config.mjs. It is a second dress on the same body:
+ * left crawlable it would be a duplicate of the home page, which is the one thing a marketing site must
+ * not hand a search engine.
+ *
+ * The styling is entirely in `styles/angkor.css`, scoped under `.a-page`. Nothing here touches the
+ * tokens or component classes the rest of the site is built on.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+import { gitStats } from "@intentic-dev/astro-integrations";
+import { CREATOR_NAME, creatorBio, creatorRole, trustCards } from "@intentic-dev/site-content/about";
+import { faqGroups } from "@intentic-dev/site-content/faq";
+import { landingContent } from "@intentic-dev/site-content/landing";
+import { APP_URL, DEMO_PATH, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
+import { Image } from "astro:assets";
+import AngkorNav from "../components/angkor/AngkorNav.astro";
+import Corners from "../components/angkor/Corners.astro";
+import Lotus from "../components/angkor/Lotus.astro";
+import { DIVIDER, LOZENGE, MANDALA } from "../components/angkor/ornaments";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { DESKTOP_DOWNLOADS_PAGE, desktopPlatforms } from "../lib/desktop-downloads";
+import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import "../styles/angkor.css";
+
+const content = landingContent;
+
+/* THE HEADLINE, RE-BEATEN. The content ships two typeset lines ("You delegate. Agents work." and "You
+ * approve.") because the live hero sets them at 32px in a 26rem column. This treatment sets the same
+ * words at three times that size, one sentence per line, with the full stop carrying the only ember on
+ * the screen — so the beats are re-split off the same strings rather than authored a second time here.
+ * Splitting on the sentence rather than on the line is what keeps this page and landing.ts one source. */
+const beats = content.hero.headlineLines
+    .flatMap((line) => line.split(/(?<=\.)\s+/u))
+    .map((beat) => beat.replace(/\.\s*$/u, ""))
+    .filter((beat) => beat.length > 0);
+
+const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
+const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
+const appSizes = "(min-width: 80rem) 1040px, (min-width: 64rem) 780px, (min-width: 40rem) 880px, calc((100vw - 3rem) * 1.95)";
+const chatSizes = "(min-width: 80rem) 700px, (min-width: 64rem) 560px, (min-width: 40rem) 500px, calc((100vw - 3rem) * 1.55)";
+
+const [leadVerb, ...verbCards] = content.verbs.items;
+
+/* The one number on this page that would rot: every land changes it, so it is MEASURED from git during
+ * the build rather than authored. When git cannot answer (a shallow CI clone, a tarball) `gitStats()`
+ * returns null and the card falls back to its sentence with no figure — it never renders a zero, which
+ * in a trust band is the one thing that costs more than it buys. Same source as the live page's cards. */
+const stats = gitStats();
+
+// The same table the live download button reads, for the same progressive narrowing (see the script below).
+const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(([key, platform]) => [key, { name: platform.name, href: platform.href }]));
+---
+
+<BaseLayout
+    title={`${content.meta.title} · Angkor`}
+    description={content.meta.description}
+    noindex={true}
+>
+    <div class="a-page flex flex-1 flex-col">
+        <AngkorNav />
+
+        <main class="flex-1">
+            <!-- ═══ 1 · The first screen ═══════════════════════════════════════════════════════════
+                 The plate, the sky, the claim and the product. The copy sits in the left third because
+                 that is the only part of the photograph the scrim can take all the way down to black
+                 without erasing the temple, and the windows lean into the right two thirds where the
+                 art is darkest of its own accord. -->
+            <section class="a-hero" id="hero">
+                <div class="a-plate" aria-hidden="true">
+                    <div class="a-plate-img"></div>
+                </div>
+                <div class="a-sky" aria-hidden="true">
+                    <span class="a-mandala a-mandala-1" set:html={MANDALA} />
+                    <span class="a-mandala a-mandala-2" set:html={MANDALA} />
+                    <span class="a-mandala a-mandala-3" set:html={MANDALA} />
+                </div>
+                <div class="a-plate-fade" aria-hidden="true"></div>
+
+                <div class="a-hero-grid">
+                    <div class="a-hero-copy">
+                        <h1 class="a-headline">
+                            {
+                                beats.map((beat) => (
+                                    <span class="a-headline-line">
+                                        <span class="a-display">{beat}</span>
+                                        <span class="a-stop">.</span>
+                                    </span>
+                                ))
+                            }
+                        </h1>
+
+                        <p class="a-hero-sub">{content.hero.subhead}</p>
+                        <p class="a-hero-summary">{content.hero.summary}</p>
+
+                        <span class="a-divider a-hero-divider" aria-hidden="true" set:html={DIVIDER} />
+
+                        <div class="a-hero-actions">
+                            <a class="a-btn a-btn-primary" href={APP_URL}>
+                                <Corners />
+                                Get started free
+                            </a>
+                            <a class="a-btn" href={githubUrl} target="_blank" rel="noopener">
+                                <Corners />
+                                See the source
+                            </a>
+                        </div>
+
+                        {/* The installer for the machine this is being read on. Ships as the honest
+                            general case and is narrowed to a named platform by the inline script below,
+                            exactly as the live hero's button does — same table, same behaviour, so a
+                            reader on a Mac is never promised a build that does not exist. */}
+                        <div class="a-hero-actions a-hero-actions-second">
+                            <a class="a-btn" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
+                                <Corners />
+                                <svg viewBox="0 0 24 24" class="a-win" fill="currentColor" aria-hidden="true">
+                                    <path d="M3 5.4 10.2 4.4v7.1H3zM11.4 4.2 21 3v8.5h-9.6zM3 12.6h7.2v7.1L3 18.7zM11.4 12.6H21V21l-9.6-1.3z"></path>
+                                </svg>
+                                <span data-download-label>Download the app</span>
+                            </a>
+                        </div>
+
+                        <ul class="a-chips">
+                            {
+                                content.hero.chips.map((chip) => (
+                                    <li>
+                                        <Lotus />
+                                        {chip}
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+
+                    <!-- The two windows, in the arrangement the product itself offers: the workspace
+                         behind, the chat popped out of it and tucked into its bottom corner. Both crop
+                         their screens from the top-left rather than fitting them, so what a reader sees
+                         is the legible top of a screen instead of a whole one shrunk past reading. -->
+                    <figure class="a-hero-visual">
+                        <div class="a-hero-stack">
+                            <div class="a-window a-window-app">
+                                <Corners />
+                                <span class="a-finial" aria-hidden="true"><Lotus size="md" /></span>
+                                <div class="a-window-rail">
+                                    <span class="a-window-dot"></span>
+                                    <span class="a-window-dot"></span>
+                                    <span class="a-window-dot"></span>
+                                    {
+                                        appScreens.map((screen, index) => (
+                                            <span class="a-pill" data-hero-label="app" data-index={index} hidden={index > 0}>
+                                                {screen.frameLabel}
+                                            </span>
+                                        ))
+                                    }
+                                </div>
+                                <div class="a-window-crop a-window-crop-app">
+                                    {
+                                        appScreens.map((screen, index) => (
+                                            <Image
+                                                src={screen.image}
+                                                alt={screen.alt}
+                                                widths={SHOT_WIDTHS}
+                                                sizes={appSizes}
+                                                loading={index === 0 ? "eager" : "lazy"}
+                                                fetchpriority={index === 0 ? "high" : undefined}
+                                                decoding="async"
+                                                class:list={["a-screen a-screen-app", index === 0 && "is-on"]}
+                                                data-hero-screen="app"
+                                                data-index={index}
+                                                aria-hidden={index > 0 ? "true" : undefined}
+                                            />
+                                        ))
+                                    }
+                                    <a href={DEMO_PATH} class="a-play">
+                                        <span class="a-play-pill">
+                                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                                            {content.hero.demo.playLabel}
+                                        </span>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="a-window a-window-chat" aria-hidden="true">
+                                <Corners />
+                                <div class="a-window-rail">
+                                    <span class="a-window-dot"></span>
+                                    <span class="a-window-dot"></span>
+                                    {
+                                        chatScreens.map((screen, index) => (
+                                            <span class="a-pill" data-hero-label="chat" data-index={index} hidden={index > 0}>
+                                                {screen.frameLabel}
+                                            </span>
+                                        ))
+                                    }
+                                </div>
+                                <div class="a-window-crop a-window-crop-chat">
+                                    {
+                                        chatScreens.map((screen, index) => (
+                                            <Image
+                                                src={screen.image}
+                                                alt=""
+                                                widths={SHOT_WIDTHS}
+                                                sizes={chatSizes}
+                                                loading="lazy"
+                                                decoding="async"
+                                                class:list={["a-screen a-screen-chat", index === 0 && "is-on"]}
+                                                data-hero-screen="chat"
+                                                data-index={index}
+                                            />
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <figcaption>{content.hero.demo.note}</figcaption>
+                    </figure>
+                </div>
+            </section>
+
+            <!-- ═══ 2 · What you do: the five verbs ═════════════════════════════════════════════ -->
+            <section class="a-band" id="verbs">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-eyebrow">{content.verbs.eyebrow}</div>
+                    <h2 class="a-h2 a-display">{content.verbs.heading}</h2>
+                    <p class="a-lede">{content.verbs.sub}</p>
+
+                    <div class="a-lead-verb">
+                        <div class="a-lead-verb-head">
+                            <div>
+                                <div class="a-verb-name">{leadVerb.verb}</div>
+                                <p class="a-lead-verb-line">{leadVerb.line}</p>
+                            </div>
+                            <a href={leadVerb.href} class="a-link a-see">See it →</a>
+                        </div>
+                        {
+                            leadVerb.shot && (
+                                <div class="a-window a-window-wide">
+                                    <Corners />
+                                    <span class="a-finial" aria-hidden="true">
+                                        <Lotus size="md" />
+                                    </span>
+                                    <div class="a-window-rail">
+                                        <span class="a-window-dot" />
+                                        <span class="a-window-dot" />
+                                        <span class="a-window-dot" />
+                                        <span class="a-pill">{leadVerb.shot.label}</span>
+                                    </div>
+                                    <Image
+                                        src={shotAsset(leadVerb.shot.name)}
+                                        alt={leadVerb.shot.alt}
+                                        widths={SHOT_WIDTHS}
+                                        sizes={COLUMN_SIZES}
+                                        loading="lazy"
+                                        decoding="async"
+                                        class="a-window-full"
+                                    />
+                                </div>
+                            )
+                        }
+                    </div>
+
+                    <div class="a-verb-grid">
+                        {
+                            verbCards.map((item) => (
+                                <a href={item.href} class="a-card a-verb-card">
+                                    <Corners set="diag" />
+                                    {item.shot ? (
+                                        <div class="a-verb-shot">
+                                            <div class="a-window-rail">
+                                                <span class="a-window-dot" />
+                                                <span class="a-window-dot" />
+                                                <span class="a-window-dot" />
+                                                <span class="a-pill">{item.shot.label}</span>
+                                            </div>
+                                            <div class="a-verb-crop">
+                                                <Image
+                                                    src={shotAsset(item.shot.name)}
+                                                    alt={item.shot.alt}
+                                                    widths={SHOT_WIDTHS}
+                                                    sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* Automate has no honest screenshot, so its picture is the events it
+                                           wakes on — the same decision the live page makes, and for the same
+                                           reason: a mocked-up automations screen would be the one lie here. */
+                                        <div class="a-triggers">
+                                            <div class="a-eyebrow">Wakes on</div>
+                                            <ul>
+                                                {item.triggers?.map((trigger) => (
+                                                    <li>
+                                                        <span class="a-loz" set:html={LOZENGE} />
+                                                        {trigger}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <p class="a-triggers-out">
+                                                <span aria-hidden="true">→</span> an optional command checks the event, then a new agent session starts and
+                                                appears on your board.
+                                            </p>
+                                        </div>
+                                    )}
+                                    <div class="a-verb-body">
+                                        <h3>{item.verb}</h3>
+                                        <p>{item.line}</p>
+                                    </div>
+                                </a>
+                            ))
+                        }
+                    </div>
+
+                    <a href="/features/" class="a-link a-band-cta">{content.verbs.cta} →</a>
+                </div>
+            </section>
+
+            <!-- ═══ 3 · Why a workspace: the comparison ═════════════════════════════════════════
+                 Two columns of nouns, and the asymmetry between them is the whole argument — so the
+                 heavy side is a lit cartouche and the light one a dashed outline that ends early. -->
+            <section class="a-band" id="workspace">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-eyebrow">{content.workspace.eyebrow}</div>
+                    <h2 class="a-h2 a-display">{content.workspace.heading}</h2>
+                    <p class="a-lede">{content.workspace.sub}</p>
+
+                    <div class="a-compare">
+                        <div class="a-card a-compare-ours">
+                            <Corners />
+                            <div class="a-compare-head">
+                                <h3>{content.workspace.comparison.ours.label}</h3>
+                                <span>{content.workspace.comparison.ours.note}</span>
+                            </div>
+                            <ul>
+                                {
+                                    content.workspace.comparison.ours.items.map((item) => (
+                                        <li>
+                                            <Lotus />
+                                            {item}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
+
+                        <div class="a-compare-chat">
+                            <div class="a-compare-head">
+                                <h3>{content.workspace.comparison.chat.label}</h3>
+                                <span>{content.workspace.comparison.chat.note}</span>
+                            </div>
+                            <ul>
+                                {
+                                    content.workspace.comparison.chat.items.map((item) => (
+                                        <li>
+                                            <span class="a-loz a-loz-hollow" set:html={LOZENGE} />
+                                            {item}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                            <p class="a-compare-missing">{content.workspace.comparison.chat.missing}</p>
+                        </div>
+                    </div>
+
+                    <div class="a-compare-foot">
+                        <p>{content.workspace.comparison.footnote}</p>
+                        <a href="/features/review/" class="a-link">How reviewing agent work works →</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 4 · What it costs ═══════════════════════════════════════════════════════════ -->
+            <section class="a-band" id="economics">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-eyebrow">{content.economics.eyebrow}</div>
+                    <h2 class="a-h2 a-display">{content.economics.heading}</h2>
+                    <p class="a-lede">{content.economics.sub}</p>
+
+                    <div class="a-econ">
+                        <div class="a-card a-accounts">
+                            <Corners set="diag" />
+                            <div class="a-accounts-head"><span class="a-eyebrow">Your agent accounts</span></div>
+                            <ul>
+                                {
+                                    content.economics.accounts.map((account) => (
+                                        <li>
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                                <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                            </svg>
+                                            <span class="a-account-name">{account.name}</span>
+                                            <span class="a-account-detail">{account.detail}</span>
+                                            <span class="a-account-tag">subscription</span>
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
+
+                        <div class="a-card a-flat">
+                            <Corners set="diag" />
+                            <div class="a-eyebrow">Flat, not metered</div>
+                            <ul>
+                                {
+                                    content.economics.points.map((point) => (
+                                        <li>
+                                            <Lotus />
+                                            {point}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 5 · Who builds it ═══════════════════════════════════════════════════════════ -->
+            <section class="a-band" id="trust">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-trust">
+                        <div>
+                            <div class="a-eyebrow">{content.trust.eyebrow}</div>
+                            <h2 class="a-h2 a-display">{CREATOR_NAME}</h2>
+                            <p class="a-lede">{creatorRole}</p>
+                            <p class="a-trust-bio">{creatorBio}</p>
+                            <a href="/about/" class="a-link a-band-cta">{content.trust.cta} →</a>
+                        </div>
+
+                        <div class="a-trust-cards">
+                            {
+                                trustCards.map((card) => (
+                                    <div class="a-card a-trust-card">
+                                        <Corners set="diag" />
+                                        <h3>
+                                            <Lotus />
+                                            {card.title}
+                                        </h3>
+                                        {card.stat === "commits" && stats !== null && (
+                                            <p class="a-trust-stat a-display">
+                                                {stats.agent.toLocaleString("en-US")} of {stats.total.toLocaleString("en-US")}
+                                                <span>commits since {stats.since}</span>
+                                            </p>
+                                        )}
+                                        <p>{card.body}</p>
+                                        {card.href && (
+                                            <a
+                                                href={card.href}
+                                                target={card.href.startsWith("http") ? "_blank" : undefined}
+                                                rel={card.href.startsWith("http") ? "noopener" : undefined}
+                                                class="a-link"
+                                            >
+                                                {card.linkLabel} →
+                                            </a>
+                                        )}
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 6 · Getting started ═════════════════════════════════════════════════════════ -->
+            <section class="a-band" id="connect">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-eyebrow">{content.connect.eyebrow}</div>
+                    <h2 class="a-h2 a-display">{content.connect.heading}</h2>
+                    <p class="a-lede">{content.connect.sub}</p>
+
+                    <div class="a-steps">
+                        {
+                            content.connect.steps.map((step, i) => (
+                                <div class="a-step">
+                                    <div class="a-step-num a-display" aria-hidden="true">
+                                        0{i + 1}
+                                    </div>
+                                    <h3>{step.title}</h3>
+                                    <p>{step.body}</p>
+                                </div>
+                            ))
+                        }
+                    </div>
+
+                    <div class="a-frame a-command">
+                        <Corners />
+                        <div class="a-command-head"><span class="a-eyebrow">Step 3 · your machine</span></div>
+                        <pre><code><span class="a-prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                    </div>
+                    <p class="a-command-note">{content.connect.commandNote}</p>
+
+                    <div class="a-card a-desktop">
+                        <Corners set="diag" />
+                        <div>
+                            <p class="a-desktop-lead">{content.connect.desktop.lead}</p>
+                            <p class="a-desktop-note">{content.connect.desktop.note}</p>
+                        </div>
+                        <a class="a-btn a-btn-sm" href="/download/">
+                            <Corners />
+                            {content.connect.desktop.cta}
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 7 · FAQ ═════════════════════════════════════════════════════════════════════
+                 Native <details>, so the whole widget costs no JavaScript and keeps keyboard and
+                 screen-reader behaviour for free. `name` makes each band an exclusive accordion. -->
+            <section class="a-band" id="faq">
+                <div class="a-wall" aria-hidden="true"></div>
+                <div class="a-shell a-reveal">
+                    <div class="a-eyebrow">FAQ</div>
+                    <h2 class="a-h2 a-display">Questions, answered plainly.</h2>
+                    <p class="a-lede">Including the honest ones: what's free, what's stored where, what isn't ready yet.</p>
+
+                    <div class="a-faq">
+                        {
+                            faqGroups.map((group) => (
+                                <div class="a-faq-group" id={`angkor-${group.id}`}>
+                                    <div class="a-faq-group-head">
+                                        <h3>{group.label}</h3>
+                                        <p>{group.blurb}</p>
+                                    </div>
+                                    <div class="a-faq-list">
+                                        {group.items.map((item) => (
+                                            <details name={`angkor-${group.id}`}>
+                                                <summary>
+                                                    <span>{item.question}</span>
+                                                    <span class="a-faq-mark" aria-hidden="true" set:html={LOZENGE} />
+                                                </summary>
+                                                <div class="a-faq-answer">
+                                                    {item.answer.map((paragraph) => (
+                                                        <p>{paragraph}</p>
+                                                    ))}
+                                                    {item.more && (
+                                                        <a href={item.more.href} class="a-link">
+                                                            {item.more.label} →
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </details>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 8 · The closing cartouche ═══════════════════════════════════════════════════
+                 The plate returns, cropped to its foot — the temple and the lotus at the bottom of the
+                 art, which is the half the first screen never shows because the windows cover it. -->
+            <section class="a-band a-final">
+                <div class="a-plate a-plate-foot" aria-hidden="true">
+                    <div class="a-plate-img"></div>
+                </div>
+                <div class="a-shell a-reveal a-final-inner">
+                    <Lotus size="lg" class="a-final-lotus" />
+                    <h2 class="a-h2 a-display a-final-heading">{content.finalCta.heading}</h2>
+                    <p class="a-lede a-final-sub">{content.finalCta.sub}</p>
+                    <span class="a-divider a-final-divider" aria-hidden="true" set:html={DIVIDER} />
+                    <div class="a-hero-actions a-final-actions">
+                        <a class="a-btn a-btn-primary" href={APP_URL}>
+                            <Corners />
+                            Get started free
+                        </a>
+                        <a class="a-btn" href={githubUrl} target="_blank" rel="noopener">
+                            <Corners />
+                            See the source
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="a-foot">
+            <div class="a-shell a-foot-inner">
+                <div class="a-foot-brand">
+                    <Lotus size="md" />
+                    <span class="a-foot-word">intentic</span>
+                </div>
+                <p class="a-foot-note">
+                    An alternative treatment of the home page. The live one is at <a href="/" class="a-link">intentic.dev</a>.
+                </p>
+                <div class="a-foot-links">
+                    <a href="/features/" class="a-link">Features</a>
+                    <a href="/docs/" class="a-link">Docs</a>
+                    <a href="/developers/" class="a-link">Developers</a>
+                    <a href="/extensions/" class="a-link">Extensions</a>
+                    <a href="/earn/" class="a-link">Earn</a>
+                    <a href="/about/" class="a-link">About</a>
+                    <a href={discordUrl} target="_blank" rel="noopener" class="a-link">Discord</a>
+                    <a href={githubUrl} target="_blank" rel="noopener" class="a-link">GitHub</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    {/* The download button's platform narrowing. Inline and immediately after the markup so it runs
+        before the hero paints — a bundled module is deferred, and the label would visibly change under
+        the reader. Without JavaScript the general case stands, and it works. */}
+    <script is:inline>
+        (() => {
+            const hint = navigator.userAgentData?.platform || navigator.userAgent;
+            const key = /Win/i.test(hint) ? "windows" : /Linux|X11/i.test(hint) && !/Android|CrOS/i.test(hint) ? "linux" : null;
+            if (!key) return;
+            for (const cta of document.querySelectorAll("[data-download-cta]")) {
+                const platform = JSON.parse(cta.dataset.platforms || "{}")[key];
+                if (!platform) continue;
+                cta.href = platform.href;
+                cta.querySelector("[data-download-label]").textContent = `Download for ${platform.name}`;
+            }
+        })();
+    </script>
+
+    <script>
+        /* Three small behaviours, and none of them is load-bearing: the page is correct with the script
+           removed. The bar lifts once the hero is behind you, bands fade in as they arrive, and the two
+           hero frames walk their screens on alternate beats — the same six-step cycle the live hero
+           runs, for the same reason (three surfaces behind, two conversations in front, so the pair
+           never settles into one repeating picture). */
+
+        const bar = document.querySelector<HTMLElement>(".a-bar");
+        if (bar) {
+            const lift = () => {
+                if (window.scrollY > 40) bar.setAttribute("data-lifted", "");
+                else bar.removeAttribute("data-lifted");
+            };
+            lift();
+            window.addEventListener("scroll", lift, { passive: true });
+        }
+
+        const reveals = document.querySelectorAll(".a-reveal");
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("is-visible");
+                            observer.unobserve(entry.target);
+                        }
+                    }
+                },
+                { threshold: 0.1 },
+            );
+            reveals.forEach((el) => observer.observe(el));
+        } else {
+            reveals.forEach((el) => el.classList.add("is-visible"));
+        }
+
+        const STEP_MS = 6000;
+        const frames = ["app", "chat"] as const;
+        const shown = { app: 0, chat: 0 };
+        const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
+        const labelsOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-label="${frame}"]`);
+
+        if (screensOf("app").length > 1) {
+            let tick = 0;
+            setInterval(() => {
+                const frame = frames[tick % frames.length]!;
+                tick += 1;
+                const screens = screensOf(frame);
+                if (screens.length < 2) return;
+                const next = (shown[frame] + 1) % screens.length;
+                shown[frame] = next;
+                screens.forEach((screen, index) => {
+                    screen.classList.toggle("is-on", index === next);
+                    // The frame's own alt text is the one on screen: nobody on a screen reader should be
+                    // handed three descriptions of one picture.
+                    screen.setAttribute("aria-hidden", index === next ? "false" : "true");
+                });
+                labelsOf(frame).forEach((label, index) => {
+                    label.hidden = index !== next;
+                });
+            }, STEP_MS / frames.length);
+        }
+    </script>
+</BaseLayout>
+
+<style is:global>
+    /* ── The shell every band shares ─────────────────────── */
+    .a-page .a-shell {
+        position: relative;
+        max-width: 84rem;
+        margin: 0 auto;
+        padding: 5.5rem 1.5rem;
+    }
+    .a-page .a-band {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .a-page .a-h2 {
+        margin: 0.9rem 0 0;
+        max-width: 24ch;
+        font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+        line-height: 1.16;
+    }
+    .a-page .a-lede {
+        margin: 1rem 0 0;
+        max-width: 52ch;
+        font-size: 1.0625rem;
+        line-height: 1.7;
+        color: var(--a-muted);
+    }
+    .a-page .a-band-cta {
+        display: inline-block;
+        margin-top: 2.5rem;
+        font-size: 0.9375rem;
+        font-weight: 500;
+    }
+
+    /* ── 1 · The first screen ────────────────────────────── */
+    .a-page .a-hero {
+        position: relative;
+        overflow: hidden;
+    }
+    /* THE HEIGHT IS THE PICTURE'S. The plate is a framed plaque — a carved border on all four sides —
+       and a hero taller than the plate's own proportion pushes the bottom rail of that frame below the
+       fold, which turns a framed wall into a wall that just runs out. So the padding is set to land the
+       whole band within about one screen of a laptop, and the copy column takes 33rem: wide enough for
+       the summary to break where its clauses do rather than mid-phrase. */
+    .a-page .a-hero-grid {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 33rem) minmax(0, 1fr);
+        align-items: center;
+        gap: 2.5rem;
+        max-width: 84rem;
+        margin: 0 auto;
+        padding: 8.5rem 1.5rem 5rem;
+    }
+    .a-page .a-hero-copy {
+        position: relative;
+        z-index: 1;
+    }
+
+    .a-page .a-headline {
+        margin: 0;
+        font-size: clamp(2.6rem, 5.1vw, 4.15rem);
+        line-height: 1.03;
+        font-weight: 600;
+    }
+    .a-page .a-headline-line {
+        display: block;
+        white-space: nowrap;
+    }
+    /* The ember stop rides just off the last letter, the way a carved full stop would. */
+    .a-page .a-stop {
+        margin-left: 0.06em;
+        font-family: "Playfair Display", Georgia, serif;
+    }
+
+    /* BALANCED, and that is what decides the cap. This sentence is two clauses and the column is a
+       shade narrower than it: left greedy, it orphaned "of sight." on a line of its own directly under
+       the brand line, which is the most looked-at inch of the page. Balance splits it on its own full
+       stop instead — one clause per line. */
+    .a-page .a-hero-sub {
+        margin: 1.5rem 0 0;
+        max-width: 40ch;
+        font-size: 1.125rem;
+        line-height: 1.6;
+        color: #e4d3b6;
+        text-wrap: balance;
+    }
+    /* 45ch, not the 50 the column would allow: at 50 the line broke between "git" and "worktree", and
+       a git worktree is one noun. Narrowing moves the break to the comma before it. */
+    .a-page .a-hero-summary {
+        margin: 0.8rem 0 0;
+        max-width: 45ch;
+        font-size: 0.9375rem;
+        line-height: 1.7;
+        color: var(--a-muted);
+    }
+    .a-page .a-hero-divider {
+        margin: 1.7rem 0 1.6rem;
+        max-width: 17rem;
+    }
+
+    .a-page .a-hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.9rem;
+    }
+    .a-page .a-hero-actions-second {
+        margin-top: 0.9rem;
+    }
+    .a-page .a-win {
+        width: 1rem;
+        height: 1rem;
+        flex: none;
+    }
+
+    .a-page .a-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem 1.5rem;
+        margin: 1.9rem 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: 0.875rem;
+        color: var(--a-muted);
+    }
+    .a-page .a-chips li {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+    }
+
+    /* The visual leans out of its column on the widest screens: the composition wants the width more
+       than the gutter does, and the copy beside it is capped at its own measure anyway. */
+    .a-page .a-hero-visual {
+        position: relative;
+        margin: 0;
+    }
+    @media (min-width: 90rem) {
+        .a-page .a-hero-visual {
+            margin-right: min(0px, calc(700px - 50vw));
+        }
+    }
+    .a-page .a-hero-stack {
+        position: relative;
+        padding: 0 0.5rem 6.5rem 0;
+    }
+    .a-page .a-window-crop {
+        position: relative;
+        overflow: hidden;
+    }
+    .a-page .a-window-crop-app {
+        aspect-ratio: 16 / 10;
+    }
+    .a-page .a-window-crop-chat {
+        aspect-ratio: 4 / 3;
+    }
+    .a-page .a-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        max-width: none;
+    }
+    .a-page .a-screen-app {
+        width: 112%;
+    }
+    .a-page .a-screen-chat {
+        width: 100%;
+    }
+
+    /* The press into the demo sits top-right rather than dead centre: the chat window covers this
+       screen from its middle down at every width, and the top strip is the one band all three
+       surfaces leave clear. */
+    .a-page .a-play {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        padding: 0.9rem;
+        background: rgba(10, 7, 5, 0.08);
+        transition: background-color 0.25s ease;
+    }
+    .a-page .a-play:hover {
+        background: rgba(10, 7, 5, 0.35);
+    }
+    .a-page .a-play-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        border: 1px solid var(--a-line-mid);
+        background: rgba(12, 9, 7, 0.86);
+        padding: 0.5rem 1rem;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 0.9375rem;
+        color: var(--a-cream);
+        backdrop-filter: blur(4px);
+        transition:
+            border-color 0.25s ease,
+            color 0.25s ease;
+    }
+    .a-page .a-play:hover .a-play-pill {
+        border-color: rgba(224, 123, 39, 0.6);
+        color: var(--a-ember-bright);
+    }
+    .a-page .a-play-pill svg {
+        width: 0.8rem;
+        height: 0.8rem;
+    }
+
+    .a-page .a-window-chat {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 66%;
+        pointer-events: none;
+        box-shadow:
+            -0.9rem 0 1.6rem -0.35rem rgba(0, 0, 0, 0.7),
+            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
+    }
+    .a-page .a-hero-visual figcaption {
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        line-height: 1.6;
+        color: var(--a-subtle);
+    }
+
+    /* ── 2 · The verbs ───────────────────────────────────── */
+    .a-page .a-lead-verb {
+        margin-top: 3.5rem;
+    }
+    .a-page .a-lead-verb-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1.5rem;
+        max-width: 52rem;
+    }
+    .a-page .a-verb-name {
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--a-ember);
+    }
+    .a-page .a-lead-verb-line {
+        margin: 0.6rem 0 0;
+        max-width: 46ch;
+        font-size: 1.125rem;
+        line-height: 1.6;
+        color: var(--a-cream);
+    }
+    .a-page .a-see {
+        white-space: nowrap;
+        font-size: 0.9375rem;
+    }
+    .a-page .a-window-wide {
+        margin-top: 1.8rem;
+    }
+    .a-page .a-window-full {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    .a-page .a-verb-grid {
+        display: grid;
+        gap: 1.1rem;
+        margin-top: 1.1rem;
+    }
+    @media (min-width: 44rem) {
+        .a-page .a-verb-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .a-page .a-verb-card {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        text-decoration: none;
+        color: inherit;
+    }
+    .a-page .a-verb-crop {
+        position: relative;
+        height: 13rem;
+        overflow: hidden;
+        border-bottom: 1px solid var(--a-line);
+    }
+    .a-page .a-verb-crop img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 150%;
+        max-width: none;
+    }
+    .a-page .a-verb-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        padding: 1.25rem;
+    }
+    .a-page .a-verb-body h3 {
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.1875rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-verb-body p {
+        margin: 0.5rem 0 0;
+        max-width: 52ch;
+        font-size: 0.9375rem;
+        line-height: 1.65;
+        color: var(--a-muted);
+    }
+    .a-page .a-verb-card:hover .a-verb-body h3 {
+        color: var(--a-ember-bright);
+    }
+
+    .a-page .a-triggers {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--a-line);
+        background: rgba(224, 123, 39, 0.03);
+        padding: 1.4rem;
+    }
+    .a-page .a-triggers ul {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem 1.25rem;
+        margin: 0.9rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .a-page .a-triggers li {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-size: 0.875rem;
+        color: var(--a-muted);
+    }
+    .a-page .a-triggers-out {
+        margin: 1.3rem 0 0;
+        font-size: 0.75rem;
+        line-height: 1.65;
+        color: var(--a-subtle);
+    }
+    .a-page .a-loz {
+        display: inline-block;
+        flex: none;
+        width: 0.55rem;
+        height: 0.55rem;
+        color: var(--a-ember);
+    }
+    .a-page .a-loz svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+    .a-page .a-loz-hollow {
+        color: var(--a-subtle);
+    }
+
+    /* ── 3 · The comparison ──────────────────────────────── */
+    .a-page .a-compare {
+        display: grid;
+        align-items: start;
+        gap: 1.4rem;
+        margin-top: 3rem;
+    }
+    @media (min-width: 60rem) {
+        .a-page .a-compare {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .a-page .a-compare-ours {
+        border-color: rgba(224, 123, 39, 0.3);
+        background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+        padding: 1.9rem;
+    }
+    .a-page .a-compare-chat {
+        border: 1px dashed var(--a-line-mid);
+        padding: 1.9rem;
+    }
+    .a-page .a-compare-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.85rem;
+    }
+    .a-page .a-compare-head h3 {
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-compare-chat .a-compare-head h3 {
+        color: var(--a-muted);
+    }
+    .a-page .a-compare-head span {
+        font-size: 0.8125rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-compare ul {
+        margin: 1.4rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.85rem;
+    }
+    .a-page .a-compare li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: var(--a-cream);
+    }
+    .a-page .a-compare li .a-lotus,
+    .a-page .a-compare li .a-loz {
+        margin-top: 0.2rem;
+    }
+    .a-page .a-compare-chat li {
+        color: var(--a-muted);
+    }
+    .a-page .a-compare-missing {
+        margin: 1.4rem 0 0;
+        border-top: 1px solid var(--a-line);
+        padding-top: 1.3rem;
+        font-size: 0.9375rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-compare-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem 2rem;
+        margin-top: 1.5rem;
+    }
+    .a-page .a-compare-foot p {
+        margin: 0;
+        max-width: 60ch;
+        font-size: 0.8125rem;
+        line-height: 1.65;
+        color: var(--a-subtle);
+    }
+    .a-page .a-compare-foot a {
+        font-size: 0.9375rem;
+    }
+
+    /* ── 4 · What it costs ───────────────────────────────── */
+    .a-page .a-econ {
+        display: grid;
+        align-items: start;
+        gap: 1.4rem;
+        margin-top: 3rem;
+    }
+    @media (min-width: 60rem) {
+        .a-page .a-econ {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .a-page .a-accounts-head {
+        border-bottom: 1px solid var(--a-line);
+        padding: 0.9rem 1.3rem;
+    }
+    .a-page .a-accounts ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .a-page .a-accounts li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.85rem;
+        border-bottom: 1px solid var(--a-line);
+        padding: 0.95rem 1.3rem;
+        color: var(--a-cream);
+    }
+    .a-page .a-accounts li:last-child {
+        border-bottom: 0;
+    }
+    .a-page .a-account-name {
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .a-page .a-account-detail {
+        flex: 1;
+        min-width: 10rem;
+        font-size: 0.75rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-account-tag {
+        border: 1px solid rgba(201, 160, 92, 0.3);
+        padding: 0.15rem 0.6rem;
+        font-size: 0.6875rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--a-gold);
+    }
+    .a-page .a-flat {
+        padding: 1.5rem;
+    }
+    .a-page .a-flat ul {
+        display: grid;
+        gap: 0.9rem;
+        margin: 1.2rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .a-page .a-flat li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: var(--a-muted);
+    }
+    .a-page .a-flat li .a-lotus {
+        margin-top: 0.2rem;
+    }
+
+    /* ── 5 · Who builds it ───────────────────────────────── */
+    .a-page .a-trust {
+        display: grid;
+        gap: 3rem;
+    }
+    @media (min-width: 64rem) {
+        .a-page .a-trust {
+            grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+            gap: 3.5rem;
+        }
+    }
+    .a-page .a-trust-bio {
+        margin: 0.9rem 0 0;
+        max-width: 52ch;
+        font-size: 0.9375rem;
+        line-height: 1.7;
+        color: var(--a-subtle);
+    }
+    .a-page .a-trust-cards {
+        display: grid;
+        gap: 1.1rem;
+    }
+    @media (min-width: 48rem) {
+        .a-page .a-trust-cards {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    .a-page .a-trust-card {
+        padding: 1.4rem;
+    }
+    .a-page .a-trust-card h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-trust-card p {
+        margin: 0.85rem 0 0;
+        font-size: 0.9375rem;
+        line-height: 1.65;
+        color: var(--a-muted);
+    }
+    .a-page .a-trust-stat {
+        font-size: 1.6rem;
+        line-height: 1.2;
+        font-weight: 700;
+    }
+    .a-page .a-trust-stat span {
+        display: block;
+        margin-top: 0.2rem;
+        font-family: var(--font-sans);
+        font-size: 0.75rem;
+        font-weight: 400;
+        color: var(--a-subtle);
+        -webkit-text-fill-color: var(--a-subtle);
+    }
+    .a-page .a-trust-card a {
+        display: inline-block;
+        margin-top: 1rem;
+        font-size: 0.875rem;
+    }
+
+    /* ── 6 · Getting started ─────────────────────────────── */
+    .a-page .a-steps {
+        display: grid;
+        gap: 2.5rem;
+        margin-top: 3rem;
+    }
+    @media (min-width: 48rem) {
+        .a-page .a-steps {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 2rem;
+        }
+    }
+    .a-page .a-step-num {
+        font-size: 3.25rem;
+        line-height: 1;
+        font-weight: 700;
+        opacity: 0.32;
+    }
+    .a-page .a-step h3 {
+        margin: 0.75rem 0 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-step p {
+        margin: 0.5rem 0 0;
+        font-size: 0.9375rem;
+        line-height: 1.65;
+        color: var(--a-muted);
+    }
+    .a-page .a-command {
+        margin-top: 2.75rem;
+        background: rgba(8, 6, 4, 0.72);
+    }
+    .a-page .a-command-head {
+        border-bottom: 1px solid var(--a-line);
+        padding: 0.7rem 1.2rem;
+    }
+    .a-page .a-command pre {
+        margin: 0;
+        overflow-x: auto;
+        padding: 0.9rem 1.2rem;
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        color: var(--a-cream);
+    }
+    .a-page .a-prompt {
+        color: var(--a-ember);
+    }
+    .a-page .a-command-note {
+        margin: 0.9rem 0 0;
+        font-size: 0.8125rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-desktop {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem 2rem;
+        max-width: 52rem;
+        margin-top: 1.6rem;
+        padding: 1.2rem 1.4rem;
+    }
+    .a-page .a-desktop > div {
+        flex: 1;
+        min-width: 16rem;
+    }
+    .a-page .a-desktop-lead {
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-desktop-note {
+        margin: 0.35rem 0 0;
+        max-width: 52ch;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        color: var(--a-muted);
+    }
+
+    /* ── 7 · FAQ ─────────────────────────────────────────── */
+    .a-page .a-faq {
+        display: grid;
+        gap: 2.75rem;
+        max-width: 44rem;
+        margin-top: 2.75rem;
+    }
+    .a-page .a-faq-group-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.85rem;
+    }
+    .a-page .a-faq-group-head h3 {
+        margin: 0;
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--a-cream);
+    }
+    .a-page .a-faq-group-head p {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-faq-list {
+        margin-top: 0.85rem;
+        border-bottom: 1px solid var(--a-line);
+    }
+    .a-page .a-faq details {
+        border-top: 1px solid var(--a-line);
+    }
+    .a-page .a-faq summary {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        cursor: pointer;
+        list-style: none;
+        padding: 1rem 0;
+        font-size: 0.9375rem;
+        line-height: 1.45;
+        color: var(--a-cream);
+        transition: color 0.2s ease;
+    }
+    .a-page .a-faq summary::-webkit-details-marker {
+        display: none;
+    }
+    .a-page .a-faq summary::marker {
+        content: "";
+    }
+    .a-page .a-faq summary:hover {
+        color: var(--a-ember-bright);
+    }
+    .a-page .a-faq-mark {
+        flex: none;
+        width: 0.6rem;
+        height: 0.6rem;
+        margin-top: 0.35rem;
+        color: var(--a-gold);
+        transition: transform 0.25s ease;
+    }
+    .a-page .a-faq-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+    .a-page .a-faq details[open] .a-faq-mark {
+        transform: rotate(90deg) scale(1.15);
+        color: var(--a-ember);
+    }
+    .a-page .a-faq-answer {
+        padding-bottom: 1.25rem;
+    }
+    .a-page .a-faq-answer p {
+        margin: 0 0 0.7rem;
+        max-width: 60ch;
+        font-size: 0.9375rem;
+        line-height: 1.7;
+        color: var(--a-muted);
+    }
+    .a-page .a-faq-answer p:last-of-type {
+        margin-bottom: 0;
+    }
+    .a-page .a-faq-answer a {
+        display: inline-block;
+        margin-top: 0.8rem;
+        font-size: 0.875rem;
+    }
+
+    /* ── 8 · The closing cartouche ───────────────────────── */
+    .a-page .a-final {
+        border-top: 1px solid var(--a-line);
+    }
+    /* The plate's foot: the temple and the lotus, which the first screen hides behind its windows. */
+    .a-page .a-plate-foot .a-plate-img {
+        background-position: 50% 100%;
+        background-size: 130% auto;
+    }
+    .a-page .a-plate-foot::after {
+        background:
+            linear-gradient(180deg, var(--a-canvas) 0%, rgba(10, 7, 5, 0.6) 34%, rgba(10, 7, 5, 0.42) 68%, rgba(10, 7, 5, 0.78) 100%),
+            rgba(12, 9, 7, 0.14);
+    }
+    .a-page .a-final-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding-top: 6rem;
+        padding-bottom: 6.5rem;
+    }
+    .a-page .a-final-heading {
+        max-width: 20ch;
+        margin-top: 1.4rem;
+        font-size: clamp(2.1rem, 4vw, 3.25rem);
+    }
+    .a-page .a-final-sub {
+        max-width: 46ch;
+    }
+    .a-page .a-final-divider {
+        margin: 2rem 0;
+    }
+    .a-page .a-final-actions {
+        justify-content: center;
+    }
+
+    /* ── The foot ────────────────────────────────────────── */
+    .a-page .a-foot {
+        position: relative;
+        border-top: 1px solid var(--a-line);
+        background: #090706;
+    }
+    .a-page .a-foot-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem 2rem;
+        padding-top: 2.5rem;
+        padding-bottom: 2.5rem;
+    }
+    .a-page .a-foot-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+    .a-page .a-foot-word {
+        font-family: "Playfair Display", Georgia, serif;
+        font-size: 1.35rem;
+        color: var(--a-ember);
+    }
+    .a-page .a-foot-note {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--a-subtle);
+    }
+    .a-page .a-foot-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+        font-size: 0.875rem;
+    }
+
+    /* ── Below the columns break ─────────────────────────── */
+    @media (max-width: 64rem) {
+        .a-page .a-hero-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 3.5rem;
+            padding-top: 7.5rem;
+            padding-bottom: 4rem;
+        }
+        .a-page .a-hero-visual {
+            max-width: 40rem;
+        }
+        .a-page .a-headline-line {
+            white-space: normal;
+        }
+        .a-page .a-shell {
+            padding-top: 4rem;
+            padding-bottom: 4rem;
+        }
+        .a-page .a-screen-app {
+            width: 155%;
+        }
+        .a-page .a-screen-chat {
+            width: 150%;
+        }
+    }
+    @media (max-width: 40rem) {
+        .a-page .a-hero-stack {
+            padding-bottom: 5.5rem;
+        }
+        .a-page .a-screen-app {
+            width: 200%;
+        }
+        .a-page .a-screen-chat {
+            width: 220%;
+        }
+        .a-page .a-window-crop-app {
+            aspect-ratio: 5 / 4;
+        }
+        .a-page .a-triggers ul {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .a-page .a-btn {
+            padding: 0.75rem 1.2rem;
+            font-size: 1rem;
+        }
+    }
+</style>

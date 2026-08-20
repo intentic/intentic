@@ -120,6 +120,13 @@ this page.
   variants** — that system is retired.
 - Structure: `_site/site/src/components/Landing.astro` renders the `LandingContent`;
   `_site/site/src/pages/index.astro` is the single entry.
+- **Visual treatments are not variants.** `/angkor/` (`_site/site/src/pages/angkor.astro`) is this page in
+  a different dress — a photographed temple wall, engraved serif display type, gold rules and lotus
+  bullets — parked on its own URL so the look can be judged against the live one. It reads the SAME
+  content modules, so it can never make a different claim and a copy change lands on both; what is
+  forked is styling, all of it scoped under `.a-page` in `styles/angkor.css`. It is `noindex` and out of
+  the sitemap, because to a crawler it is a duplicate of `/`. That is the line: a second **look** is
+  allowed and lives on one extra URL; a second set of **words** is the thing that stays retired.
 - Meta: title/description come from `_site/site-content/src/page-meta.ts` /
   `_site/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
 - Screenshots: `_site/site/src/assets/product/`, all written by one harness —
