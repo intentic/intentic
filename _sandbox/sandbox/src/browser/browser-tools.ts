@@ -67,12 +67,46 @@ const resolveMcpCli = (): string => {
 // Private per daemon process: configs name executables and arguments the child will trust, so a shared /tmp
 // directory would let another local user pre-create or replace one before the MCP reads it. mkdtemp creates
 // this with mode 0700 and an unpredictable suffix; every file below is exclusive and 0600 as the second half.
-const configDir = mkdtempSync(join(tmpdir(), "intentic-browser-mcp-"));
+const CONFIG_PREFIX = "intentic-browser-mcp-";
+const configDir = mkdtempSync(join(tmpdir(), CONFIG_PREFIX));
 
 // A config file's whole life is one turn's Chromium, but nothing deletes it when that Chromium dies (the MCP
 // is not ours to hook). Sweeping the dir on the way in keeps it to the handful of turns in flight, without a
 // timer or a shutdown path that a crash would skip anyway.
 const STALE_CONFIG_MS = 6 * 3_600_000;
+
+// The newest thing a directory holds — its own mtime when it holds nothing, so a directory nobody has written
+// to since it was created still reads as old once it is.
+const freshestMs = async (dir: string): Promise<number> => {
+    const own = await stat(dir).catch(() => undefined);
+    if (own === undefined) {
+        return 0;
+    }
+    const names = await readdir(dir).catch(() => []);
+    const stats = await Promise.all(names.map((name) => stat(join(dir, name)).catch(() => undefined)));
+    return Math.max(own.mtimeMs, ...stats.map((entry) => entry?.mtimeMs ?? 0));
+};
+
+/* The DIRECTORY itself outlives its daemon, and nothing was removing it: mkdtemp per process, one per restart,
+ * kept forever. A long-lived sandbox accumulated hundreds of them, a couple of dozen files deep each. So the
+ * same pass that trims stale files inside our own directory also removes the directories of daemons that have
+ * written nothing for the whole stale window — a live-but-idle daemon's would rebuild itself on its next write
+ * (mkdir below restores the 0700), and its mux sockets are long dead by then anyway. */
+const sweepDeadDirs = async (now: number): Promise<void> => {
+    const parent = tmpdir();
+    const names = await readdir(parent).catch(() => []);
+    await Promise.all(
+        names
+            .filter((name) => name.startsWith(CONFIG_PREFIX) && join(parent, name) !== configDir)
+            .map(async (name) => {
+                const dir = join(parent, name);
+                if ((await freshestMs(dir)) <= now - STALE_CONFIG_MS) {
+                    await rm(dir, { recursive: true, force: true });
+                }
+            }),
+    );
+};
+
 const sweepConfigs = async (now: number): Promise<void> => {
     const entries = await readdir(configDir, { withFileTypes: true }).catch(() => []);
     await Promise.all(
@@ -84,6 +118,7 @@ const sweepConfigs = async (now: number): Promise<void> => {
             }
         }),
     );
+    await sweepDeadDirs(now);
 };
 
 /* A free loopback port, taken by binding one and letting go.
@@ -122,9 +157,18 @@ const freePort = async (): Promise<number> => {
     return bindEphemeral();
 };
 
+/* A NONCE, not owner+port, because owner+port REPEATS and the repeat used to end the turn.
+ *
+ * Ports come back around: freePort refuses to reissue one it remembers, but that memory is the last ISSUED_MEMORY
+ * of them, and a turn takes one per profile — a sandbox with twenty accounts burns through the whole memory in a
+ * dozen turns, while the files stay readable for STALE_CONFIG_MS. So the kernel hands back a port whose file is
+ * still sitting there, `wx` refuses to replace it (rightly — that flag is what stops a planted config naming an
+ * executable the child would trust), and the EEXIST propagates out of turn planning, which happens BEFORE the
+ * model is asked anything: the whole turn dies with a raw filesystem error and no browser was even involved.
+ * The name never had to be derivable, so it isn't. Owner and port stay in it for reading a directory by eye. */
 export const writeBrowserConfig = async (server: string, port: number): Promise<string> => {
-    await mkdir(configDir, { recursive: true });
-    const path = join(configDir, `${server}-${port}.json`);
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
+    const path = join(configDir, `${server}-${port}-${randomBytes(4).toString("hex")}.json`);
     await writeFile(path, JSON.stringify({ browser: { launchOptions: { args: [`--remote-debugging-port=${port}`] } } }), {
         flag: "wx",
         mode: 0o600,

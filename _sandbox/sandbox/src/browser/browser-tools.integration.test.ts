@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
@@ -14,12 +14,45 @@ const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: 
 // Asserting the SHAPE of each spec is version-independent; the wiring test below adapts.
 const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot())).servers).length > 0;
 
-test("browser MCP configs live in a private directory and cannot replace an existing file", async () => {
+test("browser MCP configs live in a private directory, each one written exclusively", async () => {
     const server = `permissions-${process.hrtime.bigint()}`;
     const path = await writeBrowserConfig(server, 41_237);
     expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
     expect(statSync(path).mode & 0o777).toBe(0o600);
-    await expect(writeBrowserConfig(server, 41_237)).rejects.toMatchObject({ code: "EEXIST" });
+});
+
+/* THE REGRESSION: a recycled port must not end the turn.
+ *
+ * Ports are reissued once the port memory has rolled past them — a dozen turns, in a sandbox with twenty
+ * accounts — while the config file the earlier turn wrote is still on disk for hours. Named owner+port, the
+ * second write hit `wx` and threw EEXIST out of turn planning, killing the turn before the model ran. */
+test("a recycled port writes its own config instead of colliding with the old one", async () => {
+    const server = `recycled-${process.hrtime.bigint()}`;
+    const first = await writeBrowserConfig(server, 41_237);
+    const second = await writeBrowserConfig(server, 41_237);
+    expect(second).not.toBe(first);
+    expect(existsSync(first)).toBe(true);
+    expect(statSync(second).mode & 0o777).toBe(0o600);
+});
+
+/* Every daemon restart used to leave its config directory behind forever — hundreds of them in a long-lived
+ * sandbox. The stale sweep now takes the directories too, without touching the one this process is writing to. */
+test("config directories left by dead daemons are swept, and the live one is kept", async () => {
+    if (!(await chromiumInstalled())) {
+        return;
+    }
+    const dead = mkdtempSync(join(tmpdir(), "intentic-browser-mcp-"));
+    const stale = new Date(Date.now() - 7 * 3_600_000);
+    writeFileSync(join(dead, "web-40000-abcdef01.json"), "{}");
+    utimesSync(join(dead, "web-40000-abcdef01.json"), stale, stale);
+    utimesSync(dead, stale, stale);
+
+    const { servers } = await browserServersOf([], tempRoot());
+
+    expect(existsSync(dead)).toBe(false);
+    // …while this turn's own config, in the live directory, survived the very same pass.
+    const args = (servers["web"] as { args: string[] }).args;
+    expect(existsSync(args[args.indexOf("--config") + 1] as string)).toBe(true);
 });
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
