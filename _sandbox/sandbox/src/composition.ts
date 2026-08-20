@@ -1018,7 +1018,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Named once at boot, because from outside this box the engine is now just one more node child among
     // several, and "which process is holding the gigabyte" is the first question anyone asks of a memory
     // report. Without this line the answer needs `ps` plus a guess.
-    logger.info({ pid: iq.pid() }, "iq search engine running in its own process");
+    // `enginePid`, not `pid`: pino stamps every line with the DAEMON's pid under that name, and a second one
+    // made the boot line a JSON object with two `pid` keys — where the last wins, so a log reader was told the
+    // daemon lived at the engine's pid.
+    logger.info({ enginePid: iq.pid() }, "iq search engine running in its own process");
 
     /* The backend supervisor enumerates extensions through the finished services object (the same
      * ExtensionHost seam every other consumer uses), which does not exist until the literal below is built —
