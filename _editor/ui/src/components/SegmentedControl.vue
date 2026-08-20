@@ -3,6 +3,7 @@
      pills are muted text. Native buttons keep it keyboard-accessible without ARIA wiring. -->
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../icons/iconSets.js";
+import { useDevice } from "../composables/useDevice.js";
 
 const {
     options,
@@ -39,6 +40,22 @@ const {
 }>();
 
 const model = defineModel<T>({ required: true });
+
+/* THE COMPACT PILL IS A MOUSE CONTROL, and this component has said so in prose since it was written: "at ~20px
+ * tall it is a mouse control". What it did not do was act on it. Every compact call site — the mobile
+ * workspace's Files|Changes switch, its Name|Text|Smart scope switch, the sandbox and settings sub-navs —
+ * rendered 22px pills on a phone, which a sweep at 390px found to be most of that form factor's undersized
+ * targets in one component.
+ *
+ * The `stretch` variant was already built for the other answer (a full-width track at a thumb's height) and is
+ * right where the choice is a STEP OF THE TASK. It is wrong for a switch riding a fixed-height toolbar row,
+ * which is where the compact one is used and where a full-width track cannot fit. So the pill keeps its ink
+ * and takes the hit area instead: `touch-target` grows the tappable box to 44px on a coarse pointer without
+ * moving the pill or the bar around it.
+ *
+ * DERIVED, NOT A PROP. A call site cannot know which pointer is reading it, and asking 40 of them to pass a
+ * flag is how the prose above came to be true and unenforced. */
+const { coarse } = useDevice();
 </script>
 
 <template>
@@ -60,6 +77,10 @@ const model = defineModel<T>({ required: true });
             class="cursor-pointer rounded-md font-medium transition-colors"
             :class="[
                 model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
+                // Only the compact pill needs it. The stretch track is already ≥36px and its pills sit edge to
+                // edge inside a bordered box, so an overlay reaching 44px would spill past that border and
+                // over the pill beside it — the one shape where a bigger hit area buys a wrong press.
+                stretch ? `` : `touch-target`,
                 stretch
                     ? /* THE FULL-WIDTH TRACK STILL HAS A DENSITY, which it used to ignore — `size` only reached
                        * the compact pill, so any surface wanting the track's shape was handed a thumb-sized one

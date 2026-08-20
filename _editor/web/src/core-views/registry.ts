@@ -121,6 +121,19 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
 
 const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.ids);
 
+/* WHAT THE MOBILE TAB BAR HAS ALREADY PROMOTED, and therefore what the mobile menu must not list again.
+ *
+ * A phone has four thumb tabs and the rail's whole column behind the fourth of them, so a surface can be
+ * reachable twice — and two of these were: Drafts was the Review tab AND a "Drafts" row in the Judge band,
+ * same badge, same count, two names. Workspace is the Files tab; Chat is the agent route.
+ *
+ * VIEW IDS, the same key RAIL_GROUPS ranks and `detectActivations` returns — not the publisher-and-name
+ * package ids the sandbox's extension routes speak. The tab bar previously matched drafts on the package id
+ * and so never matched at all. Declared once here because two surfaces read it: the bar, to find the tile it
+ * promotes, and the menu, to drop it. A list in each of them is how they came to disagree. */
+export const DRAFTS_VIEW_ID = `drafts`;
+export const TAB_BAR_IDS: readonly string[] = [DRAFTS_VIEW_ID, `workspace`, `chat`, `agents`];
+
 export const railRank = (id: string): number => {
     const at = RAIL_ORDER.indexOf(id);
     return at === -1 ? RAIL_ORDER.length : at;

@@ -180,6 +180,22 @@
             "cache": false,
             "passThroughEnv": ["SANDBOX_E2E_IMAGE"]
         },
+        // The mobile geometry gate (_tools/e2e/mobile/audit.mts) — a phone-shaped browser walked over every
+        // mobile route, failing on a blank surface, anything drawn off-screen, or a target under the WCAG floor.
+        //
+        // Its own task rather than part of e2e:browser, for the reason that suite's own comment above gives:
+        // e2e:browser needs a whole LOCALHOST stack — compose postgres, the https API, a daemon container — and
+        // so cannot run in CI at all. This one drives the hermetic demo build, exactly as the shots harness
+        // does, so it needs a Chromium and nothing else. That is the entire point: a target-size rule nobody
+        // runs is a target-size rule that decays, and this one is cheap enough for every merge request.
+        //
+        // The demo build is the root script's job (`pnpm e2e:mobile`), not a dependsOn — this package does not
+        // depend on the demo, matching the shots harness beside it, and the gate names the build command in its
+        // own error when the output is missing. No passThroughEnv: it talks to nothing real, so there is no
+        // credential that could gate it and nothing for it to stand down over.
+        "e2e:mobile": {
+            "cache": false
+        },
         "bench:retrieval": {
             "dependsOn": ["^build", "build"],
             "cache": false,

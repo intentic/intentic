@@ -29,6 +29,19 @@ import ChatTabsMobile from "./ChatTabsMobile.vue";
  * turns on its side: the strip becomes a rail down the left edge, and the panes stand side by side in the room
  * that leaves. */
 
+/* `tabs: false` — DRAW NO HEADER OF MY OWN, because the surface embedding me already has one.
+ *
+ * One caller passes it: the mobile agent route. That screen's own header names the agent, and this panel's
+ * mobile header named the same conversation directly underneath it — two bars, 98px of a 844px phone, the same
+ * string in both, and the string truncated in both. Everything the second bar uniquely offered is a tap away
+ * on the same form factor: it switched between open chats and started a new agent, and on a phone the fleet
+ * board (the Agents tab) is that switcher and carries that button.
+ *
+ * A prop rather than a `mobile` check inside this component, because "am I on a phone" is not the question —
+ * the docked and popped-out panels are the ones that need their own strip, and they are the ones that keep it.
+ * Defaults on, so nothing but the caller that asked is affected. */
+const { tabs = true } = defineProps<{ tabs?: boolean }>();
+
 const { active, activeId, conversations, panes, setActive, closePane, closeTabs, openConversation, tabReveal } = useChat();
 const layout = useLayout();
 const { poppedOut, fit } = useChatPopout();
@@ -314,8 +327,10 @@ const endResize = (event: PointerEvent): void => {
             title="Drag to resize · double-click to reset"
         ></div>
 
-        <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
-        <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
+        <template v-if="tabs">
+            <ChatTabsMobile v-if="mobile" @select="setActive" @close="closeTabs" @open="openConversation" />
+            <ChatTabs v-else @select="setActive" @close="closeTabs" @open="openConversation" />
+        </template>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- THE RUN BAR — drawn wherever a run is driving the panes (barRun), not only where its diagram

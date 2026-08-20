@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 //
-// jsdom because the contract here is the header AgentDetail actually renders. It cannot calculate flexbox,
-// but it can pin the allocation rule that fixes the measured production failure: a registered mobile agent
-// carries both the status and Chat | Changes, so the status words stand down below the header's @md width while
-// their accessible name remains. Without that one class the fixed controls consumed the row and left the title
-// a four-pixel box whenever "Idle" became "Running".
+// jsdom because the contract here is the header AgentDetail actually renders. It cannot calculate flexbox, but
+// it can pin WHAT IS ALLOWED IN THE HEADER ROW, which is what two measured production failures came down to.
+//
+// The first: the status words and Chat | Changes both sat in that row, so a longer status ("Idle" → "Running")
+// left the title a four-pixel box. The words were made to stand down below the header's @md width, keeping
+// their accessible name — that is the `hidden @md:inline` pair below.
+//
+// The second, measured at 390px: even with the words gone the row held a back arrow, the title, a rename
+// pencil, the session chip, the status glyph, the ~120px switch and the actions menu, and the title got 55px
+// for a string needing 250 — "Add Stripe checkout to the pricing page" rendered "Add St…". The switch moved to
+// a full-width row of its own beneath the header, so THE SWITCH BEING OUTSIDE `.view-header` is now the
+// contract, and it is asserted as such rather than merely "present somewhere in the component" — which is
+// what the old assertion said, and which stayed true throughout the failure it was meant to prevent.
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
@@ -113,7 +121,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`keeps a mobile running agent's title slot by compacting only the status words`, async () => {
+it(`keeps a mobile running agent's title slot: the view switch is not in the header, and only the status words compact`, async () => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp(AgentDetail);
@@ -135,7 +143,9 @@ it(`keeps a mobile running agent's title slot by compacting only the status word
     const status = header.querySelector<HTMLElement>(`[aria-label="Running"]`)!;
     const words = [...status.querySelectorAll(`span`)].find((node) => node.textContent === `Running`)!;
 
+    // The switch is rendered, and it is rendered OUTSIDE the header — the header has no width to spare for it.
     expect(el.querySelector(`[data-mode-switch]`)).not.toBeNull();
+    expect(header.querySelector(`[data-mode-switch]`)).toBeNull();
     expect(title.textContent).toBe(`Readable mobile title`);
     expect(title.classList).toContain(`flex-1`);
     expect(words.classList).toContain(`hidden`);

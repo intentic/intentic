@@ -291,9 +291,15 @@ const reviewCard = (): void => {
     emit(`review`);
 };
 
-// The header's quiet icon affordances (rename, archive, restore) — one class string, since they differ only
-// in glyph and in the opacity rule the template applies per form factor.
-const HOVER_ACTION = `flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content`;
+/* The header's quiet icon affordances (rename, archive, restore) — one class string, since they differ only
+ * in glyph and in the opacity rule the template applies per form factor.
+ *
+ * 20px of ink, which is right beside a 12px title and hopeless under a thumb — and the template already knows
+ * it is on a phone, because it drops the hover-reveal there (an affordance that only appears on hover appears
+ * never on touch). What it could not fix by showing them is that four of them sit in one 390px row. So the
+ * INK stays 20px and `touch-target` takes the hit area to 44 on a coarse pointer: the card's density is the
+ * reason a fleet board fits on a phone at all, and it survives. */
+const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content`;
 
 // Offer the card to the board's drag as long as the press starts on the card BODY — the rename pencil and its
 // input run their own pointer gestures, and a press while renaming belongs to the input's caret.
@@ -667,7 +673,7 @@ const grab = (event: PointerEvent): void => {
                 <button
                     v-if="agent.subagents !== undefined"
                     type="button"
-                    class="cursor-pointer transition-colors hover:text-content hover:underline"
+                    class="touch-target cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"
                     v-tooltip.top="
                         agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'

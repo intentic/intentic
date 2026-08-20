@@ -2689,7 +2689,7 @@ watch(
                      carries the answer. The slash runs across the handle, not along it. -->
                 <button
                     type="button"
-                    class="relative inline-flex cursor-pointer items-center transition-colors hover:text-muted"
+                    class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-muted"
                     :aria-pressed="showToolCalls"
                     :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
                     v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
@@ -2712,7 +2712,7 @@ watch(
                 <button
                     v-if="usageChip"
                     type="button"
-                    class="inline-flex cursor-pointer items-center transition-colors hover:text-content"
+                    class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
                     @click="router.push('/sandbox/usage')"
                 >
                     <UsageRing :headroom="usageChip.headroom"
@@ -2727,7 +2727,7 @@ watch(
                 <button
                     v-if="creditChip"
                     type="button"
-                    class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
+                    class="touch-target inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
                     :class="creditChip.spent ? `text-warning` : ``"
                     :aria-label="creditChip.hint"
                     v-tooltip.top="creditChip.hint"
@@ -2738,7 +2738,7 @@ watch(
                 </button>
                 <button
                     type="button"
-                    class="inline-flex items-center gap-1 transition-colors hover:text-content"
+                    class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
                     @click="router.push('/sandbox/agent')"
                 >
                     <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage

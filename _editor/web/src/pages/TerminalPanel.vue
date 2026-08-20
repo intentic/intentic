@@ -1472,12 +1472,17 @@ const endResize = (event: PointerEvent): void => {
 }
 
 /* Touch extra-keys: 40px min targets, monospace glyphs, armed-Ctrl tint. */
+/* 44px, not 36. These keys only exist on a coarse pointer (the row is `v-if="coarse"`), so there is no mouse
+   to keep a tighter size for — and they are the most repeatedly and quickly pressed controls the app has on a
+   phone: driving a shell is Tab, Tab, arrow, Ctrl-C, and every one of those is a key the soft keyboard could
+   not offer. They also sit at the very bottom of the screen, where thumb accuracy is worst. The row is theirs
+   alone and scrolls sideways, so the height costs nothing but the 8px it takes. */
 .termkey {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2.5rem;
-    height: 2.25rem;
+    min-width: 2.75rem;
+    height: 2.75rem;
     padding: 0 0.6rem;
     flex-shrink: 0;
     border-radius: var(--radius-md);

@@ -125,6 +125,10 @@ const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
 
+// The commit box's own prompt. A phone keyboard has no Ctrl, so naming the shortcut there is an instruction
+// nobody can follow — it names the button underneath instead, which is how a commit happens on touch.
+const commitPlaceholder = computed(() => (mobile.value ? `Message` : `Message (Ctrl+Enter to commit)`));
+
 const legend = computed(() => summarizeOrigins(scannable.value));
 /* Seeded from the standing ask rather than from nothing, so coming back to this panel finds it as it was left.
  * The lit chip is how the user asked for the commit to be named after a session, and that ask outlives this
@@ -1101,7 +1105,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 ref="commitBox"
                 v-model="commitMessage"
                 rows="1"
-                :placeholder="chipNotice ?? `Message (Ctrl+Enter to commit)`"
+                :placeholder="chipNotice ?? commitPlaceholder"
                 class="scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto rounded-md border border-line bg-canvas px-2 py-1 text-xs leading-snug text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"

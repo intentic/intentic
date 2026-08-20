@@ -1052,7 +1052,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     type="button"
                     aria-label="Mark all agents read"
                     v-tooltip.bottom="'Mark all read'"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
+                    class="touch-target inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
                     @click="markAllSeen"
                 >
                     <Icon name="check" class="text-2xs" />{{ unread }} unread
@@ -1250,7 +1250,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 type="button"
                                 aria-label="Archive every finished agent"
                                 v-tooltip.bottom="`Archive all ${clearable} — you can undo it`"
-                                class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                                class="touch-target shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                                 @click="archive()"
                             >
                                 Clear

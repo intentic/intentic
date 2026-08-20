@@ -304,7 +304,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
                                     :href="standing.repo.url"
                                     target="_blank"
                                     rel="noopener"
-                                    class="flex items-center gap-1.5 text-subtle hover:text-link"
+                                    class="touch-target flex items-center gap-1.5 text-subtle hover:text-link"
                                     v-tooltip.top="`Open ${standing.repo.project} on ${standing.repo.host === `github` ? `GitHub` : `GitLab`}`"
                                 >
                                     <Icon :name="standing.repo.host" />

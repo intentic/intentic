@@ -651,10 +651,31 @@
     .composer-effort-seg {
         height: 1.1rem;
         width: 0.5rem;
+        /* The bar has to stay a bar — it is a METER, and a meter whose rungs are 44px wide is a row of
+           buttons. So the target grows on ONE AXIS. Vertically it is a full thumb: 18px of bar in a composer
+           row is where the misses happen, and every rung gaining the same 44px strip costs nothing because
+           the strip is shared top to bottom. Horizontally it keeps the bar's own width plus the snap-down
+           gap above, because picking a rung is a precise act and the neighbour is a different answer, not a
+           near miss. Overlaying 44px sideways would simply hand every press to whichever rung is last in the
+           DOM. */
+        position: relative;
     }
     .composer-effort-seg:not(:last-child) {
         padding-right: 0.3rem; /* chunkier snap-down gap for touch */
     }
+}
+/* THE SAME LADDER AS A PICTURE — the spans ComposerEffort draws on a touch pointer, where the rungs are a
+   readout inside one button and the levels are picked from a sheet (that component carries the reasoning).
+   Same geometry and same ramp as the real thing, with every affordance taken back off: no pointer of its own,
+   and no hover, because it is not the control. */
+.composer-effort-seg-static {
+    display: inline-block;
+    cursor: default;
+    pointer-events: none;
+}
+.composer-effort-seg-static:hover {
+    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+    filter: none;
 }
 .composer-send {
     display: inline-flex;
@@ -683,6 +704,17 @@
     background: var(--color-overlay);
     color: var(--color-subtle);
     cursor: default;
+}
+/* THE MOST-PRESSED CONTROL IN THE PRODUCT, and it was 32px. Send and Stop share this class, and Stop is the
+   one you reach for in a hurry — a turn is doing something you did not want — so both get the full 44. Grown
+   rather than overlaid, unlike every other control this sweep touched: these two are round, they sit at the
+   end of the composer row with the row's own padding beside them, and a 44px circle is exactly what a phone's
+   send button is everywhere else. Nothing is behind them for a bigger box to steal from. */
+@media (pointer: coarse) {
+    .composer-send {
+        height: 2.75rem;
+        width: 2.75rem;
+    }
 }
 .composer-stop {
     background: var(--color-overlay);

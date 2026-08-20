@@ -55,10 +55,15 @@ const submit = (): void => {
     <div class="px-4 py-2.5">
         <div class="flex items-center gap-3">
             <Icon name="plus" class="shrink-0 text-subtle" />
+            <!-- `min-h-11`: the field is transparent and borderless, so its own box was the height of one line
+                 of text — 22px — and the row's padding around it belonged to the row, not to the input. On a
+                 phone that meant the only way to start typing was to hit a 22px band in the middle of a 48px
+                 row. The field now fills the row it sits in, which changes nothing visible (there is no border
+                 or fill to grow) and makes the whole row the thing you tap. -->
             <input
                 v-model="title"
                 :placeholder="group === `` ? `New story — a title, or group/title to file it under one` : `New story in ${group}/ — type a title`"
-                class="min-w-0 flex-1 bg-transparent text-sm text-content placeholder:text-subtle focus:outline-none"
+                class="min-h-11 min-w-0 flex-1 bg-transparent text-sm text-content placeholder:text-subtle focus:outline-none"
                 @keydown.enter.prevent="submit"
                 @keydown.esc="title = ``"
             />

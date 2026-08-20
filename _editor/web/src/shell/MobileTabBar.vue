@@ -4,7 +4,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { activationBadge, detectActivations, extensionPath } from "../core-views/registry";
+import { activationBadge, detectActivations, DRAFTS_VIEW_ID, extensionPath } from "../core-views/registry";
 import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
@@ -34,6 +34,11 @@ interface Tab {
     // What the tab says without being opened — the same shape the desktop rail badges with, so one renderer
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
+    /* WHICH WORKSPACE PANEL THIS TAB OWNS, for the two tabs that can share the workspace path. Files is the
+     * bare address and Review — with the drafts pack off — is the Changes panel of the same view, so path
+     * matching alone lit both of them at once and neither tab answered "where am I". Absent on a tab whose
+     * path is its own. */
+    readonly panel?: "files" | "changes";
 }
 
 const { attention } = useAgents();
@@ -41,12 +46,18 @@ const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
 
-// The drafts extension's activation, when the pack is on: its path is the tab's target and its badge count is
-// the queue's own `owed` — the identical number the desktop rail shows, because it is the same badge() call.
+/* The drafts extension's activation, when the pack is on: its path is the tab's target and its badge count is
+ * the queue's own `owed` — the identical number the desktop rail shows, because it is the same badge() call.
+ *
+ * MATCHED ON THE VIEW ID, which is what `detectActivations` returns. It used to look for the PACKAGE id
+ * (`intentic.drafts`, the publisher-and-name pair the sandbox's extension routes speak) against a list that
+ * only ever carries view ids — so nothing ever matched, the tab never once reached the queue it is named for,
+ * and its count was the changes half alone. TAB_BAR_IDS is the shared statement of that promotion, so the
+ * mobile menu drops the same row rather than listing it a second time under its own name. */
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const draftsTile = computed(() => {
-    const active = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === `intentic.drafts`);
+    const active = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === DRAFTS_VIEW_ID);
     return active === undefined ? undefined : { to: extensionPath(active.extension, active.activation), badge: activationBadge(active) };
 });
 
@@ -78,12 +89,16 @@ const tabs = computed<readonly Tab[]>(() => [
             ? { badge: { count: attention.value, tooltip: `${attention.value} need${attention.value === 1 ? `s` : ``} you` } }
             : {}),
     },
-    { to: `/workspace`, label: `Files`, icon: `file-tree` },
+    { to: `/workspace`, label: `Files`, icon: `file-tree`, panel: `files` },
     {
-        to: draftsTile.value?.to ?? `/workspace`,
+        /* The queue when the pack is on; the workspace's OWN review — its Changes panel — when it is off.
+         * `?panel=changes` rather than the bare path the Files tab already owns: two tabs at one address are
+         * one tab's worth of navigation and two highlights (WorkspaceMobile reads the query). */
+        to: draftsTile.value?.to ?? `/workspace?panel=changes`,
         label: `Review`,
         icon: `send`,
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
+        ...(draftsTile.value === undefined ? { panel: `changes` as const } : {}),
     },
     { to: `/menu`, label: `Menu`, icon: `bars`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
@@ -93,19 +108,33 @@ const tabs = computed<readonly Tab[]>(() => [
 const tabLabel = (tab: Tab): string => (tab.badge?.tooltip === undefined ? tab.label : `${tab.label} · ${tab.badge.tooltip}`);
 
 const route = useRoute();
-// A tab is active for its route AND any sub-path (a file open on /workspace) — `active-class` compares params
-// and drops the highlight once the splat param is set, so match by path prefix instead.
-const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
+/* A tab is active for its route AND any sub-path (a file open on /workspace) — `active-class` compares params
+ * and drops the highlight once the splat param is set, so match by path prefix instead.
+ *
+ * EXACTLY ONE TAB WINS. A tab declaring a `panel` shares the workspace path with its neighbour, so the path
+ * alone cannot separate them: it must also be the panel on screen (absent query ⇒ `files`, the bare address).
+ * Without this both Files and Review lit up on every workspace route and the bar stopped saying where you were. */
+const isNavActive = (tab: Tab): boolean => {
+    const path = tab.to.split(`?`)[0] ?? tab.to;
+    if (!(route.path === path || route.path.startsWith(`${path}/`))) {
+        return false;
+    }
+    if (tab.panel === undefined) {
+        return true;
+    }
+    const showing = route.query[`panel`];
+    return (typeof showing === `string` ? showing : `files`) === tab.panel;
+};
 </script>
 
 <template>
     <nav class="flex shrink-0 items-stretch border-t border-line bg-card pb-[env(safe-area-inset-bottom)]">
         <RouterLink
             v-for="tab in tabs"
-            :key="tab.to"
+            :key="tab.label"
             :to="tab.to"
             class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors active:bg-overlay"
-            :class="{ 'text-link': isNavActive(tab.to) }"
+            :class="{ 'text-link': isNavActive(tab) }"
             :aria-label="tabLabel(tab)"
         >
             <!-- One badge for every tab — a `mark` replaces the number where the amount isn't what you act on.

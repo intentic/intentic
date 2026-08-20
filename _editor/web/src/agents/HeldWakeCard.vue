@@ -60,11 +60,16 @@ const autoRunLabel = computed(() => {
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
                 {{ autoRunLabel ?? `waiting for you` }} · {{ timeAgo(entry.createdAt) }}
             </span>
+            <!-- TWO DECISIONS ABOUT WHAT AN AGENT IS ALLOWED TO DO, side by side, and they were the smallest
+                 pair of buttons on the board: 22px tall, which is under the WCAG 2.2 floor and a long way
+                 under a thumb. `touch-target` grows the tappable box to 44px on a coarse pointer without
+                 touching the pill, so the card keeps its density on a desk. `gap-2` on the row is what keeps
+                 the two overlays from meeting in the middle — a mis-tap here runs an automation. -->
             <button
                 type="button"
                 aria-label="Reject this held wake"
                 v-tooltip.top="`Drop it — the wake never runs, the automation stays as it is`"
-                class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold text-subtle transition-colors hover:bg-danger/10 hover:text-danger"
+                class="touch-target shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold text-subtle transition-colors hover:bg-danger/10 hover:text-danger"
                 @click.stop="emit(`reject`)"
             >
                 Reject
@@ -73,7 +78,7 @@ const autoRunLabel = computed(() => {
                 type="button"
                 aria-label="Approve this held wake"
                 v-tooltip.top="`Run it now, with exactly what fired — the session lands on this board`"
-                class="shrink-0 rounded bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
+                class="touch-target shrink-0 rounded bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
                 @click.stop="emit(`approve`)"
             >
                 Approve

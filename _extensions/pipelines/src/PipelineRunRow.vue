@@ -113,7 +113,7 @@ const startFix = (): void => {
                         :href="run.url"
                         target="_blank"
                         rel="noopener"
-                        class="min-w-0 truncate text-sm font-medium text-content hover:text-link"
+                        class="touch-target min-w-0 truncate text-sm font-medium text-content hover:text-link"
                         :title="headline"
                     >
                         {{ headline }}
@@ -127,7 +127,7 @@ const startFix = (): void => {
                         :href="superseded.url"
                         target="_blank"
                         rel="noopener"
-                        class="inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
+                        class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
                         v-tooltip.top="`${run.branch} went green again in this run — open it to check the job that failed here even ran`"
                     >
                         <Icon name="check-circle" class="text-2xs text-success" />
@@ -223,7 +223,7 @@ const startFix = (): void => {
                     </div>
                     <button
                         type="button"
-                        class="cursor-pointer p-1"
+                        class="touch-target cursor-pointer p-1"
                         :title="expanded ? `Hide job graph` : `Show job graph`"
                         @click="expanded = !expanded"
                     >

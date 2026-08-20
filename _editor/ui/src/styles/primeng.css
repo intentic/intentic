@@ -267,6 +267,38 @@
         border-color: var(--color-line-strong);
     }
 
+    /* A CHECKBOX IS 18px OF INK AND HAS TO BE 44px OF TARGET, on a phone, everywhere, without being told.
+     *
+     * Aura's small checkbox is right beside a 12px label and it is the smallest thing a finger is ever asked
+     * to find: the acceptance board puts nine of them down the left edge of a 390px screen, one per story,
+     * each deciding whether that story runs. There is no per-call-site fix worth writing for that — every
+     * checkbox in the app has the same problem for the same reason — so the target is grown here, once, on
+     * the wrapper PrimeVue already renders.
+     *
+     * COARSE POINTERS ONLY, and by overlay rather than by size: the box's own dimensions are what the label
+     * beside it is aligned to, and every checked/indeterminate mark is drawn against them. An 18px box in a
+     * 44px hit area keeps every row in this app looking exactly as it does now.
+     *
+     * `.p-checkbox` is the wrapper, not the input — PrimeVue's input is visually hidden and stretched over
+     * the box already, so the overlay goes on the wrapper and the click lands where it always did. */
+    @media (pointer: coarse) {
+        .p-checkbox {
+            position: relative;
+        }
+
+        .p-checkbox::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            min-width: 44px;
+            min-height: 44px;
+            transform: translate(-50%, -50%);
+        }
+    }
+
     /* Compact switch — the size a LIST of toggles needs. Aura's 40×24 control is right when a toggle is one
      * of three on a settings card; stacked fifteen deep (the Extensions tab) that same control becomes a
      * column of brand-coloured blocks carrying more weight than the names it belongs to, and the eye reads

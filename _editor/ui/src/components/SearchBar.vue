@@ -139,11 +139,18 @@ const clear = (): void => {
             <!-- `Aa`, in the glyph and the lit state the workspace search uses — the notation IS the label, so it
                  is spelled out rather than iconified. `mousedown` is suppressed so a press leaves the caret in
                  the field it sits inside: the query is half typed and the next keystroke belongs to it. The click
-                 still fires, so keyboard activation is untouched. -->
+                 still fires, so keyboard activation is untouched.
+
+                 BOTH OF THESE SIT INSIDE THE FIELD, which is what makes their ink so small and why they take
+                 the hit area instead of growing: 16px of glyph tucked against the right edge of an input is a
+                 mouse target, and on a phone it was the smallest control on the fleet board at 18×18. The
+                 overlay reaches past the field's padding into the input, which is the right trade — a tap that
+                 lands a few pixels off `Aa` and focuses the field is recoverable; one that hits nothing is
+                 what a person retries three times. -->
             <button
                 v-if="matchCase !== undefined"
                 type="button"
-                class="flex h-4 w-4 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
+                class="touch-target flex h-4 w-4 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'bg-primary-600/20 text-link': matchCase }"
                 :aria-pressed="matchCase"
                 v-tooltip.bottom="'Match case'"
@@ -156,7 +163,7 @@ const clear = (): void => {
             <button
                 v-if="clearable && query !== ``"
                 type="button"
-                class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                class="touch-target flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
                 v-tooltip.bottom="'Clear (Esc)'"
                 aria-label="Clear filter"
                 @click="clear"

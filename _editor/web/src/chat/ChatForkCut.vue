@@ -314,7 +314,7 @@ const open = (event: Event): void => {
     <div class="relative z-[6] -mt-1 h-0">
         <button
             type="button"
-            class="absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
+            class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-overlay hover:text-content"
             :class="[
                 forks.length > 0 ? `text-link opacity-100` : `text-subtle`,
                 forks.length > 0 ? `` : mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover/turn:opacity-100`,

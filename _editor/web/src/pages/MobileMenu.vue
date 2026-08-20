@@ -5,8 +5,8 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands } from "../core-views/registry";
-import { badgeClass } from "../core-views/viewBadge";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, TAB_BAR_IDS } from "../core-views/registry";
+import { badgeClass, badgeToneClass } from "../core-views/viewBadge";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useRole } from "../composables/sandbox/useRole";
 import { useSandboxAttention } from "../composables/sandbox/sandboxAttention";
@@ -81,7 +81,7 @@ onMounted(() => {
 const areaBands = computed(() =>
     railBands(
         detectActivations(panels.value, capabilities.value)
-            .filter(({ extension }) => extension.surface === `rail`)
+            .filter(({ extension }) => extension.surface === `rail` && !TAB_BAR_IDS.includes(extension.id))
             .map(extensionRow),
         (area) => area.id,
     ),
@@ -237,22 +237,40 @@ const logout = async (): Promise<void> => {
 
         <!-- The areas the desktop rail links to (minus the ones on the tab bar), in the rail's own bands — the
              headings the 44px column can only imply with a hairline. -->
+        <!-- A BADGE'S SENTENCE IS A SECOND LINE, NEVER A PILL BESIDE THE NAME. A tooltip is a sentence
+             ("api agent/soft-deletes is failing — 1 run in a row"), and rendered as a `shrink-0` chip it was
+             the only thing in the row that could not yield: the name — the one word saying where the row goes
+             — collapsed to nothing, and the chip still ran 130px past the edge of the screen. So the name
+             keeps the first line to itself and the sentence sits under it, which is the shape the "Needs you"
+             section above already uses. The PILL survives for a bare count, which is what a pill is for. -->
         <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
                 v-for="area in band.items"
                 :key="area.to"
                 :to="area.to"
-                class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
+                class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center">
                     <Icon v-if="area.icon" :name="area.icon" class="text-base text-muted" />
                     <span v-else class="text-xs font-semibold text-muted">{{ area.label.slice(0, 2).toUpperCase() }}</span>
                 </span>
-                <span class="min-w-0 flex-1 truncate">{{ area.label }}</span>
-                <span v-if="area.badge" class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold" :class="badgeClass(area.badge)">{{
-                    area.badge.tooltip ?? area.badge.count
-                }}</span>
+                <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2">
+                        <span class="min-w-0 truncate">{{ area.label }}</span>
+                        <!-- The count, when that is all there is to say. `min-w-0` so a runaway number shrinks
+                             rather than pushing the name it belongs to off the row. -->
+                        <span
+                            v-if="area.badge && area.badge.tooltip === undefined"
+                            class="min-w-0 shrink rounded-full px-1.5 py-px text-2xs font-semibold"
+                            :class="badgeClass(area.badge)"
+                            >{{ area.badge.count }}</span
+                        >
+                    </span>
+                    <span v-if="area.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(area.badge)">{{
+                        area.badge.tooltip
+                    }}</span>
+                </span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
         </section>

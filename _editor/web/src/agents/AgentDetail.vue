@@ -268,11 +268,13 @@ const confirmDiscard = (): void => {
                 compact
                 @reveal="identityOpen = true"
             />
-            <!-- A registered mobile agent also carries the Chat | Changes switch. Below @md those fixed-width
-                 controls leave the title only a few pixels when a longer status such as "Running" arrives, so
-                 the status compresses to its glyph until the HEADER (not the window) has room for its words.
-                 The chip keeps its full accessible name in both forms; draft/unregistered mobile chats have no
-                 mode switch competing for the row, so they keep the words at every width. -->
+            <!-- THE STATUS COMPRESSES TO ITS GLYPH IN A NARROW HEADER, and on mobile that is now the only
+                 fixed-width thing left competing with the title — the Chat | Changes switch moved to a row of
+                 its own below (see there for why). The words return the moment the HEADER, not the window, has
+                 room for them, so a phone in landscape and a narrow desktop column both get the sentence. The
+                 chip keeps its full accessible name at every width, so nothing is lost to a screen reader.
+                 Kept on `mobile` rather than on `mobile && reviewable`: what makes the row tight is the phone,
+                 and a draft chat's header carries the same back arrow, title, pencil and chip as any other. -->
             <span
                 v-if="status !== undefined"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
@@ -280,9 +282,8 @@ const confirmDiscard = (): void => {
                 :aria-label="status.label"
             >
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" aria-hidden="true" />
-                <span :class="mobile && reviewable ? `hidden @md:inline` : ``">{{ status.label }}</span>
+                <span :class="mobile ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
-            <SegmentedControl v-if="mobile && reviewable" v-model="view" :options="viewOptions" />
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
                 <!-- The page's one primary action, beside the status chip that says whether it is even needed.
@@ -332,7 +333,21 @@ const confirmDiscard = (): void => {
             </template>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-        <ChatPanel v-if="mobile && (view === 'chat' || !reviewable)" class="min-h-0 flex-1" />
+        <!-- CHAT | CHANGES OWNS A ROW ON A PHONE, instead of riding the header above.
+             It was the single biggest thing in that row — a two-word switch is ~120px — and the row also
+             carries a back arrow, the title, a rename pencil, the session chip, the status and the actions
+             menu. Measured at 390px the title was left 55px for a string that needs 250: "Add Stripe checkout
+             to the pricing page" rendered as "Add St…", which is not a title, it is a shrug.
+             The `stretch` variant is the one built for this — SegmentedControl's own note calls it right when
+             "the choice is a step of the task on a narrow screen" — so the two views become equal halves of a
+             full-width track at a thumb's height, and the header gets its width back. It costs ~36px and the
+             header stops needing the second line it was effectively wrapping onto. -->
+        <div v-if="mobile && reviewable" class="shrink-0 border-b border-line px-2 py-1.5">
+            <SegmentedControl v-model="view" :options="viewOptions" stretch />
+        </div>
+        <!-- `:tabs="false"` — this screen's header already names the conversation, and the panel's own mobile
+             header named it again directly beneath (see ChatPanel for the full reasoning). -->
+        <ChatPanel v-if="mobile && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
         <!-- `chat` is the review asking to be swapped for the conversation — raised when it hands a land
              conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
              already on screen there, so the review has nothing to swap itself for. -->

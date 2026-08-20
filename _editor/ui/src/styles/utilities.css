@@ -40,6 +40,58 @@
     .animate-fade-in-up {
         animation: ui-fade-in-up 0.25s ease-out both;
     }
+
+    /* A FINGER'S WORTH OF HIT AREA, WITHOUT MOVING A PIXEL.
+     *
+     * The app's dense controls are measured for a mouse and they are right for one: a 24px icon button in a
+     * 36px toolbar row is what lets a workspace header carry six affordances. On a phone that same button is
+     * a 24px target, and the sweep that prompted this found most of them under it — 13 of 20 controls on the
+     * fleet board, 57 of 61 on the pipelines board, Approve and Reject at 22px tall, Send at 35.
+     *
+     * Growing the boxes was the obvious fix and the wrong one: every one of those rows has a measured height
+     * (`.view-header` is 2.25rem and the comments in useLayout.ts explain what each column's floor was
+     * measured against), so a 44px minimum applied to the BOX reflows desktop layouts that nothing is wrong
+     * with. The hit area and the drawn box do not have to be the same rectangle. This grows only the former,
+     * with an absolutely-positioned overlay centred on the control, so the ink, the row height and every
+     * measurement in this codebase stay exactly as they are.
+     *
+     * COARSE POINTERS ONLY, so a mouse keeps the precise target it was designed for and no desktop surface
+     * can regress: an overlay big enough for a thumb would swallow the gaps between toolbar buttons, which on
+     * a phone is what you want (the neighbours are 44px too and the midpoint has to belong to somebody) and
+     * on a desktop would make a six-button header ambiguous.
+     *
+     * 44px is Apple's floor. WCAG 2.2 SC 2.5.8 asks 24 and would already be met by most of these; 44 is what
+     * a thumb actually needs, and the whole reason to do this in CSS rather than by hand is that hitting the
+     * higher number costs nothing extra once the overlay exists.
+     *
+     * `position: relative` is set here rather than assumed: most callers are flex children with no position
+     * of their own, and an overlay in a static box escapes to the nearest positioned ancestor — which for a
+     * toolbar button is the panel, so the whole panel becomes the button. It is applied unconditionally, and
+     * only INSIDE the media query would be worse: a control that gains a containing block only on phones is
+     * a control whose absolutely-positioned children (a badge, a dropdown caret) move between form factors.
+     *
+     * Not for a control that is ALREADY thumb-sized — a 48px row, a full-width button — where the overlay
+     * would reach past the row's own edge into its neighbour. Use it on the dense ones. */
+    .touch-target {
+        position: relative;
+    }
+
+    @media (pointer: coarse) {
+        .touch-target::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            min-width: 44px;
+            min-height: 44px;
+            transform: translate(-50%, -50%);
+            /* The overlay is the target, so it must be the thing the tap lands on — and it must never be the
+               thing a paint lands on. No background, ever. */
+            pointer-events: auto;
+        }
+    }
 }
 
 /* Loading placeholder. The caller owns the BOX — `class="skeleton h-4 w-32 rounded-full"` — and this owns the

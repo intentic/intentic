@@ -45,6 +45,26 @@ const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
 // Absent tone means the resting count — the tone every core surface has always left unset.
 export const badgeClass = (badge: ViewBadge): string => BADGE_TONE[badge.tone ?? `info`];
 
+/* THE SAME FOUR VOLUMES AS INK ALONE, for a badge whose text is a SENTENCE rather than a count.
+ *
+ * The filled pill above is sized for a number. A sentence in one is a sentence-shaped pill, which on a phone's
+ * 390px row could not shrink (a badge that yields stops being legible) and so took the row's own name down to
+ * nothing — the mobile menu's Pipelines row rendered its whole width as a red paragraph with no title. A
+ * sentence needs a line, and a line needs no fill: it is the only thing on it, so the tone can ride the text.
+ *
+ * `danger` is the one that changes shape rather than just losing its background. The pill's white-on-red-800
+ * pairing exists because a bare red count sat where every resting count sits; a sentence is already
+ * unmistakably not a count, so the separation is carried by length and the ink can be the danger role — which
+ * is the token meant for text and holds AA against the canvas in both schemes, where red-800 as ink would not. */
+const BADGE_INK: Record<NonNullable<ViewBadge["tone"]>, string> = {
+    neutral: `text-muted`,
+    info: `text-link`,
+    warning: `text-warning`,
+    danger: `text-danger`,
+};
+
+export const badgeToneClass = (badge: ViewBadge): string => BADGE_INK[badge.tone ?? `info`];
+
 // What the chip SAYS, on the same terms and for the same reason: the rail, the mobile menu and the hub index
 // all render one, and "99+" is a product decision (the API documents it), not each surface's own rounding.
 export const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));

@@ -66,9 +66,15 @@ const passAttrs = computed(() => {
     const { class: _class, ...rest } = attrs;
     return rest;
 });
+/* `touch-target` on the trigger, and it is the GHOST variant that needs it: the `input` variant already
+ * clears 44px from its own padding (a form row), while the ghost one is a bare word with a caret riding a
+ * toolbar — 22px tall, which is what a page's own repository switcher measured at on a phone. The overlay
+ * grows the hit area on a coarse pointer and leaves the toolbar's height alone, so nothing this trigger
+ * shares a row with moves. Applied to both because twMerge would drop a duplicate anyway and the input
+ * variant is already big enough for the rule to be a no-op there. */
 const triggerClass = computed(() =>
     twMerge(
-        `inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default disabled:opacity-40`,
+        `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default disabled:opacity-40`,
         variant === `input`
             ? `rounded-md border border-line bg-canvas px-3 py-2 text-sm text-content hover:border-line-strong focus:border-line-strong focus:outline-none`
             : `rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,

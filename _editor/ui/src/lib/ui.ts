@@ -56,10 +56,16 @@ import { twMerge } from "tailwind-merge";
 /* Bare 24px icon button — the toolbar affordance that shows no chrome until the pointer is on it. Nine of
  * these had been spelled out by hand across the terminal panel, the workspace toolbar, the history panel and
  * the two popover triggers; they agreed exactly, which is what made a tenth so easy to get slightly wrong.
- * Callers size and re-tint through twMerge (`ui.iconButton('h-7 w-7 hover:text-danger')`). */
+ * Callers size and re-tint through twMerge (`ui.iconButton('h-7 w-7 hover:text-danger')`).
+ *
+ * `touch-target` is baked in, not left to the caller. 24px of ink is right for a mouse and unreachable with a
+ * thumb, and the utility (styles/utilities.css) fixes exactly that split: on a coarse pointer the HIT AREA
+ * grows to 44px while the drawn box stays 24, so every toolbar this recipe already serves becomes usable on a
+ * phone without one row changing height on a desktop. Baked in because the alternative is remembering it at
+ * ninety-odd call sites, which is the same bet this recipe exists to stop taking. */
 const iconButton = (...twClasses: string[]) =>
     twMerge(
-        `flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`,
+        `touch-target flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content`,
         ...twClasses,
     );
 

@@ -36,6 +36,40 @@ Those tiers each declare the credentials they need with `e2eTier` (`_tools/testi
 naming what was missing, which is what lets CI ask for all of them at once. This suite declares nothing —
 its requirement is a whole local stack, which no environment variable can announce.
 
+## The mobile geometry gate: `e2e:mobile`
+
+```sh
+pnpm e2e:mobile     # from the repo root: builds the demo, then walks every mobile route at 390×844, touch
+```
+
+A phone-shaped Chromium over [every mobile surface](mobile/audit.mts), asserting three things that no other
+check in this repo can see, because all three are **geometry** rather than structure:
+
+- **BLANK** — a route whose primary list renders at zero height. This shipped: the mobile Files tab wrapped its
+  listing in a directive-less `<template>`, which Vue passes through as a real `<template>` element, so every
+  file row was in the DOM with the right text and `display: none` above it. Typecheck, lint and a mounted
+  "the row exists" test all pass that.
+- **OFFSCREEN** — anything drawn past the viewport with no scrollable ancestor. Also shipped: the mobile menu's
+  Pipelines row rendered its own name at zero width because a badge carrying a *sentence* was `shrink-0` beside
+  it, and the sentence ran 130px off the edge.
+- **TARGETS** — interactive elements under the WCAG 2.2 SC 2.5.8 floor of 24px, honouring that criterion's
+  inline exception (a link set in running prose cannot be 24px tall without the prose being 24px tall).
+  44px — Apple's and Material's floor — is reported as a warning rather than failing, because reaching it is a
+  design conversation per surface and a gate that failed on it would be switched off within a week.
+
+**Hermetic, like the shots harness**, and for the same reason: it drives the demo build of the real SPA, so
+there is no postgres, no platform API and no seeded session between a CI job and an answer. That is what makes
+it cheap enough for every merge request — which is the only way a rule about target size survives contact with
+a codebase whose dense controls are correctly dense for a mouse.
+
+Its counterpart is [`_editor/web/src/shell/deadTemplate.test.ts`](../../_editor/web/src/shell/deadTemplate.test.ts),
+which catches the *cause* of the blank-screen case across every view in the app at compile level, with no
+browser at all. The pair is deliberate: the unit test proves nobody can reintroduce the mistake, the gate proves
+the app actually draws.
+
+Requires Playwright's Chromium (`pnpm --filter @intentic-app/e2e exec playwright install chromium`). Unlike
+`e2e:browser` above it needs no stack on localhost, so it runs anywhere.
+
 ## The one thing here that runs against production: `smoke:signin`
 
 ```sh

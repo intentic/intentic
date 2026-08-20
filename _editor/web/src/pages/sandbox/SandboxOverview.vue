@@ -368,11 +368,15 @@ const save = async (): Promise<void> => {
                 <div v-if="agentUrl" class="flex items-center justify-between gap-3">
                     <dt class="text-subtle">Sandbox URL</dt>
                     <dd class="min-w-0">
+                        <!-- `touch-target`, which a link in flowing prose would not need — WCAG exempts one
+                             whose height is set by the line it sits on. This is not that: it is `inline-flex`
+                             (it carries an icon), it is the only thing on its row, and it opens the sandbox in
+                             a new tab. So it is a control that happens to be made of text, and it was 18px. -->
                         <a
                             :href="agentUrl"
                             target="_blank"
                             rel="noopener"
-                            class="inline-flex items-center gap-1 truncate font-mono text-link hover:underline"
+                            class="touch-target inline-flex items-center gap-1 truncate font-mono text-link hover:underline"
                         >
                             {{ agentUrl }}<Icon name="external-link" class="text-2xs" />
                         </a>

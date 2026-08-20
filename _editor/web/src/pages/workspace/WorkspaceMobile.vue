@@ -128,7 +128,25 @@ const openMeta = computed(() => entry(openPath.value));
 const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 
 // --- The current directory's listing -----------------------------------------------------------
-const segment = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
+/* WHICH PANEL IS SHOWING IS PART OF THE ADDRESS, like `?dir=` and `?diff=` above it. It used to be the
+ * persisted preference alone, which cost two things a phone cannot afford: the tab bar had no way to send
+ * anybody to Changes (so its Review tab fell back to the same bare `/workspace` the Files tab already owned,
+ * and both lit up at once), and the OS back gesture walked past a segment switch as if it had not happened.
+ *
+ * Still WRITTEN to the persisted preference, so the choice survives to the next visit and desktop keeps
+ * reading one setting — the query is the address of this visit, not a second source of truth. */
+const PANELS = [`files`, `changes`, `history`] as const;
+const segment = computed<SidebarPanel>({
+    get: () => {
+        const asked = route.query[`panel`];
+        return typeof asked === `string` && PANELS.includes(asked as SidebarPanel) ? (asked as SidebarPanel) : layout.sidebarPanel.value;
+    },
+    set: (value) => {
+        layout.setSidebarPanel(value);
+        // `files` is the bare address — a query naming the default would show up in every shared link.
+        void router.replace({ query: { ...route.query, panel: value === `files` ? undefined : value } });
+    },
+});
 // The Changes tab's chip, on the desktop explorer's terms (WorkspaceDesktop documents the gating): the count
 // while there is work to review, then the outgoing mark, so a clean tree with commits still to push does not
 // read as an empty tab.
@@ -499,85 +517,85 @@ const onPick = (event: Event): void => {
                         @load-more="searchLoadMore"
                     />
                 </div>
+                <!-- NO WRAPPER ELEMENT AROUND THESE ROWS. A `<template>` carrying no structural directive is
+                     not compiled away — Vue passes it through as a real HTML `<template>`, which the browser
+                     renders `display: none`. One sat here, and it took the entire listing with it: the rows,
+                     the empty state, the loading line and the elided-entry notice all had the data they
+                     needed and none of them ever painted. The `v-for` belongs on the row itself. -->
                 <PullToRefresh v-else :on-refresh="refetch">
                     <div class="pb-24">
-                        <template>
-                            <button
-                                v-for="node in listing"
-                                :key="node.path"
-                                type="button"
-                                class="flex h-11 w-full items-center gap-3 px-3 text-left transition-colors active:bg-overlay"
-                                v-longpress="() => (sheetEntry = node)"
-                                @click="
-                                    node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)
-                                        ? openDir(node.path)
-                                        : openFile(node.path)
-                                "
+                        <button
+                            v-for="node in listing"
+                            :key="node.path"
+                            type="button"
+                            class="flex min-h-12 w-full items-center gap-3 px-3 text-left transition-colors active:bg-overlay"
+                            v-longpress="() => (sheetEntry = node)"
+                            @click="
+                                node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node) ? openDir(node.path) : openFile(node.path)
+                            "
+                        >
+                            <!-- A row the sandbox keeps to itself: padlock, dimmed, and a tap opens the tab
+                                 that explains it rather than walking into a folder with nothing in it. -->
+                            <Icon
+                                :name="isLockedWorkspacePath(node.path) ? 'lock' : iconForEntry(node.name, node.type)"
+                                class="shrink-0 text-base"
+                                :class="node.ignored || isLockedWorkspacePath(node.path) ? 'text-subtle' : 'text-muted'"
+                            />
+                            <span
+                                class="min-w-0 flex-1 truncate text-sm"
+                                :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined }"
+                                >{{ node.name }}</span
                             >
-                                <!-- A row the sandbox keeps to itself: padlock, dimmed, and a tap opens the tab
-                                     that explains it rather than walking into a folder with nothing in it. -->
-                                <Icon
-                                    :name="isLockedWorkspacePath(node.path) ? 'lock' : iconForEntry(node.name, node.type)"
-                                    class="shrink-0 text-base"
-                                    :class="node.ignored || isLockedWorkspacePath(node.path) ? 'text-subtle' : 'text-muted'"
-                                />
-                                <span
-                                    class="min-w-0 flex-1 truncate text-sm"
-                                    :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined }"
-                                    >{{ node.name }}</span
-                                >
-                                <!-- A symlink. The row wears its TARGET's icon, so this marker is what says the
-                                     name is a pointer. No hover on touch, so where it points can't be shown
-                                     here — the long-press sheet is where a row explains itself. -->
-                                <Icon
-                                    v-if="node.link !== undefined"
-                                    :name="node.link.state === undefined ? 'link' : 'link-broken'"
-                                    class="shrink-0 text-xs"
-                                    :class="node.link.state === undefined ? 'text-subtle' : 'text-warning'"
-                                />
-                                <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
-                                <span
-                                    v-if="node.path === REFERENCE_DIR"
-                                    class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
-                                    >reference</span
-                                >
-                                <!-- The outbox: a warning, not a label — everything under it is on the internet. -->
-                                <span
-                                    v-if="node.path === PUBLIC_DIR"
-                                    class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
-                                    >public</span
-                                >
-                                <Icon
-                                    v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)"
-                                    name="chevron-right"
-                                    class="shrink-0 text-xs text-subtle"
-                                />
-                            </button>
-                            <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">Loading…</p>
-                            <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
-                                {{ filter ? "No matching entries." : "This directory is empty." }}
-                            </p>
-                            <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
-                                {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder — search to reach
-                                them.
-                            </p>
-                        </template>
+                            <!-- A symlink. The row wears its TARGET's icon, so this marker is what says the
+                                 name is a pointer. No hover on touch, so where it points can't be shown
+                                 here — the long-press sheet is where a row explains itself. -->
+                            <Icon
+                                v-if="node.link !== undefined"
+                                :name="node.link.state === undefined ? 'link' : 'link-broken'"
+                                class="shrink-0 text-xs"
+                                :class="node.link.state === undefined ? 'text-subtle' : 'text-warning'"
+                            />
+                            <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
+                            <span
+                                v-if="node.path === REFERENCE_DIR"
+                                class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
+                                >reference</span
+                            >
+                            <!-- The outbox: a warning, not a label — everything under it is on the internet. -->
+                            <span v-if="node.path === PUBLIC_DIR" class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
+                                >public</span
+                            >
+                            <Icon
+                                v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)"
+                                name="chevron-right"
+                                class="shrink-0 text-xs text-subtle"
+                            />
+                        </button>
+                        <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">Loading…</p>
+                        <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
+                            {{ filter ? "No matching entries." : "This directory is empty." }}
+                        </p>
+                        <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
+                            {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder — search to reach them.
+                        </p>
                     </div>
                 </PullToRefresh>
 
                 <!-- Upload FAB: the picker replacement for desktop's drag-drop; lands in the open directory —
                      so it is gone while a search is showing, which has no open directory to land in and whose
-                     rows it would otherwise sit on top of. -->
+                     rows it would otherwise sit on top of.
+
+                     THE POSITIONING LIVES ON A WRAPPER, not on the button. PrimeVue's `.p-button` sets
+                     `position: relative` in its own base layer, which beats the `absolute` utility — so
+                     `bottom-4 right-4` were inert and the button laid out in normal flow instead, landing
+                     18px off the LEFT edge of the screen at the one corner a right hand never reaches.
+                     A plain positioned div can't be overridden by the button's own styling. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                <Button
-                    v-if="!contentMode"
-                    rounded
-                    class="absolute bottom-4 right-4 z-10 h-13 w-13 px-0 py-0 shadow-lg"
-                    aria-label="Upload files here"
-                    @click="fileInput?.click()"
-                >
-                    <Icon name="upload" class="text-xl" />
-                </Button>
+                <div v-if="!contentMode" class="absolute bottom-4 right-4 z-10">
+                    <Button rounded class="h-14 w-14 px-0 py-0 shadow-lg" aria-label="Upload files here" @click="fileInput?.click()">
+                        <Icon name="upload" class="text-xl" />
+                    </Button>
+                </div>
             </template>
 
             <UploadProgress v-if="uploadScanning || uploadFiles.length > 0 || uploadSkipped !== undefined" />
