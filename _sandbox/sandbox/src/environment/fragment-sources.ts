@@ -9,8 +9,8 @@ import type { Services } from "../composition.js";
 /* The single resolver for every Dockerfile fragment a capability contributes to the composed overlay. Two
  * sources with DIFFERENT trust: core capability handlers (vpn/browser) return code-authored fragments
  * that MAY carry privileged `# intentic:runtime` directives; an extension's `contributes.environment.fragment`
- * is a checkout file restricted to RUN/ENV instructions only. Keeping the split here — not in
- * CapabilityHandler.fragment (which stays sync + trusted) — means the "what can an extension bake into the
+ * is a checkout file restricted to RUN/ENV instructions only. Keeping the split here, not in
+ * CapabilityHandler.fragment (which stays sync + trusted), means the "what can an extension bake into the
  * image" security surface is exactly `invalidExtensionFragment`. composeEnvironment calls this per capability. */
 
 // Reject anything an extension fragment must not contain: FROM (the daemon owns the base pin), any privileged
@@ -29,7 +29,7 @@ export const invalidExtensionFragment = (content: string): string | undefined =>
             }
             continue;
         }
-        // The body of a continued RUN/ENV — not an instruction line, so don't re-check the leading keyword.
+        // The body of a continued RUN/ENV, not an instruction line, so don't re-check the leading keyword.
         if (wasContinued) {
             if (line.includes("intentic:runtime")) {
                 return raw;
@@ -43,8 +43,8 @@ export const invalidExtensionFragment = (content: string): string | undefined =>
     return undefined;
 };
 
-// Every fragment one capability entry contributes. The core handler fragment first (trusted), then — for an
-// extension capability declaring contributes.environment — the checkout fragment, validated and skipped with a
+// Every fragment one capability entry contributes. The core handler fragment first (trusted), then, for an
+// extension capability declaring contributes.environment, the checkout fragment, validated and skipped with a
 // warn if it rotted or violates the allowlist (install-time already hard-rejected a bad fragment; this is the
 // compose-time defense for a checkout that changed underneath).
 export const capabilityFragments = async (services: Services, capability: Capability): Promise<string[]> => {
@@ -62,7 +62,7 @@ export const capabilityFragments = async (services: Services, capability: Capabi
         }
     }
     // A cli connector's image fragment (psql/mysql/whisper client) lives in the extension that declares the
-    // connector — resolve it the same allowlisted way.
+    // connector, resolve it the same allowlisted way.
     if (capability.kind === "cli") {
         const connector = contributionFor(await contributionRegistry(services), "cli", capability.config);
         const fragmentPath = connector === undefined ? undefined : contributionFragmentPath(connector);
@@ -74,10 +74,10 @@ export const capabilityFragments = async (services: Services, capability: Capabi
 };
 
 // A WORKSPACE extension's contributes.environment fragment. It has no capability entry, so the per-capability
-// resolver above never reaches it — and no install moment either, so unlike a checkout the allowlist check
+// resolver above never reaches it, and no install moment either, so unlike a checkout the allowlist check
 // below is its ONLY gate. That is enough: the fragment still only reaches the image through the overlay the
 // owner approves and rebuilds out-of-band. Baked extensions stay out deliberately (their fragments are inert
-// by design — rtk is git-install opt-in for exactly that reason).
+// by design, rtk is git-install opt-in for exactly that reason).
 export const workspaceExtensionFragments = async (services: Services): Promise<string[]> => {
     const fragments: string[] = [];
     for (const extension of await enabledExtensions(services)) {

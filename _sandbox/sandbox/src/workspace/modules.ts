@@ -5,7 +5,7 @@ import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 
 /* The modules of one repo: every directory owning a package.json that NAMES itself, as repo-relative dirs.
  * This is what the review panels group changed files under when the reader has asked for modules instead of
- * paths — "which part of the system did this touch" is the first question of any review, and a manifest name
+ * paths, "which part of the system did this touch" is the first question of any review, and a manifest name
  * is the only thing in the tree that answers it in the words the team actually uses.
  *
  * A filesystem walk rather than package-graph.ts's pnpm-workspace globs, which the DEPENDENCY graph is right
@@ -14,7 +14,7 @@ import { IGNORED_DIRS } from "@intentic/workspace-ignore";
  * repo with no pnpm workspace at all has modules just the same.
  *
  * The walk is bounded on both axes and prunes exactly what every other walk here prunes (hidden dirs, junk
- * dirs) plus nested repos — a repo inside a repo carries its own {repo} id, and its files arrive under that id
+ * dirs) plus nested repos, a repo inside a repo carries its own {repo} id, and its files arrive under that id
  * rather than under its parent's. */
 
 // packages/<group>/<pkg> is the deepest layout worth walking for; past that a "module" is not what anyone
@@ -25,7 +25,7 @@ const MAX_DEPTH = 3;
 const MAX_DIRS = 5_000;
 
 // The name a directory's manifest declares, or undefined when there is no manifest, it doesn't parse, or it
-// names nothing — none of which is a module.
+// names nothing, none of which is a module.
 const manifestName = (dir: string): string | undefined => {
     let parsed: unknown;
     try {
@@ -49,7 +49,7 @@ export const readModules = (repoDir: string): WorkspaceModule[] => {
         try {
             entries = readdirSync(join(repoDir, rel), { withFileTypes: true });
         } catch {
-            // Unreadable dir (permissions, a symlink that went nowhere) — it contributes no modules, and the
+            // Unreadable dir (permissions, a symlink that went nowhere), it contributes no modules, and the
             // rest of the repo still does.
             return;
         }
@@ -72,7 +72,7 @@ export const readModules = (repoDir: string): WorkspaceModule[] => {
     };
     walk("", 0);
     // A repo that is ONE package declares itself at its root. Read only when nothing under it claimed a file
-    // first — otherwise a monorepo's private root manifest ("@acme/root", a holder for scripts) would become
+    // first, otherwise a monorepo's private root manifest ("@acme/root", a holder for scripts) would become
     // the module every loose file at the top level belongs to, which is a name no reviewer would recognize.
     const own = modules.length === 0 ? manifestName(repoDir) : undefined;
     return own === undefined ? modules : [{ dir: "", name: own }];

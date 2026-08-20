@@ -7,14 +7,14 @@ import { stateRelPath } from "../workspace/state-paths.js";
 /* The two files the maintenance surface persists, both under <workspace>/.intentic/records/chores/ and both deliberately
  * boring: a cache of what the probes measured, and a ledger of what has been done about it.
  *
- * WHY .intentic AND NOT A REPO. Neither of these is an asset about the code — they are point-in-time evidence and
+ * WHY .intentic AND NOT A REPO. Neither of these is an asset about the code, they are point-in-time evidence and
  * bookkeeping about agents, the same category as an acceptance run's reports. Putting them in a repo would mean
  * every probe refresh shows up as a diff someone has to not-commit, and the workspace root repo excludes
  * `.intentic` for exactly this reason. It also means they are shared with isolated turns (`.intentic` is bound
  * back SHARED), so a chore agent running in its own worktree writes its outcome where the browser will read it.
  *
- * WHY ONE FILE EACH, NOT ONE PER REPO. Both are read whole on every poll — the rail badge scans every repo's
- * verdicts on a timer — so N files would be N reads a minute to answer one question. They are kilobytes; the
+ * WHY ONE FILE EACH, NOT ONE PER REPO. Both are read whole on every poll, the rail badge scans every repo's
+ * verdicts on a timer, so N files would be N reads a minute to answer one question. They are kilobytes; the
  * probe cache holds a handful of results per repo and the ledger holds one row per repo × chore, capped by the
  * catalog's size rather than by time. Nothing here grows without bound. */
 
@@ -68,12 +68,12 @@ export const fileChoresStore = (probesPath: string, ledgerPath: string): ChoresS
 
 /* How long a result that is NOT a measurement holds its slot before the runner tries again. A `failed` or
  * `unavailable` probe is a record of not having measured, and leasing it like a measurement is what pinned a
- * tier-2 parse failure to the Maintenance panel for a week — long after its cause (a tool still installing, a
+ * tier-2 parse failure to the Maintenance panel for a week, long after its cause (a tool still installing, a
  * network-less audit, output this build's parser has since learned to read) stopped being true.
  *
  * An hour is short enough that a cause fixed in the morning self-heals the same day, and still a real rate limit:
  * the sweep ticks every 30 minutes and refuses to run at all while a turn is live, so the worst case on an idle
- * machine is one retry an hour. The same lease for both — an `unavailable` probe stops after its `available`
+ * machine is one retry an hour. The same lease for both, an `unavailable` probe stops after its `available`
  * check, which is the cheapest thing the runner does, and re-checking it hourly is how a repo that just added
  * knip gets measured today rather than next week. */
 const RETRY_MS = 3_600_000;

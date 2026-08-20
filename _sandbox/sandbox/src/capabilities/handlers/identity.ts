@@ -6,26 +6,26 @@ import { accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.js";
 
-/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the container browser accounts are born from (see
+/* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE, the container browser accounts are born from (see
  * IdentityConfigSchema for the model). This handler is deliberately the browser handler's sibling: the payload
  * is the same machinery (one persisted Chromium profile, the browser feature pack, a roster line on the shared
- * `identities` skill), because an identity IS a browser — the one its accounts share. What differs is what the
+ * `identities` skill), because an identity IS a browser, the one its accounts share. What differs is what the
  * profile means: not "signed into one site" but "signed into its own email provider, with room for the
  * accounts that will live beside it".
  *
  * A CORE CARD, NOT A CONTRIBUTION. Platform cards are extension data because sites vary; an identity has no
- * site — it has an email address, and everything a card would pin (where the sign-in starts) is derivable from
+ * site, it has an email address, and everything a card would pin (where the sign-in starts) is derivable from
  * it or answered on the form. So there is no contribution lookup here, and the skill is rendered from core
- * (browser-skill.ts identitiesSkill) rather than a pack's SKILL.md — ONE skill for all identities, each a
+ * (browser-skill.ts identitiesSkill) rather than a pack's SKILL.md. ONE skill for all identities, each a
  * roster line, converged by account-skills.ts on every apply/remove.
  *
- * The connected marker means "the identity's browser is signed into its provider" — the one login that stays
+ * The connected marker means "the identity's browser is signed into its provider", the one login that stays
  * the OWNER's own hands (automated Google sign-ins are what Google blocks), done in the guided window. Its
  * accounts mark themselves connected one by one, exactly like standalone accounts do. */
 
-// Where the guided login starts for this identity — the provider's own sign-in. Known mail hosts get their real
+// Where the guided login starts for this identity, the provider's own sign-in. Known mail hosts get their real
 // login pages; anything else falls back to the address's own domain, which for hosted mail commonly serves (or
-// redirects to) the provider's webmail — and `loginUrl` on the card overrides the guess entirely.
+// redirects to) the provider's webmail, and `loginUrl` on the card overrides the guess entirely.
 const PROVIDER_LOGINS: Record<string, string> = {
     "gmail.com": "https://accounts.google.com/",
     "googlemail.com": "https://accounts.google.com/",
@@ -47,7 +47,7 @@ export const identityLoginUrl = (config: IdentityConfig): string => {
 };
 
 export const identityHandler: CapabilityHandler = {
-    // The identity's stored email password — typed into the provider by the daemon on the agent's behalf (the
+    // The identity's stored email password, typed into the provider by the daemon on the agent's behalf (the
     // accounts tools), never revealed. Unset for the common case: the owner signs the provider in by hand.
     secret: (config) => ((config as IdentityConfig).password !== undefined ? "password" : undefined),
     echo: (config) => {
@@ -57,10 +57,10 @@ export const identityHandler: CapabilityHandler = {
             ...(password !== undefined ? { hasPassword: true } : {}),
         };
     },
-    // The identity's browser is the browser pack — same probe, same fragment, same rebuild story.
+    // The identity's browser is the browser pack, same probe, same fragment, same rebuild story.
     fragment: () => packFragment("browser"),
     /* An identity's browser is the whole point of it: the Google sign-in that makes "Continue with Google" a
-     * click, and every account living beside it. So the profile MOVES rather than being re-made — the re-apply
+     * click, and every account living beside it. So the profile MOVES rather than being re-made, the re-apply
      * that follows re-converges the shared skill, whose roster line is derived from the new name. The accounts
      * that name this identity are repointed by the route, which is where cross-connection references belong. */
     rename: {
@@ -73,7 +73,7 @@ export const identityHandler: CapabilityHandler = {
         if (!email.includes("@")) {
             throw new Error(`"${email}" is not an email address — the identity IS an address, so this field is the card`);
         }
-        // A linked mailbox must be a real connected entry, checked here where the reader is still on the form —
+        // A linked mailbox must be a real connected entry, checked here where the reader is still on the form,
         // a dangling reference would otherwise surface turns later as a code tool that shrugs.
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
             throw new Error(`no capability "${mailbox}" to read mail from — connect the mailbox (IMAP) first, or leave the field empty`);

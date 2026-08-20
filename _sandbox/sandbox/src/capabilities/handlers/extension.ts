@@ -18,15 +18,15 @@ import { checkoutInto, previousDir } from "../git-checkout.js";
 // loader.
 export const extensionHandler: CapabilityHandler = {
     secret: (config) => ((config as ExtensionConfig).token !== undefined ? "token" : undefined),
-    /* `tier` and `registry` are echoed because they are not credentials and never were — the tier is the row's
+    /* `tier` and `registry` are echoed because they are not credentials and never were, the tier is the row's
      * own "Premium" label and the registry is the address of a public catalogue. Withholding them cost far more
      * than a missing label: secret-fields.ts derives the credential keys as the COMPLEMENT of this echo, so an
-     * unechoed field is vaulted and the manifest keeps the marker in its place — and the marker is not a url and
+     * unechoed field is vaulted and the manifest keeps the marker in its place, and the marker is not a url and
      * not a member of the tier enum, so every install from Discover (which always attaches the registry it
      * browsed) wrote an entry that failed CapabilitySchema on the very next read and was skipped as unreadable.
      * The extension then had no capability entry to be enumerated from: no row, no switch, no views, no bin, no
      * agent plugin. An echo is a claim about what the browser may see, and here it is also the claim that decides
-     * what leaves the file — so a field that is merely uninteresting must still be named. */
+     * what leaves the file, so a field that is merely uninteresting must still be named. */
     echo: (config) => {
         const extension = config as ExtensionConfig;
         return {
@@ -61,7 +61,7 @@ export const extensionHandler: CapabilityHandler = {
             yield { kind: "terminal", session };
         }
         yield { kind: "log", message: `Cloning ${url} @ ${ref}…` };
-        // Set inside validate — the donation keys on the manifest-derived identity, which exists only once
+        // Set inside validate, the donation keys on the manifest-derived identity, which exists only once
         // the checkout has been read. Captured out so the apply can SAY what happened after it goes live.
         let donation: { donated: number } | undefined;
         await checkoutInto(ctx, session, extensionsRoot(ctx.workspace.root), id, {
@@ -73,7 +73,7 @@ export const extensionHandler: CapabilityHandler = {
             keepPrevious: true,
             /* The quiesce step: stop the OUTGOING checkout's declared processes before its directory is
              * replaced. Without this an updated extension's gateway keeps executing the previous release until
-             * a reboot — `processes.start` is a no-op against a running session, so the post-apply autoStart
+             * a reboot, `processes.start` is a no-op against a running session, so the post-apply autoStart
              * seam alone cannot cycle them. The old manifest is read at the old config's `path` (the update may
              * move it), via the store because the route upserts the new config only after apply succeeds. */
             beforeSwap: async () => {
@@ -92,12 +92,12 @@ export const extensionHandler: CapabilityHandler = {
                 }
                 const manifest = ExtensionManifestSchema.parse(JSON.parse(raw));
                 /* THE PREMIUM GATE IS THE DONATION. Installing (or updating to a new sha) a premium
-                 * extension supports its creator with the owner's credits — once per month at most, the
-                 * platform dedupes — and an install whose donation is refused does not proceed: throwing
+                 * extension supports its creator with the owner's credits, once per month at most, the
+                 * platform dedupes, and an install whose donation is refused does not proceed: throwing
                  * here discards the staged checkout like any other validation failure, so nothing half-paid
                  * ever goes live. Keyed on publisher.name (the identity creators are paid under), read from
                  * the manifest the checkout actually contains rather than anything the form claimed. The
-                 * tier marker itself is self-declared (the schema says why) — this is a product surface,
+                 * tier marker itself is self-declared (the schema says why), this is a product surface,
                  * not DRM; the honest install path carries the registry row's tier, and the gate holds it. */
                 if (tier === "premium") {
                     const outcome = await ctx.donatePremium(extensionIdOf(manifest));
@@ -106,7 +106,7 @@ export const extensionHandler: CapabilityHandler = {
                     }
                     donation = { donated: outcome.donated };
                 }
-                // Prebuilt-dist rule: the sha the owner approved must BE the code that runs — no install-time build.
+                // Prebuilt-dist rule: the sha the owner approved must BE the code that runs, no install-time build.
                 if (manifest.entry !== undefined && (await ctx.files.read(join(dir, manifest.entry))) === undefined) {
                     throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file — commit the prebuilt bundle`);
                 }
@@ -157,7 +157,7 @@ export const extensionHandler: CapabilityHandler = {
             ctx.panels.stop(extensionProcessKey(id, process.name));
         }
         await ctx.files.remove(dir);
-        // The kept-aside previous version goes with it — a removed extension has nothing to revert to.
+        // The kept-aside previous version goes with it, a removed extension has nothing to revert to.
         await ctx.files.remove(previousDir(extensionsRoot(ctx.workspace.root), id));
     },
 };

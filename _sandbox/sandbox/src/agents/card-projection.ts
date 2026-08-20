@@ -1,15 +1,15 @@
 /* A LIVE FACT THE FLEET CARD CARRIES, kept beside the roster instead of inside it.
  *
- * Some things a card has to say are not properties of a conversation at all — they belong to the machine
+ * Some things a card has to say are not properties of a conversation at all, they belong to the machine
  * DRIVING it. A loop's iteration count, a workflow run's position in its graph: both are owned by a runner that
  * reaches Services, git and the turn generator, and neither can be stored on the registry entry without the
  * registry importing that world and closing a cycle on its way round. So the runner publishes here and the
- * registry reads by function call — the pattern agent/subagents.ts set, generalised the once it was needed
+ * registry reads by function call, the pattern agent/subagents.ts set, generalised the once it was needed
  * twice.
  *
  * THE CHANGE NOTIFICATION is what these have over a plain map, and it earns its place on a case the subagent
  * counts don't have. A subagent's count only moves DURING a turn, and every turn frame broadcasts the roster
- * anyway, so the counts ride out for free. The state changes that matter most here happen BETWEEN turns — the
+ * anyway, so the counts ride out for free. The state changes that matter most here happen BETWEEN turns, the
  * last iteration's `finish` has already broadcast, and only then does the pump decide the goal is met; a step
  * settles and only then does the step after it start. Without a notification the card would hold
  * `running · iteration 12/12` until something unrelated moved the fleet, which is precisely the moment someone
@@ -26,10 +26,10 @@ export interface CardProjection<T> {
     // What the roster should say about this conversation; undefined for the majority that never did this.
     readonly of: (conversationId: string) => T | undefined;
     readonly set: (conversationId: string, projection: T) => void;
-    // Forget projections for agents that no longer exist — the registry's own `remove` (discard, archive purge)
+    // Forget projections for agents that no longer exist, the registry's own `remove` (discard, archive purge)
     // calls it with the same ids, so a conversation cannot leave one behind.
     readonly forget: (conversationIds: readonly string[]) => void;
-    // Subscribe to changes; returns the unsubscribe. The registry is the only subscriber — it re-publishes the
+    // Subscribe to changes; returns the unsubscribe. The registry is the only subscriber, it re-publishes the
     // roster, which is the entire point of the notification.
     readonly onChange: (listener: () => void) => () => void;
 }

@@ -25,7 +25,7 @@ export const internalTools = (encoded: string | undefined): AgentTool[] => {
 };
 
 // Build the SDK `mcpServers` map from a tool list. Tools are `alwaysLoad` so a small, curated set stays
-// present in the prompt instead of being deferred behind tool search — best agent performance for known tools.
+// present in the prompt instead of being deferred behind tool search, best agent performance for known tools.
 // A later entry with the same name wins (lets external config override an internal default).
 export const mcpServersOf = (tools: readonly AgentTool[]): Record<string, McpServerConfig> => {
     const servers: Record<string, McpServerConfig> = {};

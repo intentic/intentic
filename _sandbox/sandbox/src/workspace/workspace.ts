@@ -6,7 +6,7 @@ export interface WorkspacePaths {
     readonly repos: Readonly<Record<RepoRole, string>>;
 }
 
-// The on-disk layout: the three fixed-role repos live directly under <root> (VSCode-style — a repo is any
+// The on-disk layout: the three fixed-role repos live directly under <root> (VSCode-style, a repo is any
 // directory owning a .git, wherever it sits; see repo-discovery.ts). Pure path derivation so the daemon, the
 // CLI, and tests all agree on where each role lives.
 export const workspacePaths = (root: string): WorkspacePaths => ({

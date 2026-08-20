@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 
 /* THE CHEAP HALF of a repository's chore evidence: everything the daemon can answer without starting a
  * subprocess. It is recomputed on every GET /chores rather than cached, which is only defensible because of what
- * is in it — a directory read of package manifests the daemon already parses for the dependency graph, one stat
+ * is in it, a directory read of package manifests the daemon already parses for the dependency graph, one stat
  * per package, and a call into the RESIDENT iq index that is answering search queries anyway. Nothing here shells
  * out, and nothing here waits on the network. Everything that would is a probe.
  *
@@ -15,17 +15,17 @@ import type { Services } from "../composition.js";
  * the daemon has already read. */
 
 // How many hotspots and key modules a chore ever needs. The complexity chore asks whether a file is an OUTLIER in
-// its own ranking, which a leaderboard answers and a full report only makes more expensive — and this list is
+// its own ranking, which a leaderboard answers and a full report only makes more expensive, and this list is
 // carried per repo on a route the rail badge polls.
 const RANKING_LIMIT = 12;
 
-/* The architecture document a package is expected to have — its own README. Named here rather than imported from
+/* The architecture document a package is expected to have, its own README. Named here rather than imported from
  * the documentation extension: that extension owns generating and publishing them, this only asks whether one
  * EXISTS, and a daemon route reaching into a browser extension's module for a path constant would be the wrong
  * direction entirely.
  *
- * It used to be `docs/architecture/<dir>/doc.md`, a page in a tree mirroring the repo. That layout rotted — the
- * page was never open when the code it described changed — so a package's document is now the README beside its
+ * It used to be `docs/architecture/<dir>/doc.md`, a page in a tree mirroring the repo. That layout rotted, the
+ * page was never open when the code it described changed, so a package's document is now the README beside its
  * code, and this is a stat on the package directory itself. */
 const docPath = (repoDir: string, packageDir: string): string => join(repoDir, packageDir, "README.md");
 
@@ -44,7 +44,7 @@ const enginesOf = (manifest: Record<string, unknown>): Record<string, string> | 
 };
 
 /* A repo that is not a pnpm workspace has no packages, and that is a true answer rather than a gap: the chores
- * that read `packages` (documentation, libraries, runtime pins) then find nothing to say, which is right — a
+ * that read `packages` (documentation, libraries, runtime pins) then find nothing to say, which is right, a
  * single-package repo has no package to be undocumented and no second library to collide with the first.
  *
  * The ROOT manifest is deliberately not folded in as a pseudo-package. It would make every non-monorepo report
@@ -58,7 +58,7 @@ export const packageSignals = (repoDir: string): ChorePackage[] =>
             devDependencies: dependencyNames(manifest, "devDependencies"),
             documented: existsSync(docPath(repoDir, dir)),
         };
-        // `engines` is absent rather than undefined for a package that declares none — the wire schema makes it
+        // `engines` is absent rather than undefined for a package that declares none, the wire schema makes it
         // optional, and exactOptionalPropertyTypes means the two are different values.
         const engines = enginesOf(manifest);
         return engines === undefined ? entry : Object.assign(entry, { engines });
@@ -66,7 +66,7 @@ export const packageSignals = (repoDir: string): ChorePackage[] =>
 
 // How deep the Dockerfile and document sweeps look, and how many paths they carry. A bound on the walk, not on
 // what exists: the question every applicability gate asks is "is there ANY", and a repo with forty Dockerfiles
-// answers that as clearly as one with three — while a route the rail badge polls must not walk a whole tree.
+// answers that as clearly as one with three, while a route the rail badge polls must not walk a whole tree.
 const SHAPE_DEPTH = 3;
 const SHAPE_LIMIT = 20;
 
@@ -118,7 +118,7 @@ const findFiles = (root: string, matches: (name: string) => boolean): string[] =
     return found;
 };
 
-// A Dockerfile by either convention — `Dockerfile`, `Dockerfile.prod`, `web.Dockerfile`. Compose files are
+// A Dockerfile by either convention, `Dockerfile`, `Dockerfile.prod`, `web.Dockerfile`. Compose files are
 // deliberately not counted: they orchestrate images, they are not one to make smaller.
 const isDockerfile = (name: string): boolean => name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
 
@@ -145,7 +145,7 @@ const declaredDeps = (repoDir: string): string[] => {
         collect(JSON.parse(readFileSync(join(repoDir, "package.json"), "utf8")) as Record<string, unknown>);
     } catch {
         // No root manifest, or one that does not parse. The workspace packages below are still worth reading, and
-        // an unparseable manifest is the repo's problem to report — not a reason for every gate here to throw.
+        // an unparseable manifest is the repo's problem to report, not a reason for every gate here to throw.
     }
     for (const { manifest } of readWorkspaceManifests(repoDir)) {
         collect(manifest);
@@ -154,7 +154,7 @@ const declaredDeps = (repoDir: string): string[] => {
 };
 
 /* What this repository is MADE OF, for the applicability gates. Every check here is a stat or a shallow readdir,
- * which is what lets it sit on a route the rail badge polls — anything that needed a subprocess would be a probe.
+ * which is what lets it sit on a route the rail badge polls, anything that needed a subprocess would be a probe.
  *
  * `docs` looks for the repository MAP rather than for the directory: an empty `docs/architecture/` is a directory
  * somebody made and never filled, and gating the drift survey on it would put the chore back exactly where a repo
@@ -184,7 +184,7 @@ export const choreSignals = async (services: Services, repo: string): Promise<Ch
         keyModules: health.modules,
         totals: health.totals,
         /* Only a FRESH index may drive a verdict. A build in progress has ranked whatever it has finished reading,
-         * which is not the repository — and the complexity chore acting on that would send a turn at whichever
+         * which is not the repository, and the complexity chore acting on that would send a turn at whichever
          * file happened to be indexed first. "stale" (the index is behind by some files) is fine: the ranking is
          * still over the whole repo, just missing the last few edits, which cannot promote a file into being an
          * outlier by three times its ranking's median. */

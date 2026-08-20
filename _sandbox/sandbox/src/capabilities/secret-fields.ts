@@ -2,12 +2,12 @@ import type { Capability } from "@intentic/sandbox-contract";
 import type { ResolvedContribution } from "./contributions.js";
 import { registry } from "./registry.js";
 
-/* WHICH CONFIG KEYS OF ONE ENTRY HOLD A CREDENTIAL — derived from `echo` rather than declared a second time.
+/* WHICH CONFIG KEYS OF ONE ENTRY HOLD A CREDENTIAL, derived from `echo` rather than declared a second time.
  *
  * `echo` already answers "what of this config may the browser see", and every kind is forced to answer it out
  * loud (capability.ts makes it required for exactly that reason). So the credential keys are its complement:
  * whatever a kind withholds from a browser is, by the same judgement, what must not sit in a file the agent
- * reads. Deriving the set means there is no second per-kind table to keep in step — a new kind that withholds a
+ * reads. Deriving the set means there is no second per-kind table to keep in step, a new kind that withholds a
  * new field starts vaulting it on the same commit, and a kind that starts echoing a field stops.
  *
  * Not `handler.secret()`: that names the ONE rotatable key /secrets offers to replace, which is a different

@@ -2,14 +2,14 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace-ignore";
 
-/* THE MAP A TURN OPENS WITH — which areas this project has, what each one is for, and where the run is
+/* THE MAP A TURN OPENS WITH, which areas this project has, what each one is for, and where the run is
  * standing among them. Computed from the filesystem at the start of a conversation, never written down.
  *
  * WHY IT EXISTS. Across 100 exploration-heavy sessions of this workspace, the same warm-up was paid over and
  * over: `ls /work` opened 42 of them, a bare directory listing was the first action in 41%, and the first six
  * search/read results came back at a median ~21k characters (~5.3k tokens) before a single line of the actual
  * job was read. The median session then spent 19 read/search calls before its first edit. None of that is the
- * agent wandering — 52 of those sessions reached their eventual target area within two actions — it is a fixed
+ * agent wandering — 52 of those sessions reached their eventual target area within two actions, it is a fixed
  * entry toll, and the toll is the part a map removes.
  *
  * WHY IT IS AREAS AND NOT FILES, which is the part that took measuring to believe. Those same 100 sessions read
@@ -19,7 +19,7 @@ import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace
  * search, which is better at it.
  *
  * WHY IT IS GENERATED AND NOT A PARAGRAPH IN A PROMPT OR A CLAUDE.md. In the ten days that corpus covers, this
- * repo's two highest-churn top-level directories (`_apps`, `_libs`) stopped existing — and ten sessions went on
+ * repo's two highest-churn top-level directories (`_apps`, `_libs`) stopped existing, and ten sessions went on
  * naming them. A map that is recomputed cannot be wrong about that; a map that is typed always eventually is.
  * The whole design follows from that one property: nothing here is a stored fact, and nothing here is a
  * convention of this repository.
@@ -31,14 +31,14 @@ import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace
  *
  * It rides the USER message (turn-preamble.ts), like the retrieved-context note and for the same reason: it is
  * computed per conversation, so it must not sit in a system prefix that is kept byte-stable for the prompt
- * cache — and riding the message is what lets the chat show the reader exactly what was injected. */
+ * cache, and riding the message is what lets the chat show the reader exactly what was injected. */
 
 export const WORKSPACE_MAP_NOTE_HEADER = "## Map of this project";
 
 /* The note's share of the turn, as characters (~4 per token). Deliberately of the same order as the retrieved
  * context capsule's 1.2k tokens and far under what it replaces: the warm-up it removes measured ~5.3k tokens of
- * tool results. The renderer treats this as a hard ceiling and sheds detail to hold it — purpose lines first,
- * then whole areas — rather than truncating mid-structure. */
+ * tool results. The renderer treats this as a hard ceiling and sheds detail to hold it, purpose lines first,
+ * then whole areas, rather than truncating mid-structure. */
 const MAX_NOTE_CHARS = 2_800;
 
 // A purpose line longer than this is a paragraph, not a label. Cut at a word boundary.
@@ -60,20 +60,20 @@ const CONTAINER_MIN_CHILDREN = 3;
 const MANIFESTS = ["package.json", "pyproject.toml", "Cargo.toml", "composer.json", "go.mod", "build.gradle", "pom.xml"] as const;
 
 export interface MapArea {
-    // The area's path relative to the project root — a real path, so it can be used rather than only read.
+    // The area's path relative to the project root, a real path, so it can be used rather than only read.
     readonly name: string;
     readonly files: number;
-    // The two commonest file extensions, without dots — a language hint that needs no language table.
+    // The two commonest file extensions, without dots, a language hint that needs no language table.
     readonly kinds: readonly string[];
     // What the directory's own files say it is for. Empty when they say nothing; never invented.
     readonly purpose: string;
     // The run starts inside this area.
     readonly here: boolean;
-    /* How many packages this area holds, when it is a shelf of them. Always known — it falls out of deciding
-     * whether the area is a shelf at all — and always said, so a reader can tell that `packages/` has a level
+    /* How many packages this area holds, when it is a shelf of them. Always known, it falls out of deciding
+     * whether the area is a shelf at all, and always said, so a reader can tell that `packages/` has a level
      * below it even on the runs where that level is not worth spending lines on. */
     readonly packages: number;
-    /* Those packages, listed — filled ONLY for the area the run is standing in.
+    /* Those packages, listed, filled ONLY for the area the run is standing in.
      *
      * The second half of "zoom to the starting position", and it exists because the first draft of this got it
      * wrong in a way worth recording: descending into every container flattened this workspace's 9 areas into 87
@@ -98,7 +98,7 @@ export interface WorkspaceMap {
 const posix = (path: string): string => path.split(sep).join("/");
 
 // A directory that is a directory and that this workspace's conventions do not gray out. `relPath` is
-// root-relative so the reference shelf and the outbox are recognised as the TOP-LEVEL directories they are —
+// root-relative so the reference shelf and the outbox are recognised as the TOP-LEVEL directories they are,
 // a project's own `public/` is ordinary content and stays.
 const isBrowsable = (name: string, relPath: string): boolean =>
     !name.startsWith(".") && !IGNORED_DIRS.has(name) && !isReferencePath(relPath) && !isPublicPath(relPath);
@@ -131,7 +131,7 @@ const hasManifest = (dir: string): boolean => MANIFESTS.some((name) => readIfPre
  *
  * Order is believability: a manifest description was written to describe the package, a README's opening line
  * was written to open a document and only usually describes it. Both beat an invented sentence, and the empty
- * string beats a guess — an area with nothing to say is listed with its name and its size, which is still more
+ * string beats a guess, an area with nothing to say is listed with its name and its size, which is still more
  * than the agent had. */
 const describeManifest = (dir: string, name: string): string | undefined => {
     const source = readIfPresent(join(dir, name));
@@ -147,7 +147,7 @@ const describeManifest = (dir: string, name: string): string | undefined => {
         }
     }
     if (name === "go.mod") {
-        // `module github.com/org/thing` — the path is the only self-description a go.mod carries, and its tail
+        // `module github.com/org/thing`, the path is the only self-description a go.mod carries, and its tail
         // is the part that is not boilerplate.
         const module = /^\s*module\s+(\S+)/m.exec(source)?.[1];
         return module === undefined ? undefined : `Go module ${module.split("/").slice(-2).join("/")}`;
@@ -159,8 +159,8 @@ const describeManifest = (dir: string, name: string): string | undefined => {
     return found === undefined || found === "" ? undefined : found;
 };
 
-/* A README's first line of actual prose. Everything a README opens WITH and is not — the title, badge rows,
- * HTML banners, block quotes, front matter, list items — is stepped over rather than pattern-matched away one
+/* A README's first line of actual prose. Everything a README opens WITH and is not, the title, badge rows,
+ * HTML banners, block quotes, front matter, list items, is stepped over rather than pattern-matched away one
  * by one, because the set of things that are not a sentence is open and the set of things that is one is not. */
 const describeReadme = (dir: string): string | undefined => {
     const source = readIfPresent(join(dir, "README.md")) ?? readIfPresent(join(dir, "readme.md"));
@@ -209,7 +209,7 @@ const purposeOf = (dir: string): string => {
     return readme === undefined ? "" : clip(readme, MAX_PURPOSE_CHARS);
 };
 
-/* How big an area is and what it is written in — one bounded walk answering both. The count is a SIGNAL, not an
+/* How big an area is and what it is written in, one bounded walk answering both. The count is a SIGNAL, not an
  * inventory: it is there so a reader can tell a core area from a scratch folder, which is a judgement the number
  * supports long before it is exact. Bounded on both axes for the usual reason, and the bound is why the count is
  * reported as what it is rather than promised as complete. */
@@ -261,7 +261,7 @@ const measure = (dir: string, root: string): { files: number; kinds: string[] } 
     return { files, kinds };
 };
 
-/* WHICH PROJECT THE RUN IS IN — the nearest git boundary at or above the starting folder, floored at the
+/* WHICH PROJECT THE RUN IS IN, the nearest git boundary at or above the starting folder, floored at the
  * workspace root.
  *
  * This is the whole "starting position" idea in one function. A turn does not start at /work: it starts in a
@@ -269,7 +269,7 @@ const measure = (dir: string, root: string): { files: number; kinds: string[] } 
  * looking at. Mapping the workspace from the top for a run that begins three levels inside one project answers
  * a question nobody asked and buries the one they did.
  *
- * A workspace with no git anywhere still gets a map — the root is the project — because a directory of code is
+ * A workspace with no git anywhere still gets a map, the root is the project, because a directory of code is
  * a project whether or not anyone has run `git init` in it. */
 const projectRootOf = (root: string, cwd: string): string => {
     let current = cwd;
@@ -280,7 +280,7 @@ const projectRootOf = (root: string, cwd: string): string => {
             statSync(join(current, ".git"));
             return current;
         } catch {
-            // No boundary here — keep climbing.
+            // No boundary here, keep climbing.
         }
         if (current === root || current === dirname(current)) {
             return root;
@@ -302,7 +302,7 @@ interface AreaDir {
     readonly packages: readonly { readonly name: string; readonly dir: string }[];
 }
 
-/* IS THIS DIRECTORY A SHELF RATHER THAN AN AREA — `packages/`, `apps/`, `libs/`, `crates/`, `cmd/`, `services/`,
+/* IS THIS DIRECTORY A SHELF RATHER THAN AN AREA, `packages/`, `apps/`, `libs/`, `crates/`, `cmd/`, `services/`,
  * and whatever the next ecosystem decides to call it.
  *
  * Written against the SHAPE and not against a list of names, which is the single decision that makes this work
@@ -320,11 +320,11 @@ const packagesIn = (dir: string, root: string): { name: string; dir: string }[] 
         : [];
 };
 
-/* THE AREAS OF A PROJECT — its own top-level directories, with one exception.
+/* THE AREAS OF A PROJECT, its own top-level directories, with one exception.
  *
  * The exception is the repository that IS a container: a root holding `packages/` and little else. Its top level
  * is not a map of anything, so the packages are promoted to being the areas. The test is structural like
- * everything else here — one or two browsable directories at the root, of which one is a shelf.
+ * everything else here, one or two browsable directories at the root, of which one is a shelf.
  *
  * Every other project keeps its top level, and a shelf among those directories stays one line until the run
  * turns out to be standing inside it. That is the difference between a map and a listing. */
@@ -341,11 +341,11 @@ const areaDirsOf = (projectRoot: string, root: string): AreaDir[] => {
 export interface WorkspaceMapInput {
     // The workspace root, for the sibling line and as the floor of the climb.
     readonly root: string;
-    // Where this run actually starts — a persona's start folder, an isolated worktree, or the root.
+    // Where this run actually starts, a persona's start folder, an isolated worktree, or the root.
     readonly cwd: string;
 }
 
-/* The map, or undefined when there is nothing worth saying — a project with one area or none is one the agent
+/* The map, or undefined when there is nothing worth saying, a project with one area or none is one the agent
  * can see in a single listing, and a note about it would be pure overhead. */
 export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap | undefined => {
     const projectRoot = projectRootOf(root, cwd);
@@ -354,7 +354,7 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
         return undefined;
     }
     const cwdRel = posix(relative(projectRoot, cwd));
-    // The run is "in" the area that is a prefix of the starting folder — `_editor` for a cwd of
+    // The run is "in" the area that is a prefix of the starting folder, `_editor` for a cwd of
     // `_editor/web/src`, and no area at all for a run starting at the project root.
     const isHere = (name: string): boolean => cwdRel === name || cwdRel.startsWith(`${name}/`);
     // A package inside a shelf is never itself expanded: one level of zoom is the point, and two is the
@@ -365,8 +365,8 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
     };
     const measured = found.map(({ name, dir, packages }): MapArea => {
         /* The shelf's packages are measured only for the shelf the run is inside. Walking every package of every
-         * shelf to print a number nobody will read is what this lazily avoids — on this workspace that is 87
-         * walks against 9 — and it is the same restraint the note itself is an argument for. */
+         * shelf to print a number nobody will read is what this lazily avoids, on this workspace that is 87
+         * walks against 9, and it is the same restraint the note itself is an argument for. */
         const children = isHere(name)
             ? packages
                   .map((entry) => asArea(`${name}/${entry.name}`, entry.dir, 0, []))
@@ -377,7 +377,7 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
     // Biggest first: with a budget to hold, the areas most of the work is in are the ones worth the characters.
     const ranked = measured.toSorted((left, right) => right.files - left.files || left.name.localeCompare(right.name));
     const kept = ranked.slice(0, MAX_AREAS);
-    // An area the run is standing in is never dropped for being small — it is the one line the reader is
+    // An area the run is standing in is never dropped for being small, it is the one line the reader is
     // certain to want.
     const here = ranked.slice(MAX_AREAS).filter((area) => area.here);
     const areas = [...kept, ...here];
@@ -413,12 +413,12 @@ const areaBlock = (area: MapArea, width: number, silent: ReadonlySet<string>): s
 
 /* THE NOTE, rendered to fit. Detail is shed in the order it is worth least: the purpose lines of the smallest
  * areas go first (a name and a size still locate an area), then whole small areas, and what went is counted out
- * loud rather than quietly dropped — a list that silently stops reads as a complete list, which is the one way
+ * loud rather than quietly dropped, a list that silently stops reads as a complete list, which is the one way
  * a map can be actively misleading. */
 const render = (map: WorkspaceMap): string => {
     const project = map.project === "" ? "the workspace" : `\`${map.project}\``;
     const all = map.areas.flatMap((area) => [area, ...area.children]);
-    // The size column starts past the longest name AT ITS OWN INDENT — an expanded package is indented four
+    // The size column starts past the longest name AT ITS OWN INDENT, an expanded package is indented four
     // further, and measuring names alone is what left one row's columns hanging off the end of the others.
     const width = Math.min(
         Math.max(...map.areas.flatMap((area) => [area.name.length + 2, ...area.children.map((child) => child.name.length + 6)])) + 2,
@@ -445,7 +445,7 @@ const render = (map: WorkspaceMap): string => {
             return note;
         }
     }
-    /* Every purpose is already gone and the names alone still overflow — a project with a great many areas. Keep
+    /* Every purpose is already gone and the names alone still overflow, a project with a great many areas. Keep
      * the head, keep as many lines as fit, and say how many did not. */
     const silent = new Set(byFilesAsc);
     const lines: string[] = [];

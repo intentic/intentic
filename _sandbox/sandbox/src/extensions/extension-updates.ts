@@ -32,21 +32,21 @@ import { installedExtensions } from "./installed-extensions.js";
 
 /* THE UPDATE LIFECYCLE for git-installed extensions, in one module because its five verbs share one fact base:
  *
- *   check    — compare each installed extension's pinned sha against the registry its install came from; a
+ *   check   , compare each installed extension's pinned sha against the registry its install came from; a
  *              differing pinned row is an UPDATE, a `blocked` row is an ADVISORY. Nothing here touches code.
- *   preview  — stage the offered sha in a throwaway clone and answer with the version story + the mechanical
+ *   preview , stage the offered sha in a throwaway clone and answer with the version story + the mechanical
  *              powers diff (extension-manifest's diffPowers): what a click would actually approve.
- *   apply    — the transaction: re-clone → validate → quiesce → swap (keeping the outgoing checkout one back)
+ *   apply   , the transaction: re-clone → validate → quiesce → swap (keeping the outgoing checkout one back)
  *              → restart → health-watch. Runs on the EXISTING capability config so a private-source token and
  *              the premium tier survive; the capability handler owns the staging/validation half.
- *   revert   — swap the kept-previous checkout back and repoint the capability's ref at what it holds. The
+ *   revert  , swap the kept-previous checkout back and repoint the capability's ref at what it holds. The
  *              swap is symmetric, so reverting a revert is redo.
- *   watch    — for a minute after a swap, check that what the new version declared actually came up. Written
+ *   watch   , for a minute after a swap, check that what the new version declared actually came up. Written
  *              because validation catches broken and cannot catch wrong.
  *
  * The registry's own model bounds all of it: nothing auto-updates by default (the owner's per-extension policy
  * opts single extensions into the agent-prepared or auto rungs), and an advisory's automatic action is
- * DISABLING — the one direction that runs no new code and reverses with a click. */
+ * DISABLING, the one direction that runs no new code and reverses with a click. */
 
 // ---- state: .intentic/records/extension-updates.json, keyed by the manifest identity (publisher.name) like the
 // settings and the switch, so records survive the remove/re-add that an update IS.
@@ -89,7 +89,7 @@ const patchRecord = async (root: string, identity: string, patch: (record: Updat
 };
 
 // ---- policy: .intentic/config/extension-update-policy.json, same key. Absent means the safe posture: updates wait
-// for the owner (`notify`), advisories act (`auto-disable`) — see ExtensionUpdatePolicySchema for the ladder.
+// for the owner (`notify`), advisories act (`auto-disable`), see ExtensionUpdatePolicySchema for the ladder.
 
 const PolicyFileSchema = z.record(
     z.string(),
@@ -182,7 +182,7 @@ export interface UpdatePreview {
 }
 
 // Which sha/pointer an update verb targets: an explicit ref wins; otherwise the recorded update. The recorded
-// row's url/path are used when they answer for that exact ref — updating follows the LISTING as it stands now
+// row's url/path are used when they answer for that exact ref, updating follows the LISTING as it stands now
 // (a listing may repoint its source repo), and anything else falls back to the install's own pointer.
 const resolveTarget = (
     config: ExtensionConfig,
@@ -234,7 +234,7 @@ export const previewExtensionUpdate = async (services: Services, id: string, ref
     }
 };
 
-// ---- apply: the transaction. One at a time per id, shared with nothing — the capabilities add route has its
+// ---- apply: the transaction. One at a time per id, shared with nothing, the capabilities add route has its
 // own same-id guard, and an owner clicking Update twice deserves "wait" rather than interleaved clones.
 
 const applying = new Set<string>();
@@ -304,7 +304,7 @@ export const applyExtensionUpdate = async (
     }
 };
 
-// ---- revert: the kept-previous checkout swaps back. Symmetric on purpose — the displaced version lands where
+// ---- revert: the kept-previous checkout swaps back. Symmetric on purpose, the displaced version lands where
 // the previous one sat, so reverting a revert is redo, and the checkout an owner just left is never deleted.
 
 export const revertExtensionUpdate = async (services: Services, id: string): Promise<{ ref: string }> => {
@@ -352,7 +352,7 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         void reconcileListenerProcesses(services);
         // The verdict that led here has served: clear the health record so the row stops alarming about a
         // version that is no longer running. The next registry check re-badges the newer sha as an ordinary
-        // update, which is the honest state — it is available, and the owner has already once said no.
+        // update, which is the honest state, it is available, and the owner has already once said no.
         await patchRecord(root, extensionIdOf(previousManifest), ({ health: _health, ...rest }) => rest);
         return { ref: previousRef };
     } finally {
@@ -361,7 +361,7 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
 };
 
 // ---- health: for a minute after a swap, the daemon checks that what the new version declared actually came
-// up. Two probes — an early one so a crash-looping gateway is caught in seconds, and a final one that has
+// up. Two probes, an early one so a crash-looping gateway is caught in seconds, and a final one that has
 // given a slow boot a fair chance. `autoRevert` is the auto rung's failure path.
 
 const EARLY_PROBE_MS = 15_000;
@@ -389,7 +389,7 @@ const healthProblem = async (services: Services, id: string): Promise<string | u
     return undefined;
 };
 
-// Resolves once the watch is ARMED (the "watching" record is on disk) — the probes themselves stay on timers.
+// Resolves once the watch is ARMED (the "watching" record is on disk), the probes themselves stay on timers.
 const watchExtensionHealth = (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
     const root = services.workspace.root;
     const record = (health: ExtensionHealth | undefined): Promise<void> =>
@@ -408,7 +408,7 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
             if (autoRevert) {
                 /* The auto rung's promise: an unattended update that fails its watch is rolled back unattended,
                  * and the record says so instead of pretending the attempt never happened. A revert that itself
-                 * fails leaves the plain unhealthy verdict — the owner decides from there. */
+                 * fails leaves the plain unhealthy verdict, the owner decides from there. */
                 try {
                     await revertExtensionUpdate(services, id);
                     await record({ state: "unhealthy", detail: problem, fromRef, at: new Date().toISOString(), autoReverted: true });
@@ -434,7 +434,7 @@ const watchExtensionHealth = (services: Services, id: string, identity: string, 
 
 // ---- the agent-prepared rung: the same diff-read the update card offers, run unprompted the moment the check
 // records a new sha, so the owner opens a finished account instead of starting one. The conversation is an
-// ordinary fleet entry (unattended, shared workspace — the brief itself orders a scratch clone), and the
+// ordinary fleet entry (unattended, shared workspace, the brief itself orders a scratch clone), and the
 // update record links it.
 
 let reviewSeq = 0;
@@ -508,8 +508,8 @@ const inFlight = new Map<string, Promise<string>>();
 
 /* One pass: read every registry that answers for an installed extension (one clone per distinct registry, not
  * per extension), fold each row into an update/advisory record, enforce the advisory policy, then run the
- * update policies. An unreachable registry KEEPS the previous records — offline must not read as "no updates,
- * no advisories" — and a delisted row clears them, because a registry that dropped the row asserts nothing. */
+ * update policies. An unreachable registry KEEPS the previous records, offline must not read as "no updates,
+ * no advisories", and a delisted row clears them, because a registry that dropped the row asserts nothing. */
 export const checkExtensionUpdates = (services: Services): Promise<string> => {
     const root = services.workspace.root;
     const running = inFlight.get(root);
@@ -634,7 +634,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
 };
 
 // The extensions list calls this on every read: a fresh state answers instantly, a stale one refreshes in the
-// background — so opening the tab is what keeps a watched sandbox current, and nobody waits on a clone.
+// background, so opening the tab is what keeps a watched sandbox current, and nobody waits on a clone.
 export const refreshUpdatesIfStale = (services: Services): void => {
     void (async () => {
         const state = await readExtensionUpdateState(services.workspace.root);
@@ -645,8 +645,8 @@ export const refreshUpdatesIfStale = (services: Services): void => {
     })().catch((error: unknown) => services.logger.warn({ err: error }, "extension update check failed"));
 };
 
-// Boot wiring (main.ts): one comparison shortly after boot — delayed so it never competes with the boot path's
-// own git work — then daily, for the sandbox nobody opens. The list-read staleness refresh above is the floor.
+// Boot wiring (main.ts): one comparison shortly after boot, delayed so it never competes with the boot path's
+// own git work, then daily, for the sandbox nobody opens. The list-read staleness refresh above is the floor.
 export const startExtensionUpdateWatch = (services: Services): { stop: () => void } => {
     const initial = setTimeout(() => refreshUpdatesIfStale(services), 60_000);
     initial.unref?.();

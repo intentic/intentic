@@ -1,7 +1,7 @@
 import { access, constants } from "node:fs/promises";
 import { join } from "node:path";
 
-/* IS THIS BINARY IN THE IMAGE — the question a split image makes every helper's caller ask.
+/* IS THIS BINARY IN THE IMAGE, the question a split image makes every helper's caller ask.
  *
  * The sandbox image is a minimal CORE plus feature packs (environment/packs.ts): `codex`, `opencode` and
  * `cli-proxy-api` are each a pack's global install, present on a STANDARD image and absent on a core one until
@@ -9,7 +9,7 @@ import { join } from "node:path";
  * became a runtime fact, and the daemon must boot cleanly either way.
  *
  * Read straight off the filesystem rather than by spawning `command -v`: no shell, no per-call process. Cached
- * for the daemon's life — PATH is fixed at container start, and an environment rebuild recreates the container,
+ * for the daemon's life. PATH is fixed at container start, and an environment rebuild recreates the container,
  * so nothing can add a binary underneath a running daemon. */
 const pathCache = new Map<string, Promise<string | undefined>>();
 
@@ -40,6 +40,6 @@ export const resolveOnPath = (binary: string): Promise<string | undefined> => {
     return probe;
 };
 
-// The same probe asked as the yes/no most callers want — a gate deciding whether to spawn a helper has no use
+// The same probe asked as the yes/no most callers want, a gate deciding whether to spawn a helper has no use
 // for the path, and `(await resolveOnPath(x)) !== undefined` at every one of those sites reads as noise.
 export const onPath = async (binary: string): Promise<boolean> => (await resolveOnPath(binary)) !== undefined;

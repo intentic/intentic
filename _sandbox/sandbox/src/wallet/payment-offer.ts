@@ -15,30 +15,30 @@ import {
     usdToAtomic,
 } from "./x402.js";
 
-/* THE PAYMENT GATE — the services spend gate's shape (platform/service-offer.ts), pointed at the open x402
+/* THE PAYMENT GATE, the services spend gate's shape (platform/service-offer.ts), pointed at the open x402
  * web instead of the platform's catalog. The agent's `wallet fetch` PARKS here: the daemon makes the unpaid
  * request itself, parses the endpoint's own 402 challenge, checks the owner's policy, raises an offer card
  * whose every number is the daemon's arithmetic over that challenge and the wallet's ledger (never anything
- * the model typed — the model owns the URL, the request body, and one line of why), and only the owner's
- * click (or the owner's standing auto-approve band) releases a signature. One click pays exactly one price —
+ * the model typed, the model owns the URL, the request body, and one line of why), and only the owner's
+ * click (or the owner's standing auto-approve band) releases a signature. One click pays exactly one price,
  * a repeat parks a fresh card. A prompt-injected model can ask; it cannot spend.
  *
  * Raised OUTSIDE the turn generator for the services gate's reason verbatim: the CLI call arrives as an HTTP
  * request while the turn sits inside its Bash tool, so frames are pushed into the live run's frame log and
- * mirrored to the registry by hand, and the card is deliberately not journalled — its waiter is the CLI's
+ * mirrored to the registry by hand, and the card is deliberately not journalled, its waiter is the CLI's
  * held connection, which dies with the daemon.
  *
  * WHAT AN APPROVAL RELEASES is one EIP-3009 authorization: a signed instruction for one transfer of one
  * exact amount to one recipient, expiring within five minutes, signed by the PLATFORM (the key never enters
  * this container) and settled by the merchant's own side. A payment that fails after signing spends nothing
- * — the authorization simply expires unused — which is why `failed` receipts can honestly say so. */
+ *, the authorization simply expires unused, which is why `failed` receipts can honestly say so. */
 
 const OFFER_DEADLINE_MS = 10 * 60_000;
 const WHY_MAX = 280;
 // The unpaid probe's budget: enough for a slow endpoint's challenge, short enough that a dead one doesn't
 // hold the CLI hostage.
 const PROBE_TIMEOUT_MS = 60_000;
-// The paid retry's budget — the request is doing the actual (possibly heavy) work now, plus onchain
+// The paid retry's budget, the request is doing the actual (possibly heavy) work now, plus onchain
 // settlement (~2s on Base). Bounded like the services relay's stream budget.
 const RETRY_TIMEOUT_MS = 300_000;
 
@@ -49,7 +49,7 @@ const refusal = (status: number, type: string, message: string): RelayedAnswer =
 });
 
 export interface PaidAnswer extends RelayedAnswer {
-    // Present when a payment actually settled with this answer — what the CLI's receipt line renders.
+    // Present when a payment actually settled with this answer, what the CLI's receipt line renders.
     readonly paidUsd?: string;
     readonly transaction?: string;
 }
@@ -61,12 +61,12 @@ export interface PaymentGateDeps {
     // The platform signer relay (wallet-signer.ts), injected so tests drive the gate without a platform.
     readonly sign: (request: SignRequest) => Promise<RelayedAnswer>;
     readonly fetchFn?: typeof fetch;
-    // The live turn the card lands in — the service gate's own seam, verbatim.
+    // The live turn the card lands in, the service gate's own seam, verbatim.
     readonly liveRun: (
         conversationId: string | undefined,
     ) => { readonly conversationId: string; readonly push: (event: AgentEvent) => void } | undefined;
     readonly observe: (conversationId: string, event: AgentEvent) => void;
-    // Whether the live turn in this conversation has taken in outside content (guard/turn-taint.ts) — the
+    // Whether the live turn in this conversation has taken in outside content (guard/turn-taint.ts), the
     // one input to the auto-approve decision that is not the owner's policy. Injected like every other seam
     // so the gate's tests state the rule rather than reaching into a module registry.
     readonly tainted: (conversationId: string) => boolean;
@@ -79,7 +79,7 @@ export interface PaidFetchRequest {
     readonly method: string;
     readonly body: string | undefined;
     readonly contentType: string | undefined;
-    // The agent's own ceiling for THIS call — a self-imposed bound below the owner's, never above it.
+    // The agent's own ceiling for THIS call, a self-imposed bound below the owner's, never above it.
     readonly maxUsd: string | undefined;
     readonly why: string | undefined;
     readonly conversationId: string | undefined;
@@ -129,7 +129,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     }
     const host = url.hostname.toLowerCase();
 
-    /* THE UNPAID PROBE — the same request the agent asked for, sent without payment. A non-402 answer passes
+    /* THE UNPAID PROBE, the same request the agent asked for, sent without payment. A non-402 answer passes
      * through whole: a free endpoint stays free, an endpoint's own 4xx/5xx is its own business, and either
      * way nothing below this line runs. */
     const requestInit = (extra?: Record<string, string>): RequestInit => ({
@@ -157,7 +157,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         return refusal(502, "unsupported_protocol", `${challenge.reason} — nothing was spent.`);
     }
     if (challenge.kind === "none") {
-        // A 402 that isn't a machine-payable challenge — the endpoint's own refusal, relayed whole.
+        // A 402 that isn't a machine-payable challenge, the endpoint's own refusal, relayed whole.
         return { status: 402, body: probeBody, contentType: probe.headers.get("content-type") ?? "application/json" };
     }
     const quote: PaymentQuote | undefined = challenge.quotes.find(
@@ -172,7 +172,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         );
     }
 
-    /* THE POLICY WALL — every check the card does not ask the owner to repeat. Amounts are compared in
+    /* THE POLICY WALL, every check the card does not ask the owner to repeat. Amounts are compared in
      * atomic units; every ceiling here is the owner's own number off the capability card (or the agent's
      * `--max`, which may only narrow). Refusals name the number that stopped them, because the agent's next
      * move ("ask the owner to raise the cap", "give up") depends on which wall it was. */
@@ -212,12 +212,12 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         );
     }
 
-    /* THE CONSENT STEP. Inside the auto-approve band — and, when an allow list exists, only on its hosts —
+    /* THE CONSENT STEP. Inside the auto-approve band, and, when an allow list exists, only on its hosts,
      * the owner's standing delegation covers the spend and no card goes up. Everything else parks on a card;
      * no live conversation means no card CAN go up, and an unanswered card times out as exactly that. The
      * band's default is "0": out of the box, every payment is a click.
      *
-     * THE BAND IS SUSPENDED ON A TAINTED TURN — one that has taken in content from outside (a fetched page,
+     * THE BAND IS SUSPENDED ON A TAINTED TURN, one that has taken in content from outside (a fetched page,
      * a stranger's message; guard/turn-taint.ts). The delegation was granted for the AGENT's judgment about
      * small payments, and outside content is precisely what replaces that judgment: a page that can talk a
      * model into paying is a page that can be paid. So the payment still happens, it just asks first. This
@@ -273,7 +273,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         }
     }
 
-    /* THE SPEND. A pending row FIRST — a ledger that cannot be written refuses the payment (fail closed, and
+    /* THE SPEND. A pending row FIRST, a ledger that cannot be written refuses the payment (fail closed, and
      * the pending row is what holds this amount against the daily cap while it is in flight). Then one
      * signature from the platform (which re-checks its own mirror of the caps), then the retry carrying the
      * payment header. A failure anywhere after signing spends nothing: the authorization expires unused. */
@@ -336,7 +336,7 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         paidBody = await paid.text();
     } catch (error) {
         /* The one honest unknown: the retry died between sending the authorization and reading an answer.
-         * The row stays `pending` — whether the merchant settled is theirs to know, the authorization
+         * The row stays `pending`, whether the merchant settled is theirs to know, the authorization
          * expires within its five-minute window either way, and the pending row keeps the amount held
          * against the daily cap until it ages out of today. */
         receipt("failed");

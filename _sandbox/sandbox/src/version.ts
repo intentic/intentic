@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { packageRoot } from "@intentic/constants/node";
 
 // The release flow bumps package versions before building the release image, so this is the readable version
-// behind ghcr.io/intentic/sandbox:stable the moment it ships — release-images.sh moves that tag as part of the
+// behind ghcr.io/intentic/sandbox:stable the moment it ships, release-images.sh moves that tag as part of the
 // publish itself.
 export const { version } = createRequire(import.meta.url)(join(packageRoot(import.meta.url), "package.json")) as { version: string };
 
@@ -34,13 +34,13 @@ const newestMtimeMs = (dir: string): number => {
         try {
             newest = Math.max(newest, statSync(path).mtimeMs);
         } catch {
-            // a file that vanished mid-walk — it cannot be part of the build we are identifying
+            // a file that vanished mid-walk, it cannot be part of the build we are identifying
         }
     }
     return newest;
 };
 
-/* WHICH BUILD OF THE DAEMON THIS IS — advertised on the /events hello frame so the browser can drop what it
+/* WHICH BUILD OF THE DAEMON THIS IS, advertised on the /events hello frame so the browser can drop what it
  * cached from a DIFFERENT one.
  *
  * The browser persists daemon responses to IndexedDB and paints them stale-while-revalidate on the next load.
@@ -48,7 +48,7 @@ const newestMtimeMs = (dir: string): number => {
  * daemon's to change, and hydrating an old build's answers into a new build's components is how a
  * `pnpm build:sandbox && dev-sandbox.sh` swap left a workspace that only a site-data wipe would fix.
  *
- * `version` alone cannot say it — every working-tree build carries the same 0.0.0 sentinel — so the identity
+ * `version` alone cannot say it, every working-tree build carries the same 0.0.0 sentinel, so the identity
  * is version + the newest mtime across the daemon's own compiled tree. In an image that is the layer's build
  * time: stable across restarts, different after an update. Under the dev bind mounts it is the last `tsgo`,
  * which is exactly the granularity a developer changing response shapes needs. Computed once, lazily: one

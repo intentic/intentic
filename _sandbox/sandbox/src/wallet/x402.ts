@@ -1,37 +1,37 @@
 import { randomBytes } from "node:crypto";
 
-/* THE x402 WIRE — parsing a 402 challenge into one normalized quote, and building the payment the retry
- * carries. Pure protocol logic: no network, no policy, no keys — the gate (payment-offer.ts) owns consent
+/* THE x402 WIRE, parsing a 402 challenge into one normalized quote, and building the payment the retry
+ * carries. Pure protocol logic: no network, no policy, no keys, the gate (payment-offer.ts) owns consent
  * and the platform owns the signature, so everything here is testable with strings.
  *
  * TWO WIRE VERSIONS, ONE INTERNAL SHAPE. The protocol's current revision (v2) carries the challenge in a
  * `PAYMENT-REQUIRED` response header and takes payment back in `PAYMENT-SIGNATURE`; the original (v1) put
  * the challenge in the 402's JSON body and took `X-PAYMENT`. Both are live on the open web, so the CLIENT
- * speaks both — but as parsers in and one builder out of the same PaymentQuote, per this repo's no-legacy
+ * speaks both, but as parsers in and one builder out of the same PaymentQuote, per this repo's no-legacy
  * rule: internal types are v2-native, v1 is a wire adapter, and dropping it one day deletes a parser and
  * nothing else. A third 402 dialect exists (MPP's `WWW-Authenticate: Payment` scheme, the Stripe-backed
- * rail WunderCorp's gateways speak) — recognized and refused by name, because a wrong-protocol refusal the
+ * rail WunderCorp's gateways speak), recognized and refused by name, because a wrong-protocol refusal the
  * agent can read beats a parse failure it cannot.
  *
  * ONLY THE "EXACT" SCHEME, ONLY USDC. The exact scheme is an EIP-3009 transferWithAuthorization: an OFFLINE
  * authorization for one transfer of one exact amount, signed as EIP-712 typed data and settled by the
  * MERCHANT's side (they pay the gas; the wallet needs no ETH and never submits a transaction). That shape is
- * what makes agent payments safe to automate at all — the signature is a bearer instrument for exactly that
+ * what makes agent payments safe to automate at all, the signature is a bearer instrument for exactly that
  * transfer and nothing else, and an unused one simply expires. USDC-only is what keeps the policy math
  * honest: the owner's caps are written in dollars, and only a dollar-pegged token makes "amount ≤ cap" a
  * fact rather than an exchange-rate guess. */
 
 // USDC per supported network: the token contract, its EIP-712 domain defaults, and the explorer that renders
-// a settlement hash. This table is the compliance surface — an asset not on it is refused, which is the
+// a settlement hash. This table is the compliance surface, an asset not on it is refused, which is the
 // USDC-only rule enforced as a lookup rather than a judgment.
 export interface UsdcNetwork {
     // CAIP-2 ("eip155:8453"), the v2 vocabulary and the wallet config's.
     readonly network: string;
-    // How v1 challenges spell the same chain ("base") — matched on parse, echoed on the v1 retry header.
+    // How v1 challenges spell the same chain ("base"), matched on parse, echoed on the v1 retry header.
     readonly v1Network: string;
     readonly chainId: number;
     readonly asset: string;
-    // EIP-712 domain fallbacks — a challenge's `extra.{name,version}` wins when present, because the domain
+    // EIP-712 domain fallbacks, a challenge's `extra.{name,version}` wins when present, because the domain
     // must match what the token contract itself hashes and the server publishing the price knows its token.
     readonly domainName: string;
     readonly domainVersion: string;
@@ -67,7 +67,7 @@ export const USDC_NETWORKS: readonly UsdcNetwork[] = [
 
 export const usdcNetworkOf = (network: string): UsdcNetwork | undefined => USDC_NETWORKS.find((entry) => entry.network === network);
 
-// USDC has six decimals, and every amount in this module is a bigint of its atomic units — floats never
+// USDC has six decimals, and every amount in this module is a bigint of its atomic units, floats never
 // touch money. The USD string forms ("1.50") are the display and policy vocabulary; these two are the only
 // crossings between the vocabularies, so a rounding bug has one place to not exist.
 export const USDC_DECIMALS = 6n;
@@ -86,7 +86,7 @@ export const atomicToUsd = (atomic: bigint): string => {
 
 /* One payable price off a challenge, normalized: everything the policy check, the card, and the retry
  * builder need, in one vocabulary regardless of which wire version said it. `requirement` and `resource`
- * keep the server's own objects verbatim — the v2 retry must echo the accepted requirement exactly as
+ * keep the server's own objects verbatim, the v2 retry must echo the accepted requirement exactly as
  * offered (the server matches on it), and a normalized copy would be a second spelling to drift. */
 export interface PaymentQuote {
     readonly x402Version: 1 | 2;
@@ -105,11 +105,11 @@ export interface PaymentQuote {
 }
 
 export type ChallengeParse =
-    // At least one payable quote — the caller picks the one matching the wallet's network and token.
+    // At least one payable quote, the caller picks the one matching the wallet's network and token.
     | { readonly kind: "quotes"; readonly quotes: readonly PaymentQuote[] }
-    // A 402 in a dialect this wallet does not pay — said by name so the agent can relay something true.
+    // A 402 in a dialect this wallet does not pay, said by name so the agent can relay something true.
     | { readonly kind: "unsupported"; readonly reason: string }
-    // A 402 with nothing challenge-shaped on it — relayed as the plain refusal it is.
+    // A 402 with nothing challenge-shaped on it, relayed as the plain refusal it is.
     | { readonly kind: "none" };
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
@@ -233,17 +233,17 @@ export const parseChallenge = (url: string, headers: Headers, body: string): Cha
             return quotes.length > 0 ? { kind: "quotes", quotes } : { kind: "unsupported", reason: "the endpoint's x402 challenge offers no exact-scheme price" };
         }
     } catch {
-        // Not JSON — a plain 402 with prose, handled below.
+        // Not JSON, a plain 402 with prose, handled below.
     }
     void url;
     return { kind: "none" };
 };
 
 /* The EIP-3009 authorization the platform signs: one transfer of exactly `value`, from the wallet, to the
- * challenge's payTo, valid for a window bounded by the challenge's own timeout (and 300s regardless — a
+ * challenge's payTo, valid for a window bounded by the challenge's own timeout (and 300s regardless, a
  * longer-lived bearer instrument helps nobody). The nonce is 32 random bytes, the standard's replay guard:
  * the token contract burns it on settlement, so the same authorization can never move money twice. Times as
- * decimal-string seconds and value as decimal-string atomic units — the x402 payload's own spelling. */
+ * decimal-string seconds and value as decimal-string atomic units, the x402 payload's own spelling. */
 export interface TransferAuthorization {
     readonly from: string;
     readonly to: string;
@@ -286,7 +286,7 @@ export const paymentHeader = (
 };
 
 // The settlement the server reports back (v2 PAYMENT-RESPONSE / v1 X-PAYMENT-RESPONSE): success, the onchain
-// transaction hash, and — on failure — the server's own reason. Absent header ⇒ undefined, and the caller
+// transaction hash, and, on failure, the server's own reason. Absent header ⇒ undefined, and the caller
 // falls back to what the HTTP status proves.
 export interface Settlement {
     readonly success: boolean;
@@ -312,7 +312,7 @@ export const parseSettlement = (headers: Headers): Settlement | undefined => {
     };
 };
 
-// The wallet's live USDC balance, read straight off the chain's public RPC — balanceOf(address) is one
+// The wallet's live USDC balance, read straight off the chain's public RPC, balanceOf(address) is one
 // eth_call with a hand-built selector, which is what keeps chain SDKs out of the daemon entirely. Undefined
 // on any failure: a balance is a nicety on a status card, never something a payment path waits on.
 export const usdcBalance = async (network: UsdcNetwork, address: string, fetchFn: typeof fetch = fetch): Promise<bigint | undefined> => {

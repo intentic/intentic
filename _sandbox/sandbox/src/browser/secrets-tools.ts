@@ -5,14 +5,14 @@ import { type NamedSecret, secretReference } from "../secrets/secret-registry.js
 import { browserAccountPage } from "./browser-sessions.js";
 import { focusedEditable } from "./accounts-tools.js";
 
-/* THE BROWSER EXIT: how a stored secret gets into a dashboard's form — a Grafana admin password into its
- * login, an API key into a service's settings page — without ever entering the model's context. The same
+/* THE BROWSER EXIT: how a stored secret gets into a dashboard's form, a Grafana admin password into its
+ * login, an API key into a service's settings page, without ever entering the model's context. The same
  * design rule as type_credential, widened from an account's own password to the sandbox's NAMED secrets: the
  * agent focuses the field with the browser tools, names the secret, and the daemon types the value over the
  * same CDP attach the /browsers view watches through.
  *
  * Deliberately ONLY the user-kept kinds (env, generated). A capability's credential already has its own lane
- * — type_credential for a browser account's password, the connector env vars for a CLI's token — and a tool
+ *, type_credential for a browser account's password, the connector env vars for a CLI's token, and a tool
  * that would type ANY connector's credential into ANY page is exactly the confused deputy this machinery
  * exists not to build. The page's host is recorded on the use ledger, so "which secret went to which site" is
  * a question the Secrets view answers rather than a matter of trust. */
@@ -74,7 +74,7 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                             return "the current page";
                         }
                     })();
-                    // Same human-ish cadence as type_credential — some forms listen for the key events.
+                    // Same human-ish cadence as type_credential, some forms listen for the key events.
                     await page.keyboard.type(entry.value, { delay: 30 });
                     deps.secrets.used({ name, lane: "browser", detail: host });
                     return ok(`typed ${secretReference(name)} into the focused field on ${host} (value not shown)`);

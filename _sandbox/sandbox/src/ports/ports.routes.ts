@@ -5,9 +5,9 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 
-// The /ports routes: `list` scans procfs on demand (no background poller — the Ports view polls while open),
+// The /ports routes: `list` scans procfs on demand (no background poller, the Ports view polls while open),
 // `forward`/`unforward` drive the slot table. Forwarding is the explicit exposure gesture: previews are
-// public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it —
+// public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it,
 // and the daemon's own surfaces are never listed or forwardable at all.
 
 export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "workspace">;
@@ -16,8 +16,8 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    // The daemon's own listeners: the oRPC server, the preview proxy, and the container sshd. Everything else —
-    // including docker-proxy ports for containers the workspace published — is the user's to forward.
+    // The daemon's own listeners: the oRPC server, the preview proxy, and the container sshd. Everything else,
+    // including docker-proxy ports for containers the workspace published, is the user's to forward.
     const reserved = new Set([services.config.sandbox.port, services.config.preview.port, 22]);
 
     return {

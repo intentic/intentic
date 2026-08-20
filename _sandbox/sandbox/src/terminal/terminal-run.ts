@@ -4,10 +4,10 @@ import { promisify } from "node:util";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // THE PRINCIPLE: every real shell action the daemon executes for a user-triggered flow runs inside a visible
-// tmux session surfaced in the app's terminals panel — no invisible child_process for user actions. Reads,
+// tmux session surfaced in the app's terminals panel, no invisible child_process for user actions. Reads,
 // probes and boot plumbing are exempt. A new flow picks a `job-*` session (terminal-session.ts), emits
 // {kind:"terminal", session} as its stream's first frame (gated on `visible`), and runs every command through
-// this runner. Secrets ride the `env` option — forwarded as name-only tmux `-e` flags the wrapper resolves
+// this runner. Secrets ride the `env` option, forwarded as name-only tmux `-e` flags the wrapper resolves
 // from its own environment, never the command string or any argv: pane text is persisted to the pane logs
 // (logs/log-files.ts), so anything printed is written to disk.
 //
@@ -16,18 +16,18 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 // scrollback until the session's next run prunes them; sessions linger attachable until the boot sweep
 // (managed-processes.ts killStaleManagedSessions) or the user × them.
 //
-// The BROWSER half of the same rule — what a surface may do with the output once it has a session, and the two
-// text surfaces that are exceptions to it — is stated at the seam that opens them:
+// The BROWSER half of the same rule, what a surface may do with the output once it has a session, and the two
+// text surfaces that are exceptions to it, is stated at the seam that opens them:
 // _editor/web/src/composables/terminal/useTerminalPanel.ts. A flow is only half-visible if the daemon runs it
 // here and the client still paints a captured tail into a box.
 
 const execFileAsync = promisify(execFile);
 
-// Where the image bakes the wrapper (Dockerfile). Absent in local dev/tests — the runner then degrades to a
+// Where the image bakes the wrapper (Dockerfile). Absent in local dev/tests, the runner then degrades to a
 // plain invisible `bash -c` with the same result contract, and `visible` gates the terminal frames.
 export const TMUX_RUN_BIN = "/usr/local/bin/tmux-run";
 
-// What ships back over the wrapper's stdout (the tail — full output stays in the pane + pane log), and the
+// What ships back over the wrapper's stdout (the tail, full output stays in the pane + pane log), and the
 // execFile ceiling above it.
 const OUTPUT_TAIL_BYTES = 262_144;
 const MAX_BUFFER = 4 * 1024 * 1024;
@@ -36,14 +36,14 @@ export interface TerminalRunOptions {
     readonly cwd: string;
     // tmux window name (a safe slug); defaults to "run".
     readonly window?: string;
-    // Extra env for the command — set on the wrapper's own env (what the no-tmux fallback sees) and forwarded
+    // Extra env for the command, set on the wrapper's own env (what the no-tmux fallback sees) and forwarded
     // onto the tmux window by NAME (`-e KEY`), so values never appear in any argv or pane text.
     readonly env?: Readonly<Record<string, string>>;
     // Abort SIGTERMs the wrapper; its trap kills the tmux window, so the command dies with the caller.
     readonly signal?: AbortSignal;
-    // Watchdog for a wedged command — same kill path as abort.
+    // Watchdog for a wedged command, same kill path as abort.
     readonly timeoutMs?: number;
-    /* Called when this command LEAVES THE QUEUE and the wrapper is spawned — i.e. when its tmux window is
+    /* Called when this command LEAVES THE QUEUE and the wrapper is spawned, i.e. when its tmux window is
      * being created, milliseconds away, rather than at some unknown later point behind whatever else the
      * session is running. For the one caller that has to tell a browser where to look: a session name handed
      * out while the command is still queued sends it to a tab tmux has not created yet. */
@@ -56,21 +56,21 @@ export interface TerminalRunResult {
 }
 
 export interface TerminalRunner {
-    // False in the no-tmux fallback (dev/CI) — callers gate their {kind:"terminal"} frame on it.
+    // False in the no-tmux fallback (dev/CI), callers gate their {kind:"terminal"} frame on it.
     readonly visible: boolean;
-    // Throws on a non-zero exit with the output tail in the message — the common "this step must succeed" call.
+    // Throws on a non-zero exit with the output tail in the message, the common "this step must succeed" call.
     readonly run: (session: string, command: string, options: TerminalRunOptions) => Promise<string>;
     // A non-zero exit is a RESULT the caller inspects (wg-quick down before up, git config --unset's exit 5).
     readonly tryRun: (session: string, command: string, options: TerminalRunOptions) => Promise<TerminalRunResult>;
-    // Any command in flight (or queued) for the session — the terminals list's `running` dot for job-* tabs.
+    // Any command in flight (or queued) for the session, the terminals list's `running` dot for job-* tabs.
     readonly running: (session: string) => boolean;
 }
 
-// What the PANE shows before the command runs — the line itself, the way a terminal echoes what you typed.
+// What the PANE shows before the command runs, the line itself, the way a terminal echoes what you typed.
 // Without it a flow of quiet commands (`git config`, a credential write) leaves a blank pane, and the terminal
 // the app just opened for the user reads as "nothing happened here" even though the install ran in it.
 // Written to the pane's own tty rather than to stdout, so it stays out of the captured output the caller gets
-// back (an error message's tail, an ACP agent's tool result) — and the whole line is swallowed where there is
+// back (an error message's tail, an ACP agent's tool result), and the whole line is swallowed where there is
 // no tty, which is the no-tmux fallback. Safe to print by the runner's standing invariant: secrets ride `env`,
 // never the command string.
 const paneEcho = (command: string): string => `{ printf '\\033[1m$ %s\\033[0m\\n' ${shellQuote(command)} > /dev/tty; } 2>/dev/null; `;
@@ -93,7 +93,7 @@ export const terminalExec =
     };
 
 // The same contract for boot plumbing, which the visible-terminal principle above exempts: a restore runs with
-// nobody watching and no job session to surface it in, so it goes straight through execFile — including the
+// nobody watching and no job session to surface it in, so it goes straight through execFile, including the
 // numeric exit `code` callers branch on (git config --unset's 5).
 export const directExec: ExecInTerminal = (file, args) => execFileAsync(file, [...args]);
 
@@ -137,7 +137,7 @@ export const createTerminalRunner = (): TerminalRunner => {
             return { code: 0, output: stdout };
         } catch (err) {
             // An abort is the caller's cancellation (propagate as such), and a string code is a spawn failure
-            // (ENOENT/EACCES) — an infra error, not a command result.
+            // (ENOENT/EACCES), an infra error, not a command result.
             const failure = err as { code?: number | string; stdout?: string };
             if (options.signal?.aborted === true || typeof failure.code !== "number") {
                 throw err;

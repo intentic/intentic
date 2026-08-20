@@ -5,7 +5,7 @@ import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contr
 
 // The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only.
 // Living under historyRoot keeps it outside the agent's /work mount, so the agent can't read or rewrite its
-// own trail — the same placement rationale as workspace history.
+// own trail, the same placement rationale as workspace history.
 
 // Prune to the newest KEEP_LINES once the file passes MAX_BYTES.
 const MAX_BYTES = 5_000_000;
@@ -53,7 +53,7 @@ export const fileActivityStore = (path: string): ActivityStore => {
                 if ((await stat(path)).size <= MAX_BYTES) {
                     return;
                 }
-                // ponytail: whole-file prune on the write path — fine at a 5MB cap.
+                // ponytail: whole-file prune on the write path, fine at a 5MB cap.
                 const lines = (await readFile(path, "utf8")).split("\n").filter((line) => line !== "");
                 await writeFile(path, `${lines.slice(-KEEP_LINES).join("\n")}\n`);
             });

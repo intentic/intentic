@@ -8,7 +8,7 @@ import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
 // The panel key (→ tmux session `panel-ext-<id>-<name>`) for one declared extension process. tmux session
 // names reject dots and a baked extension's id is publisher.name, so dots are sanitized. Extension processes
-// ride the panel manager unchanged — port assignment (PORT env), the liveness sweep, boot's stale-session
+// ride the panel manager unchanged, port assignment (PORT env), the liveness sweep, boot's stale-session
 // kill, and the preview proxy all apply with no new machinery. The prefix is how the terminals list tells an
 // extension process apart from a dev-server panel (kind "process" vs "panel").
 export const EXTENSION_PROCESS_PREFIX = "ext-";
@@ -18,14 +18,14 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     const key = extensionProcessKey(extension.id, process.name);
     if (process.preview === true) {
         // Mint the tunneled preview hostname fire-and-forget (the panels-start pattern); never rejects, and the
-        // process bind doesn't need the route — only a later browser load does.
+        // process bind doesn't need the route, only a later browser load does.
         void services.ensurePreviewRoutes([previewLabel(key)]);
     }
     await services.processes.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
         // A declared process reaches the daemon's own routes (a listener gateway posting to /listeners/<provider>)
-        // over loopback with the panel token — the token never leaves the container. (Flagged: the panel token
+        // over loopback with the panel token, the token never leaves the container. (Flagged: the panel token
         // is all-routes; a scoped per-extension token is a named follow-up.) INTENTIC_WORKSPACE lets a process
         // that produces agent-facing files (the discord gateway's voice transcripts) write under the workspace.
         env: {
@@ -36,14 +36,14 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     });
 };
 
-/* THE SPAWN GATE for one extension's declared processes — both halves in one place so no caller can consult
+/* THE SPAWN GATE for one extension's declared processes, both halves in one place so no caller can consult
  * only one of them. The code has to BE here, and, for a listener extension, its provider has to be wanted at
  * all (listenerProcessesDesired, which is the half the gateway's own /state feed shares).
  *
  * The runtime half is what keeps a core image from running a messaging gateway: those extensions bake their
  * manifests without the trees behind them, and a declared process is started by TYPING its command into a
  * shell in a tmux session. `node dist/gateway.js` with no dist/ prints a module-not-found, the shell returns to
- * its prompt, and the session lives on — so the manager, which tracks the SESSION, would report that gateway
+ * its prompt, and the session lives on, so the manager, which tracks the SESSION, would report that gateway
  * running for the life of the container. Not spawning it at all is the only honest answer available here.
  *
  * Exported for the post-update health watch, which must ask the same question in reverse: a declared process
@@ -56,7 +56,7 @@ export const processesDesired = async (services: Services, extension: InstalledE
     return listener === undefined || listenerProcessesDesired(await listenerState(services, listener.provider));
 };
 
-// autoStart processes for one extension — after a successful install (the capabilities add route's post-apply
+// autoStart processes for one extension, after a successful install (the capabilities add route's post-apply
 // seam) and at boot convergence. A listener extension's processes exist only while its provider is wanted, so a
 // fresh sandbox runs no idle gateway for an integration nobody enabled.
 export const startAutoStartProcesses = async (services: Services, extension: InstalledExtension): Promise<void> => {
@@ -71,7 +71,7 @@ export const startAutoStartProcesses = async (services: Services, extension: Ins
 };
 
 // Boot convergence (beside startDockerd): sessions died with the container / the boot sweep while the
-// manifests survived — bring every installed extension's autoStart processes back up. Best-effort.
+// manifests survived, bring every installed extension's autoStart processes back up. Best-effort.
 export const startAllExtensionProcesses = async (services: Services): Promise<void> => {
     for (const extension of await enabledExtensions(services)) {
         await startAutoStartProcesses(services, extension);
@@ -79,14 +79,14 @@ export const startAllExtensionProcesses = async (services: Services): Promise<vo
 };
 
 // How long the poke below waits. The gateway is on loopback and its reconcile is a state fetch plus a connect,
-// so anything slower is a wedged process — and its own poll is the fallback either way.
+// so anything slower is a wedged process, and its own poll is the fallback either way.
 const GATEWAY_POKE_TIMEOUT_MS = 10_000;
 
 /* Tell a RUNNING gateway to re-read the listener state now rather than on its own poll.
  *
  * Starting the process was never the whole job: a gateway that is already up (any other automation for that
  * provider, or one just switched off and on) subscribes on a 30-second cycle, so switching an integration on
- * left the bot deaf for up to half a minute. A message sent in that window was not queued or dropped — it was
+ * left the bot deaf for up to half a minute. A message sent in that window was not queued or dropped, it was
  * never seen, which is indistinguishable from a broken integration to whoever sent it.
  *
  * Best-effort by construction: a gateway that just started reconciles at boot anyway, and a poke that fails
@@ -103,7 +103,7 @@ const pokeListenerGateway = async (services: Services, key: string): Promise<voi
 
 // Converge listener-extension processes after an automations or capabilities mutation: bring a now-wanted
 // gateway up, stop a no-longer-wanted one (start is a no-op when already running), and poke whatever is left
-// running so it picks the change up at once. Best-effort and detached — a reconcile failure logs, it never
+// running so it picks the change up at once. Best-effort and detached, a reconcile failure logs, it never
 // fails the mutation that triggered it. Stops only what the manager tracks (`running`): an untracked key has
 // no session left to kill.
 export const reconcileListenerProcesses = async (services: Services): Promise<void> => {

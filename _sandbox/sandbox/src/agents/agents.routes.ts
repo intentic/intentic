@@ -16,7 +16,7 @@ import { describeLandingInBackground } from "./landed-subject.js";
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
 // or discard it. An unknown {id} is NOT_FOUND; land/discard/archive while the conversation's turn is running
-// is CONFLICT — the worktree is the turn's live working state.
+// is CONFLICT, the worktree is the turn's live working state.
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
     const entryOf = (id: string): PersistedAgent => {
@@ -44,17 +44,17 @@ export const createAgentsRoutes = (services: Services) => {
      *
      * Discard and archive take the whole worktree away, so a live turn rules them out flatly. A land only READS
      * that checkout and copies what it finds into the main tree, and the copy arrives as uncommitted changes
-     * the user reviews — so the question is not "is a turn alive" but "is anyone mid-sentence".
+     * the user reviews, so the question is not "is a turn alive" but "is anyone mid-sentence".
      *
      * Two of the three answers let it through. A turn PARKED on a question or a permission card is writing
      * nothing, and refusing there was the sharpest form of the bug: the turn could only end once the user
      * answered, so "wait for it to finish" asked them to do the very thing they had come here instead of doing.
-     * A turn genuinely mid-write is the one real hazard — half a rename, three files of five — and that is the
+     * A turn genuinely mid-write is the one real hazard, half a rename, three files of five, and that is the
      * user's call to make with the facts in front of them, so it costs an explicit `force` rather than a
      * refusal. Both halves of that hazard are recoverable, which is why it is a warning and not a wall: the
      * land is uncommitted, and the remainder of the turn lands on top of it at completion.
      *
-     * Unforced mid-write still answers CONFLICT, and the message says which of the two states it means — the
+     * Unforced mid-write still answers CONFLICT, and the message says which of the two states it means, the
      * old one named the wrong one for a parked agent and sent people to wait on a turn that was waiting on
      * them. */
     const landable = (id: string, force: boolean): void => {
@@ -62,7 +62,7 @@ export const createAgentsRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "the agent is still writing — land again to apply its work as it stands" });
         }
     };
-    /* Which SDK session holds this conversation's transcript — asked of the REGISTRY, which recorded it from
+    /* Which SDK session holds this conversation's transcript, asked of the REGISTRY, which recorded it from
      * the turn's own `session` frame, never re-derived from where the turn happened to run. An isolated turn
      * runs in a mount namespace where its worktree IS the workspace root (agents/isolation.ts), so the SDK
      * files the session under the root's project key and the worktree path is not a project key at all.
@@ -70,44 +70,44 @@ export const createAgentsRoutes = (services: Services) => {
      * reads as a conversation that never happened.
      *
      * `sessionIdOf` and not `entry.sessionId`: the entry is only flushed with the id at finish, so a running
-     * first turn — the one most likely to be opened — would otherwise have none. */
+     * first turn, the one most likely to be opened, would otherwise have none. */
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
         capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
-    // `archived` was lost — the router kept compiling and the archive door quietly stopped rendering) fails no
+    // `archived` was lost, the router kept compiling and the archive door quietly stopped rendering) fails no
     // build and no test. The router builder types the shape against agentsContract, so the next one is a
     // typecheck error instead of a 404 the browser swallows.
     return i.router({
         /* Every roster read carries the revision it was taken at, so the browser can tell this answer apart
-         * from the /events snapshots racing it — see AgentsListSchema.
+         * from the /events snapshots racing it, see AgentsListSchema.
          *
          * The refresh first is what makes a roster read SELF-HEALING. Every other trigger fires on something
          * the daemon did; a hand-merge in a terminal, a rebuild, a sibling agent's land absorbing the same
          * hunks all move the shas with nothing to hook. Loading the board is the moment the user is asking
-         * about, so it is the honest place to re-ask git, and it also broadcasts — every other open surface
+         * about, so it is the honest place to re-ask git, and it also broadcasts, every other open surface
          * heals with it. */
         list: i.list.handler(async () => {
             await services.agents.refreshStandings();
-            // The approvals queue rides along as `held` — the wakes waiting at the door belong on the board
+            // The approvals queue rides along as `held`, the wakes waiting at the door belong on the board
             // beside the agents that got through it. Approve/reject stay the automations routes' verbs.
             return { agents: services.agents.list(), rev: services.agents.revision(), held: await services.approvals.list() };
         }),
-        // The archive's own roster — the other half of the fleet, off `list` by construction and pulled on
+        // The archive's own roster, the other half of the fleet, off `list` by construction and pulled on
         // demand (the /events stream never carries it). Newest-archived first; see registry.listArchived.
         archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
-        /* The board's filter, and the popped-out rail's. Answers over BOTH halves of the fleet in one pass —
-         * the live roster and the archive — because the board hides by design (its Finished lane windows to a
+        /* The board's filter, and the popped-out rail's. Answers over BOTH halves of the fleet in one pass,
+         * the live roster and the archive, because the board hides by design (its Finished lane windows to a
          * handful, archived agents are off the roster entirely), and a filter that reports "no matches" while
          * the agent sits one click away is a lie the user only catches once.
          *
          * Matches the TITLE (which is the sanitized first prompt) or anything either side SAID in the
-         * conversation — the user's later prompts and the agent's own replies — while thinking, tool output and
+         * conversation, the user's later prompts and the agent's own replies, while thinking, tool output and
          * daemon protocol stay out (see AgentSearchQuerySchema for where that line is drawn, and matchLines for
          * why the user's own words are the snippet when both sides hit). A title match carries no snippet: the
          * card already shows it.
          *
-         * A draft agent has no session and so nothing said, and never appears here — the browser matches those
+         * A draft agent has no session and so nothing said, and never appears here, the browser matches those
          * against the title it holds locally, which is all a conversation with no turn yet has.
          */
         search: i.search.handler(async ({ input }) => {
@@ -142,14 +142,14 @@ export const createAgentsRoutes = (services: Services) => {
         // The transcript a card redraws, read root-scoped: the workspace root is the working dir every turn
         // saw, so restored tool locations and attachment paths come back relative to the same tree they
         // streamed against.
-        /* A conversation's transcript, for a client opening its tab. Answers for EVERY agent — the transcript is
+        /* A conversation's transcript, for a client opening its tab. Answers for EVERY agent, the transcript is
          * the daemon's own record now (sessions/transcript-record.ts), so it no longer depends on the agent
          * running a harness that keeps a readable session store. This route used to return `{messages: []}` for
          * anything `sdkSessionIdOf` had no answer for, which is every codex/grok NATIVE and every ACP agent:
          * their chats opened blank, permanently, with the work sitting on disk the whole time.
          *
-         * `sessionId` still comes from the SDK-shaped lookup, because it answers a different question — which
-         * session the client should ADOPT so its next turn resumes the right thread — and only the Claude Code
+         * `sessionId` still comes from the SDK-shaped lookup, because it answers a different question, which
+         * session the client should ADOPT so its next turn resumes the right thread, and only the Claude Code
          * loop has one of those to hand over. */
         transcript: i.transcript.handler(async ({ input }) => {
             const agent = entryOf(input.id);
@@ -157,20 +157,20 @@ export const createAgentsRoutes = (services: Services) => {
             const messages = await services.transcripts.read(agent);
             return { ...(sessionId !== undefined ? { sessionId } : {}), messages };
         }),
-        /* SPEAK AS THE AGENT — the user's words appended to the record as an assistant row, no turn behind them,
+        /* SPEAK AS THE AGENT, the user's words appended to the record as an assistant row, no turn behind them,
          * no reply. Marked `placed` so a HUMAN re-reading the transcript can tell (the flag never reaches any
-         * agent-facing text — see RestoredMessageSchema).
+         * agent-facing text, see RestoredMessageSchema).
          *
          * The session drop is the half that makes it real. Appending alone would show the line to every reader
          * but the one that matters: a next turn that RESUMES its provider session never re-reads the record, so
          * the agent would carry on from a memory the transcript no longer matches. Forgetting the session is
-         * rewind's own move — the next turn then opens a fresh runtime session seeded from the record
+         * rewind's own move, the next turn then opens a fresh runtime session seeded from the record
          * (agent.routes.ts → handoffHistory), where the placed line renders exactly like every line the agent
          * genuinely said.
          *
          * OPEN BEFORE APPEND, and not as ceremony: for a conversation still served off the provider-store
          * backfill the record does not exist yet, and a bare append would create it holding ONLY the placed
-         * line — which, the record being authoritative wherever it exists, would silently disappear the whole
+         * line, which, the record being authoritative wherever it exists, would silently disappear the whole
          * conversation behind it. `open` adopts that history first.
          *
          * UNDER THE REWIND LEASE rather than a notRunning check, for rewind's own reason: a turn admitted
@@ -179,9 +179,9 @@ export const createAgentsRoutes = (services: Services) => {
          * a turn takes, so the two cannot interleave; a held lease answers undefined ⇒ CONFLICT.
          *
          * A CHANNEL CONVERSATION'S AUDIENCE IS THE CHANNEL. One woken by an outside message (a Discord mention,
-         * a Telegram chat — origin.channelId names the thread) has two readers: the transcript and whoever is
+         * a Telegram chat, origin.channelId names the thread) has two readers: the transcript and whoever is
          * waiting where the message came from. A placed line that only reached the record answered into the
-         * void — the channel saw nothing, while the transcript claims the agent spoke — so the line is carried
+         * void, the channel saw nothing, while the transcript claims the agent spoke, so the line is carried
          * out through the provider's gateway first (extensions/listener-deliver.ts), and carried FIRST: a
          * delivery that fails refuses the whole place (BAD_GATEWAY, with the gateway's own sentence), leaving
          * the record untouched rather than holding a sentence its audience never got. Origins with no gateway
@@ -236,7 +236,7 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Legal mid-turn too (no notRunning): the override is read at turn COMPLETION, so flipping it while
-        // the agent works is exactly "hold THIS turn's work for review" — the press that matters most.
+        // the agent works is exactly "hold THIS turn's work for review", the press that matters most.
         autoLand: i.autoLand.handler(async ({ input }) => {
             isolatedEntryOf(input.id);
             const summary = await services.agents.setAutoLand(input.id, input.autoLand);
@@ -245,7 +245,7 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        /* THIS conversation's outage posture. `entryOf`, not `isolatedEntryOf` — the one place this route
+        /* THIS conversation's outage posture. `entryOf`, not `isolatedEntryOf`, the one place this route
          * deliberately differs from the one above it: a provider outage kills a workspace chat as readily as a
          * branch-backed one, and nothing about picking the turn back up touches a worktree.
          *
@@ -262,9 +262,9 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         /* A collaborator's ask for a land they may not perform (role floors put land/discard at maintainer).
-         * Isolated agents only — a workspace conversation has no land for anyone to perform. Legal mid-turn
+         * Isolated agents only, a workspace conversation has no land for anyone to perform. Legal mid-turn
          * (no notRunning): the ask is about whatever the branch holds when a maintainer answers it, exactly
-         * like flipping autoLand. Loopback mode has no identity to attribute the ask to — and no collaborators
+         * like flipping autoLand. Loopback mode has no identity to attribute the ask to, and no collaborators
          * to make one. */
         requestLand: i.requestLand.handler(async ({ input, context }) => {
             isolatedEntryOf(input.id);
@@ -295,7 +295,7 @@ export const createAgentsRoutes = (services: Services) => {
             return { agents: services.agents.list(), rev: services.agents.revision() };
         }),
         // The review shows the agent's CUMULATIVE output (anchor → worktree), so work stays inspectable after
-        // it lands — which is the normal case, clean turn completions auto-landing within ms of finishing.
+        // it lands, which is the normal case, clean turn completions auto-landing within ms of finishing.
         // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
         // for "Land now" (everything, when nothing has landed yet), and every other file is flagged `landed`.
         diff: i.diff.handler(async ({ input }) => {
@@ -303,7 +303,7 @@ export const createAgentsRoutes = (services: Services) => {
             const repos: AgentRepoChanges[] = [];
             for (const composed of entry.repos) {
                 try {
-                    /* The one reading of this agent's delta (agent-changes.ts) — the same call the land totals
+                    /* The one reading of this agent's delta (agent-changes.ts), the same call the land totals
                      * for the card's counter, so the two surfaces cannot disagree about what the agent did.
                      * The cumulative span keeps landed work inspectable (a clean turn auto-lands within ms of
                      * finishing); the outstanding one is the land's own incremental span, and flags the rest. */
@@ -332,14 +332,14 @@ export const createAgentsRoutes = (services: Services) => {
              * conflicted card, so it has to arrive already knowing what blocked and why (see
              * AgentChangesSchema). Re-derived, not replayed from the entry: the stored report is the refusal
              * AT LAND TIME, and its `workspace` rows point at uncommitted edits the user may since have
-             * committed — served verbatim, they kept the resolve flow refusing ("commit or stash them") over
+             * committed, served verbatim, they kept the resolve flow refusing ("commit or stash them") over
              * a spotless tree. The entry keeps the event; the probes answer for today (outstandingConflicts).
-             * Omitted once nothing refuses anymore — a report with no rows is not a report. */
+             * Omitted once nothing refuses anymore, a report with no rows is not a report. */
             const conflicts = entry.conflicts === undefined ? [] : await outstandingConflicts(services.agentWorktrees, entry);
             return { repos, ...(conflicts.length > 0 ? { conflicts } : {}) };
         }),
-        // Against the same cumulative anchor as the list above: one row means one question — "what did this
-        // agent do to this file" — and its answer must not change the moment the work lands. (Diffing from
+        // Against the same cumulative anchor as the list above: one row means one question, "what did this
+        // agent do to this file", and its answer must not change the moment the work lands. (Diffing from
         // `landedTip` would silently empty out every already-landed row; diffing from the frozen base would
         // show other agents' synced-in work, disagreeing with the list.)
         fileDiff: i.fileDiff.handler(async ({ input }) => {
@@ -349,8 +349,8 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
             }
             const main = services.agentWorktrees.mainDir(input.repo);
-            // Retired checkout: both sides are blobs, read from the main repo — the same per-repo seam as
-            // `diff` above. The path guard still applies — it is validating the REQUEST, not the disk, and a
+            // Retired checkout: both sides are blobs, read from the main repo, the same per-repo seam as
+            // `diff` above. The path guard still applies, it is validating the REQUEST, not the disk, and a
             // `..` here would escape into rev-spec territory just as readily.
             if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
                 if (resolveWithin(main, input.path) === undefined) {
@@ -365,11 +365,11 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return services.git.fileDiff(dir, input.path, await anchorOf(dir, main, entry.branch, undefined, composed.base));
         }),
-        // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
+        // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             landable(input.id, input.force === true);
-            // Snapshotted before the land advances every landedTip — the span a chore diffs from, exactly as
+            // Snapshotted before the land advances every landedTip, the span a chore diffs from, exactly as
             // the auto-land path captures it before its own land (see streamIsolatedTurn). A cumulative land
             // reads from the base for the same reason the land itself does: the rung it is putting back is
             // the one before anything landed, so a chore told otherwise would diff an empty range.
@@ -380,12 +380,12 @@ export const createAgentsRoutes = (services: Services) => {
             }));
             const result = await landAgent(services.agentWorktrees, entry, input.mode, input.span);
             // Both halves of what the card will show: recordLanded stores the tips and the conflict report,
-            // and re-derives the standing from them. `finish` no longer carries a verdict — it clears how the
+            // and re-derives the standing from them. `finish` no longer carries a verdict, it clears how the
             // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to
             // land must not keep wearing the error), and takes no turn off the counter because none ran.
             await services.agents.recordLanded(input.id, result);
             /* ...but ONLY once the turn it describes is over. `finish` flushes the turn's usage, releases the
-             * conversation's mutex and writes how the turn ended — the right close for a land on a resting
+             * conversation's mutex and writes how the turn ended, the right close for a land on a resting
              * agent, and a lie on a live one. Called under a running turn it would free the mutex a second
              * turn could then claim beside the first, and stamp an ending on a turn still streaming frames
              * that will stamp their own. The land itself is complete either way; what waits is the
@@ -395,9 +395,9 @@ export const createAgentsRoutes = (services: Services) => {
             }
             if (result.landed && result.changed) {
                 // What this work DID, drafted from the diff now sitting in the tree, for the Changes panel's
-                // chip to file into the commit box. Not awaited — the card's response does not wait on it.
+                // chip to file into the commit box. Not awaited, the card's response does not wait on it.
                 describeLandingInBackground(services, entry.id);
-                // The main tree changed under the user — same attribution convention as git.discard.
+                // The main tree changed under the user, same attribution convention as git.discard.
                 services.history.notifyUserWrite();
                 emitWorkspaceEvent(
                     services,
@@ -415,7 +415,7 @@ export const createAgentsRoutes = (services: Services) => {
             return {
                 landed: result.landed,
                 ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
-                // A `merge` land's report of the paths it left carrying conflict markers — dropping this is
+                // A `merge` land's report of the paths it left carrying conflict markers, dropping this is
                 // how the panel's "Landed with N files to finish" strip went permanently dark.
                 ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
                 ...(result.held === true ? { held: true } : {}),
@@ -432,8 +432,8 @@ export const createAgentsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Named ids archive whatever the user pointed at (a card, or a bulk undo's inverse); no ids means
-        // "clear the Finished lane" — every agent that is archivable RIGHT NOW, ignoring the retention clock.
-        // Both routes answer with what MOVED and not with the roster afterwards: see AgentsMovedSchema — a
+        // "clear the Finished lane", every agent that is archivable RIGHT NOW, ignoring the retention clock.
+        // Both routes answer with what MOVED and not with the roster afterwards: see AgentsMovedSchema, a
         // snapshot would let two overlapping requests undo each other's work in the browser.
         archive: i.archive.handler(async ({ input }) => {
             if (input.ids !== undefined) {
@@ -444,15 +444,15 @@ export const createAgentsRoutes = (services: Services) => {
             }
             /* THE RE-PROBE IS THE BULK PRESS'S ALONE. "Every agent that is archivable right now" is a question
              * about the DERIVED half of the status, which is invisible from the persisted entry (see
-             * archive.ts) — so "Clear" has to re-ask git before it can decide what qualifies.
+             * archive.ts), so "Clear" has to re-ask git before it can decide what qualifies.
              *
              * A named archive has already been decided, by the user, about a card they are looking at: the ids
              * ARE the answer that probe would produce. Awaiting it anyway made one click cost a standing read
-             * over the whole live roster — cheap while every verdict's key still holds, and a git pass per
+             * over the whole live roster, cheap while every verdict's key still holds, and a git pass per
              * agent the moment anything moved main (a land, a hand-commit, a restart empties the cache
              * outright). That is the whole of "archiving one card is sometimes ultra slow" on a board with a
              * thousand sessions on it: the press paid for the fleet before it did the one thing it was for.
-             * Nothing downstream needs the fresher verdict either — the guards a named archive owes the user
+             * Nothing downstream needs the fresher verdict either, the guards a named archive owes the user
              * are `notRunning` above, and archiveAgents re-reads each entry as it goes. */
             const archivableNow = async (): Promise<string[]> => {
                 await services.agents.refreshStandings();
@@ -464,7 +464,7 @@ export const createAgentsRoutes = (services: Services) => {
             const targets = input.ids ?? (await archivableNow());
             const archived = await archiveAgents(services, targets, Date.now());
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
-            // the revision that applied it — the browser holds these ids off the board until a roster at least
+            // the revision that applied it, the browser holds these ids off the board until a roster at least
             // that new arrives, so an in-flight older snapshot can't put them back.
             return {
                 moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
@@ -484,12 +484,12 @@ export const createAgentsRoutes = (services: Services) => {
             };
         }),
         /* The archive's own exit, and the destructive one: everything filed away is deleted outright, branches
-         * included. Answers with the ids that actually went — a teardown that fails on one agent leaves that one
+         * included. Answers with the ids that actually went, a teardown that fails on one agent leaves that one
          * in the archive rather than failing the press (see purgeArchived).
          *
          * The ARCHIVED RUN RECORDS go with them, because an archived run is the row the archive lists its steps
          * under: leaving it behind would draw a workflow in an emptied archive whose sessions no longer exist,
-         * and clicking it would open nothing. Only archived runs — a run still on the board is not in the pile
+         * and clicking it would open nothing. Only archived runs, a run still on the board is not in the pile
          * this press is about, even if the retention sweep filed some of its steps away on their own.
          */
         purge: i.purge.handler(async () => {

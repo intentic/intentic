@@ -4,15 +4,15 @@ import { type UsageRollupRow, type UsageTurn, UsageTurnSchema } from "@intentic/
 
 /* The durable spend ledger (historyRoot/usage.jsonl): one append-only line per attributed turn, written by the
  * daemon only. Living under historyRoot keeps it outside the agent's /work mount, so the agent can't rewrite
- * its own spend record — the same placement rationale as the activity log and workspace history.
+ * its own spend record, the same placement rationale as the activity log and workspace history.
  *
  * Why a second log rather than reusing activity.jsonl: that log prunes to its most recent entries, which is
  * right for an audit feed and wrong for money. Under pruning a spend total SHRINKS as newer turns evict older
  * ones, so "what did this month cost" is not merely unavailable but actively misreported. This log is never
- * pruned. A row is ~250 bytes and a heavy day is ~100 turns, so a year of hard use lands near 9 MB — cheap
+ * pruned. A row is ~250 bytes and a heavy day is ~100 turns, so a year of hard use lands near 9 MB, cheap
  * enough that exactness beats compaction.
  * ponytail: if a multi-year sandbox ever makes the read cost matter, fold days older than the current quarter
- * into one pre-rolled line per day. That is a pure compaction of rows this schema already describes — no
+ * into one pre-rolled line per day. That is a pure compaction of rows this schema already describes, no
  * migration, because `rollup` sums whatever granularity it finds. */
 
 export interface UsageStore {
@@ -23,7 +23,7 @@ export interface UsageStore {
     // day bounds.
     readonly rollup: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageRollupRow[]>;
     // The rows themselves, same bounds. The rollup is a projection built for the cost panels and cannot answer
-    // a question about the SPREAD of turns — the terse experiment needs a per-turn variance to put a margin on
+    // a question about the SPREAD of turns, the terse experiment needs a per-turn variance to put a margin on
     // its delta, and summing that out of grouped rows is exactly the information the grouping destroyed.
     readonly turns: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageTurn[]>;
 }

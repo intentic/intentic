@@ -9,9 +9,9 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
 import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "./agent-refs.js";
 import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
 
-// A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
+// A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout,
 // <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/<repo>/ each nested
-// repo's — so the agent, .claude/ config resolution, and monorepo-relative paths work unmodified. Worktrees
+// repo's, so the agent, .claude/ config resolution, and monorepo-relative paths work unmodified. Worktrees
 // live on /history (the volume the real git dirs already occupy): they survive container rebuilds, stay
 // invisible to the /work tree walk + watcher + iq + history scopes, and their gitdir pointers never straddle
 // volumes. The object stores are shared; a worktree costs only its checkout.
@@ -20,11 +20,11 @@ import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./i
 // conversation, and repos the agent clones inside its worktree are outside diff/land (both v2).
 
 export interface ConversationWorktree {
-    // The agent's cwd for isolated turns — the root repo's worktree dir.
+    // The agent's cwd for isolated turns, the root repo's worktree dir.
     readonly cwd: string;
     readonly branch: string;
     // Each repo in the composition with the full sha its branch sits on the main line at. Set here at creation
-    // and moved by the pre-turn rebase whenever the main line runs ahead of it (agents/sync.ts) — so it is
+    // and moved by the pre-turn rebase whenever the main line runs ahead of it (agents/sync.ts), so it is
     // where the branch stands TODAY, not a record of where it started.
     readonly repos: readonly { repo: string; base: string }[];
 }
@@ -36,7 +36,7 @@ export interface AgentWorktrees {
     readonly exists: (id: string) => Promise<boolean>;
     // Is this repo's checkout actually on disk? `archivedAt` cannot answer it: a restored agent keeps the
     // marker clear while its checkout stays retired until the next turn's ensure() re-attaches it. Diff,
-    // fileDiff and land all branch on this — the checkout when it is there, the branch refs when it is not.
+    // fileDiff and land all branch on this, the checkout when it is there, the branch refs when it is not.
     readonly attached: (id: string, repo: string) => Promise<boolean>;
     // The current full HEAD of every repository a new conversation would span. A workflow captures this once
     // and hands it to every candidate, so a fan-out cannot observe several different moving workspaces.
@@ -48,9 +48,9 @@ export interface AgentWorktrees {
         recorded: readonly { repo: string; base: string }[],
         base?: readonly { repo: string; base: string }[],
     ) => Promise<ConversationWorktree>;
-    // Tear down: worktree remove (before the ref goes — git refuses to delete a checked-out branch), then the dir.
+    // Tear down: worktree remove (before the ref goes, git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
-    // Retire the CHECKOUT and keep the commits — what archiving an agent costs. Everything the worktree still
+    // Retire the CHECKOUT and keep the commits, what archiving an agent costs. Everything the worktree still
     // held is committed onto agent/<id> first (land's move, same author), so the branch is a complete record
     // and `ensure` can restore the checkout from it whenever the agent runs again. The branch itself then
     // leaves refs/heads/ for the parked shelf (agents/agent-refs.ts), which nothing above this layer can tell.
@@ -59,7 +59,7 @@ export interface AgentWorktrees {
     // branches of agents that are off the board, and drop parked refs the registry no longer knows.
     //
     // The id sets are CALLBACKS, re-read at each decision, because this runs DETACHED behind the boot (it is
-    // sweep work, and awaiting it held every route for minutes after a crash) — a conversation the user opens
+    // sweep work, and awaiting it held every route for minutes after a crash), a conversation the user opens
     // while the sweep walks must not be judged by a roster snapshotted before it existed.
     readonly prune: (knownIds: () => readonly string[], archivedIds: () => readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
@@ -75,12 +75,12 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-/* ROOT, THEN THE REST TOGETHER — the shape every pass over a composition takes, and the one thing about a
+/* ROOT, THEN THE REST TOGETHER, the shape every pass over a composition takes, and the one thing about a
  * composition that is genuinely ordered.
  *
  * Root's checkout CREATES the conversation dir the nested worktrees mount into, so it cannot run beside them;
  * nothing else in a composition depends on anything else in it. `withRepoLock` is already per repo, so the
- * serial `for` loops this replaces were not protecting anything — each iteration simply waited on a lock it was
+ * serial `for` loops this replaces were not protecting anything, each iteration simply waited on a lock it was
  * never going to contend, and a workspace that grew from one repo to six grew its turn-start cost by the same
  * factor, on the one path a person is watching. `retire` had always done it this way (see its pass 2); create,
  * repair and remove had not caught up.
@@ -104,7 +104,7 @@ const eachRepo = async (
 };
 
 // DEPENDENCY MIRRORING. A worktree is a checkout of TRACKED files, and everything a package's imports resolve
-// THROUGH is untracked by design — its installed tree and its build output (isolation.ts's MIRRORED_DIRS) — so
+// THROUGH is untracked by design, its installed tree and its build output (isolation.ts's MIRRORED_DIRS), so
 // a fresh worktree holds source that cannot resolve a single import, its own siblings least of all. Nothing
 // type-checks, lints or tests, and the post-edit diagnostics gate on a resolvable node_modules
 // (agent-diagnostics.ts), so an isolated turn silently gets NO compile feedback at all while the readiness
@@ -120,7 +120,7 @@ const eachRepo = async (
 //
 // WHERE ISOLATION IS AVAILABLE, this is done with OVERLAY MOUNTS instead (agents/isolation.ts) and only the
 // empty mount point is created here. That is strictly better and not just different: an absolute symlink into
-// /work/... would, inside the namespace, point back into the worktree that now occupies /work — a loop. And
+// /work/... would, inside the namespace, point back into the worktree that now occupies /work, a loop. And
 // unlike the symlink (or a plain bind), an overlay does not share the WRITE side: pnpm hardlinks a workspace
 // package's sources into node_modules, so a write through the mirrored path used to land on the main
 // checkout's own tracked file. Reads still come from the main tree; writes stop at the turn's layer.
@@ -140,7 +140,7 @@ export const createAgentWorktrees = (
 
     const conversationDir = (id: string): string => join(worktreesRoot, id);
     /* An isolated turn's dependency overlays (isolation.ts) live OUTSIDE the checkout, so reclaiming the
-     * checkout does not reclaim them — every teardown path below drops both. They hold only what a turn wrote
+     * checkout does not reclaim them, every teardown path below drops both. They hold only what a turn wrote
      * over the main tree's node_modules (a tsbuildinfo, an install's output), so this is space, never work:
      * nothing an agent is meant to keep is ever written there. */
     const overlaysFor = (id: string): string => overlaysDir(historyRoot, id);
@@ -149,18 +149,18 @@ export const createAgentWorktrees = (
 
     // Per-repo op chains (the history.ts serialize pattern): worktree add/remove and land all touch the repo's
     // shared admin area (<gitdir>/worktrees/) and, for land, the main-tree index. Turns themselves never come
-    // through here — per-worktree index/HEAD make concurrent agent work naturally safe.
+    // through here, per-worktree index/HEAD make concurrent agent work naturally safe.
     const chains = new Map<string, Promise<unknown>>();
-    // How many tasks are queued on each repo's chain right now — measurement only, and the single number that
+    // How many tasks are queued on each repo's chain right now, measurement only, and the single number that
     // separates the two ways this lock makes a user wait (see below).
     const queued = new Map<string, number>();
     /* WAIT AND HOLD ARE MEASURED SEPARATELY, because they are different problems wearing the same symptom.
      *
-     * The user clicks Stage; it takes four seconds. Either the stage itself was slow (hold — a huge index, a
-     * contended disk), or it sat behind an agent's land checking out the monorepo (wait — the stage was
+     * The user clicks Stage; it takes four seconds. Either the stage itself was slow (hold, a huge index, a
+     * contended disk), or it sat behind an agent's land checking out the monorepo (wait, the stage was
      * instant and never got to start). Those have nothing in common: one is a git problem, the other is a
      * scheduling one, and a single "the commit took 4s" line cannot tell you which you have. This is the
-     * likeliest explanation for "git actions feel slow" and it was completely invisible — a queued task simply
+     * likeliest explanation for "git actions feel slow" and it was completely invisible, a queued task simply
      * had no clock on it until it ran.
      *
      * `depth` is what was already ahead of it in the queue, so a line reads "waited 3.2s behind 2 tasks". */
@@ -203,7 +203,7 @@ export const createAgentWorktrees = (
     };
 
     // The workspace repos a NEW conversation spans: root plus every discovered repo. Unborn-HEAD repos are
-    // skipped in createOne — an unborn HEAD has nothing to branch from.
+    // skipped in createOne, an unborn HEAD has nothing to branch from.
     const liveRepos = async (): Promise<string[]> => ["root", ...(await discoverRepos(workspace.root))];
 
     const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
@@ -215,7 +215,7 @@ export const createAgentWorktrees = (
         }
         const branch = `agent/${id}`;
         const target = worktreeDir(id, repo);
-        // A crash between branch creation and checkout leaves the branch without a dir — attach, don't recreate.
+        // A crash between branch creation and checkout leaves the branch without a dir, attach, don't recreate.
         if (await branchExists(main, branch)) {
             await git(main, ["worktree", "add", target, branch]);
         } else {
@@ -229,12 +229,12 @@ export const createAgentWorktrees = (
         if (await exists(join(target, ".git"))) {
             return;
         }
-        /* Past the early return is the RESTORE path, so the branch may be parked — an archived agent the user
+        /* Past the early return is the RESTORE path, so the branch may be parked, an archived agent the user
          * just sent a message to (registry.begin cleared the marker moments ago), or one this boot's sweep
          * archived for having no checkout. Unparking is a no-op for anything else, and it has to come first:
          * `worktree add` handed a name that resolves only through the shelf checks the commit out DETACHED,
          * and the resumed turn's commits would then land on nothing. One spawn, on the path that already
-         * spends several — never on the attached path above, which is every ordinary turn. */
+         * spends several, never on the attached path above, which is every ordinary turn. */
         await unparkAgentRef(mainDir(repo), `agent/${id}`, git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "agents: branch unpark failed"),
         );
@@ -251,16 +251,16 @@ export const createAgentWorktrees = (
         );
     };
 
-    // Which of these link paths git will keep out of a commit — asked of git rather than assumed, because the
+    // Which of these link paths git will keep out of a commit, asked of git rather than assumed, because the
     // answer is not the obvious one. `retire` sweeps a worktree with `add -A`, and a gitignore rule written
     // DIRECTORY-ONLY (`node_modules/`, the common form) does not match a symlink: git sees a file, stages it,
     // and a machine-local absolute symlink lands on the agent branch and then in whatever `land` merges. Only a
     // rule that matches files too (`**/node_modules`) makes the link safe to plant. So a repo whose rule is
-    // directory-only is left unmirrored on purpose — no tooling, but no poisoned history either.
+    // directory-only is left unmirrored on purpose, no tooling, but no poisoned history either.
     //
     // One spawn per repo answers it exactly. check-ignore exits 1 when nothing matches, which is the "link
     // nothing" answer rather than a failure; `-z` is unavailable (it requires --stdin, which GitRunner cannot
-    // feed), so this reads line-separated output and any path git chose to quote simply fails to match — the
+    // feed), so this reads line-separated output and any path git chose to quote simply fails to match, the
     // same fail-closed direction as the exit-1 case.
     const ignoredLinks = async (worktree: string, links: readonly string[]): Promise<Set<string>> => {
         if (links.length === 0) {
@@ -271,7 +271,7 @@ export const createAgentWorktrees = (
     };
 
     // Mirror one repo's untracked dependency and build-output dirs from its main checkout into its worktree.
-    // Idempotent — an existing link, and a package the agent's branch doesn't carry, are both left alone — so
+    // Idempotent, an existing link, and a package the agent's branch doesn't carry, are both left alone, so
     // it re-runs on every ensure and picks up dirs an install or build produced after the checkout did.
     // Best-effort by design: a link that fails costs that package's tooling, never the turn.
     const linkMirrors = async (id: string, repo: string): Promise<void> => {
@@ -286,14 +286,14 @@ export const createAgentWorktrees = (
         await Promise.all(
             mirrors.map(async (rel) => {
                 const target = join(worktree, rel);
-                // The dir the mirror belongs to — a package the agent's branch does not carry gets nothing.
+                // The dir the mirror belongs to, a package the agent's branch does not carry gets nothing.
                 if (!ignored.has(rel) || !(await exists(join(worktree, dirname(rel))))) {
                     return;
                 }
                 // The mirror's FORM is a property of the container (namespace or not), and worktrees outlive
-                // containers on /history — so a checkout can carry the other mode's form, and ensure must
+                // containers on /history, so a checkout can carry the other mode's form, and ensure must
                 // converge it. A pre-namespace absolute symlink would, inside the namespace, resolve back into
-                // the worktree that now occupies /work — a loop the anchor's mkdir dies on. The other way, an
+                // the worktree that now occupies /work, a loop the anchor's mkdir dies on. The other way, an
                 // empty mount point left by an isolated run would sit where the symlink belongs and resolve
                 // nothing for a namespace-less turn.
                 const entry = await lstat(target).catch(() => undefined);
@@ -307,13 +307,13 @@ export const createAgentWorktrees = (
                     return;
                 }
                 if (entry?.isDirectory()) {
-                    // rmdir refuses a non-empty dir — a real install the agent made stays put.
+                    // rmdir refuses a non-empty dir, a real install the agent made stays put.
                     await rmdir(target).catch(() => undefined);
                 }
                 // "junction" on Windows: a dir symlink there needs a privilege ordinary accounts lack, while a
                 // junction does the same resolve-through job unprivileged (and takes the absolute path this is).
                 await symlink(join(main, rel), target, process.platform === "win32" ? "junction" : "dir").catch((error: unknown) => {
-                    // EEXIST is the steady state, not a failure: the link — or a real install — is already there.
+                    // EEXIST is the steady state, not a failure: the link, or a real install, is already there.
                     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                         logger.warn({ err: error, repo, mirror: rel }, "agents: mirror link failed");
                     }
@@ -323,7 +323,7 @@ export const createAgentWorktrees = (
     };
 
     // Runs once the WHOLE composition is on disk: a nested repo's worktree dir must exist before links can be
-    // planted in it. No repo lock — this reads the main checkout and writes only inside this conversation's own
+    // planted in it. No repo lock, this reads the main checkout and writes only inside this conversation's own
     // worktree, so taking one would serialize the fleet behind a queue it has no reason to join.
     const linkComposition = async (id: string, repos: readonly { readonly repo: string }[]): Promise<void> => {
         await Promise.all(repos.map(({ repo }) => linkMirrors(id, repo)));
@@ -350,7 +350,7 @@ export const createAgentWorktrees = (
                 return { cwd: conversationDir(id), branch, repos: recorded };
             }
             // Root first: its checkout creates the conversation dir the nested worktrees mount into (the root
-            // repo excludes every repo dir — syncRootExcludes — so the mounts never collide with its own
+            // repo excludes every repo dir, syncRootExcludes, so the mounts never collide with its own
             // tracked files).
             const live = base === undefined ? (await liveRepos()).map((repo) => ({ repo, base: undefined })) : base;
             const created = new Map<string, { repo: string; base: string }>();
@@ -373,7 +373,7 @@ export const createAgentWorktrees = (
                 withRepoLock(repo, async () => {
                     const main = mainDir(repo);
                     await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
-                        // Dir already gone — drop the stale admin entry instead.
+                        // Dir already gone, drop the stale admin entry instead.
                         git(main, ["worktree", "prune"]).catch(() => undefined),
                     );
                     // Both spellings: an archived agent being discarded holds its commits on the parked shelf,
@@ -390,7 +390,7 @@ export const createAgentWorktrees = (
             //
             // PASS 1 takes NO repo lock, and that is the difference between archiving one agent and archiving
             // ten: `withRepoLock` is a per-repo chain shared by every agent, so holding it here would serialize
-            // the whole fleet's preserve work behind one queue. Nothing in this pass needs it — the status read,
+            // the whole fleet's preserve work behind one queue. Nothing in this pass needs it, the status read,
             // the index write and the commit all happen inside THIS agent's own worktree (its own index, its own
             // HEAD), and the only shared things it touches are the object store (content-addressed) and its own
             // refs/heads/agent/<id> (git's per-ref lockfile). The admin area `withRepoLock` exists to protect is
@@ -404,9 +404,9 @@ export const createAgentWorktrees = (
                     // ONE spawn to answer "is there anything to keep", which is the answer in the common case:
                     // a cleanly-landed agent's worktree is already clean, because land committed its remainder.
                     // (The full changedFiles read this replaced cost five to seven spawns to say the same thing,
-                    // per repo, per agent — the single biggest chunk of an archive's wall clock.) Porcelain
+                    // per repo, per agent, the single biggest chunk of an archive's wall clock.) Porcelain
                     // covers staged, unstaged AND untracked, which is exactly what `add -A` below would sweep.
-                    // It also OVER-reports — dirty content inside a nested repo stages as nothing — which is
+                    // It also OVER-reports, dirty content inside a nested repo stages as nothing, which is
                     // why the commit itself is commitWorktreeRemainder's call, on the index, and not this probe's.
                     const { stdout } = await git(worktree, ["status", "--porcelain", "-z"]);
                     if (stdout === "") {
@@ -415,17 +415,17 @@ export const createAgentWorktrees = (
                     await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
                 }),
             );
-            // PASS 2 does need the lock (worktree admin area), but only per repo — so the nested repos run
+            // PASS 2 does need the lock (worktree admin area), but only per repo, so the nested repos run
             // concurrently with each other. ROOT GOES LAST: its worktree dir is the parent the nested checkouts
             // mount into, so removing it first deletes them out from under their own `worktree remove`, which
-            // then fails into a `prune` fallback — two wasted spawns per nested repo, every time.
+            // then fails into a `prune` fallback, two wasted spawns per nested repo, every time.
             const removeOne = (repo: string): Promise<void> =>
                 withRepoLock(repo, async () => {
                     const main = mainDir(repo);
                     await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
                         git(main, ["worktree", "prune"]).catch(() => undefined),
                     );
-                    /* The commits stay — they ARE the archive — but the BRANCH does not: it moves to the
+                    /* The commits stay, they ARE the archive, but the BRANCH does not: it moves to the
                      * parked shelf (agent-refs.ts), so an archive costs the repo no refs/heads/ entry for as
                      * long as nobody opens the conversation again. Inside the repo lock and strictly after
                      * the checkout is gone, because that is the one thing that makes the ref deletable.
@@ -437,13 +437,13 @@ export const createAgentWorktrees = (
                 });
             await eachRepo(recorded, "root-last", removeOne);
             await rm(conversationDir(id), { recursive: true, force: true });
-            // The branch is the archive; the overlays are not part of it — an archived conversation's
+            // The branch is the archive; the overlays are not part of it, an archived conversation's
             // dependency scratch has no more claim on the disk than a removed one's.
             await rm(overlaysFor(id), { recursive: true, force: true });
         },
         prune: async (knownIds, archivedIds) => {
             for (const name of await readdir(worktreesRoot).catch(() => [])) {
-                // Membership is asked of the registry AT the decision — a conversation minted after this sweep
+                // Membership is asked of the registry AT the decision, a conversation minted after this sweep
                 // started (the sweep runs detached behind boot) must not have its dir swept as an orphan.
                 if (!knownIds().includes(name)) {
                     logger.warn({ id: name }, "agents: pruning orphaned worktree dir");
@@ -452,7 +452,7 @@ export const createAgentWorktrees = (
             }
             // Swept separately, not alongside the checkouts: an overlay outlives its checkout by design (retire
             // drops the worktree and keeps the branch), so the leftovers here are the ones whose conversation
-            // is gone entirely — including any a crash left behind between the two removals above.
+            // is gone entirely, including any a crash left behind between the two removals above.
             for (const name of await readdir(overlaysRoot(historyRoot)).catch(() => [])) {
                 if (!knownIds().includes(name)) {
                     await rm(overlaysFor(name), { recursive: true, force: true });
@@ -465,12 +465,12 @@ export const createAgentWorktrees = (
                     const main = mainDir(repo);
                     await git(main, ["worktree", "prune"]).catch(() => undefined);
                     /* The ref half of the same sweep, and the only pass that can converge an archive taken before
-                     * parking existed — or one whose park lost its repo lock to a crash. Both calls are a single
+                     * parking existed, or one whose park lost its repo lock to a crash. Both calls are a single
                      * for-each-ref when there is nothing to do, which is every boot after the first.
                      *
                      * Orphan parked refs are dropped against `knownIds`, NOT `archivedIds`: a ref whose entry the
                      * registry has forgotten is holding commits no surface can ever reach again. That is the same
-                     * line the conversation-dir sweep above draws, and it stays on the safe side of it — deletion
+                     * line the conversation-dir sweep above draws, and it stays on the safe side of it, deletion
                      * the user can see (discard, purge) is the only other thing that drops an agent's commits. */
                     const parked = await parkAgentRefs(main, new Set(archivedIds()), git).catch((error: unknown) => {
                         logger.warn({ err: error, repo }, "agents: branch park sweep failed");

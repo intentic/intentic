@@ -5,14 +5,14 @@ import type { InventoryEntry, InventoryProvider, ServiceKind } from "@intentic/s
  * code outside the markers is never touched. The sandbox owns this (the browser calls the daemon's /inventory
  * routes directly).
  *
- * Three entry shapes live in the region: `backend` (i.have.<provider>(...) — host/cloudflare/github/stripe),
- * `service` (i.want.service(...) — an authorable shared tool like SigNoz) and `app` (i.want.app(...) — a
+ * Three entry shapes live in the region: `backend` (i.have.<provider>(...), host/cloudflare/github/stripe),
+ * `service` (i.want.service(...), an authorable shared tool like SigNoz) and `app` (i.want.app(...), a
  * deployable app, single production environment on `main`). Services and apps reference an existing host +
  * cloudflare binding by NAME, rendered as bare const references (`on: self`), and parsed back to those
- * names — the render→parse cycle must be lossless so repeated edits never mangle a user's entries.
+ * names, the render→parse cycle must be lossless so repeated edits never mangle a user's entries.
  *
  * The inventory wire schemas (InventoryEntry / AddInventoryInputSchema / the provider + service enums) live in
- * @intentic/sandbox-contract — the single source the daemon and the browser client both validate against. This
+ * @intentic/sandbox-contract, the single source the daemon and the browser client both validate against. This
  * module only renders/parses those entries to and from TypeScript. */
 
 // ---- managed-region parser/renderer ----
@@ -30,7 +30,7 @@ interface FieldSpec {
     readonly key: string;
     readonly source: "string" | "number" | "env";
     readonly envVar?: string;
-    // An optional field is emitted only when the entry actually carries a value — so a default like a host's
+    // An optional field is emitted only when the entry actually carries a value, so a default like a host's
     // "direct" transport isn't written as an empty literal that would fail the provider's enum on re-read.
     readonly optional?: boolean;
 }
@@ -76,7 +76,7 @@ const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
 };
 
 // i.want.service field specs (beyond kind/on/expose, which are rendered structurally). Every catalog
-// service takes just a domain — ports/env are the provider's concern.
+// service takes just a domain, ports/env are the provider's concern.
 const SERVICE_REGISTRY: Record<ServiceKind, ProviderSpec> = {
     signoz: { fields: [{ key: `domain`, source: `string` }] },
     outline: { fields: [{ key: `domain`, source: `string` }] },
@@ -119,7 +119,7 @@ const renderBackendEntry = (entry: Extract<InventoryEntry, { kind: `backend` }>)
     return `${INDENT}const ${entry.name} = i.have.${entry.provider}(${JSON.stringify(entry.name)}, { ${options} });`;
 };
 
-// i.want.service references its host + cloudflare bindings by name (bare identifiers — NOT quoted), so the
+// i.want.service references its host + cloudflare bindings by name (bare identifiers. NOT quoted), so the
 // generated TS wires the same const bindings the backend entries declare.
 const renderServiceEntry = (entry: ServiceEntry): string => {
     const spec = SERVICE_REGISTRY[entry.service];
@@ -173,7 +173,7 @@ export const writeManagedRegion = (src: string, entries: readonly InventoryEntry
 };
 
 // Best-effort parse of the option object source into display values: `key: "string"` and `key: 123`. env(...)
-// references (secrets) and bare-identifier references (on/expose) are intentionally skipped — not display values.
+// references (secrets) and bare-identifier references (on/expose) are intentionally skipped, not display values.
 const parseValues = (optionsSrc: string): Record<string, string | number> => {
     const values: Record<string, string | number> = {};
     for (const match of optionsSrc.matchAll(/(\w+)\s*:\s*"([^"]*)"/g)) {
@@ -209,7 +209,7 @@ const serviceValues = (kind: ServiceKind, all: Record<string, string | number>):
 };
 
 // Parses the i.have.* and i.want.service declarations inside the managed region into structured entries.
-// Unknown providers/services (anything not in the registries) are skipped — the inventory only surfaces what
+// Unknown providers/services (anything not in the registries) are skipped, the inventory only surfaces what
 // the platform knows how to manage, so a hand-authored declaration we don't model is left untouched.
 export const readManagedRegion = (src: string): InventoryEntry[] => {
     const lines = src.split(`\n`);
@@ -221,7 +221,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
 
     const entries: InventoryEntry[] = [];
     for (const line of lines.slice(begin + 1, end)) {
-        // service: i.want.service("name", { kind, on, expose, ... }) — on/expose are bare const references.
+        // service: i.want.service("name", { kind, on, expose, ... }), on/expose are bare const references.
         const serviceMatch = /i\.want\.service\(\s*"([^"]+)"\s*,\s*\{(.*)\}\s*\)/.exec(line);
         if (serviceMatch) {
             const name = serviceMatch[1];
@@ -274,7 +274,7 @@ export const readManagedRegion = (src: string): InventoryEntry[] => {
     return entries;
 };
 
-// A fresh deploy.config.ts containing only the managed region — the base when writing inventory into a repo
+// A fresh deploy.config.ts containing only the managed region, the base when writing inventory into a repo
 // that has no config yet, and the neutral ledger the CLI's `init --minimal` and the daemon's first-boot scaffold.
 export const scaffoldDeployConfig = (entries: readonly InventoryEntry[]): string =>
     [

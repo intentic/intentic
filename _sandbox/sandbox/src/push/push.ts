@@ -6,7 +6,7 @@ import { sendRelay } from "./senders/relay.js";
 import type { SendOutcome } from "./senders/send.js";
 import { sendWebPush } from "./senders/webpush.js";
 
-/* Sending a notification to every device registered with this sandbox — browsers over web push, native
+/* Sending a notification to every device registered with this sandbox, browsers over web push, native
  * installs through the platform relay. The transports live in senders/ behind one outcome shape; this file
  * owns only the fan-out, the prune, and the two properties that matter more than any mechanics:
  *
@@ -16,8 +16,8 @@ import { sendWebPush } from "./senders/webpush.js";
  * 2. Never let a push failure touch the thing that triggered it. Every send is fire-and-forget from the
  *    caller's perspective: a turn must complete identically whether a push service is up, down, or slow. */
 
-// How many devices a send actually reached. The turn lifecycle ignores it — a missed notification is never
-// worth failing a turn over — but the settings page's test button has no other way to tell the user whether
+// How many devices a send actually reached. The turn lifecycle ignores it, a missed notification is never
+// worth failing a turn over, but the settings page's test button has no other way to tell the user whether
 // the chain it claims to prove is intact, and a silent zero is precisely the failure it exists to catch.
 export interface PushDelivery {
     readonly delivered: number;
@@ -25,10 +25,10 @@ export interface PushDelivery {
 }
 
 export interface PushSender {
-    // Fan out to every registered device. Resolves once every send settles; never rejects — a failing device
+    // Fan out to every registered device. Resolves once every send settles; never rejects, a failing device
     // is a logged warning, since callers get no say in the outcome and nothing to retry with.
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // The same, but skipped entirely when anyone is actively watching this sandbox — nobody wants a phone
+    // The same, but skipped entirely when anyone is actively watching this sandbox, nobody wants a phone
     // buzzing about a screen they are already looking at. This is what the turn lifecycle calls; `notify`
     // stays available for the settings page's explicit "send a test" button, which must fire even though the
     // user is by definition looking at the screen when they press it.

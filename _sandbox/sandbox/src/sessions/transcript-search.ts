@@ -4,11 +4,11 @@ import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
 
-/* What was SAID in a session, per side — the text the fleet filter and the history search match on.
+/* What was SAID in a session, per side, the text the fleet filter and the history search match on.
  *
  * The board's filter answers "which chat was the one about X". Both halves of a conversation carry that: the
  * user's own prompts are what they remember opening with, and the agent's replies are where the answer they
- * are trying to find their way back to actually is — the name it found, the file it named, the number it
+ * are trying to find their way back to actually is, the name it found, the file it named, the number it
  * reported. Matching prompts alone sent people back to opening chats one at a time to re-read them.
  *
  * WHAT IS NOT SPEECH STAYS OUT, and that is the line that keeps a filter a filter: extended thinking, tool
@@ -17,25 +17,25 @@ import { stripTurnPreamble } from "../agent/turn-preamble.js";
  * is a small fraction of a transcript and reads like a sentence a person wrote, which is exactly why it can be
  * searched when a diff dump cannot.
  *
- * It is also why this is NOT readWorkspaceSession. That rebuilds the transcript a reopened tab redraws — tool
- * cards, call-time diffs, result settling — all of which a substring test throws away. Here each message is
+ * It is also why this is NOT readWorkspaceSession. That rebuilds the transcript a reopened tab redraws, tool
+ * cards, call-time diffs, result settling, all of which a substring test throws away. Here each message is
  * reduced to its text, a few KB per session against the megabytes the full rebuild carries.
  *
  * CACHING is what makes searching the whole fleet affordable: one query scans every registered agent, live
- * and archived, and typing is a burst of queries. Lines are immutable once written — a turn only ever APPENDS
- * — so a session's file read stays valid for the life of the daemon.
+ * and archived, and typing is a burst of queries. Lines are immutable once written, a turn only ever APPENDS
+ *, so a session's file read stays valid for the life of the daemon.
  *
  * Which leaves exactly one hole, and it is the case that matters most: the prompt you JUST sent. The SDK
  * writes it as the turn starts, so a search landing in that window would read a transcript without it, cache
  * that, and go on missing it for as long as the turn runs. So the daemon records every prompt it routes
  * (`recordPrompt`, from the turn's begin and from mid-turn steering) into a second list that is unioned with
- * the file read rather than replacing it. A line that appears in both simply matches twice, which is free —
+ * the file read rather than replacing it. A line that appears in both simply matches twice, which is free,
  * whereas the alternatives (mtime probes, TTLs, re-reading per keystroke) all buy the same correctness with
  * work on the query path. The REPLY a live turn is streaming needs no such record: the browser matches the tab
  * it is holding open without asking anyone (useAgentFilter), and the transcript grows the moment it settles.
  */
 
-// One thing someone said, whole — a prompt or a chat bubble, before any windowing. The same pair the wire's
+// One thing someone said, whole, a prompt or a chat bubble, before any windowing. The same pair the wire's
 // MatchSnippet carries, because a snippet IS one of these cut down to the line around the hit.
 export interface SpokenLine {
     readonly text: string;
@@ -92,7 +92,7 @@ const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
         return [];
     }
     /* Copied out of its parent, never sliced from it: every line here reaches a process-lifetime cache, and
-     * the strip/parse steps above answer with V8 slices — views that pin the WHOLE original message (a prompt
+     * the strip/parse steps above answer with V8 slices, views that pin the WHOLE original message (a prompt
      * with its preamble and history envelope runs to hundreds of KB) for as long as one cached line lives.
      * Same mechanics as git/changes.ts materializedPaths, at this module's own single point of construction. */
     return [{ text: Buffer.from(trimmed, "utf8").toString("utf8"), speaker }];
@@ -100,7 +100,7 @@ const spoken = (text: string, speaker: Speaker): SpokenLine[] => {
 
 /* A stored USER message, cleaned of daemon protocol. A runtime handoff carries the earlier conversation inside
  * one SDK user message; unfold it so the replacement session stays searchable by everything that was said
- * before the switch — each side under its own speaker, while the handoff's own labels stay out.
+ * before the switch, each side under its own speaker, while the handoff's own labels stay out.
  */
 const userMessageLines = (text: string): SpokenLine[] => {
     const stripped = stripAttachmentNote(stripTurnPreamble(text)).text;
@@ -114,7 +114,7 @@ const userMessageLines = (text: string): SpokenLine[] => {
     ];
 };
 
-// A prompt the daemon is routing to a session right now — a turn's own prompt, or a message steered into a
+// A prompt the daemon is routing to a session right now, a turn's own prompt, or a message steered into a
 // running one. Searchable from this moment, whether or not the transcript has been flushed.
 export const recordPrompt = (sessionId: string, prompt: string): void => {
     const lines = userMessageLines(prompt);
@@ -134,7 +134,7 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
     replaceLines(conversations, conversationId, held, conversationTotals);
 };
 
-// What was said in a restored transcript — the extraction the fleet filter matches on, shared with the cached
+// What was said in a restored transcript, the extraction the fleet filter matches on, shared with the cached
 // per-conversation read in agent-transcript.ts. A `notice` row is neither side speaking (it is something that
 // HAPPENED to the turn), and a message's thinking and tool cards are not speech, so only the text survives.
 export const spokenLinesOf = (messages: readonly RestoredMessage[]): SpokenLine[] =>
@@ -153,7 +153,7 @@ export const conversationLines = (conversationId: string, recorded: readonly Spo
 ];
 
 /* The `message` field of a stored turn is an Anthropic message: a bare string for a plain user prompt, or a
- * block array whose text blocks carry the prose. Everything else is not speech and never enters the index —
+ * block array whose text blocks carry the prose. Everything else is not speech and never enters the index,
  * `tool_result` blocks on a user message, `tool_use` and `thinking` blocks on an assistant one, all of it the
  * SDK's plumbing between turns rather than something either side said.
  */
@@ -210,7 +210,7 @@ const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): Mat
     if (text.length <= SNIPPET_CHARS) {
         return { text, speaker: line.speaker };
     }
-    // Centre the window on the hit, then clamp to the ends — a match near either edge keeps its full context
+    // Centre the window on the hit, then clamp to the ends, a match near either edge keeps its full context
     // on the side that has room instead of padding an ellipsis that shows nothing.
     const centred = Math.round(at + needle.length / 2 - SNIPPET_CHARS / 2);
     const start = Math.max(0, Math.min(text.length - SNIPPET_CHARS, centred));
@@ -218,7 +218,7 @@ const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): Mat
     return { text: `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`, speaker: line.speaker };
 };
 
-/* The matched line, windowed around the hit — the EVIDENCE a filtered card shows. Without it a card matching
+/* The matched line, windowed around the hit, the EVIDENCE a filtered card shows. Without it a card matching
  * on message #7 is unexplained, and an unexplained result is what teaches people not to trust a search.
  * Whitespace is collapsed first: a message is usually several lines, and a snippet that kept them would push
  * every other card down the lane.
@@ -228,7 +228,7 @@ const windowed = (line: SpokenLine, needle: string, caseSensitive: boolean): Mat
  * three turns later is the weaker evidence of the two even though it usually sits earlier in the scan.
  *
  * Returns undefined when nothing matched. `needle` arrives folded to the case rule the caller is searching under
- * — lowercased for the default, verbatim when the field's Aa switch is on — because a filter runs this over the
+ *, lowercased for the default, verbatim when the field's Aa switch is on, because a filter runs this over the
  * whole fleet on every keystroke, so the query is prepared once by the caller rather than per line here.
  */
 export const matchLines = (lines: readonly SpokenLine[], needle: string, caseSensitive: boolean): MatchSnippet | undefined => {

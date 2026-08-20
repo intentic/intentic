@@ -3,24 +3,24 @@ import type { ForticlientConnection } from "@intentic/sandbox-contract";
 // Reading an exported FortiClient configuration (File → Settings → Backup) into addable connections, so a user
 // who has that file picks a connection instead of re-keying its endpoint and protocol.
 //
-// What can and cannot be recovered is the whole story here. FortiClient wraps stored credentials — and often
-// the username too — in its proprietary "EncX <hex>" format, keyed to the machine that exported it. That is not
+// What can and cannot be recovered is the whole story here. FortiClient wraps stored credentials, and often
+// the username too, in its proprietary "EncX <hex>" format, keyed to the machine that exported it. That is not
 // reversible from a config file, and pretending otherwise would produce silently-wrong connections, so every
 // EncX value is DROPPED and reported through `needs` as something the user must type. The endpoint, protocol,
-// identity and mode — the tedious parts — all sit in the clear and are what this actually saves.
+// identity and mode, the tedious parts, all sit in the clear and are what this actually saves.
 //
 // Hand-rolled rather than an XML dependency: the shapes needed are three fixed nestings deep, the input is a
 // file the user pastes (so a lenient reader beats a strict one that rejects a slightly-off export), and the
 // daemon has no XML parser otherwise.
 
 // The DH groups the ipsec capability can express (IpsecVpnConfigSchema.dhGroup). A group outside this set is
-// dropped rather than imported wrong — the user then picks one, instead of getting a silent mismatch.
+// dropped rather than imported wrong, the user then picks one, instead of getting a silent mismatch.
 const SUPPORTED_DH_GROUPS = new Set(["2", "5", "14", "15", "16", "19", "20"]);
 
 // A FortiClient-encrypted value. Never a usable credential here.
 const isEncrypted = (value: string): boolean => value.startsWith("EncX ") || value.startsWith("Enc ");
 
-// Strip CDATA wrappers and surrounding whitespace — FortiClient wraps some values, not others.
+// Strip CDATA wrappers and surrounding whitespace. FortiClient wraps some values, not others.
 const clean = (raw: string): string => {
     const cdata = /^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/.exec(raw);
     return (cdata?.[1] ?? raw).trim();
@@ -40,7 +40,7 @@ const plainText = (scope: string, tag: string): string | undefined => {
 };
 
 // The <connection>…</connection> blocks inside the named section (<sslvpn> or <ipsecvpn>). Sectioning first is
-// what keeps an SSL connection from being read as an IPsec one — both use the same element name.
+// what keeps an SSL connection from being read as an IPsec one, both use the same element name.
 const connectionBlocks = (xml: string, section: string): string[] => {
     const sectionBody = new RegExp(`<${section}\\s*>([\\s\\S]*?)</${section}>`, "i").exec(xml)?.[1];
     if (sectionBody === undefined) {
@@ -50,7 +50,7 @@ const connectionBlocks = (xml: string, section: string): string[] => {
 };
 
 // Latin letters whose base form NFKD cannot recover, because the diacritic is a stroke or bar THROUGH the
-// glyph rather than a combining mark над it — so "Łódź" would otherwise slug to "odz", silently losing its
+// glyph rather than a combining mark над it, so "Łódź" would otherwise slug to "odz", silently losing its
 // first letter. Only the letters a European VPN connection name realistically carries.
 const STROKED_LATIN: Record<string, string> = {
     ł: "l",
@@ -73,7 +73,7 @@ export const slugId = (name: string, index: number): string => {
     const slug = name
         .toLowerCase()
         // Non-ASCII only, spelled as the property escape rather than as a code-point range: the range says the
-        // same thing with two control characters inside it, which is a lint error — and, typed literally as it
+        // same thing with two control characters inside it, which is a lint error, and, typed literally as it
         // was, a NUL byte that made this whole file read as binary to git, to grep and to every diff viewer.
         .replace(/[^\p{ASCII}]/gu, (char) => STROKED_LATIN[char] ?? char)
         .normalize("NFKD")
@@ -96,7 +96,7 @@ export const splitServer = (server: string, fallbackPort: number): { host: strin
 };
 
 // Parse an exported FortiClient configuration into connections the add form can be filled from. A file with no
-// recognisable connections yields an empty list rather than throwing — "nothing to import" is a fair answer for
+// recognisable connections yields an empty list rather than throwing, "nothing to import" is a fair answer for
 // a partial export, and the route reports it as such.
 export const parseForticlientConfig = (xml: string): ForticlientConnection[] => {
     const connections: ForticlientConnection[] = [];

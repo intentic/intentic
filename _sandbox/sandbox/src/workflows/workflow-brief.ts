@@ -9,13 +9,13 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
  *
  * WHY THE HANDOFF IS SPELLED OUT RATHER THAN IMPLIED. A `fresh` step's session has never seen the workflow, so
  * without this it reads its prompt as a standalone request and cheerfully re-derives everything the previous
- * three steps established — which is not just waste, it is DISAGREEMENT: a step that re-decides which files
+ * three steps established, which is not just waste, it is DISAGREEMENT: a step that re-decides which files
  * matter will pick a different set than the step that was supposed to have decided it, and the two halves of
  * the run then describe different work. Being handed a predecessor's output and being told it is settled is
  * what makes a chain a chain rather than four independent attempts at the same job.
  *
  * WHY IT GOES IN EVEN WHEN THE SESSION IS CONTINUED. A `continue` step's model has the predecessor's reasoning
- * in its transcript already, so this is redundant — for about two steps. By the third it is behind a wall of
+ * in its transcript already, so this is redundant, for about two steps. By the third it is behind a wall of
  * tool output, and restating it costs a few hundred tokens against a prefix that is cached anyway.
  */
 
@@ -27,7 +27,7 @@ const stepConversationId = (runId: string, stepId: string): string => `wf-${runI
 
 /* Which conversation each step runs on, for a whole workflow at once.
  *
- * A `continue` step does NOT get its own — it takes its single predecessor's, and that sharing is the entire
+ * A `continue` step does NOT get its own, it takes its single predecessor's, and that sharing is the entire
  * mechanism behind "same agent, same worktree, next phase". Resolved in one pass over the steps in dependency
  * order rather than lazily, because the run record needs every step's conversation written down before the
  * first one starts: a graph whose nodes cannot be linked to a transcript until they run is a graph you cannot
@@ -42,8 +42,8 @@ export const stepConversations = (runId: string, steps: readonly WorkflowStep[])
             return cached;
         }
         const parent = step.handoff === "continue" ? byId.get(step.needs[0] ?? "") : undefined;
-        // `seen` is belt-and-braces against a cycle the save-time validation should already have refused —
-        // this runs on a snapshot inside a run, where throwing would take the whole run down over a graph that
+        // `seen` is a redundant check against a cycle the save-time validation should already have refused.
+        // This runs on a snapshot inside a run, where throwing would take the whole run down over a graph that
         // was legal when it was saved.
         const id = parent !== undefined && !seen.has(parent.id) ? resolve(parent, new Set([...seen, step.id])) : stepConversationId(runId, step.id);
         resolved.set(step.id, id);
@@ -66,19 +66,19 @@ export interface Handover {
      *
      * This closes what would otherwise be a silent hole in the whole design. In an isolated run every fresh
      * step gets its own worktree off the run's pinned repository snapshot, so a reviewer told "check the implementation" opens a tree that
-     * contains no implementation, finds nothing wrong, and says so — a green review of work it never saw,
+     * contains no implementation, finds nothing wrong, and says so, a green review of work it never saw,
      * which is worse than no review. Naming the branch turns that into the thing it should have been all
      * along: `git diff <pinned-base>...<branch>` is what reviewing a change actually is, and it works precisely
      * BECAUSE the sessions are separate.
      *
      * THE THREE STATES ARE ALL DIFFERENT, and collapsing the last two is how the hole above reopens:
      *
-     * - `undefined` — the question does not arise. A shared-tree run, or a step continuing the same session,
+     * - `undefined`, the question does not arise. A shared-tree run, or a step continuing the same session,
      *   where the work is simply in the tree the reader is standing in. Say nothing.
-     * - a non-empty list — every entry has been RESOLVED (workflows/handover-branches.ts): the ref exists and
+     * - a non-empty list, every entry has been RESOLVED (workflows/handover-branches.ts): the ref exists and
      *   carries commits the pinned base does not. A diff command against one of these is known to show
      *   something.
-     * - EMPTY — the question was asked and the answer was nothing. The step left no committed changes in any
+     * - EMPTY, the question was asked and the answer was nothing. The step left no committed changes in any
      *   repository of the composition. That has to be stated rather than omitted, because a reader who is told
      *   nothing assumes the ordinary case and goes looking in its own tree.
      */
@@ -89,7 +89,7 @@ export interface Handover {
 // what the step was promised and what it is expected to act on; the prose follows as context.
 const handoverFrom = ({ title, document, report, reportPath, branches }: Handover): string => {
     /* Where to look, in the three states the field carries. The empty case says the thing nobody wants to
-     * write down — and is the only one of the three that changes what a reviewer does, because it is the one
+     * write down, and is the only one of the three that changes what a reviewer does, because it is the one
      * where the obvious next move (go and read the diff) is a waste of a turn that ends in a false all-clear. */
     const where =
         branches === undefined
@@ -129,11 +129,11 @@ const handoverFrom = ({ title, document, report, reportPath, branches }: Handove
     ].join(`\n`);
 };
 
-/* The prompt a step's loop is given. Becomes `Loop.prompt` — and for the ordinary step that is the WHOLE turn
+/* The prompt a step's loop is given. Becomes `Loop.prompt`, and for the ordinary step that is the WHOLE turn
  * prompt, because a step with nothing to produce and nothing to check gets no loop framing either (loop-brief's
  * `singleTurn`).
  *
- * A STEP THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE. Not "almost nothing" — nothing. A root
+ * A STEP THAT DECLARES NO PROMPT IS HANDED THE REQUEST AND NOTHING ELSE. Not "almost nothing", nothing. A root
  * step of a design written as a shape receives the sentence the person typed, byte for byte, exactly as if they
  * had sent it to one agent. Every heading is a thing standing between the reader and the model, and a model
  * handed a page about workflows spends some of its attention on workflows; a step whose entire job is "do what
@@ -148,21 +148,21 @@ const handoverFrom = ({ title, document, report, reportPath, branches }: Handove
  * typed: the request, what is already settled, and this step's own instruction.
  *
  * NOTHING NEEDS TO BE SAID ABOUT THE WORKTREE, which is worth writing down because it is not obvious and it was
- * got wrong here. A step does run isolated, and the step after it reads an exact pinned-base-to-branch diff —
+ * got wrong here. A step does run isolated, and the step after it reads an exact pinned-base-to-branch diff,
  * but the daemon commits the worktree onto that branch itself at clean turn completion (agents/land.ts, in
  * both `check` and `measure` modes). Telling the model to commit was instructing it to do something already
  * done for it, at the cost of the one thing this default exists to protect.
  *
- * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN — review this, merge those — so ITS words go
+ * A STEP THAT DECLARES A PROMPT IS SAYING IT HAS A JOB OF ITS OWN, review this, merge those, so ITS words go
  * last, where the instruction belongs, with the request and the handovers above them as the context they are
  * for that step. Two words of heading over it, and only when something IS above it: a block of instruction
  * running straight on from "what the steps before you concluded" reads as more of what was concluded. That is
- * the whole of the framing — a label saying which of these is the ask, not a paragraph explaining it.
+ * the whole of the framing, a label saying which of these is the ask, not a paragraph explaining it.
  *
  * THE REQUEST GOES TO EVERY STEP EITHER WAY, not only to the roots, and above the handovers. A workflow is a
  * shape and the request is what it is pointed at this time, so a step three down is not working from a summary
  * of a summary: the reviewer reads "make the importer handle empty files" and can tell whether what it is
- * looking at is that. It is short, the same text for every step, and cached — the cheapest context in the whole
+ * looking at is that. It is short, the same text for every step, and cached, the cheapest context in the whole
  * brief and the only one that says what any of this is FOR.
  */
 export const briefForStep = (step: WorkflowStep, handovers: readonly Handover[], request?: string): string => {
@@ -180,7 +180,7 @@ export const briefForStep = (step: WorkflowStep, handovers: readonly Handover[],
                       ...handovers.map(handoverFrom),
                   ].join(`\n`),
               ];
-    /* Inheriting: the request IS the instruction. A root step therefore gets the request and NOTHING — not a
+    /* Inheriting: the request IS the instruction. A root step therefore gets the request and NOTHING, not a
      * heading over it, since a heading over the only thing in a message is furniture. A run that would arrive
      * here with no request at all is refused before it starts (workflowRunFaults), which is what lets this be
      * the plain string rather than a third case.

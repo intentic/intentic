@@ -5,8 +5,8 @@ import { vpnDrivers } from "./vpn-drivers.js";
 import { upMarkerPath, vpnDir } from "./vpn-paths.js";
 
 // The one place the manifest ("which VPNs exist") is joined to the machine ("which are up"). Everything that
-// can dial a tunnel — the Sandbox ▸ Status card, the `vpn` CLI on the agent's PATH, the capability handler's
-// apply, and the boot restore — goes through these three functions, so there is exactly one definition of what
+// can dial a tunnel, the Sandbox ▸ Status card, the `vpn` CLI on the agent's PATH, the capability handler's
+// apply, and the boot restore, goes through these three functions, so there is exactly one definition of what
 // connecting means and no surface can drift from another.
 
 // A vpn-kind capability, narrowed. The manifest is a discriminated union over `kind`, so this is the one cast
@@ -78,7 +78,7 @@ export const disconnectVpn = async (entry: VpnEntry): Promise<void> => {
 };
 
 // Boot restore: tunnels die with the container while the manifest survives on /work, so main.ts re-dials every
-// VPN the user left on auto-connect. Best-effort — a dead gateway must not take the daemon down; the failure
+// VPN the user left on auto-connect. Best-effort, a dead gateway must not take the daemon down; the failure
 // lands in the link's state and the daemon log.
 export const reconnectVpns = async (
     capabilities: CapabilitiesStore,

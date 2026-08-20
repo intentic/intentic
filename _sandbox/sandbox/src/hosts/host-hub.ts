@@ -5,8 +5,8 @@ import type { HostFacts, hostContract, HostScopes, HostSummary } from "@intentic
  * typed client for each.
  *
  * There is no request/response plumbing in here, and that is the point of the shape. The socket speaks
- * `hostContract` over oRPC's websocket adapter, so correlating an answer to its question — which used to be a
- * hand-rolled id remap in this file, because two conversations both start their JSON-RPC ids at 1 — is the
+ * `hostContract` over oRPC's websocket adapter, so correlating an answer to its question, which used to be a
+ * hand-rolled id remap in this file, because two conversations both start their JSON-RPC ids at 1, is the
  * link's job now. What is left is what only this daemon can know: who is connected, what they last told us, and
  * what to do when they go away.
  *
@@ -14,7 +14,7 @@ import type { HostFacts, hostContract, HostScopes, HostSummary } from "@intentic
  * restart: after one, every machine reconnects on its own backoff and re-announces itself. Persisting liveness
  * would only let the UI claim a laptop is up when the daemon has no way to reach it. */
 
-// The typed client for one machine — every call in hostContract, over its own socket.
+// The typed client for one machine, every call in hostContract, over its own socket.
 export type HostClient = ContractRouterClient<typeof hostContract>;
 
 // A machine that goes silent without closing its socket (a tunnel that died mid-flight) would otherwise hold a
@@ -38,7 +38,7 @@ interface LiveHost {
 export interface HostHub {
     /* Take over as THE connection for this machine, closing any socket it left behind (a laptop waking from
      * sleep reconnects long before the old socket's keepalive gives up on it). Returns a detach function for the
-     * socket's own close handler — calling it after a newer connection replaced this one does nothing, which is
+     * socket's own close handler, calling it after a newer connection replaced this one does nothing, which is
      * what stops a stale socket from unregistering its own replacement. */
     readonly attach: (id: string, connection: { client: HostClient; close: (code: number, reason: string) => void }) => () => void;
     // What the machine said about itself on connect, and what it answered to `describe`.
@@ -47,17 +47,17 @@ export interface HostHub {
     // The typed client for a connected machine, or undefined when it is offline. Callers that need a REASON for
     // the absence use `mcp`, which throws one the model can read.
     readonly client: (id: string) => HostClient | undefined;
-    // One MCP message to a machine, bounded by CALL_TIMEOUT_MS. Throws when the machine is offline — with the
+    // One MCP message to a machine, bounded by CALL_TIMEOUT_MS. Throws when the machine is offline, with the
     // sentence the agent ends up reading, since an asleep laptop is a normal state, not a fault.
     readonly mcp: (id: string, payload: unknown) => Promise<unknown>;
     // Push the grant. False ⇒ nobody to push to; the machine gets it on its next connect instead.
     readonly pushScopes: (id: string, scopes: HostScopes) => Promise<boolean>;
-    // Cut a machine off now — the owner revoking it, or removing the capability.
+    // Cut a machine off now, the owner revoking it, or removing the capability.
     readonly disconnect: (id: string, reason: string) => void;
     /* The last tool list this machine answered with, remembered across disconnects. A turn loads its MCP servers
      * up front, so a laptop that is asleep at that moment would otherwise fail the handshake and take its tools
      * out of the turn entirely; with the list cached the agent still SEES them and gets a readable "this computer
-     * is asleep" when it calls one — the difference between a model that tells the user to open their laptop and
+     * is asleep" when it calls one, the difference between a model that tells the user to open their laptop and
      * one that reports a broken sandbox. Undefined until the machine has connected once. */
     readonly rememberTools: (id: string, result: unknown) => void;
     readonly knownTools: (id: string) => unknown | undefined;
@@ -90,7 +90,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             const host: LiveHost = {
                 client: connection.client,
                 close: connection.close,
-                // A machine that stops answering is dropped rather than left looking online — the card's dot is
+                // A machine that stops answering is dropped rather than left looking online, the card's dot is
                 // read as "the agent can work here right now", so it has to be a probe, not a memory.
                 heartbeat: setInterval(() => {
                     void connection.client.ping().catch((err: unknown) => {

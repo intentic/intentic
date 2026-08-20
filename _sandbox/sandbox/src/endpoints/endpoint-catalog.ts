@@ -5,11 +5,11 @@ import { z } from "zod";
 import { localTolerantFetch } from "../platform/local-tls.js";
 import { endpointHeaders, versionedBase } from "./endpoint-config.js";
 
-/* WHAT AN ENDPOINT SERVES — read from the server itself, and from nowhere else.
+/* WHAT AN ENDPOINT SERVES, read from the server itself, and from nowhere else.
  *
  * Every other provider's catalog ends in a compile-time seed floor, because we know who Anthropic and xAI are and
  * roughly what they publish. Here we know nothing: the server is whatever the user pointed us at. So the ladder
- * is one rung shorter — live discovery, then the last list this endpoint answered with — and its bottom is an
+ * is one rung shorter, live discovery, then the last list this endpoint answered with, and its bottom is an
  * EMPTY catalog, which is the honest report that the server has never told us anything. Inventing a floor would
  * mean offering models that may not exist on this particular server, and a picker row that 404s on send is worse
  * than a row that is absent.
@@ -20,13 +20,13 @@ import { endpointHeaders, versionedBase } from "./endpoint-config.js";
  * it would stay out until something asked again.
  *
  * Ordering is compareUnrankedModelIds, as for every OpenAI-compatible catalog: these endpoints publish a SET in
- * registry order, so the id-derived rule is the only thing that puts the frontier model at the head — and the
+ * registry order, so the id-derived rule is the only thing that puts the frontier model at the head, and the
  * head is what a fresh conversation seeds. */
 
 export interface EndpointCatalog {
     // This endpoint's models, newest/strongest first. `default` is "" exactly when `models` is empty.
     readonly models: (id: string, config: EndpointConfig) => Promise<{ models: Model[]; default: string }>;
-    // Drop an endpoint's cache + persisted list — its config changed, or it was removed.
+    // Drop an endpoint's cache + persisted list, its config changed, or it was removed.
     readonly forget: (id: string) => Promise<void>;
 }
 
@@ -41,7 +41,7 @@ const DISCOVERY_TIMEOUT_MS = 10_000;
 // the same reason: an embedding model in the picker is a row whose every turn fails.
 const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|audio|rerank|moderation|image-generation)/i.test(model.id);
 
-/* Both protocols answer `GET {base}/v1/models` with `{data: [{id, …}]}` — OpenAI's shape, which Anthropic's own
+/* Both protocols answer `GET {base}/v1/models` with `{data: [{id, …}]}`. OpenAI's shape, which Anthropic's own
  * REST catalog also follows (adding `display_name`). So one reader covers both, and a server that publishes a
  * display name gets a named row while one that publishes bare ids renders label-only. Nothing here is curated:
  * whatever the server says about a model is what the picker shows. */
@@ -74,12 +74,12 @@ const ordered = (models: readonly Model[]): { models: Model[]; default: string }
  * Its DEFAULT tolerates a self-signed certificate on localhost and nowhere else (../platform/local-tls.ts),
  * because two of the endpoints this probes are local by construction: a model server on the docker host, and
  * the free trial pointed at a platform being developed on the same machine. Plain fetch refuses both, and the
- * refusal arrives here as an empty catalog — indistinguishable from a server that published nothing. */
+ * refusal arrives here as an empty catalog, indistinguishable from a server that published nothing. */
 export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetch = localTolerantFetch): EndpointCatalog => {
     const cache = new Map<string, { value: { models: Model[]; default: string }; expiresAt: number }>();
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 
-    // Parsed through the wire schema rather than trusted — the file outlives builds, so a record written by an
+    // Parsed through the wire schema rather than trusted, the file outlives builds, so a record written by an
     // older daemon (or a truncated write) must read as "nothing known", never reach the picker half-formed.
     const readPersisted = async (id: string): Promise<Model[]> => {
         try {
@@ -105,7 +105,7 @@ export const createEndpointCatalog = (persistDir: string, fetchImpl: typeof fetc
                 return value;
             }
             // Uncached, so the next read re-probes rather than pinning a stale list for a minute after the server
-            // comes back — the same rule claude-models.ts applies to its own degraded rung.
+            // comes back, the same rule claude-models.ts applies to its own degraded rung.
             return ordered(await readPersisted(id));
         },
         forget: async (id) => {

@@ -9,12 +9,12 @@ import type { HostClient } from "./host-hub.js";
 
 /* The three surfaces of a connected computer:
  *
- *   /system/hosts/connect  the machine's own WebSocket (authenticated by its first frame — see host-protocol).
+ *   /system/hosts/connect  the machine's own WebSocket (authenticated by its first frame, see host-protocol).
  *   /mcp/hosts/:id         the loopback MCP endpoint the AGENT's tools point at, which tunnels JSON-RPC to it.
  *   /system/hosts          the owner's view: which machines are enrolled, and which are up right now.
  *
  * The middle one is where the security shape of this feature is decided. The agent reaches a machine through a
- * URL on this daemon, authenticated by a PER-BOOT bridge token that exists only inside the container — it never
+ * URL on this daemon, authenticated by a PER-BOOT bridge token that exists only inside the container, it never
  * holds the machine's own enrollment token. So the worst a prompt-injected agent can exfiltrate is a handle that
  * dies with the daemon and only works from inside it, and the grant it can exercise through that handle is the
  * one the owner ticked, enforced on the machine itself. */
@@ -24,7 +24,7 @@ import type { HostClient } from "./host-hub.js";
 const AUTH_DEADLINE_MS = 10_000;
 
 // The route the machine's agent dials. Exempt from the bearer middleware (app.ts) like the other upgrades, but
-// authorized differently: no browser is involved, so there is no ticket to redeem — the enrollment token arrives
+// authorized differently: no browser is involved, so there is no ticket to redeem, the enrollment token arrives
 // in the hello frame and resolves WHICH machine this is. The daemon never trusts a machine's claim about its own
 // identity; the token was minted against one capability id and that is the id the socket gets.
 export const createHostConnectRoute = (services: Services) =>
@@ -41,7 +41,7 @@ export const createHostConnectRoute = (services: Services) =>
                 }, AUTH_DEADLINE_MS);
             },
             /* The ONLY message this handler ever reads is the hello. Once the token checks out, the socket is
-             * handed to an oRPC link and every later message belongs to it — so a second hello (a machine that
+             * handed to an oRPC link and every later message belongs to it, so a second hello (a machine that
              * reconnected without the close arriving, say) is not a re-auth but a stray frame the link will
              * reject on its own. */
             onMessage: async (event, ws) => {
@@ -61,7 +61,7 @@ export const createHostConnectRoute = (services: Services) =>
                     return;
                 }
                 clearTimeout(deadline);
-                /* node-server hands the real socket on `.raw` — an `ws` WebSocket, which carries the
+                /* node-server hands the real socket on `.raw`, an `ws` WebSocket, which carries the
                  * addEventListener/send/readyState surface oRPC's link needs. WSContext itself does not, since it
                  * is a send/close façade for handler code. */
                 const socket = ws.raw as unknown as WebSocket;
@@ -90,7 +90,7 @@ export const createHostConnectRoute = (services: Services) =>
 
 /* The agent's door onto a machine: Streamable HTTP MCP in, the machine's own answer out.
  *
- * Deliberately not an MCP server — a PIPE. The daemon parses no tool schema and validates no argument: it
+ * Deliberately not an MCP server, a PIPE. The daemon parses no tool schema and validates no argument: it
  * forwards the JSON-RPC message and returns what came back, so `tools/list` is whatever that machine's binary
  * knows how to do today. That is what keeps a machine's capabilities on the machine's release cycle instead of
  * this daemon's, and it is why a new tool on a laptop needs no sandbox rebuild.
@@ -120,14 +120,14 @@ export const createHostMcpRoute =
         }
         const request = payload as { id?: unknown; method?: unknown };
         if (request.id === undefined) {
-            // A notification expects no answer, so it is forwarded and forgotten — but only to a machine that is
+            // A notification expects no answer, so it is forwarded and forgotten, but only to a machine that is
             // actually there; an offline one has nothing to tell.
             void services.hostHub.mcp(id, payload).catch(() => undefined);
             return c.body(null, 202);
         }
         /* A turn loads its MCP servers before it does anything, and half the time a personal computer is asleep
          * at that moment. Forwarding the handshake to a machine that cannot answer would fail the connection and
-         * take the whole machine out of the turn — the agent would not even know it exists. So the two questions
+         * take the whole machine out of the turn, the agent would not even know it exists. So the two questions
          * that are ABOUT the connection rather than about the computer are answered here when it is offline: the
          * handshake, and the tool list as the machine last reported it. Everything else still goes to the machine,
          * where a call arrives as a plain "this computer is asleep" the model can read and pass on. */
@@ -155,7 +155,7 @@ export const createHostMcpRoute =
             return c.json(answer);
         } catch (error) {
             /* An offline machine is a normal state, not a fault: laptops sleep. Answering as a JSON-RPC ERROR
-             * rather than an HTTP one is what makes that legible to the model — it reads "this computer is
+             * rather than an HTTP one is what makes that legible to the model, it reads "this computer is
              * asleep" as a tool result and can say so, where a 503 surfaces as an MCP transport failure that
              * looks like a broken sandbox and invites a retry loop. */
             return c.json({
@@ -167,7 +167,7 @@ export const createHostMcpRoute =
     };
 
 // The owner's view of their machines: the manifest's host capabilities, each with whatever the hub knows about
-// it right now. Enrollment state is deliberately part of it — "added but never connected" is the state the
+// it right now. Enrollment state is deliberately part of it, "added but never connected" is the state the
 // connect card exists to resolve, and it must be distinguishable from "connected but asleep".
 export const hostSummaries = async (services: Services): Promise<HostSummary[]> => {
     const capabilities = await services.capabilities.list();

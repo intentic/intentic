@@ -1,6 +1,6 @@
 import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract";
 
-/* Which workspace file a NAMED reference means — the search behind /workspace/resolve.
+/* Which workspace file a NAMED reference means, the search behind /workspace/resolve.
  *
  * A path written in prose is a SUFFIX of the real one at best: an agent that has been working in
  * `_editor/web/src` writes `pages/workspace/Foo.vue`, and a turn running in an isolated worktree prints
@@ -13,7 +13,7 @@ import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract";
 export const resolveReference = async (
     reference: string,
     root: string,
-    // Whether a workspace-relative path names a real file (escape guard included — a `../` climb is not one).
+    // Whether a workspace-relative path names a real file (escape guard included, a `../` climb is not one).
     exists: (relPath: string) => boolean,
     // Every workspace path matching a `**/tail` glob, unranked.
     matching: (glob: string) => Promise<readonly string[]>,

@@ -4,7 +4,7 @@ import { isLocalHost } from "./local-tls.js";
 
 // A single authenticated POST to the platform, authenticated by possession of the connect token (the announce
 // pattern). node:https instead of fetch: undici can't skip TLS verification per-request, and a localhost dev
-// platform arrives as a self-signed cert on host.docker.internal — the process-global escape hatch would also
+// platform arrives as a self-signed cert on host.docker.internal, the process-global escape hatch would also
 // disable verification for Google/Anthropic/OpenAI. Everything else verifies normally.
 
 export interface PlatformResponse {
@@ -13,7 +13,7 @@ export interface PlatformResponse {
 }
 
 // POST `body` (JSON) to `path` on the configured platform with the connect token. Rejects if no platform URL is
-// configured (headless/loopback). Resolves with the status + parsed JSON body (undefined when unparseable) —
+// configured (headless/loopback). Resolves with the status + parsed JSON body (undefined when unparseable),
 // the caller maps non-2xx to a user-facing error.
 export const postToPlatform = (config: Config, path: string, body: unknown): Promise<PlatformResponse> =>
     new Promise((resolve, reject) => {
@@ -48,7 +48,7 @@ export const postToPlatform = (config: Config, path: string, body: unknown): Pro
         );
         req.on("error", reject);
         // Idle-socket timeout: a platform that accepts the connection but never answers must reject (and free the
-        // relayed request) instead of hanging the caller — and the browser spinner behind it — forever.
+        // relayed request) instead of hanging the caller, and the browser spinner behind it, forever.
         req.setTimeout(60_000, () => req.destroy(new Error("the platform did not respond in time")));
         req.end(payload);
     });

@@ -20,16 +20,16 @@ import {
     text,
 } from "./adapter-shared.js";
 
-/* THE HERMES ADAPTER — `~/.hermes` read into a migration plan, pure over the archive's file map so the same
+/* THE HERMES ADAPTER, `~/.hermes` read into a migration plan, pure over the archive's file map so the same
  * function answers the preview and the apply (the apply re-derives; the wire plan is a rendering, never the
- * trusted input — restore.ts's rule).
+ * trusted input, restore.ts's rule).
  *
  * The layout it reads (verified against Hermes' own configuration reference and against OpenClaw's `migrate`
  * command, whose Hermes provider is a peer-reviewed inventory of the same directory):
  *
  *   config.yaml           model/fallbacks, providers (custom endpoints), mcp_servers, platforms, cron
- *   .env                  API keys and platform tokens (parseEnv — the same parser Hermes loads it with)
- *   auth.json             OAuth blobs (refused — sign in fresh here) and the occasional plain api_key
+ *   .env                  API keys and platform tokens (parseEnv, the same parser Hermes loads it with)
+ *   auth.json             OAuth blobs (refused, sign in fresh here) and the occasional plain api_key
  *   SOUL.md, AGENTS.md    personality and operating notes
  *   memories/ or memory/  MEMORY.md, USER.md, and whatever else the agent wrote
  *   skills/               SKILL.md folders in agent-skills format, sometimes nested (flattened, as Hermes'
@@ -70,7 +70,7 @@ export const planHermes = (files: Files): SourcePlan => {
         return raw === undefined ? {} : ({ ...parseEnv(raw) } as Record<string, string>);
     })();
 
-    // -- memory: SOUL.md, AGENTS.md, the memories folder — each its own fence, so each re-imports alone --
+    // -- memory: SOUL.md, AGENTS.md, the memories folder, each its own fence, so each re-imports alone --
     const soul = text(files, "SOUL.md");
     if (soul !== undefined && soul.trim() !== "") {
         planned.push({

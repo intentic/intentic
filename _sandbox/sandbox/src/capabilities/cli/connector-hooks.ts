@@ -6,12 +6,12 @@ import { npmAccessHook } from "./npm-access.js";
 
 // A connector's privileged side effect beyond env + skill, run by cliHandler around the skill write/remove.
 // This CANNOT be data (it shells out with the host's credentials, registers account keys, writes credential
-// files), so it stays core, keyed by PROVIDER NAME — a connector extension declares the name, the daemon owns
+// files), so it stays core, keyed by PROVIDER NAME, a connector extension declares the name, the daemon owns
 // what that name is allowed to do. Only the git providers and npm have one; every other connector is pure data.
 export interface ConnectorHook {
     readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
     readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;
-    // What a recreated container has to get back at boot — the connection survives on /work, its side effect on
+    // What a recreated container has to get back at boot, the connection survives on /work, its side effect on
     // the container's own filesystem does not.
     readonly restore: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
     // A hook that runs no visible commands (its writes are secret-bearing fs calls). cliHandler then skips
@@ -21,7 +21,7 @@ export interface ConnectorHook {
 
 export const CORE_CONNECTOR_HOOKS: Record<string, ConnectorHook> = { github: gitAccessHook, gitlab: gitAccessHook, npm: npmAccessHook };
 
-// main.ts's boot restore over the manifest — the connector counterpart to reconnectVpns: a hook's container-
+// main.ts's boot restore over the manifest, the connector counterpart to reconnectVpns: a hook's container-
 // local side effect (git credentials, the ~/.npmrc auth line) dies with the container while the connection
 // survives on /work, so every connected provider gets it back before the first turn (or the owner's first
 // `git pull` / `npm publish`) needs it. Best-effort per entry, and silent when it works: a failure here degrades

@@ -6,7 +6,7 @@ import { parse } from "yaml";
 // The workspace package dependency graph of a pnpm monorepo, read straight from the filesystem:
 // pnpm-workspace.yaml's `packages` globs name the package dirs, each dir's package.json contributes a node,
 // and its dependency blocks contribute edges to other workspace packages. Edges match by the dep NAME being a
-// workspace package — a `workspace:` protocol check would miss catalog:/version-pinned intra-workspace refs.
+// workspace package, a `workspace:` protocol check would miss catalog:/version-pinned intra-workspace refs.
 
 type PackageManifest = { name?: unknown } & Record<string, unknown>;
 
@@ -17,7 +17,7 @@ const DEP_BLOCKS: readonly (readonly [string, WorkspaceDepType])[] = [
 ];
 
 // Expand one pnpm packages glob into repo-relative package dirs. Only the common shapes are supported: a
-// literal dir and a single trailing `/*` segment (readdir of the prefix). `!negations` and `**` are skipped —
+// literal dir and a single trailing `/*` segment (readdir of the prefix). `!negations` and `**` are skipped,
 // the monorepos this product manages use flat `_dir/*` globs.
 const expandGlob = (repoDir: string, glob: string): string[] => {
     if (glob.startsWith("!") || glob.includes("**")) {
@@ -37,8 +37,8 @@ const expandGlob = (repoDir: string, glob: string): string[] => {
 };
 
 // One workspace package as its manifest declares it, with the dir it was found in. Exported because the graph is
-// not the only reader of these files — the maintenance surface's signals need each package's engines and
-// dependency names — and two independent glob-expanders over one pnpm-workspace.yaml would be two chances to
+// not the only reader of these files, the maintenance surface's signals need each package's engines and
+// dependency names, and two independent glob-expanders over one pnpm-workspace.yaml would be two chances to
 // disagree about what a package even is.
 export interface WorkspaceManifest {
     readonly dir: string;
@@ -48,7 +48,7 @@ export interface WorkspaceManifest {
 
 export const readWorkspaceManifests = (repoDir: string): WorkspaceManifest[] => {
     const workspaceFile = join(repoDir, "pnpm-workspace.yaml");
-    // Every caller must answer for any repo, monorepo or not — no workspace file simply means no packages.
+    // Every caller must answer for any repo, monorepo or not, no workspace file simply means no packages.
     if (!existsSync(workspaceFile)) {
         return [];
     }

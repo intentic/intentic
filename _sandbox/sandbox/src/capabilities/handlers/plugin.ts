@@ -5,7 +5,7 @@ import { checkoutInto } from "../git-checkout.js";
 import { pluginDir, pluginsRoot } from "../plugin-dirs.js";
 
 // A Claude Code plugin: the daemon owns the git checkout at .intentic/records/plugins/<id>; the Agent SDK's plugin
-// loader reads its internals (skills/agents/hooks/commands/.mcp.json) each turn — see pluginDirsOf. Apply is an
+// loader reads its internals (skills/agents/hooks/commands/.mcp.json) each turn, see pluginDirsOf. Apply is an
 // upsert: re-adding re-clones, which is also how a plugin updates. The clone/checkout run in the visible job
 // session the first frame surfaces.
 export const pluginHandler: CapabilityHandler = {
@@ -21,7 +21,7 @@ export const pluginHandler: CapabilityHandler = {
     },
     // `reapply: false` because this kind's apply is an INSTALL, not a write: re-running it would clone the
     // repository again over the network to end up with the bytes already on disk. Moving the checkout is the
-    // whole rename — the plugin loader enumerates these directories, so it reads the new name next turn.
+    // whole rename, the plugin loader enumerates these directories, so it reads the new name next turn.
     rename: {
         reapply: false,
         carry: async (ctx, from, to) => ctx.files.move(pluginDir(ctx.workspace.root, from), pluginDir(ctx.workspace.root, to)),
@@ -36,7 +36,7 @@ export const pluginHandler: CapabilityHandler = {
         await checkoutInto(ctx, session, pluginsRoot(ctx.workspace.root), id, { url, ref, token });
         yield { kind: "log", message: "Plugin installed — the agent loads its skills, agents and hooks next turn." };
     },
-    // The short HEAD sha is the version identity — the daemon never parses plugin internals (plugin.json is
+    // The short HEAD sha is the version identity, the daemon never parses plugin internals (plugin.json is
     // optional anyway). A missing/broken checkout probes as inactive; re-adding repairs it.
     status: async (ctx, id) => {
         try {

@@ -10,8 +10,8 @@ import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import { sessionUpdateEvent } from "./acp-events.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
-/* The ACP provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent — AgentRequest in,
- * AgentEvent frames out — over ANY agent speaking the Agent Client Protocol, resolved from an `agent`-kind
+/* The ACP provider adapter: the same seam as runAgent/createCodexAgent/createGrokAgent. AgentRequest in,
+ * AgentEvent frames out, over ANY agent speaking the Agent Client Protocol, resolved from an `agent`-kind
  * capability. One warm connection per agent (see acp-connection.ts); one ACP session per conversation;
  * session/update notifications map through acp-events onto the shared vocabulary.
  *
@@ -19,7 +19,7 @@ import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
  * the contract's agent-catalog.ts (`capabilitiesOf(…).runtime === "acp"`) that the composer reads out loud: the
  * agent owns its own model and reasoning settings, our http MCP tools pass through only when it advertises
  * them, there are no rate-limit or usage-limit frames, and plan mode is the shared two-phase emulation with a
- * permission-level read-only guard. Terminals ARE surfaced — an agent's terminal/create runs in the
+ * permission-level read-only guard. Terminals ARE surfaced, an agent's terminal/create runs in the
  * conversation's tmux session, which the panel attaches to exactly as it does for a Claude Bash call. */
 
 // Generalized from the Grok watchdogs: no update for our session ⇒ cancel + kill; one turn never runs
@@ -69,7 +69,7 @@ const mcpServersOf = (request: AgentRequest, connection: AcpConnection): McpServ
 
 const errorText = (error: unknown, stderrTail: string): string => {
     // The SDK wraps a throwing agent handler as RequestError("Internal error") with the real reason in
-    // data.details — unwrap it so the surfaced line says what actually happened.
+    // data.details, unwrap it so the surfaced line says what actually happened.
     const details = (error as { data?: { details?: unknown } }).data?.details;
     const base = typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
     const detail = stderrTail.trim();
@@ -83,12 +83,12 @@ interface TurnOutcome {
     readonly errored: boolean;
 }
 
-// The turn loop's idle wake latch — swapped for the wait race's resolver while a wait is in flight.
+// The turn loop's idle wake latch, swapped for the wait race's resolver while a wait is in flight.
 const noopWake = (): void => {};
 
 // One prompt turn on one session: resolve/create/load the session, bind the turn's routing, prompt, and
 // stream mapped updates until the PromptResponse settles (or a watchdog fires). Does NOT emit the terminal
-// `done` — callers do once the whole turn (incl. plan phases) settles.
+// `done`, callers do once the whole turn (incl. plan phases) settles.
 async function* runAcpTurn(
     connection: AcpConnection,
     request: AgentRequest,
@@ -101,7 +101,7 @@ async function* runAcpTurn(
     let sid = sessionId;
     if (sid !== undefined && !connection.sessions.has(sid)) {
         // A fresh process doesn't know this session. session/load replays the conversation via session/update
-        // BEFORE responding — no turn is bound yet, so the replay is dropped (we resume, not re-render).
+        // BEFORE responding, no turn is bound yet, so the replay is dropped (we resume, not re-render).
         if (connection.capabilities.loadSession === true) {
             try {
                 await connection.agent.request(methods.agent.session.load, {
@@ -143,7 +143,7 @@ async function* runAcpTurn(
     const onUpdate = (notification: SessionNotification): void => {
         const update = notification.update;
         if (captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-            // Plan phase: the agent's answer IS the plan — held back, not streamed as deltas.
+            // Plan phase: the agent's answer IS the plan, held back, not streamed as deltas.
             text += update.content.text;
             wake();
             return;
@@ -155,7 +155,7 @@ async function* runAcpTurn(
         wake();
     };
     // Terminal context: the agent's terminal/create commands run in the conversation's agent-<id> tmux
-    // session; the first create surfaces it in the panel — the exact Claude-Bash UX.
+    // session; the first create surfaces it in the panel, the exact Claude-Bash UX.
     const tmuxSession = agentSessionName(sid);
     let terminalSurfaced = false;
     const unbind = connection.bindTurn(sid, {
@@ -212,7 +212,7 @@ async function* runAcpTurn(
             }
             const waitMs = Math.min(inactivityDeadline, turnDeadline) - Date.now();
             if (waitMs <= 0) {
-                // Watchdog: the agent went silent (or ran forever). Cancel is best-effort; the kill is not —
+                // Watchdog: the agent went silent (or ran forever). Cancel is best-effort; the kill is not,
                 // sessions die with the process and the session-not-found self-heal covers the next send.
                 cancel();
                 connection.kill();
@@ -245,7 +245,7 @@ async function* runAcpTurn(
             yield { kind: "error", message: `The agent stopped early (${stopReason}).` };
             return { sessionId: session, text, errored: true };
         }
-        // end_turn | cancelled — the turn settled normally (cancelled surfaces nothing extra; the user stopped it).
+        // end_turn | cancelled, the turn settled normally (cancelled surfaces nothing extra; the user stopped it).
         return { sessionId: session, text, errored: false };
     } finally {
         unbind();
@@ -273,7 +273,7 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
 
         try {
             if (request.permissionMode === "plan") {
-                // Plan flow is text-only prompts; attachment paths ride the note (images too — the planning
+                // Plan flow is text-only prompts; attachment paths ride the note (images too, the planning
                 // phase reads, it doesn't look at screenshots natively; keeping phases uniform beats cleverness).
                 const planPhase: PlanPhase = async function* (phasePrompt, sessionId) {
                     const outcome = yield* runAcpTurn(connection, request, [{ type: "text", text: phasePrompt }], sessionId, "plan", true, timeouts);

@@ -1,4 +1,4 @@
-// Where the interstitial's CTA sends a viewer who just opened someone's shared link — the "invite" half of the
+// Where the interstitial's CTA sends a viewer who just opened someone's shared link, the "invite" half of the
 // share loop (the "demo" half is the working preview, or the published file, itself). These status pages are the
 // ONLY surface Intentic controls end-to-end (they are served by the preview proxy, never injected into the
 // user's running app), so the attribution lives here and nowhere intrusive.
@@ -9,9 +9,9 @@ const INTENTIC_URL = "https://intentic.dev";
 export const escapeHtml = (value: string): string =>
     value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 
-// A small, self-contained branded page for every status response the sandbox's public HTTP surface produces —
+// A small, self-contained branded page for every status response the sandbox's public HTTP surface produces,
 // the proxy's (panel not up, nothing forwarded, dead upstream, stray host) and the outbox's (no such file, no
-// listing, refused). Inline everything — the bare http server behind these ships no assets. `message` is
+// listing, refused). Inline everything, the bare http server behind these ships no assets. `message` is
 // embedded as text content (its only dynamic parts are pre-escaped at the call site; literal quotes stay
 // literal, which the proxy tests rely on). Shown at exactly the high-intent moment a viewer clicks a shared link.
 export const interstitial = (title: string, message: string): string =>

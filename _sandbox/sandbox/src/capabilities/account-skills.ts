@@ -7,14 +7,14 @@ import type { CapabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
 import { extensionRead } from "./extension-dirs.js";
 
-/* THE ACCOUNT SKILLS, CONVERGED — one skill per KIND of thing where there used to be one per account.
+/* THE ACCOUNT SKILLS, CONVERGED, one skill per KIND of thing where there used to be one per account.
  *
  * A connected account used to render its own SKILL.md clone (same template, different id/email), so a sandbox
  * with sixteen identities carried sixteen near-identical catalog lines in every prompt and sixteen directories
  * in the loaded folder. The skills now teach the machinery once and carry the INSTANCES as data:
  *
- *   `identities`        — one file for every identity, each a roster line (browser-skill.ts identitiesSkill).
- *   one per SITE GROUP  — a platform pack's SKILL.md rendered once per site, its accounts a roster block.
+ *   `identities`       , one file for every identity, each a roster line (browser-skill.ts identitiesSkill).
+ *   one per SITE GROUP , a platform pack's SKILL.md rendered once per site, its accounts a roster block.
  *                         The group is the platform slug (`reddit`), except on the GENERIC card, where the
  *                         card says nothing about the site and the account's own home page does: those group
  *                         by host (`producthunt-com`), so four accounts on one site are one skill and two
@@ -27,13 +27,13 @@ import { extensionRead } from "./extension-dirs.js";
  *
  * Staleness is swept by MARKER, not by memory: a group whose last account left has no surviving name to be
  * derived from, so every file this module writes carries the marker line and any marked skill the desired set
- * no longer names is removed. A skill without the marker — a hand-dropped folder, another feature's file — is
+ * no longer names is removed. A skill without the marker, a hand-dropped folder, another feature's file, is
  * never touched. */
 
 const ACCOUNT_SKILL_MARKER = "<!-- managed by the sandbox: derived from the connected accounts; edits are overwritten -->";
 
 const IDENTITIES_SKILL = "identities";
-// The card that carries no site (open-account.ts GENERIC) — the one platform that groups by host instead.
+// The card that carries no site (open-account.ts GENERIC), the one platform that groups by host instead.
 const GENERIC_PLATFORM = "website";
 
 // A skill directory name from a host: `www.producthunt.com` → `producthunt-com`. Dots would be fine on disk,
@@ -57,7 +57,7 @@ const siteHost = (config: BrowserConfig): string | undefined => {
     }
 };
 
-/* Which skill an account belongs to — the platform slug for a carded site, the home page's host for the
+/* Which skill an account belongs to, the platform slug for a carded site, the home page's host for the
  * generic card. Pure over the config on purpose: the browser handler's status probe and the skill inventory's
  * attribution both need the same answer without a registry in hand. */
 export const accountGroupOf = (config: BrowserConfig): { readonly name: string; readonly site: string } => {
@@ -84,7 +84,7 @@ const effectiveEntries = async (ctx: CapabilityCtx, delta?: AccountSkillDelta): 
 };
 
 // Frontmatter surgery on the rendered pack text: the group's name (two instances of one card must not
-// register one skill name each — they ARE one skill now), the marker stamped after the frontmatter, and the
+// register one skill name each, they ARE one skill now), the marker stamped after the frontmatter, and the
 // account ids appended to the description so the catalog line says who this skill can act as.
 const stampGroupSkill = (source: string, name: string, ids: readonly string[]): string =>
     source
@@ -96,9 +96,9 @@ const stampIdentitiesSkill = (source: string): string =>
     source.replace(/^---\n([\s\S]*?)\n---\n/, (frontmatter) => `${frontmatter}\n${ACCOUNT_SKILL_MARKER}\n`);
 
 /* One site group's skill: the pack's SKILL.md rendered once for ALL of the group's accounts. Three
- * substitutions — `${tools}` (the core driving/connecting note), `${accounts}` (the roster block), `${site}`
+ * substitutions, `${tools}` (the core driving/connecting note), `${accounts}` (the roster block), `${site}`
  * (the host, for the generic pack whose text can name no site of its own). Per-account form fields are NOT
- * substituted anymore: a value that differs per account is a roster fact, not template material — and a
+ * substituted anymore: a value that differs per account is a roster fact, not template material, and a
  * secret never belonged in a skill in any case. Undefined when the pack's file is missing (a rotted install),
  * which apply turns into a failed add rather than an empty skill. */
 const renderGroupSkill = async (
@@ -128,7 +128,7 @@ const renderGroupSkill = async (
     );
 };
 
-// Every marked skill currently in the loaded folder — the sweep's candidates. Names are read off the disk the
+// Every marked skill currently in the loaded folder, the sweep's candidates. Names are read off the disk the
 // way loaded-skills.ts reads them; content goes through the files seam like every other skill read.
 const markedSkillNames = async (ctx: CapabilityCtx): Promise<string[]> => {
     const entries = await readdir(loadedSkillsRoot(ctx.workspace.root), { withFileTypes: true }).catch(() => []);
@@ -144,7 +144,7 @@ const markedSkillNames = async (ctx: CapabilityCtx): Promise<string[]> => {
 
 /* The converge itself: derive the desired set from the (delta-adjusted) capability list, write what changed,
  * sweep what is marked and no longer desired. Idempotent and whole-set, so callers never reason about which
- * skill their one entry touches — an account moving between groups on a rename is just two groups differing
+ * skill their one entry touches, an account moving between groups on a rename is just two groups differing
  * from last time. */
 export const convergeAccountSkills = async (ctx: CapabilityCtx, delta?: AccountSkillDelta): Promise<void> => {
     const entries = await effectiveEntries(ctx, delta);
@@ -170,7 +170,7 @@ export const convergeAccountSkills = async (ctx: CapabilityCtx, delta?: AccountS
     for (const { group, accounts } of groups.values()) {
         accounts.sort((a, b) => a.id.localeCompare(b.id));
         const text = await renderGroupSkill(ctx, group, accounts, identities);
-        // A group whose extension is gone renders nothing — its skill sweeps below, and the orphaned entries
+        // A group whose extension is gone renders nothing, its skill sweeps below, and the orphaned entries
         // stay visible through their own status rather than through a stale cheatsheet.
         if (text !== undefined) {
             desired.set(group.name, text);

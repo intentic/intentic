@@ -4,10 +4,10 @@ import { resolveCommandSecrets, type SecretAccess } from "../agent/agent-secrets
 import type { TurnPlacement } from "../agents/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
-/* THE JS BACKEND AS THE CLAUDE CODE LOOP SEES IT — one tool, a peer of Bash, mounted by agent.ts directly
+/* THE JS BACKEND AS THE CLAUDE CODE LOOP SEES IT, one tool, a peer of Bash, mounted by agent.ts directly
  * from the request's own `jsExecution` field the way the ask tool and the terminal hand-off are mounted from
  * theirs. The SDK's in-process server seam is the WIRE here, nothing more: the backend is planned in
- * turn-plan, fenced in js-runtime, gated by the same command gate and secret exit Bash rides — a reader who
+ * turn-plan, fenced in js-runtime, gated by the same command gate and secret exit Bash rides, a reader who
  * wants to know what a JS run may do reads the execution module, not a tool registry.
  *
  * The name constants live here because three places must agree on them exactly: the mount, the alias that
@@ -19,7 +19,7 @@ export const JS_TOOL_ALIAS = "Code";
 
 export interface JsToolDeps {
     readonly plan: JsExecutionPlan;
-    // Where this turn's tree actually stands (agents/isolation.ts) — the runner enters or maps, see placedPlan.
+    // Where this turn's tree actually stands (agents/isolation.ts), the runner enters or maps, see placedPlan.
     readonly placement: TurnPlacement | undefined;
     // The turn's own signal: a script still running when the user stops the turn dies with it.
     readonly signal: AbortSignal;
@@ -28,7 +28,7 @@ export interface JsToolDeps {
     readonly secrets?: SecretAccess;
 }
 
-/* What the run looked like, to a model that has to act on it — the same text shape a shell gives: output
+/* What the run looked like, to a model that has to act on it, the same text shape a shell gives: output
  * first, the status last, nothing wrapped in JSON it would have to unwrap. An undefined exit code is a run
  * that did not end on its own, and each of those roads says which it was. */
 export const formatJsResult = (result: JsRunResult, timeoutSeconds: number): string => {
@@ -66,7 +66,7 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
     createSdkMcpServer({
         name: JS_SERVER_NAME,
         // In the prompt, not behind tool search: an execution mode the model has to go looking for is one it
-        // replaces with the shell habit it already has — the same reasoning that keeps the ask tool loaded.
+        // replaces with the shell habit it already has, the same reasoning that keeps the ask tool loaded.
         alwaysLoad: true,
         tools: [
             tool(
@@ -87,13 +87,13 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
         ],
     });
 
-/* The handler itself, bare — what a `run` call does once the SDK has delivered it, and the piece the tests
+/* The handler itself, bare, what a `run` call does once the SDK has delivered it, and the piece the tests
  * drive (the server wrapper above is registration, not behaviour). */
 export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutSeconds?: number | undefined }): Promise<string> => {
     const timeoutSeconds = Math.min(args.timeoutSeconds ?? JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S);
     /* The secret exit, in the handler rather than as a hook: Bash needs its resolution composed inside the
      * tmux rewrite because two hooks rewriting one string must order themselves; a JS run has no second
-     * rewriter, so the one pipeline is right here — after the command gate's hook has already read (and
+     * rewriter, so the one pipeline is right here, after the command gate's hook has already read (and
      * possibly carded) the reference-form script, and inside the process boundary the transcript never
      * crosses: what the model sent, and what the result echoes back through masking, is the reference. */
     let code = args.code;

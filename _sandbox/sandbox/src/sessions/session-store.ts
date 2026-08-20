@@ -3,24 +3,24 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { statePath } from "../workspace/state-paths.js";
 
-// The Claude Agent SDK keeps its per-conversation state under ~/.claude — the container's ephemeral fs, wiped
+// The Claude Agent SDK keeps its per-conversation state under ~/.claude, the container's ephemeral fs, wiped
 // on every rebuild while /work survives. Point every conversation-owned store at the workspace volume before
 // the first turn can spawn the CLI, so a rebuild keeps a session WHOLE: its transcript, its plan-mode plans,
-// its pre-edit backups, its background-task outputs, its todos — not just the prose. Credentials live in the
+// its pre-edit backups, its background-task outputs, its todos, not just the prose. Credentials live in the
 // separate `.intentic/secrets/auth/claude` provider home; nothing secret shares this conversation-owned tree.
 //
 // Symlinks, not CLAUDE_CONFIG_DIR: relocating the whole config dir would orphan the image-baked
 // /root/.claude/skills and the user settings loaded via settingSources:["user"], and the daemon's own
-// listSessions/getSessionInfo reads resolve the store from the daemon's process env — a per-turn env
+// listSessions/getSessionInfo reads resolve the store from the daemon's process env, a per-turn env
 // override would split the CLI's write store from the daemon's read store.
 //
 // What is NOT here is deliberate: skills and plugins are image-baked, CLAUDE.md/RTK.md are boot-written by the
-// daemon, and policy/settings caches regenerate — container-local is their correct home. settings.json stays
+// daemon, and policy/settings caches regenerate, container-local is their correct home. settings.json stays
 // container-local for that reason too; the daemon just rewrites its one retention key on every boot (below).
 const SESSION_STATE = ["projects", "plans", "backups", "tasks", "sessions", "session-env", "shell-snapshots", "todos"];
 
 // The CLI sweeps transcripts older than `cleanupPeriodDays` (default 30) on startup. That sweep was harmless
-// while the store was ephemeral — a rebuild beat it to them either way — but linking the store onto /work
+// while the store was ephemeral, a rebuild beat it to them either way, but linking the store onto /work
 // makes it the ONLY thing that deletes a transcript. Left at the default it would take an archived agent's
 // history a month on while its card stayed on the board: the same orphaning the links just fixed, on a slower
 // clock. So the window is part of taking the store over, not a preference, and it is written right beside them.
@@ -31,7 +31,7 @@ const RETENTION_DAYS = 3650;
 
 // Merged into ~/.claude/settings.json, never replacing it: that is the user settings file settingSources:
 // ["user"] loads, so the daemon owns one key in a file the user also owns. Unparseable JSON propagates rather
-// than being clobbered — losing the user's settings would cost more than the sweep this prevents.
+// than being clobbered, losing the user's settings would cost more than the sweep this prevents.
 const persistRetention = async (claudeHome: string): Promise<void> => {
     const path = join(claudeHome, "settings.json");
     const raw = await readFile(path, "utf8").catch(() => undefined);
@@ -46,7 +46,7 @@ export const linkClaudeState = async (workspaceRoot: string, home = homedir()): 
     const store = statePath(workspaceRoot, ".intentic/records/sessions/claude/");
     const claudeHome = join(home, ".claude");
     await mkdir(claudeHome, { recursive: true });
-    // A real (non-symlink) entry only happens outside the container (a dev-host run) — never clobber real
+    // A real (non-symlink) entry only happens outside the container (a dev-host run), never clobber real
     // session data. Converge every other entry first, then report the refusals in one throw.
     const refused: string[] = [];
     for (const name of SESSION_STATE) {

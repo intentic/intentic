@@ -22,7 +22,7 @@ import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
 import { codexInstructionConfig } from "./codex-instructions.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
 
-/* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
+/* The Codex provider adapter: same seam as agent.ts's runAgent. AgentRequest in, AgentEvent frames out, but
  * backed by the Codex CLI's provider-native app-server instead of the Claude Agent SDK. Provider differences
  * stay inside this file; the wire contract, routes, and UI are shared.
  *
@@ -43,8 +43,8 @@ const reasoningEffort = (effort: string): CodexReasoningEffort | undefined => {
 // the workspace-scoped auth/session store. App-server inherits only this explicit environment.
 //
 // CODEX_API_KEY is NOT inherited: it is the translator bearer, and the only turn entitled to one is the turn that
-// resolved a codexEndpoint (which sets it explicitly below). A daemon whose own environment carries a bearer —
-// exactly what a sandbox running the translator looks like — would otherwise hand it to native account turns too.
+// resolved a codexEndpoint (which sets it explicitly below). A daemon whose own environment carries a bearer,
+// exactly what a sandbox running the translator looks like, would otherwise hand it to native account turns too.
 const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined): Record<string, string> => {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
@@ -58,7 +58,7 @@ const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined)
 // The subscription-served provider block: Codex speaks its own Responses wire format to the translator
 // (CLIProxyAPI), which serves it on the connected ChatGPT subscription; auth is the fixed local bearer via
 // env_key (never a rotating OAuth token, so nothing races the translator's own refresh loop).
-// supports_websockets=false is load-bearing: the translator's inbound is plain POST SSE, and without it Codex
+// supports_websockets=false is required: the translator's inbound is plain POST SSE, and without it Codex
 // burns five WebSocket connect retries per turn before falling back.
 // One turn's provider block with its instruction and MCP keys folded in. Kept here rather than inlined so the
 // merge order is stated once: the two sets never share a key, and if one ever does, this is the line that decides.
@@ -119,12 +119,12 @@ const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | 
 });
 
 /* THE QUESTION TOOL, WHICH CODEX SHIPS OFF. Codex reads `tools.experimental_request_user_input` before it will
- * offer the model any way to ask a person something, so the absence of this one key — not any absence in Codex —
+ * offer the model any way to ask a person something, so the absence of this one key, not any absence in Codex,
  * is what made "no clarifying questions" true of this harness. Switched on because the adapter now answers the
  * request it produces (`item/tool/requestUserInput` → a question card → the picks, back on the same request).
  *
  * WITHHELD FROM AN UNATTENDED TURN, for the reason the Claude Code loop withholds its own ask tool: a benchmark,
- * a schedule or another program started this turn, so a card is not merely useless but a DEADLOCK — it parks the
+ * a schedule or another program started this turn, so a card is not merely useless but a DEADLOCK, it parks the
  * turn on an answer that can never arrive and burns until something aborts it. A turn nobody is watching is
  * better off deciding for itself. */
 const questionToolConfig = (request: AgentRequest): Readonly<Record<string, JsonValue>> =>
@@ -134,8 +134,8 @@ const questionToolConfig = (request: AgentRequest): Readonly<Record<string, Json
  * free-text answer every card already offers covers its `isOther` case without a field of ours. A question that
  * arrives with no options is asked as the open one it is.
  *
- * WHAT IS NOT PUT ON A CARD is the secret one. A card's answers are recorded on purpose — the frame log a second
- * window replays, the journal a restarted daemon restores a parked turn from — so a password typed into one is a
+ * WHAT IS NOT PUT ON A CARD is the secret one. A card's answers are recorded on purpose, the frame log a second
+ * window replays, the journal a restarted daemon restores a parked turn from, so a password typed into one is a
  * password written down in three places. The refusal names the road this runtime really has instead: a connected
  * credential is already in the turn's environment (planCodexTurn's cliEnv), and the reference language the
  * Claude Code loop's shell hook resolves is deliberately NOT claimed here, because nothing in app-server's shell
@@ -179,7 +179,7 @@ const codexAnswers = (questions: readonly CodexQuestion[], reply: Extract<AgentR
  *
  * So the queue is drained here, once, and what arrives while no phase is listening waits. Each phase borrows a
  * channel that ends when its stream does, and the next one starts by draining what the pause collected. One
- * channel is open at a time — the phases are sequential — which is what lets a single wake handle do. */
+ * channel is open at a time, the phases are sequential, which is what lets a single wake handle do. */
 interface SteeringChannel {
     readonly steering: AsyncIterable<string>;
     readonly close: () => void;
@@ -257,12 +257,12 @@ const mcpResultText = (item: Extract<CodexItem, { type: "mcp_tool_call" }>): str
 };
 
 /* Codex's IN-TURN stream retry, which arrives on the same error channels a real failure does. The CLI lost the
- * response stream mid-turn, is reconnecting, and the turn carries on from where it was — the message is
+ * response stream mid-turn, is reconnecting, and the turn carries on from where it was, the message is
  * `Reconnecting... <attempt>/<max> (<reason>)`, minted by codex's own retry loop (core/src/responses_retry.rs)
  * and forwarded with `will_retry: true`, which its JSONL surface then drops.
  *
  * Read as a failure it painted a red error line under a turn that answered normally four minutes later, wrote a
- * turn.error into the activity log, reddened the agent's card on the fleet board, and — in plan mode — would
+ * turn.error into the activity log, reddened the agent's card on the fleet board, and, in plan mode, would
  * have dropped the plan (plan-emulation abandons an errored phase). It is still worth SAYING, because a turn
  * riding out a dropped socket goes quiet and silence reads as a hang: it says it as the wait it is, on the
  * `provider_retry` frame the Claude path emits for exactly this (agent.ts, api_retry), which takes over the
@@ -278,7 +278,7 @@ const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
 const CODEX_COMPACTED = /long threads and multiple compactions/i;
 
 /* What a codex error message actually is, when it is not a failure. Both of codex's error channels run through
- * here so a notice reads the same whichever one carries it — the CLI has moved them before (an advisory rides
+ * here so a notice reads the same whichever one carries it, the CLI has moved them before (an advisory rides
  * the item channel, a stream retry the top-level event) and the two are one `error` kind by the time they reach
  * us. Undefined ⇒ a real failure, which is every other message. */
 const codexNotice = (message: string): AgentEvent | undefined => {
@@ -289,7 +289,7 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     if (CODEX_COMPACTED.test(message)) {
         return { kind: "compact", trigger: "auto" };
     }
-    // An advisory shares this channel with real failures but is not one — the turn answers normally after it. So
+    // An advisory shares this channel with real failures but is not one, the turn answers normally after it. So
     // it must not mark the phase errored: a plan turn that hit one still has a plan to propose (CODEX_ADVISORY).
     return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
 };
@@ -300,7 +300,7 @@ interface TurnCapture {
     threadId?: string;
     heldMessage?: string;
     // Set when the plan phase hit a terminal error (turn.failed / error / item error), so runCodexPlanTurn
-    // suppresses the plan frame — a failed turn must not surface a "plan" even if a message was held first.
+    // suppresses the plan frame, a failed turn must not surface a "plan" even if a message was held first.
     errored?: boolean;
 }
 
@@ -313,7 +313,7 @@ interface CodexBrowserContext {
     readonly ports: Readonly<Record<string, number>>;
     readonly passkeys: Readonly<Record<string, string>>;
     // The routed browser server's account→owner map (browser-tools.ts). App-server's tool items carry no
-    // arguments, so a routed call can only be attributed when every route lands on the same profile — the
+    // arguments, so a routed call can only be attributed when every route lands on the same profile, the
     // single-owner turn, which is the common one (soleRoutedOwner below).
     readonly accounts: Readonly<Record<string, string>>;
     readonly owner?: string;
@@ -321,7 +321,7 @@ interface CodexBrowserContext {
     readonly sessionId?: string;
 }
 
-// The one profile a routed call can be pinned to without seeing its arguments — defined only when the turn's
+// The one profile a routed call can be pinned to without seeing its arguments, defined only when the turn's
 // account map resolves everything to a single owner.
 const soleRoutedOwner = (browser: CodexBrowserContext | undefined): string | undefined => {
     const owners = new Set(Object.values(browser?.accounts ?? {}));
@@ -329,7 +329,7 @@ const soleRoutedOwner = (browser: CodexBrowserContext | undefined): string | und
 };
 
 // What one Codex turn's stream is normalized AGAINST: where the turn works, where its generated images land, and
-// the two things a question card needs — the signal that settles the card if the turn dies first, and the
+// the two things a question card needs, the signal that settles the card if the turn dies first, and the
 // conversation a dismissal ends. `holdMessages` is the plan phase's one behavioural difference (see streamTurn).
 interface CodexStreamContext {
     readonly cwd: string;
@@ -340,7 +340,7 @@ interface CodexStreamContext {
     readonly browser?: CodexBrowserContext;
 }
 
-/* A CODEX QUESTION, ON THE CARD THE `ask` TOOL RAISES — the same registry, the same frames, the same dismissal
+/* A CODEX QUESTION, ON THE CARD THE `ask` TOOL RAISES, the same registry, the same frames, the same dismissal
  * behaviour, so a question reads identically whichever runtime asked it (agent-requests.ts).
  *
  * The stream is PARKED on the await, and that is the point: app-server is blocked on this reply too, so nothing
@@ -365,10 +365,10 @@ async function* codexQuestionCard(
     request.respond(codexAnswers(request.questions, reply));
 }
 
-// Normalize one Codex turn's provider event stream onto AgentEvents, RETURNING what the turn captured — the
+// Normalize one Codex turn's provider event stream onto AgentEvents, RETURNING what the turn captured, the
 // plan phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary
 // turn discards it. `holdMessages` is the plan phase's one behavioural difference: agent messages are held back
-// one-deep — intermediate narration still streams (flushed when the next message arrives), and whatever remains
+// one-deep, intermediate narration still streams (flushed when the next message arrives), and whatever remains
 // held at stream end is the plan text.
 async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStreamContext): AsyncGenerator<AgentEvent, TurnCapture> {
     const { cwd, imageArtifacts, browser, holdMessages = false } = context;
@@ -383,7 +383,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                 if (event.type !== "item.completed") {
                     continue;
                 }
-                // Only `item.completed` reaches here, so each delta below is a WHOLE message block — its
+                // Only `item.completed` reaches here, so each delta below is a WHOLE message block, its
                 // text_end follows immediately, which retires the client's prose bubble so the tool calls this
                 // message introduced render under it instead of being hoisted above the turn's whole narration.
                 if (!holdMessages) {
@@ -404,7 +404,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                 if (event.type === "item.started") {
                     yield { kind: "tool_call", id: item.id, name: "Bash", category: "execute", status: "in_progress", target: item.command };
                 } else if (event.type === "item.updated") {
-                    // Live output: item.updated carries the aggregated output SO FAR as a snapshot — exactly the
+                    // Live output: item.updated carries the aggregated output SO FAR as a snapshot, exactly the
                     // update frame's replace semantics, so a long command streams into its card.
                     yield { kind: "tool_call_update", id: item.id, content: [{ type: "text", text: item.aggregated_output }] };
                 } else if (event.type === "item.completed") {
@@ -534,7 +534,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             yield { kind: "error", message: event.message };
             capture.errored = true;
         }
-        // turn.started has no UI mapping — dropped, like the Claude path's unmapped SDK messages.
+        // turn.started has no UI mapping, dropped, like the Claude path's unmapped SDK messages.
     }
     return capture;
 }
@@ -546,7 +546,7 @@ const CODEX_PLAN_PREAMBLE =
 
 // Always-plan flow over the shared skeleton (this client does not wire app-server's collaboration modes): a
 // read-only planning turn whose trailing message becomes the plan, then a full-access execution turn resumed on
-// the same thread. Both phases can be steered and both can ask — each borrows its own steering channel from the
+// the same thread. Both phases can be steered and both can ask, each borrows its own steering channel from the
 // run's relay, and closes it when its stream ends so the pause between them keeps the queue's messages.
 async function* runCodexPlanTurn(
     request: AgentRequest,
@@ -557,7 +557,7 @@ async function* runCodexPlanTurn(
     channel: (() => SteeringChannel) | undefined,
 ): AsyncGenerator<AgentEvent> {
     const { images: firstTurnImages, others } = splitAttachments(request.attachments);
-    // Images ride the first planning turn only — revision and execute turns resume the same thread, whose
+    // Images ride the first planning turn only, revision and execute turns resume the same thread, whose
     // context already holds them.
     let images = firstTurnImages;
     const phase = async function* (
@@ -610,7 +610,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
     return async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         // Per-account CODEX_HOME when the turn resolved one; the constructor's base dir is the OPENAI_API_KEY
         // fallback path only. A subscription-served turn (codexEndpoint) layers the translator provider block
-        // on top: the bearer rides CODEX_API_KEY and the home holds only sessions — whatever auth.json it may
+        // on top: the bearer rides CODEX_API_KEY and the home holds only sessions, whatever auth.json it may
         // carry is ignored by the custom provider.
         const activeCodexHome = request.codexHome ?? options.codexHome;
         const env = codexEnv(activeCodexHome, request.cliEnv);
@@ -628,7 +628,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                   }
                 : { env, ...(Object.keys(runtimeConfig).length > 0 ? { config: runtimeConfig } : {}) }),
             /* WHERE APP-SERVER IS BORN. An isolated turn's anchor makes the conversation's worktree /work for the
-             * app-server and everything it forks, which is what `isolation: "namespace"` in the Codex row claims —
+             * app-server and everything it forks, which is what `isolation: "namespace"` in the Codex row claims,
              * before this the turn was merely cwd'd there and an absolute /work path reached the shared checkout.
              * Absent when the turn is not isolated, or when the container could not build a namespace (the plan
              * still stands, and the turn runs cwd'd as it always did). */
@@ -637,7 +637,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                 : { namespace: { pid: request.isolation.anchor.pid, cwd: request.isolation.anchor.cwd } }),
         };
         // request.cwd is the conversation's own checkout: the worktree for a cwd-isolated turn, and the workspace
-        // root as the namespace sees it for an anchored one — inside which /work IS that worktree. Using the
+        // root as the namespace sees it for an anchored one, inside which /work IS that worktree. Using the
         // daemon's shared root would put an isolated conversation's generated image in somebody else's tree.
         const imageArtifacts = { workspaceRoot: request.cwd, codexHome: activeCodexHome };
         const browser =
@@ -650,7 +650,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                       ...(request.conversationId === undefined ? {} : { owner: request.conversationId }),
                   };
         // The run's one consumer of the daemon's steering queue (see steeringRelay). Absent when the turn was
-        // started with no queue — a bench or benchmark run rather than a chat.
+        // started with no queue, a bench or benchmark run rather than a chat.
         const channel = request.steering === undefined ? undefined : steeringRelay(request.steering);
         const context: Omit<CodexStreamContext, "holdMessages" | "browser"> = {
             cwd: request.cwd,
@@ -688,7 +688,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
             for await (const event of turn) {
                 if (event.kind === "error") {
                     // An advisory is already tagged and is not a failure, so it must not count as the turn's
-                    // surfaced error — letting it stand in for one would swallow the process-exit wrapper on a
+                    // surfaced error, letting it stand in for one would swallow the process-exit wrapper on a
                     // turn that then died for a real reason.
                     if (event.code === "codex-advisory") {
                         yield event;
@@ -697,7 +697,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                     surfacedError = true;
                     // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned
                     // model, mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing
-                    // to re-prompt with here — the reloaded default serves the next turn).
+                    // to re-prompt with here, the reloaded default serves the next turn).
                     yield CODEX_MODEL_INVALID.test(event.message) ? { ...event, code: "codex-model-invalid" as const } : event;
                     continue;
                 }

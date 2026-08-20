@@ -9,13 +9,13 @@ import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // The owner-facing CI surface (the Pipelines rail view's whole backend). Reads serve the webhook-freshened
-// cache and backfill it over the vendors' REST APIs when stale — a freshly opened view gets history even on a
+// cache and backfill it over the vendors' REST APIs when stale, a freshly opened view gets history even on a
 // sandbox whose webhooks never registered. Actions re-resolve repo → project per call (a stale card must not
 // act on a project the workspace no longer maps to) and translate vendor refusals into BAD_GATEWAY with the
 // vendor's own words, the one boundary where the message is the whole point.
 
 const RUNS_PER_PROJECT = 15;
-// How much failed-job log tail seeds a fix conversation — enough to see the actual error, small enough that
+// How much failed-job log tail seeds a fix conversation, enough to see the actual error, small enough that
 // the turn's context stays about fixing rather than scrolling.
 const FIX_LOG_BYTES = 24_000;
 const TITLE_MAX = 80;
@@ -125,7 +125,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 conversationId,
                 isolated: true,
                 /* Started by a surface rather than by someone at a composer, so `agentRunModels` answers for it
-                 * (turn-resume.ts) — which is also what the button's own caret names before the click.
+                 * (turn-resume.ts), which is also what the button's own caret names before the click.
                  *
                  * UNLESS they used that caret. A pick rides on as the turn's own agent/model, and the daemon's
                  * fill step then leaves it alone because it only fills what is absent. The flag stays either

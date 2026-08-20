@@ -12,7 +12,7 @@ import type { Terminal as TerminalType } from "@xterm/headless";
 // file, rewriting the rendered buffer as output arrives.
 
 // @xterm/headless v6 ships as CommonJS whose named exports Node's ESM lexer can't detect, so a bare
-// `import { Terminal }` fails at runtime — load it through require and keep the type via the import.
+// `import { Terminal }` fails at runtime, load it through require and keep the type via the import.
 const { Terminal } = createRequire(import.meta.url)("@xterm/headless") as typeof import("@xterm/headless");
 
 const DEFAULT_COLS = 200;
@@ -23,7 +23,7 @@ const FLUSH_MAX_MS = 2_000;
 
 // oh-my-zsh sets the tmux tab title with the screen sequence ESC k <title> (ST | BEL). xterm.js does
 // not recognise ESC k (probed: it renders <title> as screen text), so drop that one sequence before
-// the emulator sees it — everything else xterm parses correctly. Stateful because a title string, or
+// the emulator sees it, everything else xterm parses correctly. Stateful because a title string, or
 // a lone trailing ESC, can straddle a chunk boundary. Non-title escapes pass through untouched.
 class TitleStripper {
     #inTitle = false;
@@ -63,7 +63,7 @@ class TitleStripper {
     }
 }
 
-// Renders the emulator's buffer (scrollback + viewport) to plain text — every line, trailing blanks
+// Renders the emulator's buffer (scrollback + viewport) to plain text, every line, trailing blanks
 // trimmed. Not addon-serialize: that re-emits SGR colour escapes, the very noise we are removing.
 const render = (term: TerminalType): string => {
     const buffer = term.buffer.active;

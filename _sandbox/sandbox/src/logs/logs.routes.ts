@@ -6,7 +6,7 @@ import { listLogFiles, logsRoot, tailLogFile } from "./log-files.js";
 
 export type LogsRoutesDeps = Pick<Services, "config">;
 
-// Daemon-owned debug logs under historyRoot/logs — terminal captures, intentic run logs, daemon.log and the
+// Daemon-owned debug logs under historyRoot/logs, terminal captures, intentic run logs, daemon.log and the
 // resource-metrics JSONL series. Read-only: only the daemon/tmux write these files (the same trust rationale
 // as /activity).
 export const createLogsRoutes = (services: LogsRoutesDeps) => {

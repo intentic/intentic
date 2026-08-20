@@ -5,19 +5,19 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 
-// The xAI provider id in OpenCode / models.dev — also the single account's id (OpenCode holds one xAI auth).
+// The xAI provider id in OpenCode / models.dev, also the single account's id (OpenCode holds one xAI auth).
 const XAI = "xai";
 // OpenCode doesn't expose a connect timestamp; the single account uses 0 so its list shape matches the others.
 const grokAccount = { id: XAI, label: "Grok", connectedAt: 0 };
 
 // xAI offers two OAuth methods (both type "oauth"): a browser flow that waits on a 127.0.0.1 loopback callback,
-// and a headless device-code flow. The daemon is remote, so the loopback can never fire — we must use the
+// and a headless device-code flow. The daemon is remote, so the loopback can never fire, we must use the
 // device method (verification URL + one-time code the user enters at x.ai, completed by polling). Matched by
 // label; confirm the exact string at runtime via provider.auth().
 const isDeviceMethod = (label: string): boolean => /headless|device|remote|vps/i.test(label);
 
 // OpenCode's provider.oauth.callback is a SINGLE poll of the device token endpoint (true once approved, false
-// while pending) — it doesn't loop. So drive the RFC 8628 poll ourselves until the user approves, the code
+// while pending), it doesn't loop. So drive the RFC 8628 poll ourselves until the user approves, the code
 // expires (~15 min), or a superseding `start` aborts us. Detached from the `start` response; the UI polls
 // /grok/accounts for the connected flip.
 const pollDeviceApproval = async (client: OpencodeClient, method: number, signal: AbortSignal): Promise<void> => {
@@ -33,7 +33,7 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number, signal
                 return;
             }
         } catch {
-            // authorization_pending / transient — keep polling until the deadline.
+            // authorization_pending / transient, keep polling until the deadline.
         }
     }
 };
@@ -42,7 +42,7 @@ export type GrokRoutesDeps = Pick<Services, "openCode">;
 
 // xAI Grok OAuth, relayed through OpenCode (which owns the protocol + token storage). `start` authorizes xAI's
 // device-code method and returns the URL + instructions (the instructions carry the one-time code the user
-// enters at x.ai); OpenCode then polls to completion — there is no paste-back. `accounts` reflects OpenCode's
+// enters at x.ai); OpenCode then polls to completion, there is no paste-back. `accounts` reflects OpenCode's
 // connection view; `disconnect` clears the stored tokens.
 export const createGrokRoutes = (services: GrokRoutesDeps) => {
     const i = implement(grokContract).$context<OrpcContext>();
@@ -68,7 +68,7 @@ export const createGrokRoutes = (services: GrokRoutesDeps) => {
             pollController?.abort();
             pollController = new AbortController();
             void pollDeviceApproval(client, method, pollController.signal);
-            // Surface the code the URL pre-fills (the single source of truth) so the card matches x.ai exactly —
+            // Surface the code the URL pre-fills (the single source of truth) so the card matches x.ai exactly,
             // `instructions` has been observed to carry a different/stale code. Fall back to it only if absent.
             const code = new URL(authorization.url).searchParams.get("user_code") ?? authorization.instructions;
             return { url: authorization.url, code };

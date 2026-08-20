@@ -1,4 +1,4 @@
-/* WHY A WORKFLOW GRAPH IS NOT RUNNABLE — the rules that `WorkflowSchema` cannot state, because each of them is
+/* WHY A WORKFLOW GRAPH IS NOT RUNNABLE, the rules that `WorkflowSchema` cannot state, because each of them is
  * about the graph rather than about one field.
  *
  * A rule per function, so the reason a graph is refused reads as one sentence in one place. They are
@@ -49,24 +49,24 @@ const stepFaults = (step: WorkflowStep, ids: ReadonlySet<string>): string[] => {
             ),
         );
     }
-    /* A STEP THAT DECLARES NOTHING IS NOT A FAULT — it is the ordinary step, and this used to refuse it.
+    /* A STEP THAT DECLARES NOTHING IS NOT A FAULT, it is the ordinary step, and this used to refuse it.
      *
      * The rule was borrowed from loops (`loopCanConverge`), where it is right: a LOOP is started to repeat
      * until something is true, so one with nothing to produce and nothing to check has no reason to run twice
      * and the dialog is correct to grey out its button. A STEP is not started to repeat. It is one agent
-     * session with a job, and the job being done is the turn ending — which is exactly what the loop machinery
+     * session with a job, and the job being done is the turn ending, which is exactly what the loop machinery
      * already does with it (loop-stop's `readDocument` answers `done` for a `none` output, so iteration 1 is
      * the only iteration).
      *
      * Keeping the rule here forced every step to declare an output or a check before the graph would save, and
-     * the cheapest way to satisfy it was a `claim` — which buys a verdict file nobody reads, a page of contract
+     * the cheapest way to satisfy it was a `claim`, which buys a verdict file nobody reads, a page of contract
      * in the prompt, and a way for a step that did the work to fail for not having described it.
      */
     return faults;
 };
 
 /* Two steps continuing the SAME session is the one graph that is legal on paper and broken in practice: both
- * would run on one conversation, in parallel, against one worktree and one turn mutex — so they would serialize
+ * would run on one conversation, in parallel, against one worktree and one turn mutex, so they would serialize
  * on a lock neither knows about and the second would inherit a session the first had moved on. A predecessor
  * can be continued once; anything else that needs its result takes it as a handover. */
 const sharedContinuationFaults = (steps: readonly WorkflowStep[]): string[] => {
@@ -110,8 +110,8 @@ const cycleFaults = (steps: readonly WorkflowStep[]): string[] => {
     return faults;
 };
 
-/* A GATE THAT CANNOT BE ANSWERED. Every rule here is about the gate against the GRAPH — which is why none of
- * them can live in the schema — and all of them fail the same expensive way if unchecked: the run spends its
+/* A GATE THAT CANNOT BE ANSWERED. Every rule here is about the gate against the GRAPH, which is why none of
+ * them can live in the schema, and all of them fail the same expensive way if unchecked: the run spends its
  * whole fan-out of sessions and then answers `blocked`, on every commit, for a reason nobody sees until they
  * go reading the daemon's log.
  *
@@ -138,7 +138,7 @@ const gateFaults = (workflow: Pick<Workflow, "steps" | "gate">): string[] => {
     if (field.type === "string[]") {
         return [`The gate reads "${gate.field}", which is a list — a release decision has to be one value.`];
     }
-    // The schema refuses this on save (pass is min(1)), but the designer edits drafts the schema never sees —
+    // The schema refuses this on save (pass is min(1)), but the designer edits drafts the schema never sees,
     // and an empty allowlist is a gate no run could ever answer "pass", which deserves a sentence, not a save error.
     if (gate.pass.length === 0) {
         return [`The gate names no passing values, so no run could ever ship.`];
@@ -163,13 +163,13 @@ export const workflowFaults = (workflow: Pick<Workflow, "steps" | "gate">): stri
     ];
 };
 
-/* WHAT ONLY A RUN CAN BE WRONG ABOUT — kept apart from the rules above because it is not about the graph, and
+/* WHAT ONLY A RUN CAN BE WRONG ABOUT, kept apart from the rules above because it is not about the graph, and
  * the graph is what gets SAVED. A design whose steps take their goal and instruction from the request is a
  * perfectly good design; it is only unrunnable on the particular run that forgot to bring one.
  *
  * Which is why this cannot be a save-time rule and must not become one: refusing to save such a workflow would
- * outlaw the entire point of a workflow being a SHAPE. The check belongs at the two doors that start runs — the
- * run route and the gate's webhook — and it has to be there rather than left to fail later, because "later"
+ * outlaw the entire point of a workflow being a SHAPE. The check belongs at the two doors that start runs, the
+ * run route and the gate's webhook, and it has to be there rather than left to fail later, because "later"
  * means every session in the fan-out has already been paid for before anyone finds out the model was handed an
  * empty instruction.
  */

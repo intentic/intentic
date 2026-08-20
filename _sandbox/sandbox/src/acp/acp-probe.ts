@@ -4,7 +4,7 @@ import { withTimeout } from "./acp-connection.js";
 import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
 
 /* One-shot ACP probe for the `agent` capability handler: spawn the command, initialize, report what the agent
- * advertises, kill. Proves the command actually speaks ACP before the capability reads active — a wrong
+ * advertises, kill. Proves the command actually speaks ACP before the capability reads active, a wrong
  * binary fails here with its stderr, not on the user's first chat turn. Deliberately standalone (no pool):
  * the warm turn-serving connection is acp-connection's concern. */
 
@@ -20,7 +20,7 @@ export const probeAcpAgent = async (config: AcpAgentConfig, cwd: string): Promis
     const proc = spawnAcpProcess(config.command, parseEnvBlock(config.env), cwd);
     try {
         const conn = client({ name: "intentic-probe" }).connect(proc.stream);
-        // Hard timeout race — SDK request cancellation is cooperative, so a non-ACP binary would hang forever.
+        // Hard timeout race. SDK request cancellation is cooperative, so a non-ACP binary would hang forever.
         const init = await withTimeout(
             conn.agent.request(methods.agent.initialize, {
                 protocolVersion: PROTOCOL_VERSION,

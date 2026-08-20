@@ -7,7 +7,7 @@ export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModel
 
 // The picker catalog for one `endpoint` capability. Unlike the four fixed provider routes this one resolves its
 // subject first: the id in the path names a capability, and an id that names none is a NOT_FOUND rather than an
-// empty list — "this endpoint was removed" and "this endpoint publishes nothing" are different problems with
+// empty list, "this endpoint was removed" and "this endpoint publishes nothing" are different problems with
 // different fixes, and a blank catalog cannot tell them apart.
 export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
     const i = implement(endpointsContract).$context<OrpcContext>();
@@ -24,7 +24,7 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
          * allowance is spent platform-side where this daemon cannot observe it. The probe swallows its own
          * failure, so an unreachable platform answers with the last known figures instead of an error.
          *
-         * A sandbox with no trial answers `available: false` with zeroes rather than a 404 — "you have no trial"
+         * A sandbox with no trial answers `available: false` with zeroes rather than a 404, "you have no trial"
          * is the ordinary state for most sandboxes, and a picker should not have to read an error to learn it. */
         trial: i.trial.handler(async () => {
             await services.trial.refresh();

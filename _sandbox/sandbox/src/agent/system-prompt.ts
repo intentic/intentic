@@ -4,20 +4,20 @@ import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 
 /* WHAT THE MODEL IS TOLD BEFORE THE CONVERSATION STARTS, and where each piece of it goes.
  *
- * Three bases, decided by one setting, and they do NOT split three ways — they split two.
+ * Three bases, decided by one setting, and they do NOT split three ways, they split two.
  *
- * `intentic` (the default) and `claude` are peers: a base prompt, then the daemon's appends on top of it — the
+ * `intentic` (the default) and `claude` are peers: a base prompt, then the daemon's appends on top of it, the
  * widget guidance below, the delegation note, the terse steer. Only the base differs, and only in how it is
  * carried: Claude's preset is a flag the CLI expands on its way to the API (so its extras go in the SDK's
  * `append`), while Intentic's is text we ship, which reaches the same place as one concatenated string.
  *
- * `custom` is the odd one. That text IS the system prompt — no base, and none of the appends. It is honoured
+ * `custom` is the odd one. That text IS the system prompt, no base, and none of the appends. It is honoured
  * literally rather than quietly softened, because a "replace" that still smuggles four blocks in is a setting
  * whose behaviour nobody can predict; the settings page states the cost at the moment of the edit instead.
  *
  * The one piece that survives `custom` is the delegation note, and only because it was never really
  * system-prompt content: it announces a capability (Codex is reachable through the shell) and it already has a
- * second home — the user-message preamble that `stableSystemPrompt` puts it in to protect the prompt cache. A
+ * second home, the user-message preamble that `stableSystemPrompt` puts it in to protect the prompt cache. A
  * replaced prompt takes the same door. Nothing is invented for it; it reuses a path that already existed.
  *
  * ORDER, wherever appends happen, is most-stable-first: the guidance never changes, the note changes with which
@@ -26,27 +26,27 @@ import { INTENTIC_PROMPT } from "./intentic-prompt.js";
  *
  * SIX RUNTIMES READ THIS, NOT ONE, and until recently only one of them did. The setting was composed inside the
  * Claude Code arm, so a turn on native Codex, Grok, Gemini, Pi or an ACP agent ran with the owner's prompt
- * silently absent — and so did the persona note, which is the sentence saying which accounts a session may
+ * silently absent, and so did the persona note, which is the sentence saying which accounts a session may
  * speak through. What each runtime will take is now a declared axis (AgentCapabilities.instructions), and this
  * module composes to it:
  *
- *   "replace" — everything below, exactly as described. The Claude Code loop and native Codex.
- *   "append"  — the runtime's own base stands and cannot be swapped, so a custom prompt is ADDED rather than
+ *   "replace", everything below, exactly as described. The Claude Code loop and native Codex.
+ *   "append" , the runtime's own base stands and cannot be swapped, so a custom prompt is ADDED rather than
  *               substituted. OpenCode (Grok, Gemini). The settings page says so rather than letting "replaces
  *               everything" mean something different on two providers.
- *   "none"    — nothing reaches a system prompt. The persona note takes the user-message door the delegation
+ *   "none"   , nothing reaches a system prompt. The persona note takes the user-message door the delegation
  *               note already had; the owner's prompt is not applied at all, and the page says which runtimes
  *               those are.
  *
  * WHICH GUIDANCE IS UNIVERSAL AND WHICH IS THIS LOOP'S is the second thing that split. The cards, the checklist
  * tools, the browser servers, the secret references and the outside-content envelopes are all mechanisms wired
- * in agent.ts and planHarnessTurn — describing them to a Codex turn would name tools it has not got. The
+ * in agent.ts and planHarnessTurn, describing them to a Codex turn would name tools it has not got. The
  * reference shelf and the public outbox are facts about the FILESYSTEM and hold whoever is running, so those
  * two travel to every runtime that will take an append. */
 
 // Told to the model every turn, in every mode. The chat renders AskUserQuestion as a clickable card and
 // ExitPlanMode as an approval card, but a model that doesn't know the widgets exist writes "A) … B) …" as
-// prose instead — which is exactly the failure this text prevents. EnterPlanMode is named too, because the
+// prose instead, which is exactly the failure this text prevents. EnterPlanMode is named too, because the
 // user's chosen mode is a starting posture, not a cage: the agent is expected to step up into planning when
 // a request turns out to be bigger than it looked.
 const INTERACTIVE_GUIDANCE = [
@@ -54,11 +54,11 @@ const INTERACTIVE_GUIDANCE = [
     "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
 ].join("\n\n");
 
-// The checklist tools are DEFERRED — the model is told their names but not their schemas, so it must call
+// The checklist tools are DEFERRED, the model is told their names but not their schemas, so it must call
 // ToolSearch before it can use one, and left to itself it never does: across a corpus of sandbox turns,
 // TaskCreate was called zero times while the harness fired its "task list is empty" reminder on a loop. That
-// silence costs the most exactly where it is worst — an unattended turn runs ~150 steps with no plan the
-// operator can watch and nothing holding the agent to it — so this is told on EVERY turn, attended or not.
+// silence costs the most exactly where it is worst, an unattended turn runs ~150 steps with no plan the
+// operator can watch and nothing holding the agent to it, so this is told on EVERY turn, attended or not.
 const CHECKLIST_GUIDANCE =
     "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
     "`select:TaskCreate,TaskUpdate,TaskList`). Call TaskCreate once per step up front, TaskUpdate to move exactly one " +
@@ -78,9 +78,9 @@ const REFERENCE_GUIDANCE =
     "codebase for study, clone it into `refs/` rather than the workspace root.";
 
 /* The shelf's mirror image (PUBLIC_DIR in @intentic/workspace-ignore). Named for the same reason and one
- * sharper one: this convention has a blast radius. An agent that does not know `public/` is served will
+ * sharper one: this convention has consequences. An agent that does not know `public/` is served will
  * eventually write a build output, a log dump or a credentials file into it because the name looked like an
- * ordinary asset folder — and unlike a misfiled clone, that one is on the open internet. Stating what the
+ * ordinary asset folder, and unlike a misfiled clone, that one is on the open internet. Stating what the
  * directory IS turns the most likely accident into a deliberate act.
  *
  * The serve-time guards (public/public-files.ts) refuse the obvious mistakes whatever the agent believes, so
@@ -97,7 +97,7 @@ const PUBLIC_GUIDANCE =
     "project content and none of this applies.";
 
 /* HOW WORK LEAVES A SESSION (agents/land.ts). A conversation runs in its own worktree and its delta reaches the
- * owner when they press Land — as UNCOMMITTED changes in their workspace, where their own commit is the review
+ * owner when they press Land, as UNCOMMITTED changes in their workspace, where their own commit is the review
  * boundary. An agent that commits on its own is not helping: it moves that boundary and buys nothing. Left
  * untold, every session ends by offering to commit, so the owner answers the same question forever. */
 const LANDING_GUIDANCE = "The owner lands uncommitted work; commit only when asked.";
@@ -105,8 +105,8 @@ const LANDING_GUIDANCE = "The owner lands uncommitted work; commit only when ask
 /* The secret reference language (secrets/secret-registry.ts and the seams around it). One stable paragraph,
  * because every half of the machinery is invisible until named: the agent SEES `{{secret:name}}` tokens the
  * masking minted and has to know they are usable rather than damage; the write path exists only if the agent
- * knows to write the token; and the one rule the machinery cannot enforce — keep references, not values, in
- * files at rest — is a convention that holds only for agents that were told. Names are not listed here (they
+ * knows to write the token; and the one rule the machinery cannot enforce, keep references, not values, in
+ * files at rest, is a convention that holds only for agents that were told. Names are not listed here (they
  * change mid-turn; a failed resolution lists them), only the language. */
 const SECRETS_GUIDANCE =
     "Stored secrets never appear in what you read: anywhere a stored value would show, you see its reference " +
@@ -119,7 +119,7 @@ const SECRETS_GUIDANCE =
 
 /* The outside-content envelope language (guard/outside-content.ts and the seams that wrap with it). One
  * stable paragraph for the same reason the secrets language is one: the model SEES the tags on every stranger
- * message, fetched page and foreign tool result, and has to know what they assert — repeating a warning per
+ * message, fetched page and foreign tool result, and has to know what they assert, repeating a warning per
  * wrap costs a sermon per page and trains the reader to skim it. The id rule is stated because it is the part
  * a forgery has to fake and cannot: markers are minted around content, never by it. */
 const OUTSIDE_GUIDANCE =
@@ -137,7 +137,7 @@ const OUTSIDE_GUIDANCE =
 // The closing sentence names the directory the redirect hook enforces, so it is a fact rather than a
 // convention: the agent could not put a screenshot anywhere else if it tried. It used to promise the same
 // directory while the tool wrote model-named files into the agent's cwd, which cost sessions a failed Read
-// and a `find /` — and, when a session didn't check, left PNGs in the user's workspace (browser-artifacts.ts).
+// and a `find /`, and, when a session didn't check, left PNGs in the user's workspace (browser-artifacts.ts).
 const browserGuidance = (outputDir: string): string =>
     "You have a real browser. Load it with ToolSearch (`+browser`) to get `mcp__web__browser_navigate`, " +
     "`mcp__web__browser_take_screenshot` and the rest. Use it to read pages that need JavaScript, to check a " +
@@ -153,15 +153,15 @@ const browserGuidance = (outputDir: string): string =>
  * The closing sentence is the one part that is not about brevity, and it is there because the holdout says the
  * steer does not stay in its lane: over the opus turns of one week, the treated arm ran a median 55 steps
  * against the control's 64 while its prose fell only 4.3k chars to 4.7k. A small control (n=44) makes that
- * suggestive rather than settled — but "be concise" is read by the model as a budget on the TURN, not on the
+ * suggestive rather than settled, but "be concise" is read by the model as a budget on the TURN, not on the
  * paragraph, and a steer whose whole purpose is to save output tokens has no business buying them back by
  * skipping a check. Naming the boundary costs ~20 tokens against the ~2k the steer is there to save. */
 const TERSE_NOTE =
     "Response style: be concise. Don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision. This governs your PROSE, not your work: never skip a step, a check or a tool call to make a turn shorter.";
 
 /* THE CONVENTIONS THAT BELONG TO THE WORKSPACE, not to whoever is reading it. Each describes something enforced
- * elsewhere — the scanners that exclude `refs/`, the server that publishes `public/`, the land route that moves
- * a worktree's delta into the owner's tree — so they are as true of a Codex turn as of a Claude one, and a
+ * elsewhere, the scanners that exclude `refs/`, the server that publishes `public/`, the land route that moves
+ * a worktree's delta into the owner's tree, so they are as true of a Codex turn as of a Claude one, and a
  * runtime that has never been told is one that will eventually commit a clone or publish a log. Everything else
  * in this file names a mechanism only the Claude Code loop is wired for; these are why the split exists. */
 const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE];
@@ -183,7 +183,7 @@ export interface TurnPromptInput {
      *
      * It rides the SYSTEM append rather than the user message wherever there is one, unlike the delegation note
      * above, and it may do so even under stableSystemPrompt: a persona does not change from turn to turn within
-     * a session — changing it is a deliberate act that mints a different prefix anyway — so it costs the prompt
+     * a session, changing it is a deliberate act that mints a different prefix anyway, so it costs the prompt
      * cache nothing. A custom system prompt still drops it, like everything else the daemon would have
      * appended; that is the owner saying they will do their own instructing, and the tool gate holds regardless
      * of what any prose says. A runtime with no system seam is the one case where it moves rather than
@@ -197,7 +197,7 @@ export interface TurnPromptPlacement {
     readonly systemPrompt?: string;
     // What the daemon adds to that base. Undefined ⇒ nothing to add (or nothing may be added).
     readonly systemAppend?: string;
-    /* The notes that could not ride a system prompt, for the caller to prepend to the user message — in the
+    /* The notes that could not ride a system prompt, for the caller to prepend to the user message, in the
      * order they should be read. A LIST rather than the one delegation note this used to carry: a runtime with
      * no system seam sends the persona note through the same door, and two notes with one field between them is
      * how one of them silently wins. */
@@ -218,7 +218,7 @@ export const turnPromptPlacement = ({
 }: TurnPromptInput): TurnPromptPlacement => {
     const { instructions, runtime } = capabilities;
 
-    /* NO SYSTEM SEAM AT ALL (Pi, ACP). The owner's prompt is not applied — quietly softening that into a note
+    /* NO SYSTEM SEAM AT ALL (Pi, ACP). The owner's prompt is not applied, quietly softening that into a note
      * pasted on the user's message would be a different feature wearing the setting's name, and the composer
      * discloses the absence instead (limitationsOf). What still has to arrive is the persona note: a session
      * that does not know which accounts it may speak through is the mistake the whole layer exists to stop, and
@@ -228,7 +228,7 @@ export const turnPromptPlacement = ({
         return userNotes.length === 0 ? {} : { userNotes };
     }
 
-    /* "custom" — the owner's text, and nothing else of ours. On a runtime that can only ADD, it is added: its
+    /* "custom", the owner's text, and nothing else of ours. On a runtime that can only ADD, it is added: its
      * base cannot be dropped by anyone, so refusing to send the text at all would cost the owner their prompt
      * to preserve a promise the seam was never able to keep. "" is a legal custom prompt on a runtime that
      * replaces (the owner emptied the box) and means exactly that; there is nothing to add. */
@@ -244,12 +244,12 @@ export const turnPromptPlacement = ({
     const append = [
         ...(noteInUserMessage || note === undefined ? [] : [note]),
         /* The Claude Code loop composes the workspace conventions itself, around whichever base is in force
-         * (sdkSystemPrompt) — it is the only caller that can put text around a PRESET it never sees. Repeating
+         * (sdkSystemPrompt), it is the only caller that can put text around a PRESET it never sees. Repeating
          * them here would say them twice on the one runtime that already has them, and every other runtime
          * would hear them from nowhere at all. */
         ...(runtime === "claude-code" ? [] : WORKSPACE_GUIDANCE),
         ...(terseOutput ? [TERSE_NOTE] : []),
-        // Last, so it sits closest to the turn it governs — and after the terse steer, which must not be
+        // Last, so it sits closest to the turn it governs, and after the terse steer, which must not be
         // the final word when the turn is about to act as somebody in public.
         ...(personaNote === undefined ? [] : [personaNote]),
     ].join("\n\n");
@@ -273,7 +273,7 @@ export interface SdkSystemPromptInput {
 }
 
 // This harness's own guidance, in most-stable-first order, with whatever the turn composed after it. Shared by
-// both built-in bases so they differ only in the base itself — the guidance describes widgets THIS app renders
+// both built-in bases so they differ only in the base itself, the guidance describes widgets THIS app renders
 // and conventions THIS workspace enforces, both of which hold whichever prompt the agent is wearing.
 const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
@@ -281,7 +281,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
     ...WORKSPACE_GUIDANCE,
     SECRETS_GUIDANCE,
     OUTSIDE_GUIDANCE,
-    // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent —
+    // Only when the turn actually wired browser servers (turn-plan omits the dir when Chromium is absent,
     // a core image without the browser pack): advertising a browser that isn't there sends the model hunting
     // for tools it cannot load, or installing its own.
     ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir)]),
@@ -290,7 +290,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
 
 /* The SDK's `systemPrompt` option for a turn.
  *
- * A STRING replaces Claude Code's preset outright (the SDK's documented behaviour) — which is how both
+ * A STRING replaces Claude Code's preset outright (the SDK's documented behaviour), which is how both
  * `intentic` and `custom` are carried, since neither wants the preset. They differ in what rides along:
  * Intentic's base is followed by the harness guidance, a custom prompt by nothing at all.
  *
@@ -298,7 +298,7 @@ const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSyste
  * to add to a prompt this process never sees the text of. */
 export const sdkSystemPrompt = ({ mode, custom, ...extras }: SdkSystemPromptInput): NonNullable<Options["systemPrompt"]> => {
     if (mode === "custom") {
-        // "" is a legal custom prompt — the owner emptied the box — and means exactly what it says: no system
+        // "" is a legal custom prompt, the owner emptied the box, and means exactly what it says: no system
         // prompt. The settings page is where that is argued with, not here.
         return custom ?? "";
     }

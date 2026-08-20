@@ -1,14 +1,14 @@
-/* READING AND WRITING ONE SKILL.md — the frontmatter half, in one place.
+/* READING AND WRITING ONE SKILL.md, the frontmatter half, in one place.
  *
  * A skill is a markdown file whose leading `---` block declares the two things the model reads before deciding
  * whether to open the rest: `name` and `description`. Everything else in the file is instructions. The daemon
  * has to do both directions: it COMPOSES that block for a skill the owner writes (so a saved skill can never be
- * one the loader skips over), and it PARSES it for every skill it merely found — the ones inside extension
+ * one the loader skips over), and it PARSES it for every skill it merely found, the ones inside extension
  * checkouts and plugin repos, which it does not own and must describe as their authors wrote them.
  *
  * Deliberately not a YAML dependency. The block this reads is two known keys written by a tool or by this file,
  * and the failure mode of a real parser here is worse than the failure mode of ignoring a line: a skill whose
- * frontmatter this cannot understand still lists, under its directory name, with an empty description — visibly
+ * frontmatter this cannot understand still lists, under its directory name, with an empty description, visibly
  * incomplete rather than absent from a list whose whole promise is that it shows everything. */
 
 const FENCE = "---";
@@ -40,7 +40,7 @@ const unquote = (value: string): string => {
 };
 
 export interface ParsedSkill {
-    // Absent when the file declares no frontmatter at all, or none this can read — callers fall back to the
+    // Absent when the file declares no frontmatter at all, or none this can read, callers fall back to the
     // directory name, which is what the loader itself keys the skill by.
     readonly name?: string;
     readonly description?: string;
@@ -50,7 +50,7 @@ export interface ParsedSkill {
 
 /* Split a SKILL.md into its declared fields and its instructions.
  *
- * A continuation line — indented, with no `key:` of its own — appends to the value above it, which is how a long
+ * A continuation line, indented, with no `key:` of its own, appends to the value above it, which is how a long
  * description written by hand or by another tool arrives. Unknown keys are skipped rather than collected: the two
  * this reads are the two anything downstream uses, and a bag of the rest would be a shape nothing consumes. */
 export const parseSkillFile = (text: string): ParsedSkill => {

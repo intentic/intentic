@@ -3,7 +3,7 @@ import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
-// manifest-derived extension id (publisher.name) — the same key extension-settings.json uses, so the choice
+// manifest-derived extension id (publisher.name), the same key extension-settings.json uses, so the choice
 // survives a remove/re-add and the re-clone that is an update. ABSENT MEANS ENABLED: a fresh sandbox has no
 // file at all, and an extension that ships in a later image is on the moment it lands rather than waiting for
 // an entry to be written for it.

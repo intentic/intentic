@@ -4,13 +4,13 @@ import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
 import { skipReason } from "./scan-policy.js";
 
-/* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD — a gzipped tar of `~/.hermes` (or wherever the source tool
+/* READING A FOREIGN HOME DIRECTORY OFF AN UPLOAD, a gzipped tar of `~/.hermes` (or wherever the source tool
  * kept house), landed as a bounded in-memory file map the adapters can be PURE over.
  *
  * In memory rather than on disk, deliberately: the archive is a credential store (an .env, an auth.json), and
  * a temp file would be a second place those bytes live, with a lifetime somebody has to remember. A held map
  * dies with the daemon process and with the DELETE route, and nothing under /work or /history ever holds the
- * raw upload. What makes the map safe to hold is that it is BOUNDED — the caps below are not tuning, they are
+ * raw upload. What makes the map safe to hold is that it is BOUNDED, the caps below are not tuning, they are
  * the difference between "the user's config and notes" and "their session logs and SQLite", which the plan
  * refuses anyway and which would otherwise dominate the bytes.
  *
@@ -23,7 +23,7 @@ export class MigrationFormatError extends Error {}
 export interface ForeignArchive {
     // Archive-relative, forward-slash, `./` stripped. Values are the raw bytes; adapters decode.
     readonly files: ReadonlyMap<string, Buffer>;
-    // What the reader declined to hold, as path prefixes/names — merged into the plan's `refused` so the owner
+    // What the reader declined to hold, as path prefixes/names, merged into the plan's `refused` so the owner
     // sees the archive was read selectively rather than trusting that it all "made it".
     readonly skipped: readonly string[];
 }
@@ -36,7 +36,7 @@ const normalize = (name: string): string | undefined => {
         .split("/")
         .filter((part) => part !== "" && part !== ".");
     // An absolute path or a `..` segment is an archive trying to name something outside itself. The map is
-    // keyed relatively so nothing could escape anyway — refusing keeps the skip list honest about the attempt.
+    // keyed relatively so nothing could escape anyway, refusing keeps the skip list honest about the attempt.
     if (name.startsWith("/") || parts.includes("..")) {
         return undefined;
     }
@@ -123,7 +123,7 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
     return { files, skipped: [...skipped].toSorted((left, right) => left.localeCompare(right)) };
 };
 
-/* Rebase the map onto the directory that holds `anchor` — the file that proves where the tool's home starts.
+/* Rebase the map onto the directory that holds `anchor`, the file that proves where the tool's home starts.
  * `tar czf setup.tar.gz -C ~ .hermes` puts everything under `.hermes/`; packing from inside the directory puts
  * `config.yaml` at the root; a GUI archiver adds its own folder. All three are the same setup, and making the
  * user re-pack over a prefix would be a formality dressed up as a format. Shortest match wins so a nested

@@ -3,14 +3,14 @@ import type { Caller } from "./auth/auth.js";
 
 // The Hono env: the bearer middleware stashes the caller's verified identity so the oRPC context below can
 // carry it to handlers (presence needs to know WHO is connected). Middleware-exempt paths, panel-token
-// callers, and loopback mode leave it unset — those callers have no member identity to show.
+// callers, and loopback mode leave it unset, those callers have no member identity to show.
 export interface AppEnv {
     Variables: { identity?: Caller };
 }
 
 // Per-request context handed to every oRPC handler. Auth + CORS run as Hono middleware ahead of the oRPC
 // catch-all (the daemon owns its own auth), so handlers need nothing beyond the raw request metadata and the
-// verified identity — mirroring the platform/verification-api OrpcContext. The request's AbortSignal reaches
+// verified identity, mirroring the platform/verification-api OrpcContext. The request's AbortSignal reaches
 // streaming handlers through oRPC's own `signal` handler option, not this context.
 export interface OrpcContext {
     headers: Headers;

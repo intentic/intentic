@@ -6,28 +6,28 @@ import { classifyCommand } from "../guard/command-classes.js";
 import { guard } from "../guard/guard.js";
 import { armWatcher, cancelWatcher, DEFAULT_INTERVAL_S, DEFAULT_TIMEOUT_S, listWatchers, type WatcherTurnSeed } from "./watchers.js";
 
-/* THE AGENT'S DOOR TO THE CONDITION WATCH (agent/watchers.ts) — an SDK MCP server for the same reasons
+/* THE AGENT'S DOOR TO THE CONDITION WATCH (agent/watchers.ts), an SDK MCP server for the same reasons
  * subagent-wait.ts is one: the handler runs in the daemon (where the watch must live, since the turn's own
- * process dies with the turn), and `alwaysLoad` keeps it in the prompt — a tool the model has to go looking
+ * process dies with the turn), and `alwaysLoad` keeps it in the prompt, a tool the model has to go looking
  * for is a tool it replaces with the sleep-and-poll loop this exists to retire.
  *
  * THE CHECK IS GATED AT ARM TIME, ONCE, with the same rulebook Bash runs under (guard/command-gate.ts). The
- * check will run repeatedly, later, with nobody there to answer a card — so a command whose class the owner
+ * check will run repeatedly, later, with nobody there to answer a card, so a command whose class the owner
  * holds or denies is refused here outright, worded so the agent runs it through Bash instead (where a hold can
- * actually be asked). The classifier is regex over shell text and this is friction, not a boundary — the same
+ * actually be asked). The classifier is regex over shell text and this is friction, not a boundary, the same
  * honest reading command-gate gives of itself. */
 
 export interface WatchServerDeps {
-    // Absent for a conversationless turn (the bench): the tools then refuse — a watch with no conversation has
+    // Absent for a conversationless turn (the bench): the tools then refuse, a watch with no conversation has
     // nowhere to deliver its wake.
     readonly conversationId: string | undefined;
-    // The tree the check runs in (the turn's effective checkout) and the capability credentials it runs with —
+    // The tree the check runs in (the turn's effective checkout) and the capability credentials it runs with,
     // snapshotted into the watch, because the turn they belong to will be long gone at check time.
     readonly cwd: string;
     readonly env: Readonly<Record<string, string>>;
     // The owner's command rulebook, applied at arm time as above. Empty ⇒ everything arms.
     readonly commandRules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    // The turn identity the wake must reproduce — see WatcherTurnSeed.
+    // The turn identity the wake must reproduce, see WatcherTurnSeed.
     readonly turn: WatcherTurnSeed;
 }
 
@@ -35,7 +35,7 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
 
-// The strictest refusal across the check's classes — deny and hold refuse alike, because the check runs later
+// The strictest refusal across the check's classes, deny and hold refuse alike, because the check runs later
 // and repeatedly, where nobody can answer a hold.
 const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"]): string | undefined => {
     for (const commandClass of classifyCommand(command)) {

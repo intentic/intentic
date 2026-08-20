@@ -1,7 +1,7 @@
 import type { HostHub } from "../hosts/host-hub.js";
 import { isReadableName, skipReason } from "./scan-policy.js";
 
-/* READING A SETUP OFF ONE OF THE OWNER'S OWN COMPUTERS — the path that deletes the packing step entirely.
+/* READING A SETUP OFF ONE OF THE OWNER'S OWN COMPUTERS, the path that deletes the packing step entirely.
  *
  * The whole instruction the card used to give ("run this archive command, find the file it made, bring it to
  * the machine your browser is on, pick it out of a file dialog") exists only because the bytes were on the
@@ -9,13 +9,13 @@ import { isReadableName, skipReason } from "./scan-policy.js";
  * daemon can walk the directory itself over the socket the machine holds open, and the owner clicks once.
  *
  * IT READS, IT NEVER RUNS. A shell command would be one call instead of many, and it is deliberately not used:
- * reads inside the machine's roots need no scope at all (see HostScopesSchema — "Reads are always allowed
+ * reads inside the machine's roots need no scope at all (see HostScopesSchema, "Reads are always allowed
  * within them"), while `shell` is a switch an owner may well have turned off, and asking for it to import a
  * folder would be asking for far more than the job needs. Walk-and-read works on a machine granted nothing but
  * the default.
  *
  * IT READS ONLY WHAT AN ADAPTER CAN CONSUME. Every file here costs a network round trip, so the extension
- * allowlist in scan-policy.ts is applied on the way in — unlike the archive path, which already holds the
+ * allowlist in scan-policy.ts is applied on the way in, unlike the archive path, which already holds the
  * bytes and can afford to be generous. Both paths share the SKIP policy, which is the half that matters: a
  * `credentials/` folder is never read here either.
  *
@@ -77,7 +77,7 @@ const listDir = async (hub: HostHub, id: string, path: string, seq: number): Pro
 };
 
 /* Does this machine have a setup we could import? One `list_dir` per candidate directory, and a missing folder
- * is an ordinary "no" rather than an error — the probe runs on card render, for every connected machine, and
+ * is an ordinary "no" rather than an error, the probe runs on card render, for every connected machine, and
  * must be silent about the machines that have nothing.
  *
  * It confirms the ANCHOR file, not merely the folder: an empty `~/.openclaw` left behind by an uninstall would
@@ -95,7 +95,7 @@ export const probeHost = async (hub: HostHub, id: string, home: string): Promise
 
 // Walk one setup directory into the same map an uploaded archive produces. Breadth-first so the shallow files
 // that decide the plan (the config, the bootstrap markdown) are read before a deep skills tree can exhaust the
-// budget — a truncated walk then still yields a usable plan rather than a pile of skills and no config.
+// budget, a truncated walk then still yields a usable plan rather than a pile of skills and no config.
 export const scanHost = async (hub: HostHub, id: string, home: string, source: SetupSource): Promise<HostScan> => {
     const candidate = SETUP_DIRS.find((entry) => entry.source === source) ?? SETUP_DIRS[0];
     const separator = separatorOf(home);
@@ -138,7 +138,7 @@ export const scanHost = async (hub: HostHub, id: string, home: string, source: S
                     continue;
                 }
                 seq += 1;
-                // One unreadable file is not a failed import — a permission error on a stray file is recorded
+                // One unreadable file is not a failed import, a permission error on a stray file is recorded
                 // and the walk carries on, which is the difference between importing 60 things and importing
                 // nothing because of one.
                 const text = await callTool(hub, id, "read_file", { path: `${dir.abs}${separator}${entry.name}` }, seq).catch(() => undefined);

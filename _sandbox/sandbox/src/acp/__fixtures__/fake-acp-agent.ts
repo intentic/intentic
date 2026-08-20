@@ -5,7 +5,7 @@ import { decidePermission } from "../acp-permissions.js";
 import type { AcpConnection, TurnHooks } from "../acp-connection.js";
 
 /* A scenario-driven fake ACP agent built with the SAME SDK's agent() API, composed in-process (no spawn, no
- * transport) — the QueryFn/CodexRunner pattern for ACP. The prompt text selects the behaviour; the fixture
+ * transport), the QueryFn/CodexRunner pattern for ACP. The prompt text selects the behaviour; the fixture
  * exercises the adapter over a real ClientContext, so the JSON-RPC layer and update routing are the SDK's
  * own, not mocks. */
 
@@ -28,7 +28,7 @@ export const fakeAcpAgentApp = (): AgentApp => {
                 throw new Error("the agent exploded");
             }
             if (text.includes("stall")) {
-                // Never answers, never streams — the adapter's inactivity watchdog must fire.
+                // Never answers, never streams, the adapter's inactivity watchdog must fire.
                 await new Promise(() => {});
             }
             if (text.includes("tool")) {
@@ -73,7 +73,7 @@ export const fakeAcpAgentApp = (): AgentApp => {
         });
 };
 
-// A hand-built AcpConnection over the in-process composition — what acp-connection.ts produces from a spawned
+// A hand-built AcpConnection over the in-process composition, what acp-connection.ts produces from a spawned
 // process, minus the process. Mirrors its per-session turn routing so the adapter under test is the real one.
 export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities = { loadSession: false }): AcpConnection => {
     const turns = new Map<string, TurnHooks>();

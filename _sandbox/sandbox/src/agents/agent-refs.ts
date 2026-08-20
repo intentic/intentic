@@ -1,25 +1,25 @@
 import type { GitRunner } from "@intentic/scaffold";
 
-/* WHERE A CONVERSATION'S COMMITS LIVE — on `refs/heads/` while it is on the board, on a shelf once it is not.
+/* WHERE A CONVERSATION'S COMMITS LIVE, on `refs/heads/` while it is on the board, on a shelf once it is not.
  *
  * Archiving reclaims a conversation's CHECKOUT and keeps its branch, because the branch is the archive
  * (agents/archive.ts). What it also kept was a full `refs/heads/` entry per repo, for every conversation that
- * ever ran — the workspace this was written against carried 158 agent branches against 26 live checkouts, and
+ * ever ran, the workspace this was written against carried 158 agent branches against 26 live checkouts, and
  * 132 of them belonged to agents nobody was going to open again. That is not free: a ref is a file until
  * something packs it, `refs/heads/` is what the branch picker lists and what a push has to walk, and the count
  * only ever goes up. It is also the one cost of archiving that the user cannot see and cannot act on.
  *
- * So the branch moves off `refs/heads/` onto a shelf — `refs/agent/<id>` rather than `refs/heads/agent/<id>`.
+ * So the branch moves off `refs/heads/` onto a shelf, `refs/agent/<id>` rather than `refs/heads/agent/<id>`.
  * No commit moves, nothing is repacked, nothing is at risk: it is two ref writes per repo, and the inverse is
  * two more.
  *
  * WHY THAT EXACT PATH, rather than a tidier `refs/archived/...`: git resolves a bare name against `refs/<name>`
- * BEFORE `refs/heads/<name>` (gitrevisions), so `agent/<id>` — the string every caller already holds as
- * `entry.branch` — keeps naming the same commit whether the conversation is live or parked. Landing an
+ * BEFORE `refs/heads/<name>` (gitrevisions), so `agent/<id>`, the string every caller already holds as
+ * `entry.branch`, keeps naming the same commit whether the conversation is live or parked. Landing an
  * archived agent, the review's base→tip diff, `merge-base` for a standing, `show <branch>:<path>` for a file's
  * before-side: all of it keeps working with no live-or-parked branch anywhere in the caller. The only code that
- * has to know is the code that says `refs/heads/` out loud — branchSha below, and the checkout re-attach in
- * worktrees.ts — which is exactly the code that should.
+ * has to know is the code that says `refs/heads/` out loud, branchSha below, and the checkout re-attach in
+ * worktrees.ts, which is exactly the code that should.
  *
  * Parking has to be as cheap to UNDO as to do, because a user resuming an archived conversation must not be
  * able to tell: `ensure` unparks the branch and re-attaches the checkout in the same pass, before the turn that
@@ -32,30 +32,30 @@ const HEADS = `${REFS}heads/`;
 const AGENT = "agent/";
 const parkedRef = (branch: string): string => `${REFS}${branch}`;
 
-/* The tip of an agent's branch as the MAIN repo sees it — the stand-in for `rev-parse HEAD` whenever the
+/* The tip of an agent's branch as the MAIN repo sees it, the stand-in for `rev-parse HEAD` whenever the
  * checkout is retired (the refs and the objects live in the shared git dir either way). Undefined when neither
  * spelling exists, which reads as "nothing of this agent's is in this repo any more".
  *
  * Both spellings in ONE for-each-ref, rather than resolving the bare name: a rev-spec would answer correctly
- * but it answers through the ambiguity rules, and the one moment both spellings exist — a crash between
- * parkAgentRefs' two writes — is the moment we want a plain answer rather than a warning on stderr. A pattern
+ * but it answers through the ambiguity rules, and the one moment both spellings exist, a crash between
+ * parkAgentRefs' two writes, is the moment we want a plain answer rather than a warning on stderr. A pattern
  * that matches nothing is an empty line, not an error, so this needs no try/catch either. */
 export const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
     const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname)", `${HEADS}${branch}`, parkedRef(branch)]);
     return stdout.split("\n").find((line) => line !== "");
 };
 
-/* EVERY agent branch in this repo and its tip, in ONE spawn — the sweep behind a fleet-wide standings pass.
+/* EVERY agent branch in this repo and its tip, in ONE spawn, the sweep behind a fleet-wide standings pass.
  *
  * `branchSha` answers for one agent, which is the right shape for a land and the wrong one for the board: asked
  * per agent per repo, a workspace with 64 conversations across 6 repos spent 384 subprocesses on a single pass,
  * several times a minute. The daemon's own perf log is unambiguous about what that costs once the disk is
- * contended — a read that normally takes 20ms takes 250, and they come back in batches of forty at the same
+ * contended, a read that normally takes 20ms takes 250, and they come back in batches of forty at the same
  * millisecond, having cleared a queue rather than done any work.
  *
  * Keyed by BRANCH (`agent/<id>`), so both spellings collapse onto the name every caller already holds, and a
- * repo holding nothing costs the one spawn rather than none. Where a branch is BOTH live and parked — the crash
- * window in the middle of parkAgentRefs — the parked spelling wins, because git sorts its output by refname and
+ * repo holding nothing costs the one spawn rather than none. Where a branch is BOTH live and parked, the crash
+ * window in the middle of parkAgentRefs, the parked spelling wins, because git sorts its output by refname and
  * `refs/agent/…` precedes `refs/heads/agent/…`. That is the same tie, resolved the same way, as branchSha
  * taking the first line of its own two-pattern read. */
 export const agentBranchTips = async (main: string, git: GitRunner): Promise<Map<string, string>> => {
@@ -74,7 +74,7 @@ export const agentBranchTips = async (main: string, git: GitRunner): Promise<Map
     return tips;
 };
 
-/* The name of the user's main line in a repo — the branch their checkout is on. The one fact an agent needs to
+/* The name of the user's main line in a repo, the branch their checkout is on. The one fact an agent needs to
  * rebase onto it, and one the daemon already holds: without it the conflict errand has to say "read it off the
  * FIRST line of `git worktree list`", which in this workspace is a 65-line listing of every live agent's
  * worktree, and every conflicted session spent its opening calls re-deriving it.
@@ -87,7 +87,7 @@ export const mainBranchOf = async (main: string, git: GitRunner): Promise<string
     return branch === "" || branch === "HEAD" ? undefined : branch;
 };
 
-/* Park every branch in this repo belonging to an agent that is off the board — one agent when a retire calls
+/* Park every branch in this repo belonging to an agent that is off the board, one agent when a retire calls
  * it, the whole archive when the boot sweep does. Returns the ids it parked.
  *
  * ONE for-each-ref asks "which of them are still branches here", so the steady state (a boot with nothing left
@@ -95,7 +95,7 @@ export const mainBranchOf = async (main: string, git: GitRunner): Promise<string
  * the boot sweep run this unconditionally on every repo, every time.
  *
  * The shelf ref is written BEFORE the branch is deleted, and rolled back if the delete fails. A crash between
- * the two leaves both spellings on the same commit — a "refname is ambiguous" warning and nothing worse, which
+ * the two leaves both spellings on the same commit, a "refname is ambiguous" warning and nothing worse, which
  * the next pass converges. The other order would put the commit one gc away from being gone. */
 export const parkAgentRefs = async (main: string, ids: ReadonlySet<string>, git: GitRunner): Promise<string[]> => {
     const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`]);
@@ -111,7 +111,7 @@ export const parkAgentRefs = async (main: string, ids: ReadonlySet<string>, git:
         }
         await git(main, ["update-ref", parkedRef(branch), sha]);
         try {
-            // Refuses on a branch some worktree still has checked out — the one case where parking would be
+            // Refuses on a branch some worktree still has checked out, the one case where parking would be
             // wrong, and git is the authority on it rather than anything this module could test for.
             await git(main, ["branch", "-D", branch]);
             parked.push(branch.slice(AGENT.length));
@@ -122,7 +122,7 @@ export const parkAgentRefs = async (main: string, ids: ReadonlySet<string>, git:
     return parked;
 };
 
-// Put a parked branch back on `refs/heads/` — the first half of restoring an archived conversation, and a
+// Put a parked branch back on `refs/heads/`, the first half of restoring an archived conversation, and a
 // no-op (one spawn) for a branch that never left. `git worktree add` is why this must run: handed a name that
 // resolves only through the shelf, it checks the commit out DETACHED, and the turn's commits would then land
 // on nothing.
@@ -136,7 +136,7 @@ export const unparkAgentRef = async (main: string, branch: string, git: GitRunne
     await git(main, ["update-ref", "-d", parkedRef(branch)]);
 };
 
-// Drop an agent's commits from this repo for good — `discard` and the archive's purge, the two places the user
+// Drop an agent's commits from this repo for good, `discard` and the archive's purge, the two places the user
 // is told the work goes away. Both spellings, because the caller does not know which one holds it and asking
 // would cost more than the delete that misses.
 export const dropAgentRef = async (main: string, branch: string, git: GitRunner): Promise<void> => {

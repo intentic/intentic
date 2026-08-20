@@ -53,11 +53,11 @@ export const turnAwaiting = (
 });
 
 /* A pre-push check that said no while the user was somewhere else. Sent for a suite that RAN and refused, and
- * for one that could not run at all — both leave a push the user asked for standing unsent, which is the only
+ * for one that could not run at all, both leave a push the user asked for standing unsent, which is the only
  * reason to interrupt them. A pass sends nothing (the push simply goes), and neither does a cancel: the hand on
  * the Stop button was theirs.
  *
- * `requireInteraction`, because this IS the blocked case — the push is held waiting on an answer, and a notice
+ * `requireInteraction`, because this IS the blocked case, the push is held waiting on an answer, and a notice
  * that auto-dismisses is a decision nobody made. The url goes to the workspace, though the app raises the same
  * question wherever the user lands. */
 export const prepushFailed = (run: PrepushRun): PushNotification => ({
@@ -70,7 +70,7 @@ export const prepushFailed = (run: PrepushRun): PushNotification => ({
     requireInteraction: true,
 });
 
-// An automation has no title of its own — its prompt is the only human-readable thing about it, and it is
+// An automation has no title of its own, its prompt is the only human-readable thing about it, and it is
 // what the Automations page shows too, so the notification names it the same way the UI does.
 export const automationPending = (automationId: string, prompt: string): PushNotification => ({
     title: "Automation needs approval",

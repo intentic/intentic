@@ -21,8 +21,8 @@ import { runConversations } from "./workflow-state.js";
 export const createWorkflowsRoutes = (services: Services) => {
     const i = implement(workflowsContract).$context<OrpcContext>();
     // The run the archive routes are addressing, or the reason they cannot. Both are moves on an ENDED run and
-    // both would corrupt a live one — archiving pulls the worktrees out from under turns that are still writing
-    // to them — so the guard is the pair's, not each route's.
+    // both would corrupt a live one, archiving pulls the worktrees out from under turns that are still writing
+    // to them, so the guard is the pair's, not each route's.
     const endedRun = async (runId: string): Promise<WorkflowRun> => {
         const run = await services.workflowRuns.get(runId);
         if (run === undefined) {
@@ -42,7 +42,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             return { workflows: workflows.map(withRuns) };
         }),
         save: i.save.handler(async ({ input }) => {
-            /* The same sentences the designer shows while you type, enforced here — a rule the daemon holds
+            /* The same sentences the designer shows while you type, enforced here, a rule the daemon holds
              * privately is a rule the user meets as a failed save with no idea which node is wrong. Refused
              * rather than saved-and-broken because a workflow that cannot run is not a draft, it is a trap: the
              * failure would arrive an hour later, halfway through a run, having already spent money. */
@@ -51,7 +51,7 @@ export const createWorkflowsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: faults.join(" ") });
             }
             /* Mint the gate's webhook token, exactly as an event automation's is minted and for the same
-             * reason — its caller is a machine that cannot present a Google identity. A round-tripped token is
+             * reason, its caller is a machine that cannot present a Google identity. A round-tripped token is
              * KEPT, because the designer re-posts the whole workflow on every edit: a gate whose URL changed
              * each time somebody renamed a step would be one every pipeline had to be re-taught. */
             const workflow =
@@ -96,7 +96,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             return run;
         }),
         runs: i.runs.handler(async () => ({ runs: await services.workflowRuns.list() })),
-        /* Stop a run, and END it whatever state it is in — the one thing this route used to refuse to do.
+        /* Stop a run, and END it whatever state it is in, the one thing this route used to refuse to do.
          *
          * It answered "that run is not going" whenever the scheduler had no abort handle, which is exactly the
          * case where the user needs it most: a record still marked `running` that nothing is driving, because
@@ -104,7 +104,7 @@ export const createWorkflowsRoutes = (services: Services) => {
          * frozen at 0/5 and no way off the board at all. So a missing handle is not an error, it is the signal
          * to close the record instead (abandonRun).
          *
-         * NOT_FOUND is kept for a run id that names nothing — that one really is a bad request.
+         * NOT_FOUND is kept for a run id that names nothing, that one really is a bad request.
          */
         stopRun: i.stopRun.handler(async ({ input }) => {
             const run = await services.workflowRuns.get(input.runId);
@@ -121,13 +121,13 @@ export const createWorkflowsRoutes = (services: Services) => {
             }
             return { ok: true as const };
         }),
-        /* File a run away, WITH ITS SESSIONS. The board's exit for a run it has finished with — an `attention`
+        /* File a run away, WITH ITS SESSIONS. The board's exit for a run it has finished with, an `attention`
          * lane holding a failed run from two hours ago has no other way to empty, since nothing about a run
          * ever transitions once it has ended.
          *
          * The steps go first and the run's own marker last, so a teardown that throws leaves a run still ON the
          * board with some of its checkouts reclaimed, rather than a run the board has archived whose sessions
-         * are loose on it — archiveAgents already drops a failing agent from its batch and keeps the rest.
+         * are loose on it, archiveAgents already drops a failing agent from its batch and keeps the rest.
          *
          * Refuses while the run is going: that is what Stop is for, and archiving a live run would pull the
          * worktrees out from under turns that are still writing to them.
@@ -138,7 +138,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             await services.workflowRuns.setArchived(input.runId, Date.now());
             return { ok: true as const };
         }),
-        // Back onto the board, run and sessions together. No worktree restore for the steps — the next turn's
+        // Back onto the board, run and sessions together. No worktree restore for the steps, the next turn's
         // ensure() rebuilds a checkout from the branch, exactly as `agents.unarchive` relies on.
         unarchiveRun: i.unarchiveRun.handler(async ({ input }) => {
             const run = await endedRun(input.runId);

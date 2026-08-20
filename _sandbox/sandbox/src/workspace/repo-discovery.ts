@@ -3,17 +3,17 @@ import { join } from "node:path";
 import { REPO_ROLES } from "@intentic/scaffold";
 import { IGNORED_DIRS, isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 
-// VSCode-style repo discovery: a repo is any directory under /work owning a `.git` entry — dir OR pointer file
+// VSCode-style repo discovery: a repo is any directory under /work owning a `.git` entry, dir OR pointer file
 // (the daemon's own --separate-git-dir repos keep a pointer FILE in the worktree, as do git worktrees and
 // submodules). Repo ids are root-relative POSIX paths ("intent", "clients/foo"); the id doubles as the repo's
-// dir under the workspace root and as its wire {repo} name. The walk stops at the first .git boundary — a repo
+// dir under the workspace root and as its wire {repo} name. The walk stops at the first .git boundary, a repo
 // nested inside another repo (a submodule, an embedded clone) belongs to its parent, exactly like git itself
 // sees it. The workspace root's own .git (the shadow "root" repo, git/root-repo.ts) is never a workspace repo.
 
-// "root" is the /work workspace repo's {repo} name (its git dir lives at /history/gits/root) — a clone must
+// "root" is the /work workspace repo's {repo} name (its git dir lives at /history/gits/root), a clone must
 // never collide with it, and a top-level dir the agent names "root" is skipped by discovery for the same reason.
 // The reference shelf (REFERENCE_DIR, workspace-ignore) is reserved too: a clone dropped there is consulted by
-// path, never a workspace repo. So is the outbox (PUBLIC_DIR) at the other end of the same convention — a folder
+// path, never a workspace repo. So is the outbox (PUBLIC_DIR) at the other end of the same convention, a folder
 // of published artifacts is not a project, and discovering it would earn it a sidebar entry and a setup nag.
 const RESERVED = new Set<string>([...REPO_ROLES, "root", REFERENCE_DIR, PUBLIC_DIR]);
 // A safe path segment: starts alphanumeric, no separators or `..`.
@@ -23,13 +23,13 @@ const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_DEPTH = 4;
 const MAX_DIRS = 10_000;
 
-// A single-segment name for a repo the DAEMON creates at the top level (clone route, monorepo capability) —
+// A single-segment name for a repo the DAEMON creates at the top level (clone route, monorepo capability),
 // reserved names stay unclaimable so role scaffolding and the "root" scope can't collide with a clone.
 export const isValidRepoName = (name: string): boolean => SEGMENT.test(name) && !RESERVED.has(name);
 
 // A wire {repo} id naming an EXISTING repo anywhere under the root: 1–4 safe segments (each structurally
 // excludes "..", empty parts, and absolute paths), so joining it under the root can never escape. Role names
-// pass — they are ordinary repos now — but "root" stays the workspace repo's own name, and nothing under the
+// pass, they are ordinary repos now, but "root" stays the workspace repo's own name, and nothing under the
 // reference shelf is a workspace repo (discovery never returns those, so no wire id may name one either).
 export const isValidRepoId = (id: string): boolean => {
     const segments = id.split("/");
@@ -52,7 +52,7 @@ export const hasGitEntry = async (dir: string): Promise<boolean> => {
 };
 
 // Every repo under `root`, as sorted root-relative ids. Hidden dirs (.git, .intentic, browser profiles) and
-// junk dirs (node_modules, dist, …) are never descended into — same pruning as the tree walk and the watcher.
+// junk dirs (node_modules, dist, …) are never descended into, same pruning as the tree walk and the watcher.
 export const discoverRepos = async (root: string): Promise<string[]> => {
     const repos: string[] = [];
     let visited = 0;

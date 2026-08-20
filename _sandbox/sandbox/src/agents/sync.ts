@@ -9,10 +9,10 @@ import type { AgentWorktrees } from "./worktrees.js";
 /* BRING A CONVERSATION'S BRANCH ONTO THE CURRENT MAIN LINE, before its next turn reads a line of it.
  *
  * A worktree's base is frozen at the moment it is created (worktrees.ts), and a conversation can sit for hours
- * between turns — parked on a question, waiting on an approval, or simply not the one the user is looking at.
+ * between turns, parked on a question, waiting on an approval, or simply not the one the user is looking at.
  * Meanwhile the main line moves: the user commits, other agents land and are committed. Nothing used to
  * reconcile the two, so the resumed turn read code that no longer exists, wrote a delta against a dead base,
- * and the auto-land at the end refused with `diverged`. Recovery cost a WHOLE EXTRA TURN — the conflict report,
+ * and the auto-land at the end refused with `diverged`. Recovery cost a WHOLE EXTRA TURN, the conflict report,
  * the user's click, and a model re-resolving conflicts it would never have had if it had started from today's
  * main (agents/land.ts, web conflictResolution.ts).
  *
@@ -20,36 +20,36 @@ import type { AgentWorktrees } from "./worktrees.js";
  * turn starts. The same operation the conflict errand asks the agent to perform, run by the daemon for free
  * instead of by a model for the price of a turn.
  *
- * WHY THIS IS SAFE TO DO WITHOUT ASKING — three properties, and dropping any one of them would make it a
+ * WHY THIS IS SAFE TO DO WITHOUT ASKING, three properties, and dropping any one of them would make it a
  * decision the user has to be in the room for:
  *
  *   · IT ABORTS. `rebaseOnto` is runOrAbort (git/changes.ts): a rebase that hits a conflict is rolled back and
  *     the worktree is byte-identical again. A branch that cannot be moved cleanly simply is not moved, and the
- *     turn runs exactly as it does today — the existing land-time conflict flow is still there behind it.
+ *     turn runs exactly as it does today, the existing land-time conflict flow is still there behind it.
  *     Deliberately NOT resolved here: the user asked a question, and hijacking their turn to fix a merge is
  *     worse than the conflict.
  *   · IT LOSES NOTHING. A worktree is dirty between turns whenever the last one errored or was interrupted, and
- *     git refuses to rebase a dirty tree. The remainder is committed onto the branch first — the same
+ *     git refuses to rebase a dirty tree. The remainder is committed onto the branch first, the same
  *     provenance commit, with the same author, that land takes at the end of every turn.
  *   · IT STAYS ON THE BRANCH. Nothing here touches the main checkout: main's HEAD is READ, and every write
  *     lands in this conversation's own worktree and its own refs/heads/agent/<id>.
  *
  * The one thing it cannot promise is that the result still WORKS: a rebase that applies cleanly line-by-line
  * can still leave the agent calling something main just renamed. The HUMAN is told (the `worktree` frame) and
- * the AGENT is not — telling it only ever bought a verification sweep that came back green, and the case the
+ * the AGENT is not, telling it only ever bought a verification sweep that came back green, and the case the
  * warning was written for is caught by the land at the end of the turn instead (agent/turn-preamble.ts has the
  * whole argument). Announce, don't ask: at the moment the user is answering their agent's question they have
  * nothing to decide this with, and the alternative to rebasing is not "stay safe", it is "conflict later",
  * which interrupts them harder.
  *
- * NO REPO LOCK, on purpose — the same call worktrees.ts's linkComposition makes and for the same reason. The
+ * NO REPO LOCK, on purpose, the same call worktrees.ts's linkComposition makes and for the same reason. The
  * lock guards a repo's shared worktree ADMIN area and the main index; this reads main's HEAD (a ref) and writes
  * only inside one conversation's own checkout, where its private index and HEAD already make concurrent agent
  * work safe. Taking it would serialize the whole fleet's turn starts behind one queue.
  */
 
 // One repo of the composition whose branch is not sitting on main's tip. The counts describe the main-line
-// commits BETWEEN the two — gained when the rebase went through, still missing when `blocked` says it did not.
+// commits BETWEEN the two, gained when the rebase went through, still missing when `blocked` says it did not.
 export interface RepoSync {
     readonly repo: string;
     // The main-line sha involved: where the branch now sits, or where it failed to reach.
@@ -60,7 +60,7 @@ export interface RepoSync {
     // ...intersected with what this agent has changed. The actionable half: a main line that moved 200 files
     // is noise, the two of them the agent also edited is the instruction to go and re-check something.
     readonly overlap: readonly string[];
-    // The rebase would not apply and was rolled back — the branch still sits on its old base.
+    // The rebase would not apply and was rolled back, the branch still sits on its old base.
     readonly blocked?: true;
 }
 
@@ -73,12 +73,12 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-/* Every path a span touches — `--no-renames` because the two lists below are INTERSECTED, and a rename that
+/* Every path a span touches, `--no-renames` because the two lists below are INTERSECTED, and a rename that
  * collapses to its destination cannot intersect anything on the source side.
  *
  * Concretely: main renames a file the agent is editing. `moved` names the destination, `mine` names the
  * source, `overlap` comes back empty, and the turn preamble tells the agent main moved underneath it while
- * naming nothing — on the one file whose work is about to be replayed onto a path that no longer exists.
+ * naming nothing, on the one file whose work is about to be replayed onto a path that no longer exists.
  * Detection has to be disabled EXPLICITLY: git has defaulted diff.renames to true since 2.9, so leaving `-M`
  * off does not leave detection off. (agents/origins.ts carried the same defect on the attribution side.) */
 const pathsOf = async (dir: string, args: readonly string[], git: GitRunner): Promise<string[]> => {
@@ -87,7 +87,7 @@ const pathsOf = async (dir: string, args: readonly string[], git: GitRunner): Pr
 };
 
 // Does `tip` already contain `head`? One spawn, and it is the answer on every turn where nobody committed
-// since the last one — which is most of them, so the whole pass costs a single `merge-base` per repo.
+// since the last one, which is most of them, so the whole pass costs a single `merge-base` per repo.
 const contains = async (dir: string, tip: string, head: string, git: GitRunner): Promise<boolean> => {
     try {
         await git(dir, ["merge-base", "--is-ancestor", head, tip]);
@@ -125,7 +125,7 @@ const syncOne = async (
     const overlap = moved.filter((path) => mine.has(path));
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap };
-    // The dirty remainder becomes a commit before anything moves — `git rebase` refuses to start otherwise, and
+    // The dirty remainder becomes a commit before anything moves, `git rebase` refuses to start otherwise, and
     // this is the commit land would have taken anyway. Only on the path that is about to rebase, so an ordinary
     // turn on an up-to-date branch never grows a commit it did not ask for.
     await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
@@ -133,7 +133,7 @@ const syncOne = async (
     return rebased.ok ? behind : { ...behind, blocked: true };
 };
 
-/* Sync every repo of a conversation's composition. Returns only the repos that were BEHIND — an empty array is
+/* Sync every repo of a conversation's composition. Returns only the repos that were BEHIND, an empty array is
  * the ordinary answer and means the branch already sits on main's tip.
  *
  * Concurrent across repos: each one is a different git dir and a different branch, and nothing here reaches the

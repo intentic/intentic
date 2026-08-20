@@ -6,11 +6,11 @@ import { dirname, join } from "node:path";
 // (github.com / a gitlab host, key auth). Each alias gets a `<alias>.conf` block that ~/.ssh/config Includes, plus
 // a 0600 `<alias>.key` / `<alias>.pass` credential file written by the caller. Paths compute from homedir() at
 // call time (not cached) so a test can point HOME at a temp dir. The container runs as root, so ~ resolves to
-// /root — shared by the daemon, the agent, and the interactive terminal, so one config authenticates all three.
+// /root, shared by the daemon, the agent, and the interactive terminal, so one config authenticates all three.
 // The dir itself is a symlink onto the /history volume (linkSshHosts below), so the credentials survive the
 // container recreates that wipe /root.
 // ponytail: aliases are a flat namespace, so an `ssh` capability named exactly "github.com" would collide with
-// github git access on the same host — pathological; last writer wins, as with any duplicate id.
+// github git access on the same host, pathological; last writer wins, as with any duplicate id.
 
 export const hostsDir = (): string => join(homedir(), ".ssh", "intentic-hosts");
 export const hostConfPath = (alias: string): string => join(hostsDir(), `${alias}.conf`);
@@ -35,12 +35,12 @@ const ensureInclude = async (): Promise<void> => {
 };
 
 // Boot: point the managed dir at the /history volume and re-ensure the Include. ~/.ssh is the CONTAINER's
-// filesystem, which every recreate throws away — recreate.sh (any mode) and a provider update all
+// filesystem, which every recreate throws away, recreate.sh (any mode) and a provider update all
 // `docker rm -f` + `docker run`, keeping only the /work and /history volumes. So the ssh identity git access
 // registered with github/gitlab, and every `ssh` capability's key, died on each rebuild while the manifest on
 // /work still said "connected": `git pull` answered `Permission denied (publickey)` under a card that read
 // active, and re-adding the connection just uploaded ANOTHER account key. The credential material lives on
-// /history instead (the daemon's own volume — outside the agent's /work mount, never synced to a laptop) and
+// /history instead (the daemon's own volume, outside the agent's /work mount, never synced to a laptop) and
 // ~/.ssh/intentic-hosts points at it, so every path the agent, the terminal, the skills and ssh itself use is
 // unchanged. Mirrors linkClaudeState, including its "a real dir means a dev-host run" guard.
 export const linkSshHosts = async (historyRoot: string): Promise<void> => {
@@ -85,7 +85,7 @@ const configBlock = (alias: string, spec: SshHostSpec): string => {
 };
 
 // Write (or overwrite) an alias's ssh-config block and make ~/.ssh/config Include the managed dir. The credential
-// file (key/pass) is written by the caller — the ssh capability writes a pasted key, git access an ssh-keygen'd one.
+// file (key/pass) is written by the caller, the ssh capability writes a pasted key, git access an ssh-keygen'd one.
 export const writeSshHost = async (alias: string, spec: SshHostSpec): Promise<void> => {
     await mkdir(hostsDir(), { recursive: true, mode: 0o700 });
     await ensureInclude();

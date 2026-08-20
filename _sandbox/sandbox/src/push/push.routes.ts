@@ -7,7 +7,7 @@ export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
 
 // The device's half of push: read the VAPID public key (and whether THIS device is already registered),
 // register, unregister, and send a test. Registering is per-device, so every route that identifies one does
-// it by channelId — the endpoint a browser's push service minted, or the deviceId a native install's relay
+// it by channelId, the endpoint a browser's push service minted, or the deviceId a native install's relay
 // registration minted. The daemon never invents that identity.
 export const createPushRoutes = (services: PushRoutesDeps) => {
     const i = implement(pushContract).$context<OrpcContext>();

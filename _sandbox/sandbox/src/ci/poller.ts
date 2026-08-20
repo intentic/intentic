@@ -5,23 +5,23 @@ import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";
 
-/* The pipeline trigger's fallback delivery — REST polling for exactly the repos whose provider webhook could
+/* The pipeline trigger's fallback delivery. REST polling for exactly the repos whose provider webhook could
  * not be registered.
  *
  * A `ci` automation used to be silently conditional on something the owner never agreed to: the sandbox having
  * a public URL the provider can reach, and the connected token carrying hook scope (github's admin:repo_hook,
  * gitlab's Maintainer). Neither is true by default. The row looked armed, the Pipelines view carried a warning
- * nobody was reading, and the automation simply never fired — the single worst failure an automation can have,
+ * nobody was reading, and the automation simply never fired, the single worst failure an automation can have,
  * because nothing about it looks like a failure.
  *
  * So the reconciler's warnings are read as a WORK LIST rather than as an apology: every repo in
  * ciHooks.warnings() is a repo whose pipelines this polls for instead. A repo with a live hook is never
- * polled, which is what keeps the two from announcing the same run — the handover in either direction is a
+ * polled, which is what keeps the two from announcing the same run, the handover in either direction is a
  * repo appearing in or leaving that map, and the conclusion memory both paths share (ci/events.ts) means an
  * edge event stays correct across it.
  *
  * Deliberately NOT a general-purpose poller: it is not a safety net under a working webhook, and it does not
- * make the Pipelines view fresher (that view backfills on its own read). One job — the events an automation is
+ * make the Pipelines view fresher (that view backfills on its own read). One job, the events an automation is
  * waiting for, on a sandbox where nothing can be delivered to. */
 
 // Per repo, per pass. The list endpoint is one call; this only has to be deep enough that a burst of pushes
@@ -47,7 +47,7 @@ export const createCiPoller = (services: Services, wake: WakeFn, fetchFn: FetchF
         const known = await services.ciStore.announcedRuns(project.repo);
         const ids = terminal.map((run) => run.runId);
         /* Never polled before: adopt the current picture in silence. Announcing it would mean that connecting a
-         * capability — or restarting the daemon on a workspace whose ci.json was never written — replays every
+         * capability, or restarting the daemon on a workspace whose ci.json was never written, replays every
          * red branch in the workspace as news, which is a wake per repo for things that happened yesterday.
          *
          * Silent about the WAKES, not about the memory: each branch's current colour is still recorded (oldest

@@ -5,7 +5,7 @@ import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { statePath } from "./state-paths.js";
 
-/* THE STATE DIR'S GARBAGE COLLECTOR — the missing half of classifying everything under `.intentic`.
+/* THE STATE DIR'S GARBAGE COLLECTOR, the missing half of classifying everything under `.intentic`.
  *
  * The state table says what each tree IS; nothing said what happens to the ones whose class means "disposable".
  * So nothing happened: the workspace this module was written against carried 466 MB of abandoned whisper model
@@ -14,12 +14,12 @@ import { statePath } from "./state-paths.js";
  * classification already called it rebuildable, waiting for a manual `rm` nobody would ever run.
  *
  * Every rule here is DERIVED from a class, not from a judgment about content:
- *   - tmp/ is `derived` scratch and its entry says the janitor empties it — at boot, when nothing can be
+ *   - tmp/ is `derived` scratch and its entry says the janitor empties it, at boot, when nothing can be
  *     mid-write in it because no turn has started.
  *   - a RETIRED `derived` root is a rebuildable cache under an abandoned name; deleting it is what the class
- *     means. Retired `secret` and `artifacts` roots are NOT touched — deleting content is the owner's call,
+ *     means. Retired `secret` and `artifacts` roots are NOT touched, deleting content is the owner's call,
  *     only deleting what the class already says is disposable.
- *   - the pnpm store is content-addressable and `pnpm store prune` removes only unreferenced blobs — the
+ *   - the pnpm store is content-addressable and `pnpm store prune` removes only unreferenced blobs, the
  *     vendor's own definition of garbage.
  *   - browser screenshots are the one AGE rule: they are artifacts (carried, owned by conversations), but a
  *     capture exists to be Read back within the turn that took it, and a transcript that outlives its images
@@ -27,7 +27,7 @@ import { statePath } from "./state-paths.js";
  */
 
 // Screenshots older than this are deleted; everything else in artifacts/ is untouched (attachments are the
-// owner's uploads, reports are records). Measured against file mtime — a capture is written once, never touched.
+// owner's uploads, reports are records). Measured against file mtime, a capture is written once, never touched.
 const SCREENSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 // How long `pnpm store prune` may run before the janitor gives up on it for this boot. It walks hash dirs on
@@ -77,12 +77,12 @@ const pruneStore = (storeDir: string, log: Logger): Promise<void> =>
         });
     });
 
-/* The boot sweep: scratch, retired derived roots, and the pnpm store — the things where "since last boot" is
+/* The boot sweep: scratch, retired derived roots, and the pnpm store, the things where "since last boot" is
  * the natural cadence and where sweeping mid-flight could race a writer. */
 export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Promise<void> => {
     await emptyDir(statePath(workspaceRoot, ".intentic/local/tmp/"), log, "boot scratch");
     for (const dir of RETIRED_WORKSPACE_STATE_DIRS.derived) {
-        // Quarantined names, deliberately outside the table — spelled the way classify.ts spells them.
+        // Quarantined names, deliberately outside the table, spelled the way classify.ts spells them.
         await remove(join(workspaceRoot, `.intentic/${dir}`), log, "a retired derived root");
     }
     const storeDir = statePath(workspaceRoot, ".intentic/local/.pnpm-store/");
@@ -92,7 +92,7 @@ export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Prom
     await sweepAgedState(workspaceRoot, Date.now(), log);
 };
 
-// The recurring half — cheap enough for the hourly timer the agent sweeps already run on.
+// The recurring half, cheap enough for the hourly timer the agent sweeps already run on.
 export const sweepAgedState = async (workspaceRoot: string, now: number, log: Logger): Promise<void> => {
     await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/records/artifacts/", "browser"), now, log);
 };

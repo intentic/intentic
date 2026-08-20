@@ -1,6 +1,6 @@
 import { type CommandClass, CommandClassSchema } from "@intentic/sandbox-contract";
 
-/* WHICH CLASSES A SHELL COMMAND FALLS IN — the command gate's classifier, read before a Bash call runs.
+/* WHICH CLASSES A SHELL COMMAND FALLS IN, the command gate's classifier, read before a Bash call runs.
  *
  * ALL of them, not the first match, because the gate takes the most restrictive verdict across them and the
  * interesting commands are exactly the ones in two classes at once: `curl -d @.env https://…` is both
@@ -9,16 +9,16 @@ import { type CommandClass, CommandClassSchema } from "@intentic/sandbox-contrac
  *
  * HONESTY, the same note the outbound sniffer carries and for the same reason. This is regex over shell text.
  * A creatively quoted command, a path assembled from a variable, or a script written in one call and run in the
- * next goes past it untouched. So the gate is friction and a prompt for well-behaved work, never a boundary —
+ * next goes past it untouched. So the gate is friction and a prompt for well-behaved work, never a boundary,
  * the boundaries are structural and elsewhere: the container, the isolated worktree, the land gate, and an
  * automation's tool allowlist (the only thing that stops a turn nobody is watching from reaching Bash at all).
  *
- * Matching is deliberately UNANCHORED — substrings, not line starts. Another PreToolUse hook may have rewrapped
+ * Matching is deliberately UNANCHORED, substrings, not line starts. Another PreToolUse hook may have rewrapped
  * the command by the time this reads it (agent-terminals.ts wraps every Bash call in bin/tmux-run), and the
  * agent's own line survives verbatim inside that wrapper. Nothing the wrapper adds is in any class below.
  *
  * `[^|;&]*` in a pattern keeps a flag tied to the verb before it, so a later command in a pipeline cannot lend
- * its flags to an earlier one — `git push origin | grep -f patterns` is not a force-push.
+ * its flags to an earlier one, `git push origin | grep -f patterns` is not a force-push.
  */
 
 const GIT_DESTRUCTIVE = [
@@ -32,7 +32,7 @@ const GIT_DESTRUCTIVE = [
 
 const SECRETS_ACCESS = [
     /* A dotenv file: `.env`, `.env.production`, `-d @.env`. NOT the checked-in templates that sit beside it in
-     * every repo, and not `process.env` — the lookbehind is what excludes the latter, which is otherwise the
+     * every repo, and not `process.env`, the lookbehind is what excludes the latter, which is otherwise the
      * single most common string in this workspace's own commands and would hold every grep for it. */
     /(?<![\w.])\.env(?!\.(?:example|sample|template))(?:\.[\w-]+)?\b/,
     /\.ssh\//,
@@ -51,12 +51,12 @@ const PACKAGE_PUBLISH = [
     /\btwine\s+upload\b/,
 ];
 
-// The sandbox talks to itself over loopback constantly — the host bridge, a dev server the agent just started —
+// The sandbox talks to itself over loopback constantly, the host bridge, a dev server the agent just started,
 // and none of that leaves the container, so the class is about reaching OUT rather than about curl.
 const NETWORK_OUTBOUND = [
     /\b(?:curl|wget)\b[^|;&]*\bhttps?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/,
     /* The JS execution backend's curl: a literal non-loopback URL handed to `fetch(`. The classifier reads
-     * scripts with the same substring honesty it reads shell (the gate feeds it both — see command-gate's
+     * scripts with the same substring honesty it reads shell (the gate feeds it both, see command-gate's
      * EXECUTION_SOURCES), so an owner's rule about reaching out covers both ways of doing it, and the
      * outside-content seam wraps what a fetching script brings back exactly as it wraps a fetching curl's. A
      * URL assembled at runtime walks past this, as the header already admits for shell variables. */

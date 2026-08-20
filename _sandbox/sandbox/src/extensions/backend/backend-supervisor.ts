@@ -18,28 +18,28 @@ import {
     type BackendHostExtension,
 } from "./backend-host-config.js";
 
-/* THE BACKEND HOST'S SUPERVISOR — the daemon-side half of the extension backend system.
+/* THE BACKEND HOST'S SUPERVISOR, the daemon-side half of the extension backend system.
  *
  * Extension backends run in ONE separate node process (backend-host-main.ts), never in the daemon, because
  * loaded code cannot be unloaded: the off switch, an install at a new sha and a live-edited workspace
  * extension all require the process holding the old code to die, and the process that dies must not be the
- * one holding chat, terminals and file sync. So every lifecycle moment is a RESTART of the host — a couple of
- * seconds during which /x routes answer 503 with a readable reason — and the daemon supervises: spawn, wait
+ * one holding chat, terminals and file sync. So every lifecycle moment is a RESTART of the host, a couple of
+ * seconds during which /x routes answer 503 with a readable reason, and the daemon supervises: spawn, wait
  * for health, forward output into its own log, respawn with backoff when the host dies uninvited.
  *
  * It also owns the two credentials of the seam. The HOST token is how the host knows a request came through
  * the daemon's gate rather than from a neighbor on loopback. The PER-EXTENSION tokens are what each backend's
- * api.daemon presents back — verified here against the manifest's `permissions.daemon`, which is what makes a
+ * api.daemon presents back, verified here against the manifest's `permissions.daemon`, which is what makes a
  * backend's reach into the core declared and refusable rather than ambient (the all-routes panel token this
  * deliberately does not reuse). Tokens are per boot and per extension; a disabled extension's token stops
  * verifying at the restart that removes it. */
 
-// What one extension's backend row reports — the host's own /health answer, plus the two states only the
+// What one extension's backend row reports, the host's own /health answer, plus the two states only the
 // supervisor can know (a server declared but not runnable here; an engines mismatch).
 export type BackendStatus = BackendExtensionStatus | { readonly id: string; readonly state: "absent" | "incompatible"; readonly detail: string };
 
 export interface ExtensionBackendState {
-    // stopped — no extension ships a backend (or stop() was called); starting/running/error — the host's own arc.
+    // stopped, no extension ships a backend (or stop() was called); starting/running/error, the host's own arc.
     readonly state: "stopped" | "starting" | "running" | "error";
     readonly detail?: string;
     readonly extensions: readonly BackendStatus[];
@@ -49,7 +49,7 @@ export interface ExtensionBackend {
     // Converge now: enumerate enabled backends, respawn the host on the new set. Boot calls this once;
     // everything else goes through restart().
     start(): Promise<void>;
-    // Debounced converge — the toggle, an install, a workspace-extension edit. Safe to call in bursts.
+    // Debounced converge, the toggle, an install, a workspace-extension edit. Safe to call in bursts.
     restart(): void;
     stop(): void;
     status(): ExtensionBackendState;
@@ -129,7 +129,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     };
 
     // The enabled extensions that ship a backend, split into runnable ones and rows only this side can
-    // report — plus each runnable one's declared daemon reach, which stays on THIS side of the seam (the
+    // report, plus each runnable one's declared daemon reach, which stays on THIS side of the seam (the
     // daemon gates; the host never needs to know what it may ask for).
     const collect = async (): Promise<{
         runnable: BackendHostExtension[];
@@ -179,7 +179,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                     return (await response.json()) as BackendHealth;
                 }
             } catch {
-                // Not up yet — the poll IS the wait.
+                // Not up yet, the poll IS the wait.
             }
             await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
         }
@@ -238,7 +238,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             if (run !== generation || !desired) {
                 return;
             }
-            // Uninvited death — report it and respawn with backoff, so a crash-looping extension costs a log
+            // Uninvited death, report it and respawn with backoff, so a crash-looping extension costs a log
             // line every few seconds instead of a dead /x namespace forever.
             state = { state: "error", detail: `the backend host exited (${signal ?? code})`, extensions: collected.reported };
             host = undefined;

@@ -9,18 +9,18 @@ import { statePath } from "./state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
 
-/* THE DEPENDENCY VERIFIER — the deterministic half of "a landed change broke the tree, and somebody should
+/* THE DEPENDENCY VERIFIER, the deterministic half of "a landed change broke the tree, and somebody should
  * know before they build on it".
  *
  * The reconciler (reconcile-deps.ts) restores the INSTALL after a land drifts it; this runs the tree's own
  * CHECKS once that install is done, remembers the verdict (verify-store.ts), and announces the edges as
- * workspace events (`deps.broken` / `deps.fixed`) that a chore — typically the fix automation — can wake on.
+ * workspace events (`deps.broken` / `deps.fixed`) that a chore, typically the fix automation, can wake on.
  * Everything it does is watchable: the check runs in a `<project>--verify` terminal panel exactly as the
  * install runs in `<project>--install`, and every verdict lands in the activity feed. The chain's design rule
  * is NO HIDDEN MAGIC: each step leaves a trace the owner can open.
  *
  * Which is why it also runs for the installs the reconciler starts BY ITSELF, off a pull or a hand-edited
- * manifest rather than off a land. A land announces itself in the conversation that caused it — a line in the
+ * manifest rather than off a land. A land announces itself in the conversation that caused it, a line in the
  * transcript and a button onto the terminal; a pull announces itself nowhere, so without this chain the whole
  * visible trace of a background install would be a terminal row appearing in a list. Those runs have no cause to
  * attribute, which changes exactly one thing: they record and they do not wake.
@@ -28,10 +28,10 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * WHAT COUNTS AS THE CHECKS. The project's own word for it: a `verify` script first (this repo's convention
  * for "the gate CI decides on"), else `test`. No script ⇒ the project has no checks to run, and the honest
  * answer is an activity entry saying so, not a guessed command. Scripts are a node-manifest concept, so a
- * python project reads as check-less for now — same honest entry.
+ * python project reads as check-less for now, same honest entry.
  *
  * SCHEDULING RULES: verification holds nothing back. It waits for the install that prompted it and then runs
- * beside whatever else the workspace is doing — a turn started mid-check can at worst stale an advisory
+ * beside whatever else the workspace is doing, a turn started mid-check can at worst stale an advisory
  * verdict, which costs a re-run, where making anyone wait on a test suite they never asked for costs minutes
  * of their own work. Origins stay attached to their own batches. One chain runs at a time across the daemon,
  * so panels and Activity tell one ordered story.
@@ -39,20 +39,20 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * THE EXIT CODE comes out of the panel by wrapping the command: tmux reports a pane's foreground command,
  * never an exit status, so the wrapped line tees output to a log (for the event's bounded tail) and drops
  * `$pipestatus[1]` into a status file the daemon reads once the sweep sees the shell back at its prompt. The
- * wrapper is zsh syntax on purpose — the panel shell IS zsh (managed-processes' SHELL), the same constant
+ * wrapper is zsh syntax on purpose, the panel shell IS zsh (managed-processes' SHELL), the same constant
  * the sweep's prompt detection already pins. A missing or unparseable status file (the owner Ctrl+C'd the
  * pane, the shell died) reads as exit -1: unknown is not green. */
 
 export const verifyPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--verify`;
 
 // How much of the log rides the event. The payload reaches a guard's environment and a prompt, so it is a
-// TAIL — the verdict a test runner prints last — and the full log stays one attach away in the panel.
+// TAIL, the verdict a test runner prints last, and the full log stays one attach away in the panel.
 const LOG_TAIL = 2_000;
 // Polls of the panel sweep while an install or a check runs. Nothing here is latency-sensitive; the sweep
 // itself only samples every 2s.
 const POLL_MS = 2_000;
-// How long the verifier watches a run before stopping it. A check that never ends would hold the chain — and
-// every later verdict — forever, so a timeout is visible in Activity and terminal output, then ends.
+// How long the verifier watches a run before stopping it. A check that never ends would hold the chain, and
+// every later verdict, forever, so a timeout is visible in Activity and terminal output, then ends.
 const WATCH_MAX_MS = 30 * 60_000;
 
 export interface VerifyDeps {
@@ -61,7 +61,7 @@ export interface VerifyDeps {
     readonly logger: Logger;
     readonly verifyStore: VerifyStore;
     readonly activity: Pick<ActivityStore, "append">;
-    /* Bound to emitWorkspaceEvent by the land path — an injected sink here so the chain neither needs the whole
+    /* Bound to emitWorkspaceEvent by the land path, an injected sink here so the chain neither needs the whole
      * services object nor a wake fn, and a test reads announcements off an array.
      *
      * Optional because a chain with no cause provably never reaches it (see verifyProject): the reconciler's own
@@ -95,7 +95,7 @@ const watchPanel = async (deps: VerifyDeps, key: string): Promise<boolean> => {
     return false;
 };
 
-// A causeless run files under no conversation, which the feed already has a shape for — both fields are
+// A causeless run files under no conversation, which the feed already has a shape for, both fields are
 // optional on an activity row, and a row with neither reads as the daemon acting on its own, which is what
 // happened. Filing it under an unrelated conversation to avoid an empty column would be worse than a blank.
 const activity = (deps: VerifyDeps, type: string, content: string, outcome: "ok" | "error", origin: DependencyOrigin): void => {
@@ -165,7 +165,7 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         const status = Number.parseInt((await readFile(statusPath, "utf8")).trim(), 10);
         exitCode = Number.isNaN(status) ? -1 : status;
     } catch {
-        // Absent status file: the pane died before the wrapper's echo — unknown is not green.
+        // Absent status file: the pane died before the wrapper's echo, unknown is not green.
     }
     let logTail = "";
     try {
@@ -186,7 +186,7 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         );
     }
     /* The EDGE is announced only when something can be pointed at as its cause. A wake payload is not a
-     * notification — a chore reads `repos` as a git span and works the change it names — so a causeless run has
+     * notification, a chore reads `repos` as a git span and works the change it names, so a causeless run has
      * nothing to hand one, and an empty span sends the fix automation to look at a diff that does not exist.
      * The verdict is still recorded and still visible in Activity; what a background install cannot do is start
      * somebody else's work on a premise it made up. */

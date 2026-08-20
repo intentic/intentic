@@ -7,7 +7,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  * Every git verb this daemon runs itself aborts cleanly on failure (changes.ts runOrAbort), so nothing the UI
  * starts can leave a repo mid-operation. What CAN is everything else: an agent running `git rebase` in a
  * terminal, a user in a shell, a `land` that hit a conflict. Those leave a worktree git refuses to do almost
- * anything with — no commit, no checkout, no clean diff — and until now no surface named the state or offered a
+ * anything with, no commit, no checkout, no clean diff, and until now no surface named the state or offered a
  * way out of it. The Changes panel would list the conflicted files without ever saying WHY they were conflicted.
  *
  * Git records these as marker files in the PER-WORKTREE git dir, which is also how `git status` reports them, so
@@ -46,13 +46,13 @@ const queuedSequence = async (gitDir: string): Promise<GitOperation | undefined>
     }
 };
 
-// The per-worktree git dir — NOT the common dir. Every marker below is per worktree, which is what makes an
+// The per-worktree git dir. NOT the common dir. Every marker below is per worktree, which is what makes an
 // agent's linked worktree report its own halted state rather than the main checkout's.
 //
 // Read straight off the `.git` entry rather than asked of `rev-parse --git-dir`, because this runs for every
 // repo on every Changes scan and the spawn was a scan-wide multiplier for an answer the filesystem already
 // holds: every caller passes a checkout ROOT (the workspace repo dirs, an agent's worktree), where `.git` is
-// either the admin dir itself or a pointer FILE whose one line is the path (`gitdir: <path>` — what
+// either the admin dir itself or a pointer FILE whose one line is the path (`gitdir: <path>`, what
 // repo-git-dirs.ts and worktree checkouts both write, and exactly what git's own discovery reads). No memo, so
 // nothing can go stale: a re-created checkout is re-read from its fresh pointer on the next call.
 const gitDirOf = async (dir: string): Promise<string | undefined> => {
@@ -63,7 +63,7 @@ const gitDirOf = async (dir: string): Promise<string | undefined> => {
             return entry;
         }
         const target = /^gitdir:\s*(.+?)\s*$/.exec(await readFile(entry, "utf8"))?.[1];
-        // A relative pointer is resolved against the dir holding it — the rule gitfiles are defined by.
+        // A relative pointer is resolved against the dir holding it, the rule gitfiles are defined by.
         return target === undefined ? undefined : resolve(dir, target);
     } catch {
         return undefined; // Not a repo (or a torn pointer) — the same "nothing to report" as before.
@@ -77,7 +77,7 @@ export const operationInProgress = async (dir: string): Promise<GitOperation | u
         return undefined;
     }
 
-    /* `rebase-merge` covers the interactive and merge backends; `rebase-apply` the patch backend — which
+    /* `rebase-merge` covers the interactive and merge backends; `rebase-apply` the patch backend, which
      * `git am` SHARES. An `am` in progress is not a rebase and `git rebase --abort` is not what ends it, so the
      * `applying` marker inside distinguishes them and we report nothing rather than offering an abort that
      * would fail. */
@@ -94,15 +94,15 @@ export const operationInProgress = async (dir: string): Promise<GitOperation | u
     if (await exists(join(gitDir, "CHERRY_PICK_HEAD"))) {
         return "cherry-pick";
     }
-    // Markers cleared but the sequence unfinished — see queuedSequence.
+    // Markers cleared but the sequence unfinished, see queuedSequence.
     const queued = await queuedSequence(gitDir);
     if (queued !== undefined) {
         return queued;
     }
 
-    /* Checked LAST, after the rebase markers, and that order is load-bearing: a rebase that stops on a
+    /* Checked LAST, after the rebase markers, and that order matters: a rebase that stops on a
      * conflicted merge commit writes MERGE_HEAD too, and there `git merge --abort` is not what ends the
-     * operation — `git rebase --abort` is. Reading MERGE_HEAD first would offer the wrong escape hatch. */
+     * operation, `git rebase --abort` is. Reading MERGE_HEAD first would offer the wrong escape hatch. */
     return (await exists(join(gitDir, "MERGE_HEAD"))) ? "merge" : undefined;
 };
 

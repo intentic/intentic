@@ -3,10 +3,10 @@ import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sand
 
 /* The cross-provider tool-call vocabulary: one home for deriving a tool_call frame's display name, ACP
  * category, target, locations, and structured diff content from whatever a backend's native stream carries.
- * Every adapter (Claude SDK blocks, Codex ThreadItems, OpenCode parts — and later ACP sessionUpdates) maps
+ * Every adapter (Claude SDK blocks, Codex ThreadItems, OpenCode parts, and later ACP sessionUpdates) maps
  * through these instead of keeping its own copy, so the taxonomy can't drift per backend. */
 
-// Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text — the
+// Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text, the
 // edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type. Shared by
 // the live Claude stream and the session restore, so a replayed card reads exactly like the one it replaces.
 export const resultText = (content: unknown): string => {
@@ -25,7 +25,7 @@ export const resultText = (content: unknown): string => {
 };
 
 // Native tool ids → the display names the UI styles. Covers OpenCode's lowercase ids (bash/edit/patch/…);
-// Claude SDK names are already display names and pass through. `todowrite` is intentionally absent — its
+// Claude SDK names are already display names and pass through. `todowrite` is intentionally absent, its
 // checklist renders from the todos frame, never as a tool card.
 const DISPLAY_NAMES: Record<string, string> = {
     bash: "Bash",
@@ -46,8 +46,8 @@ const DISPLAY_NAMES: Record<string, string> = {
  * @playwright/mcp's tools arrive as `mcp__web__browser_navigate` / `mcp__browser__browser_click`, and a card
  * headed with that string tells the user nothing they came for. Which SERVER it was is the one part that
  * doesn't earn its place: the credential-free browser and the routed logged-in one do the same things, and
- * where an account matters the call's own `account` argument on the card already names it. What is left —
- * "Browser navigate", "Browser click" — groups on sight in a scrolling transcript and says exactly what
+ * where an account matters the call's own `account` argument on the card already names it. What is left,
+ * "Browser navigate", "Browser click", groups on sight in a scrolling transcript and says exactly what
  * happened.
  *
  * `take_screenshot` is the one verb that reads badly transliterated ("Browser take screenshot"), so it loses
@@ -96,7 +96,7 @@ const MCP_VERBS: ReadonlyArray<readonly [string, ToolKind]> = [
 /* Browsing splits into three acts, and the suffix rule above gets all three wrong (`browser_click` ends in no
  * known verb at all, so every one of them landed on `other` and drew the generic cog).
  *   · going somewhere        → fetch   (the globe: same act as WebFetch, done in a real page)
- *   · doing something there  → execute (a click, a keystroke, a form — the browser's side effects)
+ *   · doing something there  → execute (a click, a keystroke, a form, the browser's side effects)
  *   · looking at the result  → read    (a snapshot, a screenshot, the console, the network log)
  * Anything not listed is an act on the page, so `execute` is the floor rather than `other`. */
 const BROWSER_VERB_KINDS: Record<string, ToolKind> = {
@@ -145,7 +145,7 @@ const SEARCH_COMMANDS = new Set(["iq", "grep", "rg", "ag", "ack", "find", "fd", 
  * truncating its stdout opened a file. */
 const FILE_WORK_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "bat", "awk"]);
 
-/* Each statement's leading program, past an env prefix and a path — `cd /work && iq q "…"` runs two and the
+/* Each statement's leading program, past an env prefix and a path, `cd /work && iq q "…"` runs two and the
  * second is the one that matters, and `/usr/bin/rg` is `rg`.
  *
  * Split on statement separators and NEVER on a pipe: `git log | grep fix` filters a command's own output, which
@@ -160,12 +160,12 @@ const commandHeads = (command: string): string[] =>
         return head.split("/").pop() ?? head;
     });
 
-/* DID THIS TOOL CALL GO LOOKING FOR CODE — what the search-teaching experiment is judged on, and a question the
+/* DID THIS TOOL CALL GO LOOKING FOR CODE, what the search-teaching experiment is judged on, and a question the
  * category alone cannot answer.
  *
  * `toolCategoryOf` reads a tool's NAME, and this workspace's own search tool is a CLI: `iq q "…"` arrives as
  * Bash and categorizes as `execute`, next to every `grep`/`rg`/`find` the model runs by hand. Counting only the
- * `search` category would miss every iq search — precisely backwards on a sandbox with iq turned on, which is
+ * `search` category would miss every iq search, precisely backwards on a sandbox with iq turned on, which is
  * the sandbox the teaching is measured against. */
 export const isSearchCall = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean => {
     if (call.category === "search") {
@@ -209,7 +209,7 @@ export const searchPrecedesFileWork = (call: { readonly category: ToolKind; read
 
 // The file path / command / query a tool acts on, for the tool_call frame's target (the raw mono string on
 // the card). Key order matters: the most specific spelling wins. `element` is @playwright/mcp's own
-// human-readable description of what a click/type/hover is aimed at ("Submit button") — the only thing those
+// human-readable description of what a click/type/hover is aimed at ("Submit button"), the only thing those
 // calls carry that means anything to a reader, since their `ref` is a snapshot-local handle like `e12`.
 const TARGET_KEYS = ["file_path", "filePath", "notebook_path", "command", "pattern", "url", "element", "path", "query"] as const;
 export const toolTarget = (input: unknown): string | undefined => {
@@ -228,7 +228,7 @@ export const toolTarget = (input: unknown): string | undefined => {
 
 // Normalize a tool path onto the workspace-root-relative forward-slash route space, or undefined when it
 // escapes the workspace (the tree/file routes can't address it). Relative inputs are cwd-relative, which
-// IS the route space — worktree cwds mirror the /work layout.
+// IS the route space, worktree cwds mirror the /work layout.
 export const workspacePath = (raw: string, cwd: string): string | undefined => {
     const rel = isAbsolute(raw) ? relative(cwd, raw) : raw;
     if (rel === "" || rel === "." || rel === ".." || rel.startsWith("../")) {
@@ -261,12 +261,12 @@ export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] |
     return undefined;
 };
 
-// One side of a diff can be a whole written file — cap it so a giant Write can't flood the event stream.
+// One side of a diff can be a whole written file, cap it so a giant Write can't flood the event stream.
 const DIFF_SIDE_CAP = 32_000;
 const capSide = (text: string): { text: string; clipped: boolean } =>
     text.length > DIFF_SIDE_CAP ? { text: text.slice(0, DIFF_SIDE_CAP), clipped: true } : { text, clipped: false };
 
-// A capped structured diff content entry — the one constructor every diff on the wire goes through, whether
+// A capped structured diff content entry, the one constructor every diff on the wire goes through, whether
 // derived from an Edit/Write input (below) or arriving ready-made from an ACP agent.
 export const diffContent = (path: string, oldText: string | undefined, newText: string): ToolCallContent => {
     const oldCapped = oldText !== undefined ? capSide(oldText) : undefined;
@@ -280,9 +280,9 @@ export const diffContent = (path: string, oldText: string | undefined, newText: 
     };
 };
 
-// Structured diff content derived from an Edit/Write-style tool INPUT — known at call time, no result needed.
+// Structured diff content derived from an Edit/Write-style tool INPUT, known at call time, no result needed.
 // Handles both spelling families (Claude old_string / OpenCode oldString). Unrecognized shapes degrade to
-// undefined (the card falls back to target-only) — never throw. The diff keeps a workspace-escaping path
+// undefined (the card falls back to target-only), never throw. The diff keeps a workspace-escaping path
 // as-is for display; only locations enforce the route space.
 export const editDiffContent = (name: string, input: unknown, cwd: string): ToolCallContent | undefined => {
     if (typeof input !== "object" || input === null) {

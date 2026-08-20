@@ -15,17 +15,17 @@ import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from
  * run turns on it and the Grok auth routes (drive xAI's OAuth) need the same client, so ownership lives here
  * rather than inside an adapter. Single-tenant (one container per project), so one server is enough.
  *
- * TWO PROVIDERS RIDE IT, and they are credentialed in opposite directions — which is most of what this file's
+ * TWO PROVIDERS RIDE IT, and they are credentialed in opposite directions, which is most of what this file's
  * shape is about:
  *
- *   xai    — OpenCode IS the credential store. It persists the xAI OAuth tokens and refreshes them itself, so
+ *   xai   . OpenCode IS the credential store. It persists the xAI OAuth tokens and refreshes them itself, so
  *            there is no ClaudeStore/CodexStore twin. We pin its data dir (XDG_DATA_HOME) so those tokens
  *            survive daemon restarts, and `connected()`/`disconnect()` read/clear that store.
- *   gemini — OpenCode holds NOTHING. The credential is the translator's, exactly as it is for a Gemini turn on
+ *   gemini. OpenCode holds NOTHING. The credential is the translator's, exactly as it is for a Gemini turn on
  *            the Claude Code harness: the provider is declared as an OpenAI-compatible endpoint pointed at the
  *            loopback translator with its local bearer, and CLIProxyAPI supplies the real Google auth and
  *            balances the account fleet behind it. So `connected("gemini")` is a question for the translator,
- *            not for auth.json, and nothing here can answer it — planGeminiTurn asks the right thing.
+ *            not for auth.json, and nothing here can answer it, planGeminiTurn asks the right thing.
  *
  * Gemini is here at all because the Claude Code loop cannot reach Google any more: that CLI bakes its own
  * "You are a Claude agent, built on Anthropic's Claude Agent SDK." into every request, and Google's Antigravity
@@ -35,31 +35,31 @@ export interface OpenCodeService {
     // Ensure the server is up and return its client (lazy: the first turn or auth call boots it).
     readonly client: () => Promise<OpencodeClient>;
     // This directory's session-event stream, for a caller that watches one turn. Scoped, because an unscoped
-    // subscription carries no session events at all — subscribeEvents has the whole story.
+    // subscription carries no session events at all, subscribeEvents has the whole story.
     readonly events: (directory: string) => Promise<{ stream: AsyncIterable<OpenCodeEvent> }>;
-    // Keep a delegation watcher running for this directory, for the daemon's life. Idempotent per directory —
+    // Keep a delegation watcher running for this directory, for the daemon's life. Idempotent per directory,
     // every turn calls it and only the first opens a stream. The boot covers the workspace root; this is what
     // covers an isolated conversation's worktree, which the daemon cannot know about until a turn runs there.
     readonly watch: (directory: string) => Promise<void>;
-    // The warm server's base URL — what a delegated `opencode run --attach <url>` points at, so its session
+    // The warm server's base URL, what a delegated `opencode run --attach <url>` points at, so its session
     // runs where the daemon's event stream can see it (the delegation note names it; agent/delegation.ts).
     readonly url: () => Promise<string>;
-    // Whether the given provider (e.g. "xai") is authenticated — read from OpenCode's persisted auth store on disk
+    // Whether the given provider (e.g. "xai") is authenticated, read from OpenCode's persisted auth store on disk
     // (the ground truth a device sign-in writes), NOT provider.list().connected, which OpenCode computes once at
     // server-init and never refreshes after a runtime auth.set() on our long-lived server.
     readonly connected: (providerID: string) => Promise<boolean>;
-    // Whether OpenCode still holds this session — the resume pre-flight every other provider already had (see
+    // Whether OpenCode still holds this session, the resume pre-flight every other provider already had (see
     // turn-plan.ts). Without it a chat whose session OpenCode lost (its storage cleared, a sandbox rebuild) sent
     // its prompt at a dead id and got the raw rejection back, forever: nothing told the client the id was the
-    // problem, so every retry re-sent the same one. False on an unreachable server too — the turn that follows
+    // problem, so every retry re-sent the same one. False on an unreachable server too, the turn that follows
     // starts a fresh session, which is the same recovery and a better failure than a wedged conversation.
     readonly sessionExists: (sessionId: string, directory: string) => Promise<boolean>;
-    // xAI's model catalog (id + humanized label) plus a default id — ALWAYS non-empty, so the picker is never
+    // xAI's model catalog (id + humanized label) plus a default id. ALWAYS non-empty, so the picker is never
     // blank and a send always resolves a model. Source, in order: live xAI discovery with the persisted OAuth
     // token (best, when the token is unexpired), else the last-known-good catalog persisted by recordModels, else
     // a compile-time seed floor. Supersedes provider.list() (a static models.dev snapshot whose xai list can be
-    // empty and whose default is a retired id xAI rejects). Cached briefly — only real (discovered/recorded)
-    // results, never the seed — so a freshened token is retried on the next read.
+    // empty and whose default is a retired id xAI rejects). Cached briefly, only real (discovered/recorded)
+    // results, never the seed, so a freshened token is retried on the next read.
     readonly xaiModels: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
     // Persist the models xAI itself named as valid (parsed from a "Did you mean: …" rejection during a turn) as
     // the last-known-good catalog. This is the refresh-independent source of truth: it works even when the REST
@@ -73,7 +73,7 @@ export interface OpenCodeService {
 
 // ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined. Neither xAI's
 // REST catalog nor its "Did you mean" rejection publishes a ranking (see model-order.ts), so the app imposes the
-// order — which is what makes `default` the frontier newest rather than whichever id xAI happened to name first.
+// order, which is what makes `default` the frontier newest rather than whichever id xAI happened to name first.
 const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
     const ordered = ids.toSorted(compareUnrankedModelIds);
     return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
@@ -81,25 +81,25 @@ const toCatalog = (ids: readonly string[]): { models: { id: string; label: strin
 
 // How long `opencode serve` gets to print its listening line. The SDK defaults to 5s, which a cold spawn misses
 // on a loaded host: the binary is ~175 MB of bun paged in from scratch while boot is also warming the search
-// index and starting the watchers (measured: 0.7s idle, 5–10s under that contention). Missing it is expensive —
+// index and starting the watchers (measured: 0.7s idle, 5–10s under that contention). Missing it is expensive,
 // the failed warmup pushes the CPU-heavy spawn onto the user's first Grok call, which is exactly what warming at
 // boot exists to avoid.
 const BOOT_TIMEOUT_MS = 60_000;
 
-// The rebuild-fixable state, in the user's terms. "rebuild" is load-bearing — it is the word the UI reads to
-// route a state to the Environment card — so it has to survive any rewording of this sentence.
+// The rebuild-fixable state, in the user's terms. "rebuild" is required, it is the word the UI reads to
+// route a state to the Environment card, so it has to survive any rewording of this sentence.
 //
 // `backend` is the product the USER picked, not the runtime that is missing. One `opencode serve` drives both
 // providers, so the sentence that named Grok unconditionally told a user who had chosen a Google model to go
-// and rebuild for a product they were not using — see openCodeBackendLabel.
+// and rebuild for a product they were not using, see openCodeBackendLabel.
 export const openCodeBinaryMissing = (backend: string): string =>
     `This sandbox's image doesn't include the OpenCode CLI yet — rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
 
-/* THE TITLE IS THE DELEGATION'S NAME TAG — `intentic-delegation-<spawning tool call id>`.
+/* THE TITLE IS THE DELEGATION'S NAME TAG, `intentic-delegation-<spawning tool call id>`.
  *
  * A delegated session has to be told apart from the OTHER sessions on the same warm server (the Grok provider
  * adapter's own turns), AND paired with the exact Bash call that started it. `opencode run` forwards no
- * environment to the server, so the id stamp that binds a codex delegation has no road here — but the title
+ * environment to the server, so the id stamp that binds a codex delegation has no road here, but the title
  * does, and the same PreToolUse rewrite that stamps the environment stamps the id into this flag on its way
  * past (agent/agent-terminals.ts).
  *
@@ -121,8 +121,8 @@ const errorText = (error: unknown): string | undefined => {
 
 /* The warm server's news, folded into the subagent roster. A session binds on `created`, by the id its title
  * carries; everything after that is a status move keyed by session id, and noteDelegationSignal drops ids that
- * belong to no delegation — which is every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's
- * end (report — a backgrounded record completes on it, a foreground one is settled by its own tool_result); a
+ * belong to no delegation, which is every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's
+ * end (report, a backgrounded record completes on it, a foreground one is settled by its own tool_result); a
  * pending permission is the `blocked` a waiting parent is woken for, though the warm server's allow-all config
  * makes it rare. */
 const foldSessionEvent = (event: OpenCodeEvent): void => {
@@ -162,23 +162,23 @@ const foldSessionEvent = (event: OpenCodeEvent): void => {
     }
 };
 
-/* EVERY PERMISSION OPENCODE HAS, ANSWERED — because the ones this block forgets do not fail, they HANG.
+/* EVERY PERMISSION OPENCODE HAS, ANSWERED, because the ones this block forgets do not fail, they HANG.
  *
  * The container is the isolation boundary here (same posture as Claude's bypassPermissions and Codex's
  * danger-full-access), so the intent was always allow-all. What was written was allow-THREE, and OpenCode
- * defaults the rest to `ask` — an ask that reaches a runtime with no permission channel, no TUI and nobody to
+ * defaults the rest to `ask`, an ask that reaches a runtime with no permission channel, no TUI and nobody to
  * press anything. The session simply stops, silently, mid-turn: no error, no idle, no further events. Two
  * minutes later the adapter's inactivity watchdog aborts the turn and the user is told "timed out waiting for
  * OpenCode", which names the wrong thing entirely.
  *
  * Measured, and this is the case that found it: an ISOLATED conversation runs in a worktree while its
  * attachments stay on /work (turn-plan.ts), so reading the image the user attached is a read OUTSIDE the
- * session's directory — `external_directory`, which is not `read`. Five turns of one conversation died that
+ * session's directory, `external_directory`, which is not `read`. Five turns of one conversation died that
  * way in half an hour, each one 120s after asking, each one with its work half done.
  *
  * So the block is written out IN FULL against the SDK's own key list, and the type is what keeps it that way:
  * a key OpenCode adds later is a compile error here rather than another silent stall. `doom_loop` (OpenCode's
- * are-you-stuck guard) is allowed for the same reason the others are — a turn the model can't get out of is
+ * are-you-stuck guard) is allowed for the same reason the others are, a turn the model can't get out of is
  * bounded by the adapter's own turn cap, while a turn nobody can answer is bounded by nothing. */
 const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>> = {
     edit: "allow",
@@ -207,21 +207,21 @@ const allowPermission = async (client: OpencodeClient, permission: { id: string;
 
 // How many times the event stream may die in a row before the watcher gives up. The service never restarts a
 // dead warm server either (`booting` is memoized for the daemon's life), so a stream that cannot come back is
-// the server being gone — retrying forever would only keep test processes and dying daemons alive.
+// the server being gone, retrying forever would only keep test processes and dying daemons alive.
 const STREAM_RETRIES = 3;
 const STREAM_RETRY_MS = 5_000;
 
 /* THE EVENT STREAM IS SCOPED TO A DIRECTORY, AND SUBSCRIBING WITHOUT ONE IS SILENTLY USELESS.
  *
  * `/event` with no `directory` still connects, still answers 200, and still delivers `server.connected` and a
- * heartbeat every twenty seconds — it simply carries no session events at all. So every turn on this runtime
+ * heartbeat every twenty seconds, it simply carries no session events at all. So every turn on this runtime
  * subscribed successfully, saw its own session's events never arrive, sat out the inactivity watchdog and died
- * as "timed out waiting for OpenCode" — while the turn it was watching ran to completion upstream, spent the
+ * as "timed out waiting for OpenCode", while the turn it was watching ran to completion upstream, spent the
  * user's allowance, and wrote its files. Measured on the warm server: an unscoped stream saw 0 of a turn's 30
  * events; the same turn on a scoped stream saw all of them, through `session.idle`.
  *
- * The scope is an EXACT directory match, not a prefix — a stream scoped to a parent sees nothing from a session
- * in its subdirectory — which is why this takes the caller's own cwd and why the delegation watcher can no
+ * The scope is an EXACT directory match, not a prefix, a stream scoped to a parent sees nothing from a session
+ * in its subdirectory, which is why this takes the caller's own cwd and why the delegation watcher can no
  * longer be a single server-wide subscription (see watch()).
  *
  * One helper rather than the query spelled out at each call site: a subscription that forgets the scope does not
@@ -229,7 +229,7 @@ const STREAM_RETRY_MS = 5_000;
 const subscribeEvents = async (client: OpencodeClient, directory: string): ReturnType<OpencodeClient["event"]["subscribe"]> =>
     client.event.subscribe({ query: { directory } });
 
-/* Watch ONE DIRECTORY's session events for the daemon's life — detached, started per directory the daemon runs
+/* Watch ONE DIRECTORY's session events for the daemon's life, detached, started per directory the daemon runs
  * sessions in. Failures are counted, not logged loudly: losing this stream loses liveness (a delegation settles
  * only by its exit), never correctness.
  *
@@ -250,7 +250,7 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
                     }
                 }
             } catch {
-                // The stream ended or never opened — count it and try again below.
+                // The stream ended or never opened, count it and try again below.
             }
             await new Promise((resolve) => {
                 setTimeout(resolve, STREAM_RETRY_MS).unref();
@@ -263,10 +263,10 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
  * and only Grok rides the loop, which is the dev profile (no translator baked) and every test that does not care.
  *
  * `models` is a thunk because the ids come off the Gemini catalog, which is built AFTER this service in the
- * composition order — and because OpenCode fixes provider config at spawn, so the list is read once, lazily, by
+ * composition order, and because OpenCode fixes provider config at spawn, so the list is read once, lazily, by
  * the boot that actually needs it rather than eagerly at construction. */
 export interface OpenCodeGeminiConfig {
-    // The translator's base URL — its OpenAI-compatible surface is at `${baseUrl}/v1`.
+    // The translator's base URL, its OpenAI-compatible surface is at `${baseUrl}/v1`.
     readonly baseUrl: string;
     readonly token: string;
     readonly models: () => Promise<readonly string[]>;
@@ -281,7 +281,7 @@ export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
  *
  * One `opencode serve` drives both providers, so the adapter that serves a Gemini turn IS the Grok adapter with
  * a different `providerID` on the prompt. Every failure sentence in it was written when that was not true and
- * said "Grok" unconditionally — so a user who picked Claude Opus 4.6 on Google and whose turn stalled was told
+ * said "Grok" unconditionally, so a user who picked Claude Opus 4.6 on Google and whose turn stalled was told
  * "Grok turn timed out", naming a product they had not chosen and an account they had not connected.
  *
  * Keyed off the OpenCode provider id rather than our own wire id because that is what the runner carries: the
@@ -289,7 +289,7 @@ export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
 export const openCodeBackendLabel = (providerID: string): string => (providerID === OPENCODE_GEMINI_PROVIDER ? "Google" : "Grok");
 
 /* An options BAG rather than more positionals: the second parameter used to be the test's fetch injection, and
- * adding real configuration behind it would have put a production concern after a test seam — the shape where
+ * adding real configuration behind it would have put a production concern after a test seam, the shape where
  * the next parameter goes in the wrong slot. Both are optional and both are named. */
 export const createOpenCodeService = (
     xdgDataHome: string,
@@ -299,16 +299,16 @@ export const createOpenCodeService = (
     const fetchImpl = options.fetchImpl ?? fetch;
     let booting: Promise<OpencodeClient> | undefined;
     // The directories a delegation watcher is already running for. Event streams are scoped to one exact
-    // directory (subscribeEvents), so "watch everything" is a set of streams rather than one — and this is what
+    // directory (subscribeEvents), so "watch everything" is a set of streams rather than one, and this is what
     // keeps it one PER directory however many turns run there.
     const watched = new Set<string>();
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
-    // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached —
+    // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached,
     // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
     // disconnect.
     let modelsCache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
     const MODELS_TTL_MS = 60_000;
-    // Where the warm server listens — set by the boot that created it, so `url()` can answer after `ensure`.
+    // Where the warm server listens, set by the boot that created it, so `url()` can answer after `ensure`.
     let serverUrl: string | undefined;
     const opencodeDir = join(xdgDataHome, "opencode");
     const authPath = join(opencodeDir, "auth.json");
@@ -317,15 +317,15 @@ export const createOpenCodeService = (
 
     const boot = async (): Promise<OpencodeClient> => {
         // xAI's Responses API stores request/response server-side for 30 days by default (store: true in
-        // @ai-sdk/xai) — opt every known model out via per-model options, the only seam OpenCode forwards to the
+        // @ai-sdk/xai), opt every known model out via per-model options, the only seam OpenCode forwards to the
         // call. Config is fixed at server spawn, so a model first discovered later (the self-heal path) lacks the
         // flag until the next daemon restart; the persisted catalog covers it from then on.
         const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await readPersistedModels())])];
         /* The Gemini rows, read once here because OpenCode fixes provider config at spawn. A catalog read that
-         * fails degrades to no Gemini provider rather than taking the whole server down with it — Grok would
+         * fails degrades to no Gemini provider rather than taking the whole server down with it. Grok would
          * otherwise lose its runtime over a translator that happened to be unreachable at boot. */
         const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
-        /* Gemini as an OpenAI-compatible endpoint on the translator. The models have to be NAMED — OpenCode
+        /* Gemini as an OpenAI-compatible endpoint on the translator. The models have to be NAMED. OpenCode
          * builds a custom provider's catalog from config alone (there is no models.dev row for a loopback
          * endpoint), so an id it has never heard of cannot be selected. An unreadable catalog leaves this empty
          * and the provider is not registered at all, rather than registered serving nothing. */
@@ -341,7 +341,7 @@ export const createOpenCodeService = (
                       },
                   };
         // createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
-        // XDG_DATA_HOME across the synchronous spawn only — the child captures it at launch; restoring right
+        // XDG_DATA_HOME across the synchronous spawn only, the child captures it at launch; restoring right
         // after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.
         const previous = process.env["XDG_DATA_HOME"];
         process.env["XDG_DATA_HOME"] = xdgDataHome;
@@ -349,7 +349,7 @@ export const createOpenCodeService = (
         try {
             server = await createOpencodeServer({
                 timeout: BOOT_TIMEOUT_MS,
-                // No provider key — xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
+                // No provider key, xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
                 // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access),
                 // and every permission is answered here rather than most of them (ALLOW_EVERY_PERMISSION).
                 config: {
@@ -391,7 +391,7 @@ export const createOpenCodeService = (
         return booting;
     };
 
-    // OpenCode's persisted Auth store — each provider keyed at the top level:
+    // OpenCode's persisted Auth store, each provider keyed at the top level:
     // { xai: { type: "oauth", access, refresh, expires } } (`expires` is a ms epoch). {} when absent/unreadable.
     const readAuth = async (): Promise<Record<string, { type?: string; access?: string; expires?: number } | undefined>> => {
         try {
@@ -400,7 +400,7 @@ export const createOpenCodeService = (
             return {};
         }
     };
-    // The xAI OAuth access token, but only when it's usable for a direct api.x.ai call — i.e. present AND not past
+    // The xAI OAuth access token, but only when it's usable for a direct api.x.ai call, i.e. present AND not past
     // its expiry. An expired token would 401 every discovery probe, so we skip discovery and serve the persisted/
     // seed catalog instead; OpenCode refreshes the token on the next turn, after which discovery works again.
     const usableXaiToken = async (): Promise<string | undefined> => {
@@ -440,7 +440,7 @@ export const createOpenCodeService = (
         url: async () => {
             await ensure();
             if (serverUrl === undefined) {
-                // Unreachable once ensure resolved — boot sets the url before it returns the client.
+                // Unreachable once ensure resolved, boot sets the url before it returns the client.
                 throw new Error("OpenCode server url unknown after boot");
             }
             return serverUrl;

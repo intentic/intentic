@@ -3,21 +3,21 @@ import { jsonFile } from "../store/json-file.js";
 
 /* What turns a stream of inbound messages into a CONVERSATION.
  *
- * Without this, every message fires its automation afresh — and a fire opens a new isolated conversation with a
+ * Without this, every message fires its automation afresh, and a fire opens a new isolated conversation with a
  * new worktree (scheduler.ts mints one per fire), so five messages became five fleet cards, five worktrees, and
  * five agents each answering with no idea what was said a moment ago. The Front Desk hit it first (a support chat
  * is obviously one thread), but a Discord or Slack channel is the same shape: tagging the bot three times in
  * #eng is one conversation, not three strangers.
  *
  * So a thread is recorded here the moment it is admitted: which sandbox conversation it owns and which provider
- * session to resume. The record is also the ADMISSION mark for the Front Desk — a thread that has one has already
+ * session to resume. The record is also the ADMISSION mark for the Front Desk, a thread that has one has already
  * cleared the anti-bot gate, which is what makes "one check per conversation" survive a daemon restart.
  *
  * A thread ENDS by going quiet: past its TTL the record reads as absent, so the next message starts a fresh
  * conversation rather than resuming a session whose subject has long since changed. */
 
 const RecordSchema = z.object({
-    // The sandbox conversation this thread owns — a fleet card, a worktree, a chat tab.
+    // The sandbox conversation this thread owns, a fleet card, a worktree, a chat tab.
     conversationId: z.string(),
     // The provider session to resume, learned from the previous turn. Absent until one has completed (a first
     // turn has nothing to resume, and a turn that errored before the provider answered leaves none).
@@ -34,10 +34,10 @@ type SessionsFile = z.infer<typeof FileSchema>;
 
 // How long a quiet Front Desk thread keeps its conversation. A support chat resumed a week later would otherwise
 // reopen a worktree whose branch has long since been landed or reaped. Overridable per Front Desk
-// (WebchatConfig.sessionTtlMinutes) — a visitor comes back to the same tab, so hours are cheap here.
+// (WebchatConfig.sessionTtlMinutes), a visitor comes back to the same tab, so hours are cheap here.
 export const WEBCHAT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
-// How long a quiet CHANNEL keeps its conversation — the Discord/Slack side. Shorter than the Front Desk's on
+// How long a quiet CHANNEL keeps its conversation, the Discord/Slack side. Shorter than the Front Desk's on
 // purpose: a channel is a room many topics pass through, and resuming this morning's CI thread for this
 // afternoon's unrelated question is worse than starting over.
 // ponytail: 2h tuned for "one working session"; raise if real channels lose their thread over lunch.
@@ -47,7 +47,7 @@ export const CHANNEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_SESSIONS = 500;
 
 // One thread. Namespaced by provider so two sources can't collide on a channel id, and by automation so two
-// Front Desks on one site — or two automations watching one channel — each keep their own conversation.
+// Front Desks on one site, or two automations watching one channel, each keep their own conversation.
 export const threadKey = (provider: string, automationId: string, channelId: string): string => `${provider}:${automationId}:${channelId}`;
 
 export interface ThreadSessionsStore {
@@ -56,7 +56,7 @@ export interface ThreadSessionsStore {
     readonly get: (key: string, ttlMs: number, now: number) => Promise<ThreadSession | undefined>;
     // Admit a thread: return its existing live record, or create one around a freshly minted conversation id.
     readonly open: (key: string, mintConversationId: () => string, ttlMs: number, now: number) => Promise<ThreadSession>;
-    // Record what the completed turn taught us — the session to resume next time.
+    // Record what the completed turn taught us, the session to resume next time.
     readonly settle: (key: string, sessionId: string | undefined, now: number) => Promise<void>;
 }
 

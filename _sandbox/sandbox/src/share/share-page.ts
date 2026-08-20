@@ -1,21 +1,21 @@
 import type { SharePayload } from "@intentic/sandbox-contract";
 import { escapeHtml } from "../panels/interstitial.js";
 
-/* THE PAGE, AS TEXT — the built template with one conversation written into it.
+/* THE PAGE, AS TEXT, the built template with one conversation written into it.
  *
  * Its own module, and pure, because this is the step where a mistake is an injection: the payload is the
  * agent's and the user's own words, so everything in it is attacker-influenced in the only sense that matters
- * (a prompt can contain any characters at all, and often does — this product's conversations are full of HTML,
+ * (a prompt can contain any characters at all, and often does, this product's conversations are full of HTML,
  * script tags and JSON).
  *
  * Two rules make that safe, and both are about the ONE place the data lands. It goes inside a
- * `<script type="application/json">` block, whose contents the HTML parser does not treat as markup at all —
+ * `<script type="application/json">` block, whose contents the HTML parser does not treat as markup at all,
  * with exactly one exception: the parser ends the block at the first `</script` (and, in a legacy corner, gets
  * confused by `<!--`). So every `<` in the serialized JSON is escaped to `<`, which JSON.parse turns back
  * into `<` and the HTML parser cannot read as anything. That single substitution retires the whole class:
  * there is no way to close the block, so there is no way to reach the document.
  *
- * The title is different — it lands in real markup, so it takes ordinary HTML escaping. */
+ * The title is different, it lands in real markup, so it takes ordinary HTML escaping. */
 
 // Marks the block the payload replaces. Matched as a literal, so a template that stops carrying it fails
 // loudly at share time rather than publishing a page that renders nothing.

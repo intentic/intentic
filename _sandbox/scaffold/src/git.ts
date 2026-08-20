@@ -22,12 +22,12 @@ export interface GitCloneOptions {
     // "Authorization: Basic …" rides a -c http.extraheader flag for private-repo clones, so the credential
     // never lands in the URL, .git/config, or git's stderr.
     readonly authHeader?: string;
-    // Keep the real git dir outside the worktree (the in-tree .git becomes a pointer file) — see gitInit.
+    // Keep the real git dir outside the worktree (the in-tree .git becomes a pointer file), see gitInit.
     readonly separateGitDir?: string;
 }
 
 // Clone a repo into <parentDir>/<name>. Push/pull auth rides on the URL or the credentials the host already
-// holds — no token passes through the platform. The caller validates `name`.
+// holds, no token passes through the platform. The caller validates `name`.
 export const gitClone = async (
     parentDir: string,
     name: string,
@@ -64,7 +64,7 @@ export interface GitStatus {
 }
 
 export const gitStatus = async (dir: string, git: GitRunner = defaultGit): Promise<GitStatus> => {
-    // Two independent read-only spawns — run them concurrently (this backs the daemon's polled status route).
+    // Two independent read-only spawns, run them concurrently (this backs the daemon's polled status route).
     const [branchOut, statusOut] = await Promise.all([git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]), git(dir, ["status", "--porcelain"])]);
     const branch = branchOut.stdout.trim();
     const files = porcelainFiles(statusOut.stdout);
@@ -73,9 +73,9 @@ export const gitStatus = async (dir: string, git: GitRunner = defaultGit): Promi
 
 // Stage everything and commit; returns false (no commit) when there was nothing to commit, so callers can
 // commit freely without erroring on a no-op. The gate is the INDEX after staging, never the worktree: `git
-// status` also reports dirt that `add -A` cannot stage — modified content inside a NESTED repo, whose gitlink
-// moves only when that repo's own HEAD does — and committing on that verdict fails outright ("no changes added
-// to commit"). Credentials never touch this — push auth rides on the remote the runner configured when it
+// status` also reports dirt that `add -A` cannot stage, modified content inside a NESTED repo, whose gitlink
+// moves only when that repo's own HEAD does, and committing on that verdict fails outright ("no changes added
+// to commit"). Credentials never touch this, push auth rides on the remote the runner configured when it
 // cloned.
 export const gitCommitAll = async (
     dir: string,
@@ -92,7 +92,7 @@ export const gitCommitAll = async (
     /* `--no-verify` because this commit is PROVENANCE, not authorship: it preserves an agent's worktree state on
      * its own branch so a land has something to take a delta from, and its message is machine-written from the
      * agent's title. A repo whose commit-msg hook enforces Conventional Commits (this one's does) rejected every
-     * such message that didn't happen to parse — and since the hook's exit code propagates out of `git commit`,
+     * such message that didn't happen to parse, and since the hook's exit code propagates out of `git commit`,
      * that refusal surfaced as a 500 from /agents/{id}/land with the real reason buried in the daemon log. The
      * user's commit policy governs the user's commits; it cannot be allowed to make an agent's work unlandable.
      */
@@ -100,22 +100,22 @@ export const gitCommitAll = async (
     return true;
 };
 
-// Detached checkout of any ref — branch, tag, or commit sha — after a full clone (a shallow clone can't reach
+// Detached checkout of any ref, branch, tag, or commit sha, after a full clone (a shallow clone can't reach
 // an arbitrary sha, so clones that may be ref-pinned stay full).
 export const gitCheckout = async (dir: string, ref: string, git: GitRunner = defaultGit): Promise<void> => {
     await git(dir, ["checkout", "--detach", "-q", ref]);
 };
 
-// The checkout's short HEAD sha — the version identity a plugin capability reports.
+// The checkout's short HEAD sha, the version identity a plugin capability reports.
 export const gitHead = async (dir: string, git: GitRunner = defaultGit): Promise<string> =>
     (await git(dir, ["rev-parse", "--short", "HEAD"])).stdout.trim();
 
-// The full 40-character HEAD sha — what an extension revert writes back into the capability's `ref`, whose
+// The full 40-character HEAD sha, what an extension revert writes back into the capability's `ref`, whose
 // schema (rightly) refuses the abbreviated form above.
 export const gitFullHead = async (dir: string, git: GitRunner = defaultGit): Promise<string> => (await git(dir, ["rev-parse", "HEAD"])).stdout.trim();
 
 // The repo's tracked files (git ls-files), so the UI can render the source tree without node_modules/build
-// noise. Untracked-but-present files are intentionally excluded — they surface through status instead.
+// noise. Untracked-but-present files are intentionally excluded, they surface through status instead.
 export const gitListFiles = async (dir: string, git: GitRunner = defaultGit): Promise<string[]> =>
     (await git(dir, ["ls-files"])).stdout
         .split("\n")
@@ -131,7 +131,7 @@ export type GitSyncResult =
 
 // Bring `dir` up to its upstream, but only when that's safe: fetch origin, then fast-forward ONLY a clean tree
 // that is strictly behind. A dirty tree (agent mid-edit), unpushed local commits (diverged), or a detached /
-// upstream-less checkout are left exactly as-is and reported — sync never clobbers work. Fetch auth rides on
+// upstream-less checkout are left exactly as-is and reported, sync never clobbers work. Fetch auth rides on
 // `origin` just as the daemon's push does, so wherever push works this works. Git errors (e.g. an unreachable
 // remote) propagate;
 // the turn-level caller (syncWorkspaceRepos) catches per-repo so one repo can't fail the turn.
@@ -142,7 +142,7 @@ export const gitSync = async (dir: string, git: GitRunner = defaultGit): Promise
     }
     await git(dir, ["fetch", "--quiet", "origin"]);
     // No upstream (detached HEAD / a ref-pinned or never-pushed branch) ⇒ nothing to track. Real git exits
-    // non-zero here; the injectable test fake returns "" — both mean "skip".
+    // non-zero here; the injectable test fake returns "", both mean "skip".
     const upstream = await git(dir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).then(
         (r) => r.stdout.trim(),
         () => "",

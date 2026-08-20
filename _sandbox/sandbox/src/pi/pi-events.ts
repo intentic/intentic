@@ -1,14 +1,14 @@
 import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
 import { diffContent, displayNameOf, resultText, toolCategoryOf, toolLocations, toolTarget, workspacePath } from "../agent/tool-calls.js";
 
-/* Pure mapping of Pi RPC events onto AgentEvent frames — the Pi-native producer of the contract's tool-call
+/* Pure mapping of Pi RPC events onto AgentEvent frames, the Pi-native producer of the contract's tool-call
  * vocabulary, the grok-agent streamTurn shape rebuilt for a pull-per-event transport. Events with no UI
  * mapping are dropped (the streamSdk philosophy). Stateful where the protocol is: tool args arrive on
  * `tool_execution_start` and the diff is derived at `_end`, so the mapper keeps them; usage arrives one
  * assistant message at a time and is summed into one frame at settle. */
 
 // What a plan phase holds back instead of streaming: the assistant's text IS the plan. `errored` suppresses
-// the plan frame — an error already streamed, so no plan may be proposed from partial output.
+// the plan frame, an error already streamed, so no plan may be proposed from partial output.
 export interface PiTurnCapture {
     planText?: string;
     errored?: boolean;
@@ -17,9 +17,9 @@ export interface PiTurnCapture {
 export interface PiEventMapper {
     // One Pi event → its frames (usually 0 or 1; a tool result can carry a status and content together).
     readonly map: (event: Record<string, unknown>) => AgentEvent[];
-    // The turn's summed usage frame, once — undefined when no assistant message reported any.
+    // The turn's summed usage frame, once, undefined when no assistant message reported any.
     readonly usage: () => AgentEvent | undefined;
-    // What the turn held back, read at settle — the plan text of a `holdText` mapper, and whether an error
+    // What the turn held back, read at settle, the plan text of a `holdText` mapper, and whether an error
     // frame went out. Accumulated here rather than into a caller's object, exactly as `usage` is.
     readonly capture: () => PiTurnCapture;
 }
@@ -27,11 +27,11 @@ export interface PiEventMapper {
 const str = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 const num = (value: unknown): number => (typeof value === "number" ? value : 0);
 
-/* Structured diffs derived from a Pi edit/write INPUT — known at call time, the authoritative content, in
- * Pi's OWN argument spelling: `edit` takes `{path, edits: [{oldText, newText}]}` (one call, many hunks — a
+/* Structured diffs derived from a Pi edit/write INPUT, known at call time, the authoritative content, in
+ * Pi's OWN argument spelling: `edit` takes `{path, edits: [{oldText, newText}]}` (one call, many hunks, a
  * diff entry per hunk) and `write` takes `{path, content}`. The shared editDiffContent reads the Claude and
  * OpenCode spellings and would answer undefined for every Pi edit, downgrading each card to raw output.
- * Unrecognized shapes degrade to undefined (the card falls back to the tool's text output) — never throw. */
+ * Unrecognized shapes degrade to undefined (the card falls back to the tool's text output), never throw. */
 const piEditDiffs = (name: string, args: unknown, cwd: string): ToolCallContent[] | undefined => {
     if (typeof args !== "object" || args === null) {
         return undefined;
@@ -88,14 +88,14 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                         return [{ kind: "delta", text }];
                     }
                     case "text_end":
-                        // The prose block is finished — the client retires its bubble here (see the contract's
+                        // The prose block is finished, the client retires its bubble here (see the contract's
                         // text_end note). Meaningless while a plan phase is holding text back.
                         return holdText ? [] : [{ kind: "text_end" }];
                     case "thinking_delta": {
                         const text = str(delta["delta"]) ?? "";
                         return text === "" ? [] : [{ kind: "thinking", text }];
                     }
-                    // toolcall_* deltas are argument streaming — the card renders from tool_execution_start.
+                    // toolcall_* deltas are argument streaming, the card renders from tool_execution_start.
                     default:
                         return [];
                 }
@@ -147,7 +147,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                 if (id === undefined) {
                     return [];
                 }
-                // partialResult carries the ACCUMULATED output — snapshot semantics, which is exactly what the
+                // partialResult carries the ACCUMULATED output, snapshot semantics, which is exactly what the
                 // frame's content REPLACE contract wants.
                 const partial = resultText((event["partialResult"] as Record<string, unknown> | undefined)?.["content"]);
                 return partial === "" ? [] : [{ kind: "tool_call_update", id, content: [{ type: "text", text: partial }] }];
@@ -161,19 +161,19 @@ export const createPiEventMapper = (cwd: string, holdText = false): PiEventMappe
                 const name = known?.name ?? displayNameOf(str(event["toolName"]) ?? "tool");
                 const failed = event["isError"] === true;
                 const output = resultText((event["result"] as Record<string, unknown> | undefined)?.["content"]);
-                // An edit/write completion derives its diff from the (final) input — the authoritative content;
+                // An edit/write completion derives its diff from the (final) input, the authoritative content;
                 // otherwise the tool's own text output (or error) is what the card shows.
                 const diffs = failed ? undefined : piEditDiffs(name, known?.args, cwd);
                 const content: ToolCallContent[] = diffs ?? [{ type: "text", text: output }];
                 if (known === undefined) {
-                    // A call first seen at its end (the start was missed) arrives as one whole tool_call —
+                    // A call first seen at its end (the start was missed) arrives as one whole tool_call,
                     // its args are gone with the start event, so the card is name + output alone.
                     return [{ kind: "tool_call", id, name, category: toolCategoryOf(name), status: failed ? "failed" : "completed", content }];
                 }
                 return [{ kind: "tool_call_update", id, status: failed ? "failed" : "completed", content }];
             }
             case "auto_retry_start": {
-                // Pi is riding out a transient provider error inside the turn — the wait must be visible, with
+                // Pi is riding out a transient provider error inside the turn, the wait must be visible, with
                 // its own next-attempt clock (the provider_retry frame's whole reason to exist).
                 const delayMs = num(event["delayMs"]);
                 return [

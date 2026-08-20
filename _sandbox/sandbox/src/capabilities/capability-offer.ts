@@ -4,28 +4,28 @@ import type { AgentEvent, CapabilityOffer, CapabilityStatus } from "@intentic/sa
 import { createRequest } from "../agent/agent-requests.js";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../platform/leftovers.js";
 
-/* THE SETUP GATE — how an agent asks the owner to connect a capability it is missing, mid-task, in chat.
+/* THE SETUP GATE, how an agent asks the owner to connect a capability it is missing, mid-task, in chat.
  *
  * The shape is the spend gate's (platform/service-offer.ts), because the trust problem is the same: the model
  * may ASK, and only the owner's click makes anything happen. The agent's `capabilities request` call PARKS
  * here, a card goes up in the conversation's live turn with the CATALOG's own words on it (the card id and
- * title come from the catalog the ask was validated against — the model contributes its one-line `why` and
+ * title come from the catalog the ask was validated against, the model contributes its one-line `why` and
  * nothing else), and the call is answered by how the card settles. A prompt-injected model can ask; it cannot
  * connect anything, and it cannot make the card say the capability is something it is not.
  *
  * WHAT "YES" MEANS is the one place this gate differs from the spend gate: a click does not perform the setup
- * — connecting is the owner's own flow, on the Capabilities page the card hands them to. So a yes keeps the
+ *, connecting is the owner's own flow, on the Capabilities page the card hands them to. So a yes keeps the
  * agent's call parked while the gate WATCHES the manifest for the capability to come live, and the agent
- * resumes in the same turn the moment it does — which is the entire point of asking in chat rather than
+ * resumes in the same turn the moment it does, which is the entire point of asking in chat rather than
  * describing manual steps. A no answers immediately, and is remembered for the conversation so a repeat ask
  * is answered without a second card: "don't nag" is plumbing here, not etiquette.
  *
  * Frames are raised from OUTSIDE the turn generator (the agent's CLI call arrives as an HTTP request while
  * the turn sits inside its Bash tool), pushed into the live run's frame log and mirrored to the registry by
- * hand — like the spend gate, and for the same reason the card is not journalled for restore: the waiter is
+ * hand, like the spend gate, and for the same reason the card is not journalled for restore: the waiter is
  * the CLI's held connection, which dies with the daemon. */
 
-// How long an unanswered ask holds the agent's call before settling as "nobody answered" — the spend gate's
+// How long an unanswered ask holds the agent's call before settling as "nobody answered", the spend gate's
 // window, for the spend gate's reason.
 const ASK_DEADLINE_MS = 10 * 60_000;
 // How long a YES keeps the call parked waiting for the connection to come live. Longer than the ask window on
@@ -35,10 +35,10 @@ const SETUP_DEADLINE_MS = 15 * 60_000;
 // How often the watcher re-reads the manifest while a setup is underway.
 const POLL_MS = 3_000;
 
-// The agent's why, capped — one line of rationale is the card's design, not a second prompt.
+// The agent's why, capped, one line of rationale is the card's design, not a second prompt.
 const WHY_MAX = 280;
 
-// What the ask answers with — the same terminal-shaped triple the platform relays use, so the CLI prints it
+// What the ask answers with, the same terminal-shaped triple the platform relays use, so the CLI prints it
 // the same way `services` prints the platform's.
 export interface AskAnswer {
     readonly status: number;
@@ -56,20 +56,20 @@ export interface AskInstance {
 }
 
 export interface AskDeps {
-    // Every card that can be connected here — the static catalog merged with the enabled extensions'
+    // Every card that can be connected here, the static catalog merged with the enabled extensions'
     // contributed cards (connectable.ts). What the ask is validated against, and where the card's title
     // comes from.
     readonly cards: () => Promise<readonly CapabilityCatalogEntry[]>;
-    // The manifest as it stands — cheap (no probes); the join to the asked card is done here.
+    // The manifest as it stands, cheap (no probes); the join to the asked card is done here.
     readonly list: () => Promise<readonly AskInstance[]>;
     // One instance's live status, probed only for instances of the asked card.
     readonly status: (instance: AskInstance) => Promise<CapabilityStatus>;
-    // The live turn the card lands in: the named conversation's run, or — when the caller could not name one —
+    // The live turn the card lands in: the named conversation's run, or, when the caller could not name one,
     // the sole live run. Undefined refuses the ask outright.
     readonly liveRun: (
         conversationId: string | undefined,
     ) => { readonly conversationId: string; readonly push: (event: AgentEvent) => void } | undefined;
-    // The registry's frame observer — externally pushed frames bypass the turn pump that usually feeds it, so
+    // The registry's frame observer, externally pushed frames bypass the turn pump that usually feeds it, so
     // the gate mirrors its own frames there to light and clear the Attention lane.
     readonly observe: (conversationId: string, event: AgentEvent) => void;
     // Test seams for the three clocks.
@@ -85,7 +85,7 @@ export interface AskedCapability {
     // The conversation the calling shell was stamped with (INTENTIC_TURN_OWNER); the two reserved owner names
     // are "no conversation" here.
     readonly conversationId: string | undefined;
-    // The held CLI connection — aborts when the agent's command dies, which settles the card instead of
+    // The held CLI connection, aborts when the agent's command dies, which settles the card instead of
     // leaving it parked in a conversation nothing waits behind.
     readonly signal: AbortSignal;
 }
@@ -93,7 +93,7 @@ export interface AskedCapability {
 const answer = (status: number, body: unknown): AskAnswer => ({ status, body: JSON.stringify(body), contentType: "application/json" });
 const refusal = (status: number, type: string, message: string): AskAnswer => answer(status, { error: { type, message } });
 
-// An abortable pause — the watcher's tick. Resolves early (not rejects) on abort; the loop's own guard reads
+// An abortable pause, the watcher's tick. Resolves early (not rejects) on abort; the loop's own guard reads
 // the signal, so an aborted sleep simply ends the watch.
 const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
@@ -131,7 +131,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
         memory.set(conversationId, conversation);
     };
 
-    // The asked card's live instances, each with its probed status — bounded by the card, not the manifest.
+    // The asked card's live instances, each with its probed status, bounded by the card, not the manifest.
     const connectionsOf = async (entry: CapabilityCatalogEntry): Promise<{ instance: AskInstance; status: CapabilityStatus }[]> => {
         const instances = instancesOf(entry, await deps.list());
         return Promise.all(instances.map(async (instance) => ({ instance, status: await deps.status(instance) })));
@@ -165,7 +165,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
             );
         }
         // The catalog is the card's whole factual content: an ask that names nothing in it is a sentence, not
-        // a card — and never a card titled with the model's own words.
+        // a card, and never a card titled with the model's own words.
         const cards = await deps.cards();
         const entry = cards.find((candidate) => candidate.id === asked.card);
         if (entry === undefined) {
@@ -173,7 +173,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
         }
         /* Already connected ⇒ no card: the answer the agent actually wants ("use it") beats a question the
          * owner can only shrug at. Asking reflexively is therefore safe. An instance that exists but is not
-         * active (a browser account never signed in, an errored connector) does NOT short-circuit — finishing
+         * active (a browser account never signed in, an errored connector) does NOT short-circuit, finishing
          * its setup is exactly what the card asks for. */
         const connections = await connectionsOf(entry);
         const active = connections.find((connection) => connection.status.state === "active");
@@ -224,7 +224,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
                 `The owner skipped connecting ${entry.name} — continue without it, and say plainly what it would have enabled. Don't ask for it again in this conversation.`,
             );
         }
-        /* The owner said yes and is setting it up — hold the call and watch for the connection. The card's
+        /* The owner said yes and is setting it up, hold the call and watch for the connection. The card's
          * "waiting for setup" state lives on this watch: the outcome frame below is what settles it, on this
          * surface and every other one. */
         const connected = await watchForConnection(entry, asked.signal);

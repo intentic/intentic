@@ -4,11 +4,11 @@ import type { WorkspaceBucket, WorkspaceClassification, WorkspaceTree } from "@i
 import { fileTypeFromFile } from "file-type";
 
 // Precise local mirror of a walked tree node. zod's recursive `get children()` degrades to Record<string,unknown>[]
-// when WorkspaceTreeEntry is emitted to a cross-package .d.ts, so the contract type is opaque to consumers — we
+// when WorkspaceTreeEntry is emitted to a cross-package .d.ts, so the contract type is opaque to consumers, we
 // traverse against this instead and cast once at the entry point (walkWorkspaceTree is the source of this shape).
 type TreeNode = { name: string; path: string; type: "file" | "dir"; size?: number; ignored?: boolean; children?: TreeNode[] };
 
-// Deterministic, no-LLM workspace classifier — a 3-stage cascade (repo markers → magic bytes → extension/text
+// Deterministic, no-LLM workspace classifier, a 3-stage cascade (repo markers → magic bytes → extension/text
 // fallback) that sorts what the user dropped into /work into coarse buckets. It runs over the already-walked
 // WorkspaceTree (walkWorkspaceTree) and skips its `ignored` entries (node_modules, .git, .gitignore'd), so it only
 // ever classifies the tracked workspace and never traverses the disk a second time. Read-only: it proposes, it
@@ -16,7 +16,7 @@ type TreeNode = { name: string; path: string; type: "file" | "dir"; size?: numbe
 
 type Item = WorkspaceClassification["classifications"][number];
 
-// Stage 1 — a directory holding any of these at its root is one repository unit; classify it and stop descending
+// Stage 1, a directory holding any of these at its root is one repository unit; classify it and stop descending
 // (its contents belong to the repo, not the workspace). `.git` is a grayed `ignored` entry we skip, so detection
 // rides on the project manifests, which is the reliable signal anyway.
 const REPO_MARKERS = new Set([
@@ -40,7 +40,7 @@ const repoMarker = (children: readonly TreeNode[]): string | undefined => {
     return undefined;
 };
 
-// Stage 2 — magic-byte MIME → bucket. Prefix classes cover the media families; the exact sets pin document and
+// Stage 2, magic-byte MIME → bucket. Prefix classes cover the media families; the exact sets pin document and
 // archive containers (docx/xlsx/pptx resolve to their own OOXML mimes via file-type, not "application/zip").
 const DOC_MIMES = new Set([
     "application/pdf",
@@ -69,7 +69,7 @@ const mimeBucket = (mime: string): WorkspaceBucket | undefined => {
     return undefined;
 };
 
-// Stage 3 — extension → bucket, for the many text-based formats magic bytes are blind to (.md, .csv, .svg have
+// Stage 3, extension → bucket, for the many text-based formats magic bytes are blind to (.md, .csv, .svg have
 // no signature) and formats file-type doesn't sniff.
 const EXT_BUCKET: Record<string, WorkspaceBucket> = {
     ".pdf": "documents",

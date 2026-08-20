@@ -3,7 +3,7 @@ import type { AutomationRecord } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 
 // A provider's listener state: the reconcile feed its gateway process polls (via /listeners/:provider/state)
-// AND the daemon-side spawn gate for that gateway (extension-processes.ts) — one computation, so the two can
+// AND the daemon-side spawn gate for that gateway (extension-processes.ts), one computation, so the two can
 // never drift. Connector configs ride with their secrets: the gateway needs the bot token to connect.
 export interface ListenerState {
     readonly automations: AutomationRecord[];
@@ -25,8 +25,8 @@ export const listenerState = async (services: Pick<Services, "automations" | "ca
 // Whether the provider's gateway process is WANTED: a connector alone keeps it up (its loopback control
 // surface serves the voice CLI), an enabled automation alone keeps it polling for a connector to arrive.
 // Actually CONNECTING to the provider stays the gateway's own stricter predicate (automations AND a non-empty
-// token) — this only gates the process's existence. Whether a wanted gateway CAN run is the other half of the
+// token), this only gates the process's existence. Whether a wanted gateway CAN run is the other half of the
 // spawn gate and is composed beside this one (extension-processes.ts): its runtime has to be in the image,
-// which on a core image it is not. That half is deliberately not in ListenerState — this shape is also the
+// which on a core image it is not. That half is deliberately not in ListenerState, this shape is also the
 // feed a live gateway polls, and there is no live gateway to tell about its own absence.
 export const listenerProcessesDesired = (state: ListenerState): boolean => state.automations.length > 0 || state.connectors.length > 0;

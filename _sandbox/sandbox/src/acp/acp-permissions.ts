@@ -1,9 +1,9 @@
 import type { PermissionOption, PermissionOptionKind, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 
-/* The daemon's answer to ACP session/request_permission: auto-allow — the container is the isolation
+/* The daemon's answer to ACP session/request_permission: auto-allow, the container is the isolation
  * boundary, the same posture as bypassPermissions / approvalPolicy:never / OpenCode allow-all. Per-tool
  * prompts are deliberately NOT surfaced to the user (the architecture's standing decision). The one nuance
- * is the plan phase: mutating tool kinds are rejected so the planning turn stays read-only — best-effort
+ * is the plan phase: mutating tool kinds are rejected so the planning turn stays read-only, best-effort
  * (an agent that never asks isn't constrained), which the plan-emulation preamble also demands in prose. */
 
 export type PermissionPhase = "execute" | "plan";
@@ -31,7 +31,7 @@ export const decidePermission = (request: RequestPermissionRequest, phase: Permi
         if (rejection !== undefined) {
             return selected(rejection);
         }
-        // No rejection offered — allowing beats cancelling the whole planning turn; the preamble still holds.
+        // No rejection offered, allowing beats cancelling the whole planning turn; the preamble still holds.
     }
     const allowance = pick(request.options, ["allow_always", "allow_once"]);
     if (allowance !== undefined) {

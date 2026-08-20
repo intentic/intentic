@@ -3,7 +3,7 @@ import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } 
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
 import type { InvariantRegistry } from "./invariants.js";
 
-/* WHERE THE COMPANIONS ARE WIRED — the one list, so a companion that is written and never registered is a file
+/* WHERE THE COMPANIONS ARE WIRED, the one list, so a companion that is written and never registered is a file
  * nobody runs, and the gate can say so by reading this.
  *
  * The container-claim companion (platform/invariant.ts) is deliberately NOT here: its subject is the role this

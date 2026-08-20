@@ -6,7 +6,7 @@ import { parseForticlientConfig } from "./forticlient-config.js";
 import { connectVpn, disconnectVpn, vpnLink, vpnLinks } from "./vpn-links.js";
 
 // The live VPN routes. Adding a VPN is a capability add; DIALLING one is here, because connecting is a runtime
-// operation performed many times over one stored connection — by the operator from the Status card and by the
+// operation performed many times over one stored connection, by the operator from the Status card and by the
 // agent through the `vpn` CLI, which calls these same routes. Both therefore observe one implementation.
 
 export type VpnRoutesDeps = Pick<Services, "capabilities">;
@@ -14,7 +14,7 @@ export type VpnRoutesDeps = Pick<Services, "capabilities">;
 export const createVpnRoutes = (services: VpnRoutesDeps) => {
     const i = implement(vpnContract).$context<OrpcContext>();
     // One dial per id at a time: two concurrent connects would race the same interface and leave a half-built
-    // tunnel behind. Rejecting the second is honest — the first is already streaming its progress.
+    // tunnel behind. Rejecting the second is honest, the first is already streaming its progress.
     const dialling = new Set<string>();
 
     const entryOf = async (id: string) => {

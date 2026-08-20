@@ -14,7 +14,7 @@ import { DELEGATION_SESSION_TITLE } from "../grok/opencode.js";
 import { isDelegationCommand } from "./subagents.js";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
-// commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to — the
+// commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to, the
 // user watches (and can type into) the agent's terminals. Subagent Bash calls hit the same session-wide
 // hook, so their commands land in the same session as extra windows.
 
@@ -23,12 +23,12 @@ export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] 
 
 const execFileAsync = promisify(execFile);
 
-/* IS THE AGENT'S OWN SHELL STILL WORKING — asked before anything moves the files under it.
+/* IS THE AGENT'S OWN SHELL STILL WORKING, asked before anything moves the files under it.
  *
  * Every Bash command runs in a window of this turn's tmux session (the rewrite below), and tmux-run sets
  * `remain-on-exit` from inside the pane, so a finished command leaves its window behind as a DEAD pane. A live
  * pane therefore means a command that has not returned: a background job the agent started, a build it left
- * running, or the user typing in the terminal panel — which are the same thing to this question.
+ * running, or the user typing in the terminal panel, which are the same thing to this question.
  *
  * The parked-card rebase is the caller (agent.ts, agents/sync.ts). A rebase swaps files under whatever is
  * reading them, and the dirty-remainder commit it takes first would sweep a half-written file onto the branch;
@@ -66,12 +66,12 @@ const windowSlug = (description: unknown): string => {
     return slug === "" ? "run" : slug;
 };
 
-// Env var NAMES forwarded onto each command's tmux window (`-e NAME` — tmux-run resolves the value from its
+// Env var NAMES forwarded onto each command's tmux window (`-e NAME`, tmux-run resolves the value from its
 // own environment, which the SDK subprocess passes down fresh each turn). The pane's shell otherwise inherits
 // the tmux SERVER's env snapshot, so per-turn capability credentials would be missing or stale there; the
 // value itself never appears in the rewritten command text, transcript, or pane logs. Only valid identifiers
 // survive: these land unquoted in the shell line every Bash command flows through. A capability REMOVED after
-// the server captured its var stays in the server env — forwarding only overrides per-window.
+// the server captured its var stays in the server env, forwarding only overrides per-window.
 const envKeyFlags = (envKeys: readonly string[]): string =>
     [...envKeys]
         .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
@@ -79,12 +79,12 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .map((key) => `-e ${key} `)
         .join("");
 
-/* Every agent shell command runs DEMOTED — CPU nice +10, IO best-effort lowest — because the agent's builds
+/* Every agent shell command runs DEMOTED. CPU nice +10, IO best-effort lowest, because the agent's builds
  * and test runs are exactly what has starved this container: a couple of concurrent turns spawning vitest
  * worker pools flat-lined the machine, the daemon's own loop went silent for tens of seconds, and the browser
  * declared the sandbox dead. Demotion costs an agent command nothing on an idle machine (priorities only bind
  * under contention) and keeps the control plane answering during exactly the bursts that used to take it out.
- * Wrapped in `bash -c` so a compound line (`cd x && make`) demotes as ONE tree — `nice` can exec a binary,
+ * Wrapped in `bash -c` so a compound line (`cd x && make`) demotes as ONE tree, `nice` can exec a binary,
  * not a shell keyword. */
 const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
 
@@ -93,7 +93,7 @@ const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
  * intentic-delegation-<id>`, which is the only thing that reaches the warm server saying whose session this is.
  *
  * A REPLACEMENT, not an insertion. The flag is in the template the agent copies, so an agent that kept it gets
- * an exactly-paired session and one that dropped it gets an unbound one — the same "no title, no binding" floor
+ * an exactly-paired session and one that dropped it gets an unbound one, the same "no title, no binding" floor
  * grok/opencode.ts already fails to. Inserting the flag instead would mean guessing where in somebody's command
  * line it may legally go, which is how a rewrite breaks a command it was only supposed to annotate. */
 const stampDelegationTitle = (command: string, delegationId: string): string =>
@@ -102,7 +102,7 @@ const stampDelegationTitle = (command: string, delegationId: string): string =>
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
-     * what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.
+     * what /work is, the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.
      * Both roads to that agreement start here, because a pane is forked by the tmux SERVER, which is pinned to
      * the daemon's namespace (isolation.ts names it to bin/tmux-run, which hops there before it can ever fork
      * one), and the pane's own command line is the only place that can diverge from it:
@@ -113,16 +113,16 @@ export const bashTmuxHooks = (
      *    (worktree-redirect.ts), which is the same substitution the mounts would have made.
      */
     isolation?: TurnPlacement,
-    /* The conversation this turn belongs to — the same owner the SDK subprocess is stamped with (agent.ts
+    /* The conversation this turn belongs to, the same owner the SDK subprocess is stamped with (agent.ts
      * workloadStamp). Carried onto every pane command too, because a pane's processes are forked by the tmux
      * SERVER and inherit nothing from the CLI: without this a `nohup`d survivor of a killed session is a
      * stamped-nowhere process nothing can attribute. The reaper's whole licence over pane trees is this stamp
-     * (platform/reaper.ts). Charset-guarded like the delegation id — it lands unquoted-adjacent in the shell
+     * (platform/reaper.ts). Charset-guarded like the delegation id, it lands unquoted-adjacent in the shell
      * line every Bash command flows through. */
     owner?: string,
     /* The turn's secret registry, when it has one. Resolution rides INSIDE this rewrite rather than as its own
-     * PreToolUse matcher because two rewriters of one command must compose in a KNOWN order — hook order across
-     * separate matchers is the SDK's — and the order matters twice: the reference must be resolved before the
+     * PreToolUse matcher because two rewriters of one command must compose in a KNOWN order, hook order across
+     * separate matchers is the SDK's, and the order matters twice: the reference must be resolved before the
      * command is quoted into the wrapper, and the `-c` copy (what the cleaners and the use ledger read) must
      * keep the agent's reference-form line. The no-tmux configuration gets the standalone hook instead
      * (agent-secrets.ts secretCommandHooks). */
@@ -162,15 +162,15 @@ export const bashTmuxHooks = (
                          *  - `opencode run` forwards no environment to the warm server it attaches to, so the id
                          *    rides in the session TITLE the note's template already carries (grok/opencode.ts).
                          *
-                         * Both only for commands whose id charset is the SDK's — defensive, because the value
+                         * Both only for commands whose id charset is the SDK's, defensive, because the value
                          * lands unquoted in the shell line every Bash command flows through. */
                         const delegation = isDelegationCommand(redirected) && /^[A-Za-z0-9_-]+$/u.test(input.tool_use_id);
                         const command = delegation ? stampDelegationTitle(redirected, input.tool_use_id) : redirected;
                         /* The secret exit (agent-secrets.ts): `{{secret:name}}` becomes the stored value in the
-                         * line the pane EXECUTES — while `-c` below keeps the reference-form `command`, so the
+                         * line the pane EXECUTES, while `-c` below keeps the reference-form `command`, so the
                          * cleaners, the ledger and the pane's window all speak the agent's own words. The
                          * resolved value does land in the pane's command line and its logs, which the owner can
-                         * open — the owner's own secret, behind the same door as the Secrets view's reveal. */
+                         * open, the owner's own secret, behind the same door as the Secrets view's reveal. */
                         let executed = command;
                         if (secrets !== undefined) {
                             const resolved = await resolveCommandSecrets(command, secrets);
@@ -187,8 +187,8 @@ export const bashTmuxHooks = (
                         }
                         /* WHATEVER THIS COMMAND FORKS IS BORN KNOWING IT CAME FROM A CONVERSATION. An env prefix
                          * on the command itself, like the delegation id above and for the same reason: it rides
-                         * inside the namespace hop, on the process tree, so a server the agent starts — and the
-                         * children of that — carry it however deep they go and whatever spawned them.
+                         * inside the namespace hop, on the process tree, so a server the agent starts, and the
+                         * children of that, carry it however deep they go and whatever spawned them.
                          *
                          * What reads it is the daemon (platform/container-owner.ts), about ITSELF: this repo is
                          * the sandbox, so `tsx src/main.ts` to see a change work is an ordinary thing for an
@@ -212,7 +212,7 @@ export const bashTmuxHooks = (
                                      * tmux-run actually executes, because everything the cleaners are asked
                                      * about is a property of the agent's line and none of it survives wrapping:
                                      * the ledger's "which un-cleaned commands are worth a handler" list showed
-                                     * `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` for every row —
+                                     * `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` for every row,
                                      * ~100 characters of daemon boilerplate before the first real word, and a
                                      * per-turn pid making every row unique. Cleaner MATCHING reads it too, so
                                      * `nice`/`ionice`/`bash` can no longer stand in for the agent's own verb. */

@@ -14,14 +14,14 @@ import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir } from "./s
  *
  * This is a READ over what is actually on disk, not a projection of what the config asked for, and that is the
  * point: skills arrive from the daemon's own stores, from every connection the owner made, from inside extension
- * checkouts, and from plugin repos — and until this existed the only way to answer "what is my agent carrying"
+ * checkouts, and from plugin repos, and until this existed the only way to answer "what is my agent carrying"
  * was to open four directories. A skill costs the agent attention whether or not anyone remembers adding it, so
  * the list has to be complete before it can be useful, which is why an unclaimed file lists as `dropped` rather
  * than being skipped.
  *
  * WHAT EACH ROW MAY DO follows from where it came from, and nothing else:
  *   - the settings `skills` list governs baked tools and the owner's own, so those two get the switch
- *   - only the owner's own are editable — anything else would be overwritten by whatever ships it
+ *   - only the owner's own are editable, anything else would be overwritten by whatever ships it
  *   - `own` and `dropped` are removable; the rest are removed by removing their owner
  * A row that offered a control its origin cannot honour would be worse than one that offers none: the change
  * would appear to take and then come back on the next reconcile. */
@@ -57,12 +57,12 @@ const scanSkillsDir = async (services: Services, dir: string): Promise<FoundSkil
     return found;
 };
 
-/* CORE FEATURES THAT SHIP A SKILL WITHOUT THE SETTINGS GATE — the two that write into the loaded folder on their
+/* CORE FEATURES THAT SHIP A SKILL WITHOUT THE SETTINGS GATE, the two that write into the loaded folder on their
  * own schedule, mapped to the name the owner knows them by.
  *
  * A table, reluctantly, and the reluctance is worth writing down: this is a second place a core feature's skill
  * has to be remembered, which is the shape that goes stale. It is tolerable only because forgetting an entry
- * degrades gracefully — the skill still lists, as `dropped`, with no owner — rather than vanishing or lying. What
+ * degrades gracefully, the skill still lists, as `dropped`, with no owner, rather than vanishing or lying. What
  * it buys is that neither of these reads as a loose file the owner is invited to delete, since the feature behind
  * it would simply write it again. */
 const FEATURE_SKILLS: Record<string, string> = {
@@ -70,10 +70,10 @@ const FEATURE_SKILLS: Record<string, string> = {
     iq: "Code search",
 };
 
-/* A capability whose id is a loaded skill's directory name, or — for the connections that share ONE skill
- * across every instance — one the shared skill is derived FROM. Three shared shapes: a kind's own cheatsheet
- * (ssh, vpn — the skill is named after the KIND), the `identities` roster (every identity), and a site
- * group's skill (every browser account whose group resolves to the name — account-skills.ts). Matched rather
+/* A capability whose id is a loaded skill's directory name, or, for the connections that share ONE skill
+ * across every instance, one the shared skill is derived FROM. Three shared shapes: a kind's own cheatsheet
+ * (ssh, vpn, the skill is named after the KIND), the `identities` roster (every identity), and a site
+ * group's skill (every browser account whose group resolves to the name, account-skills.ts). Matched rather
  * than hardcoded, so the row's owner column names a real entry whichever way the skill came to exist. */
 const capabilityFor = (capabilities: readonly Capability[], name: string): Capability | undefined =>
     capabilities.find((capability) => capability.id === name) ??
@@ -81,7 +81,7 @@ const capabilityFor = (capabilities: readonly Capability[], name: string): Capab
     (name === "identities" ? capabilities.find((capability) => capability.kind === "identity") : undefined) ??
     capabilities.find((capability) => capability.kind === "browser" && accountGroupOf(capability.config).name === name);
 
-/* WHERE A PLUGIN'S AND AN EXTENSION'S SKILLS SIT — the same two derivations the turn's plugin list makes
+/* WHERE A PLUGIN'S AND AN EXTENSION'S SKILLS SIT, the same two derivations the turn's plugin list makes
  * (plugin-dirs.ts, extensionAgentDirsOf), pointed one level deeper at the `skills` folder inside. Shared with the
  * read route rather than repeated there: the list and the reader must resolve one id to one file, and two
  * spellings of that path is how a row opens something other than what it named. */
@@ -103,11 +103,11 @@ const summary = (fields: Omit<SkillSummary, "switchable" | "editable" | "removab
 });
 
 /* The join. Ordered by how much the reader owns: their own first, then what this image ships, then what each
- * thing they added brought, then the loose files — so the list opens on the half that answers to them.
+ * thing they added brought, then the loose files, so the list opens on the half that answers to them.
  *
  * `enabled` is read per origin rather than uniformly, because the sources disagree about what "on" means. A baked
  * tool or an own skill is on when the settings list names it. Everything else is on because the thing that ships
- * it is installed and switched on — a disabled extension is already filtered out of `enabledExtensions`, so a
+ * it is installed and switched on, a disabled extension is already filtered out of `enabledExtensions`, so a
  * row that reaches here at all is loaded. */
 export const skillInventory = async (services: Services): Promise<SkillSummary[]> => {
     const root = services.workspace.root;
@@ -136,14 +136,14 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
         );
     }
 
-    /* The baked tools, whether or not they are on — the one place this list shows something that is NOT currently
+    /* The baked tools, whether or not they are on, the one place this list shows something that is NOT currently
      * loaded, because a switched-off baked tool is an offer rather than an absence and a list that hid it would
      * make the tool undiscoverable exactly the way an empty `skills` array once made `lsp` undiscoverable. */
     for (const name of bakedSkillNames()) {
         rows.push(summary({ id: name, name, description: bakedDescription(name), origin: "builtin", enabled: enabled(name), switchable: true }));
     }
 
-    // The plugin repos the owner cloned, and the extensions they installed — both read through the same skills
+    // The plugin repos the owner cloned, and the extensions they installed, both read through the same skills
     // dir the SDK's loader reads, so this list cannot claim a skill the agent would not find.
     for (const capability of capabilities.filter((entry) => entry.kind === "plugin")) {
         for (const skill of await scanSkillsDir(services, pluginSkillsDir(root, capability))) {
@@ -161,7 +161,7 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
     }
 
     /* THE PERSONA KITS. Listed here because this surface promises to show everything the agent knows, and a
-     * skill that only some turns can reach is still something it knows — the row says whose card carries it, and
+     * skill that only some turns can reach is still something it knows, the row says whose card carries it, and
      * offers no switch, because a kit skill is on exactly when its persona is worn (personas/persona-kit.ts).
      * Edited on the card rather than here, for the same reason a plugin's skill is edited where it lives. */
     for (const persona of personas) {
@@ -200,7 +200,7 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
 
     /* THE LOADED FOLDER LAST, for whatever the four passes above have not already accounted for: the cheatsheet a
      * connection wrote, a core feature's skill, or a file somebody dropped in. Claimed names are skipped rather
-     * than re-listed — a baked tool that is currently on is present here too, and it is the same skill. */
+     * than re-listed, a baked tool that is currently on is present here too, and it is the same skill. */
     const claimed = new Set([...own.map((skill) => skill.name), ...bakedSkillNames()]);
     for (const skill of await scanSkillsDir(services, loadedSkillsRoot(root))) {
         if (claimed.has(skill.name)) {
@@ -233,17 +233,17 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
     return rows;
 };
 
-// A baked tool's description, parsed out of the registry's own skill text rather than restated here — that text
+// A baked tool's description, parsed out of the registry's own skill text rather than restated here, that text
 // IS the file the agent reads, so there is no second copy to disagree with it. Read from the registry rather than
 // from disk because a switched-off baked tool has no file, and its row still has to say what it would teach.
 const bakedDescription = (name: string): string => parseSkillFile(bakedSkillText(name) ?? "").description ?? "";
 
-/* ONE SKILL'S TEXT, from whichever of the seven places its id names — what the read route answers with.
+/* ONE SKILL'S TEXT, from whichever of the seven places its id names, what the read route answers with.
  *
  * The id shapes are the list's own (SkillSummarySchema): a bare name for anything living in the loaded folder or
  * the owner's store, and `<origin>:<owner>:<name>` for a skill inside a plugin checkout, an extension, or one
  * persona's kit. Reading is a fresh resolution rather than a lookup against a cached list, because the file may
- * have changed since the list was drawn — an agent editing its own skill mid-session is the normal case, not the
+ * have changed since the list was drawn, an agent editing its own skill mid-session is the normal case, not the
  * exotic one.
  *
  * A bare name is tried in three places, in the order that answers with what the AGENT would read: the loaded copy
@@ -253,7 +253,7 @@ export const readSkillText = async (services: Services, id: string): Promise<{ r
     const root = services.workspace.root;
     const [scope, owner, name] = id.split(":");
     // A kit skill answers from its card's own folder. Its `owner` is the persona id, which is what the list's id
-    // carries — the row's LABEL may be prettier, and is not a key.
+    // carries, the row's LABEL may be prettier, and is not a key.
     if (name !== undefined && owner !== undefined && scope === "persona") {
         const skill = await readPersonaSkill(root, owner, name);
         return skill === undefined ? undefined : { name, text: skillDocument(skill.name, skill.description, skill.body) };
@@ -267,7 +267,7 @@ export const readSkillText = async (services: Services, id: string): Promise<{ r
         return text === undefined ? undefined : { name, text };
     }
     // A bare name. `id.split` always yields at least one element, and anything with a colon that is not one of the
-    // two scopes above is not an id this daemon mints — treat it as the name it claims to be and fail to find it.
+    // two scopes above is not an id this daemon mints, treat it as the name it claims to be and fail to find it.
     const bare = scope ?? id;
     const loaded = await services.files.read(join(loadedSkillsRoot(root), bare, SKILL_FILE));
     if (loaded !== undefined) {

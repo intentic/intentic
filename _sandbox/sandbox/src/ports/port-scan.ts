@@ -1,7 +1,7 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 
-// Discovers every listening TCP socket in the sandbox by reading procfs directly — no lsof/ss dependency, a
+// Discovers every listening TCP socket in the sandbox by reading procfs directly, no lsof/ss dependency, a
 // handful of file reads per scan, cheap enough to run on demand per /ports request. This is the generic
 // complement to the managed-process registry: anything run in a terminal (a turbo TUI fanning out dev servers,
 // an agent's ad-hoc process, a docker-proxy for a published container) binds ports the daemon never assigned,
@@ -16,13 +16,13 @@ export interface ListeningPort {
     readonly port: number;
     readonly host: LoopbackHost;
     // Whether the preview proxy can actually reach the listener by dialing `host`. False for a bind to a
-    // loopback alias (Docker's embedded DNS uses 127.0.0.11) that only answers at its own address — listed for
+    // loopback alias (Docker's embedded DNS uses 127.0.0.11) that only answers at its own address, listed for
     // transparency, but the Ports view hides Preview and forwarding is refused.
     readonly forwardable: boolean;
     readonly pid?: number;
     readonly command?: string;
     readonly cwd?: string;
-    // The tmux session the listener is running in — the terminal a user can watch it in, Ctrl+C it in, or kill.
+    // The tmux session the listener is running in, the terminal a user can watch it in, Ctrl+C it in, or kill.
     // Absent when nothing in its ancestry is a pane: a daemon-managed runtime, or the process's parents died and
     // left it reparented to init. See `withOwningSessions`.
     readonly session?: string;
@@ -30,7 +30,7 @@ export interface ListeningPort {
 
 /* WHO IS OCCUPYING THIS PORT, in the only terms a user can act on: the terminal it is running in.
  *
- * A port's own process is rarely the one anybody launched — `pnpm dev` becomes turbo becomes vite, three
+ * A port's own process is rarely the one anybody launched, `pnpm dev` becomes turbo becomes vite, three
  * generations down from the pane. So the socket's owner is walked UP its parents until one of them is a tmux
  * pane's root process, and that pane's session is the answer. Without it a listening port is a fact you can
  * read and nothing you can do: the surfaces could say "something is on 4321" and had no way to say where it is.
@@ -41,7 +41,7 @@ export interface ListeningPort {
 const ANCESTRY_LIMIT = 64;
 
 // The ppid out of /proc/<pid>/stat. `comm` sits in parentheses and may itself contain spaces AND parentheses,
-// so the fields are read after the LAST `)` — splitting the line on whitespace mis-indexes on `(node (old))`.
+// so the fields are read after the LAST `)`, splitting the line on whitespace mis-indexes on `(node (old))`.
 export const parentPid = (stat: string): number | undefined => {
     const fields = stat
         .slice(stat.lastIndexOf(")") + 1)
@@ -52,7 +52,7 @@ export const parentPid = (stat: string): number | undefined => {
 };
 
 // Each listener annotated with the tmux session it descends from. `panes` maps a pane's root pid to its session
-// (terminal/terminal-session.ts panePids); an empty map — no tmux server — annotates nothing.
+// (terminal/terminal-session.ts panePids); an empty map, no tmux server, annotates nothing.
 export const withOwningSessions = async (
     listeners: readonly ListeningPort[],
     panes: ReadonlyMap<number, string>,
@@ -128,7 +128,7 @@ const parseListeners = (table: string): { port: number; host: LoopbackHost; forw
 };
 
 // Which bucket a listener belongs to in the Ports view: `workspace` = something the user runs (a dev server in
-// a repo, an ad-hoc terminal process, a published container port) — the previewable set; `system` = the
+// a repo, an ad-hoc terminal process, a published container port), the previewable set; `system` = the
 // sandbox's own machinery (agent runtimes, the translator, dockerd, sshd), which nobody previews. Classified
 // by evidence, strongest first: a cwd inside a workspace repo beats the binary name (a user running `opencode`
 // in their repo is user work); docker-proxy publishes a USER container's port, the sandbox only provides the
@@ -153,9 +153,9 @@ export const portKind = (listener: Pick<ListeningPort, "command" | "cwd">, works
     return listener.cwd === workspaceRoot ? "workspace" : "system";
 };
 
-// Map the wanted socket inodes to their owning pids by walking every process's fd table — the same resolution
+// Map the wanted socket inodes to their owning pids by walking every process's fd table, the same resolution
 // `ss -p` performs. Processes vanish mid-scan and some fds aren't readable; both just skip. First claimant
-// wins (a socket shared across forks belongs to whichever pid enumerates first — good enough for labeling).
+// wins (a socket shared across forks belongs to whichever pid enumerates first, good enough for labeling).
 const resolvePids = async (procRoot: string, wanted: ReadonlySet<string>): Promise<Map<string, number>> => {
     const owners = new Map<string, number>();
     const entries = await readdir(procRoot).catch(() => [] as string[]);
@@ -181,7 +181,7 @@ const resolvePids = async (procRoot: string, wanted: ReadonlySet<string>): Promi
 };
 
 // Docker's embedded DNS resolver binds the fixed 127.0.0.11 alias (libnetwork) and is answered by dockerd from
-// outside the container's PID namespace — so no /proc/*/fd owns its socket and the pid walk comes up empty. It's
+// outside the container's PID namespace, so no /proc/*/fd owns its socket and the pid walk comes up empty. It's
 // the one otherwise-unattributable listener the scan can still name, by its unmistakable bind address.
 const DOCKER_EMBEDDED_DNS_ADDRESS = "0B00007F"; // 127.0.0.11, /proc/net/tcp little-endian hex
 
@@ -205,17 +205,17 @@ export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningP
             .map(async ({ port, host, forwardable, address, inode }) => {
                 const pid = owners.get(inode);
                 if (pid === undefined) {
-                    // No /proc/*/fd owns the socket — usually plumbing served from outside this PID namespace.
+                    // No /proc/*/fd owns the socket, usually plumbing served from outside this PID namespace.
                     // Docker's embedded DNS is the one we can still name, from its fixed 127.0.0.11 bind address.
                     return address === DOCKER_EMBEDDED_DNS_ADDRESS
                         ? { port, host, forwardable, command: "Docker embedded DNS" }
                         : { port, host, forwardable };
                 }
                 // cmdline is the full NUL-separated argv, but it reads empty for kernel threads and any process
-                // that cleared its argv (some daemons, a defunct process still holding the socket) — fall back to
+                // that cleared its argv (some daemons, a defunct process still holding the socket), fall back to
                 // `comm`, the kernel-maintained executable name (truncated to 15 chars), so the row shows a real
                 // name rather than nothing. cwd needs the same-user privilege the daemon (root in the container)
-                // has — any of these reads failing just drops that annotation.
+                // has, any of these reads failing just drops that annotation.
                 const cmdline = await readFile(join(procRoot, String(pid), "cmdline"), "utf8").catch(() => "");
                 const command =
                     cmdline.split("\0").filter(Boolean).join(" ") ||

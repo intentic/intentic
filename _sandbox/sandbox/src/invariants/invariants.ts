@@ -2,7 +2,7 @@ import type { Logger } from "pino";
 
 /* THE PROMISES THIS DAEMON MAKES TO ITSELF, CHECKED WHILE IT RUNS.
  *
- * This repository states its runtime relationships unusually precisely — in ARCHITECTURE.md, and at the top of
+ * This repository states its runtime relationships unusually precisely, in ARCHITECTURE.md, and at the top of
  * the files that own them. Exactly one daemon per container converges HOME. Every live turn is in the journal,
  * so a container recreate cannot eat it. No credential sits in the manifest a turn can Read. None of those is
  * checked after the moment it is established, and every one of them fails SILENTLY: the daemon carries on
@@ -12,12 +12,12 @@ import type { Logger } from "pino";
  * An invariant is one of those promises, written as code that observes the live state and says so when it stops
  * being true. Three rules keep this from decaying into ceremony:
  *
- *   IT MUST OBSERVE. A check reads an authoritative event stream or mutable data — the claim file, the journal
+ *   IT MUST OBSERVE. A check reads an authoritative event stream or mutable data, the claim file, the journal
  *     directory, the two registries that each hold a `running` flag. Asserting that a method exists, that a
  *     module is wired, or that a pure function returns what it returned in the unit test is a type, load or
  *     unit-test concern, and a check that does it is worse than no check: it is a green light with no subject.
  *   IT MUST BE ABLE TO FAIL. A check that never calls `fail` asserts nothing. The gate reads for it.
- *   IT MUST NOT BE THE THING THAT BREAKS. A violation is REPORTED, never thrown at the daemon — a sandbox must
+ *   IT MUST NOT BE THE THING THAT BREAKS. A violation is REPORTED, never thrown at the daemon, a sandbox must
  *     not lose its turn because a diagnostic disagreed with it. A check that throws on its own account is
  *     recorded as a broken check, under its owner's name, so it cannot hide either.
  *
@@ -49,7 +49,7 @@ export class InvariantError extends Error {
 export interface InvariantRun {
     readonly moment: InvariantMoment;
     // Report the promise broken. Throws, so a check reads as a sequence of guards rather than as a flag it
-    // must remember to return. The message names what was expected and what was found — it is read by whoever
+    // must remember to return. The message names what was expected and what was found, it is read by whoever
     // is looking at a log line at 3am, so "expected X, found Y" beats "invalid state".
     readonly fail: (message: string) => never;
 }
@@ -75,7 +75,7 @@ export interface InvariantViolation {
 
 export interface InvariantRegistry {
     // Register one subsystem's checks. Returns the disposer. A second registration of the same owner, or two
-    // checks of one name, throws AT REGISTRATION — that is a wiring mistake, and wiring mistakes are the one
+    // checks of one name, throws AT REGISTRATION, that is a wiring mistake, and wiring mistakes are the one
     // class this module is allowed to be loud about, because nothing is running yet.
     readonly register: (owner: string, checks: readonly InvariantCheck[]) => () => void;
     // Run every check armed for this moment. Never rejects. Returns what broke this pass.
@@ -114,7 +114,7 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     const registered = new Map<string, readonly InvariantCheck[]>();
     const seen: InvariantViolation[] = [];
     /* Runs are serialized against each other. The sweep and a settling turn can land in the same tick, and two
-     * passes reading the same mutable state concurrently would report one broken promise twice — or, worse,
+     * passes reading the same mutable state concurrently would report one broken promise twice, or, worse,
      * catch a subsystem mid-write and report a violation that was never true. */
     let queue: Promise<readonly InvariantViolation[]> = Promise.resolve([]);
 

@@ -4,20 +4,20 @@ import { writeLoadedSkill } from "../settings/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
 import { stateRelPath } from "../workspace/state-paths.js";
 
-// The workspace-relative home the skill text below teaches the agent — the table's spelling, so the prompt
+// The workspace-relative home the skill text below teaches the agent, the table's spelling, so the prompt
 // can never name a directory the drafts store stopped reading.
 const DRAFTS_DIR = stateRelPath(".intentic/config/drafts/");
 
 // The post-drafts queue (<workspace>/.intentic/config/drafts/<id>.json, one file per draft): the AGENT creates drafts
-// (taught by DRAFTS_SKILL below), the daemon edits/deletes them for the owner. Per-file — never a shared
-// manifest like automations.json — because the two writers would race a read-modify-write (see json-dir.ts,
+// (taught by DRAFTS_SKILL below), the daemon edits/deletes them for the owner. Per-file, never a shared
+// manifest like automations.json, because the two writers would race a read-modify-write (see json-dir.ts,
 // which owns that cycle and the trust boundary around agent-written names). No secrets live here.
 
 export interface DraftsStore {
-    // Parsed drafts (scheduledAt ascending) plus the filenames that failed to parse — an agent typo must be
+    // Parsed drafts (scheduledAt ascending) plus the filenames that failed to parse, an agent typo must be
     // visible in the UI, not a draft that silently never posts.
     readonly list: () => Promise<{ drafts: DraftSummary[]; invalid: string[] }>;
-    // Upsert by id — approve/edit/retry are all a rewrite of the whole file.
+    // Upsert by id, approve/edit/retry are all a rewrite of the whole file.
     readonly upsert: (draft: DraftSummary) => Promise<void>;
     // True when a draft of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
@@ -40,7 +40,7 @@ export const fileDraftsStore = (dir: string): DraftsStore => {
     };
 };
 
-// How the drafting agent learns the file format — the same loaded-skills mechanism every capability connector
+// How the drafting agent learns the file format, the same loaded-skills mechanism every capability connector
 // uses. Triggered by description, so a user prompt like "prepare social media post drafts" routes here without
 // any automation change.
 const DRAFTS_SKILL = `---
@@ -90,7 +90,7 @@ platform that posts through a logged-in browser needs (see below).
   the decision away from them.
 `;
 
-// Drafts are native to every sandbox (like automations), so no capability owns this skill — the daemon
+// Drafts are native to every sandbox (like automations), so no capability owns this skill, the daemon
 // converges it at boot (the composeEnvironment pattern), keeping the prose current across daemon updates.
 export const ensureDraftsSkill = (services: Services): Promise<void> =>
     writeLoadedSkill(services.files, services.workspace.root, "drafts", DRAFTS_SKILL);

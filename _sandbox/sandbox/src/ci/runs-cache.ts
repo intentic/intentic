@@ -2,13 +2,13 @@ import type { PipelineRun } from "@intentic/sandbox-contract";
 
 // The Pipelines view's read model: a REST backfill sweep fills it (GET /ci/runs finding it stale), webhook
 // deliveries freshen single runs in place between sweeps. An upsert deliberately does NOT extend the sweep
-// freshness — one delivered run says nothing about the rest of the picture.
+// freshness, one delivered run says nothing about the rest of the picture.
 
 const TTL_MS = 20_000;
 const RUNS_KEPT = 100;
 
 export interface RunsCache {
-    // The cached picture, or undefined when no sweep landed within the TTL — time to backfill.
+    // The cached picture, or undefined when no sweep landed within the TTL, time to backfill.
     readonly sweep: () => PipelineRun[] | undefined;
     readonly replace: (runs: PipelineRun[]) => PipelineRun[];
     readonly upsert: (run: PipelineRun) => void;

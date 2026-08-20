@@ -1,11 +1,11 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Services } from "../composition.js";
 
-/* SENDING A DISCORD POST WITHOUT AN AGENT TURN — the whole reason the publisher splits by platform.
+/* SENDING A DISCORD POST WITHOUT AN AGENT TURN, the whole reason the publisher splits by platform.
  *
  * Discord hands out a bot token and a documented endpoint, so posting is one authenticated request that either
- * returned 200 or did not. Everything an agent turn brings to a browser-driven platform — reading the page,
- * finding the box, noticing the dialog — is dead weight here, and it is weight measured in a whole model turn
+ * returned 200 or did not. Everything an agent turn brings to a browser-driven platform, reading the page,
+ * finding the box, noticing the dialog, is dead weight here, and it is weight measured in a whole model turn
  * per post. This is the fast path: milliseconds, no tokens, and an error you can put in front of the owner
  * verbatim instead of a transcript to read.
  *
@@ -16,7 +16,7 @@ import type { Services } from "../composition.js";
  * Discord you cannot skip and get right by accident.
  *
  * MEDIA IS NOT SENT HERE. An attachment is a multipart upload of a workspace file, which is a second shape of
- * request, a second failure mode and a file-path trust boundary — so a draft carrying media is handed to the
+ * request, a second failure mode and a file-path trust boundary, so a draft carrying media is handed to the
  * turn instead (canPublishDirectly below). One endpoint, honestly scoped, beats two half-supported ones. */
 
 const API_BASE = `https://discord.com/api/v10`;
@@ -27,7 +27,7 @@ const MESSAGE_LIMIT = 2_000;
 
 const MAX_RETRIES = 3;
 
-// A channel id is a snowflake — digits, nothing else. Worth checking because `target` is free text written by
+// A channel id is a snowflake, digits, nothing else. Worth checking because `target` is free text written by
 // the agent, and "#releases" reaching the URL builder is a 404 whose message says nothing about the real
 // mistake.
 const CHANNEL_ID = /^\d{5,}$/;
@@ -40,12 +40,12 @@ export interface DirectPostResult {
 /* WHETHER THIS PARTICULAR DRAFT CAN GO THE FAST WAY. Platform alone is not enough: the same connector that
  * posts a line of text in one request needs a different one to carry a picture, and a draft addressed to
  * "#releases" instead of a channel id has nowhere to go. Both fall back to the turn, which can read the
- * server, find the channel by name, and upload the file — so a "no" here costs money rather than the post. */
+ * server, find the channel by name, and upload the file, so a "no" here costs money rather than the post. */
 export const canPublishDirectly = (draft: { readonly target?: string | undefined; readonly media?: readonly string[] | undefined }): boolean =>
     draft.target !== undefined && CHANNEL_ID.test(draft.target) && (draft.media ?? []).length === 0;
 
 /* The token that posts as this workspace's bot. `cli` capability configs are a plain string map (the manifest
- * is on the secret denylist rather than encrypted), and `discord` is the id the connector registers under —
+ * is on the secret denylist rather than encrypted), and `discord` is the id the connector registers under,
  * the same read the extension host does to hand the gateway its token. */
 const botTokenOf = async (services: Pick<Services, `capabilities`>): Promise<string | undefined> => {
     const capability = await services.capabilities.get(`discord`);
@@ -56,13 +56,13 @@ const botTokenOf = async (services: Pick<Services, `capabilities`>): Promise<str
     return token === undefined || token === `` ? undefined : token;
 };
 
-/* Discord answers 429 with the seconds to wait, and it means it — a retry that ignores the header earns a
+/* Discord answers 429 with the seconds to wait, and it means it, a retry that ignores the header earns a
  * longer ban than the one it skipped. Sleep exactly what it asked for plus a hair, up to MAX_RETRIES, then
  * give up and let the failure be the draft's error string. Every other non-2xx is final: a 403 is a permission
  * the owner has to grant, and hammering it changes nothing. */
 const post = async (url: string, init: RequestInit): Promise<Response> => {
     for (let attempt = 0; ; attempt++) {
-        // Bound a stalled connection — undici would otherwise wait about five minutes on headers.
+        // Bound a stalled connection, undici would otherwise wait about five minutes on headers.
         const response = await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
         if (response.status === 429 && attempt < MAX_RETRIES) {
             const body = (await response.json().catch(() => ({}))) as { retry_after?: number };
@@ -76,7 +76,7 @@ const post = async (url: string, init: RequestInit): Promise<Response> => {
     }
 };
 
-/* POST one draft into one channel. Throws with a sentence the queue can show as-is — this runs with nobody
+/* POST one draft into one channel. Throws with a sentence the queue can show as-is, this runs with nobody
  * watching, so the error IS the report. */
 export const postToDiscord = async (
     services: Pick<Services, `capabilities`>,

@@ -5,12 +5,12 @@ import { USAGE_LIMIT_ERROR_PREFIXES } from "@anthropic-ai/claude-agent-sdk";
  *
  * Two things end a turn without being anything the turn did: a spent subscription allowance, and a credential
  * the CLI has stopped trying to use. Neither arrives as a thrown error or under a category worth branching on
- * — each is filed under whatever the failing layer happened to pick, and each says what it is in a SENTENCE.
+ *, each is filed under whatever the failing layer happened to pick, and each says what it is in a SENTENCE.
  * That makes the sentence the one reliable signal, and matching the CLI's own prefixes classification rather
  * than text-sniffing.
  *
- * They live in one file because their difference only matters to RECOVERY — one waits for a reset instant, the
- * other re-mints a token (turn-resume.ts branches on exactly that) — while their sameness is what every other
+ * They live in one file because their difference only matters to RECOVERY, one waits for a reset instant, the
+ * other re-mints a token (turn-resume.ts branches on exactly that), while their sameness is what every other
  * caller needs: THIS TEXT IS NOT AN ANSWER. A caller that asked for a one-liner it will use as data (a commit
  * subject, a session title) has to refuse the family, not a member of it, because the family is the part that
  * grows. It grew once already: the naming path guarded the usage-limit sentence alone, the auth sentence
@@ -29,42 +29,42 @@ export const isUsageLimitText = (text: string): boolean => USAGE_LIMIT_ERROR_PRE
  *
  * The harness already hands the SDK a way to re-mint a token mid-turn (getOAuthToken in agent.ts), and for an
  * EXPIRED token that works: the CLI asks, takes the replacement, and carries on. It does not ask here. A token
- * that was superseded by a rotation — or revoked account-wide — still looks valid by the clock, so the CLI
+ * that was superseded by a rotation, or revoked account-wide, still looks valid by the clock, so the CLI
  * never reaches its refresh branch ("OAuth session expired and could not be refreshed") and takes the terminal
  * one instead, printing `Failed to authenticate. API Error: 401 …` and telling a human to run /login. Inside
  * this harness there is no /login to run and nobody watching an unattended turn to run it, so the turn simply
  * dies mid-work with everything it had done still in its session.
  *
  * Matched on the CLI's own prefix rather than on "401" or the word "revoked": the prefix is what the CLI writes
- * when it has stopped trying, which is precisely the condition worth resuming — an API error the CLI is still
+ * when it has stopped trying, which is precisely the condition worth resuming, an API error the CLI is still
  * retrying must not be mistaken for one it has abandoned. */
 const AUTH_FAILURE_PREFIX = "Failed to authenticate";
 
 export const isAuthFailureText = (text: string): boolean => text.startsWith(AUTH_FAILURE_PREFIX);
 
-// Neither condition is ever a name, a commit subject, or anything else a caller asked a model to produce — so
+// Neither condition is ever a name, a commit subject, or anything else a caller asked a model to produce, so
 // this is the predicate the one-shot seam and both naming guards read, and no caller of them names a member.
 export const isFailureSentence = (text: string): boolean => isUsageLimitText(text) || isAuthFailureText(text);
 
-/* A MODEL THAT ANSWERED THE ASKER INSTEAD OF THE ASK — the third kind of reply that is not data, and the only
+/* A MODEL THAT ANSWERED THE ASKER INSTEAD OF THE ASK, the third kind of reply that is not data, and the only
  * one here that is nobody's failure. The provider is healthy, the credential is good, the turn completed: the
  * model simply decided it could not do the job from what it was given and said so, politely, in the first
  * person.
  *
  * It reached us as a session title. A naming pass on a thin opening prompt came back with "I need more context
- * to name this session. What feature, surface, file, or system…", every guard above passed it — it is neither a
- * spent allowance nor a refused credential — and it was written down as the conversation's name at the highest
+ * to name this session. What feature, surface, file, or system…", every guard above passed it, it is neither a
+ * spent allowance nor a refused credential, and it was written down as the conversation's name at the highest
  * automatic rank, which made it final. The commit box then read that title, prefixed it, and filed `feat: i
  * need more context to name this session…` as a commit subject. One unguarded reply, two surfaces wrong.
  *
  * THE SHAPE IS THE SIGNAL, not the wording, because the wording is per-model and endless. Everything asked for
- * through these seams is a NOUN PHRASE — a name, a subject, a sentence about a diff — and none of them is
+ * through these seams is a NOUN PHRASE, a name, a subject, a sentence about a diff, and none of them is
  * addressed to anybody. So a reply that asks a question, opens in the first person, or apologises is a reply
  * about the request rather than an answer to it. The phrase list underneath catches the models that decline in
  * a flat declarative ("not enough information to…") and would otherwise slip past both tests.
  *
  * DELIBERATELY EAGER. A false positive costs one pass: the caller writes nothing, the old value stands, and the
- * next turn asks again. A false negative is permanent — a name that outranks every later automatic source, or a
+ * next turn asks again. A false negative is permanent, a name that outranks every later automatic source, or a
  * commit that goes into the history wearing a question. Given that trade, this leans toward refusing. */
 const DECLINE_OPENERS =
     /^(?:i|i'm|i am|i'd|i would|i've|my|we|sorry|apolog|unfortunately|please|could you|can you|to name|there(?:'s| is) (?:not|no)|without)\b/i;
@@ -85,30 +85,30 @@ const DECLINE_PHRASES = [
 
 export const isDeclinedAnswer = (text: string): boolean => {
     const clean = text.trim();
-    // Empty is not a decline — it is nothing, and every caller already treats it as nothing.
+    // Empty is not a decline, it is nothing, and every caller already treats it as nothing.
     if (clean === "") {
         return false;
     }
     return clean.includes("?") || DECLINE_OPENERS.test(clean) || DECLINE_PHRASES.some((phrase) => clean.toLowerCase().includes(phrase));
 };
 
-/* A SPENT ALLOWANCE IN SOMEBODY ELSE'S WORDS — the same condition as isUsageLimitText, for the providers whose
+/* A SPENT ALLOWANCE IN SOMEBODY ELSE'S WORDS, the same condition as isUsageLimitText, for the providers whose
  * wording the Claude Code SDK has no prefix list for.
  *
  * Kimi answers a spent Kimi Code plan with `403 You've reached your usage limit for this billing cycle`, and a
- * 403 is what the CLI prints its "Failed to authenticate" prefix over — so the frame reaches us coded as a
+ * 403 is what the CLI prints its "Failed to authenticate" prefix over, so the frame reaches us coded as a
  * refused CREDENTIAL and the user is told to reconnect an account that is in perfect health. Every routed
  * provider can do this to us: the harness only knows Anthropic's vocabulary, and it is reading somebody else's.
  *
  * This decides how a refusal is DESCRIBED, where believing the code over the sentence is what puts the wrong
- * sentence on the screen — so it is read at both places a description comes from: the frame's code
+ * sentence on the screen, so it is read at both places a description comes from: the frame's code
  * (error-frames.ts, above the auth branch it would otherwise be mistaken for) and the durable refusal filed
  * against the account (agent.routes.ts).
  *
  * The PHRASES are the conservative half, and stay that way: "rate limit" is deliberately absent, because it
  * appears in the transient retries the CLI is still working through, and reading one of those as a spent plan
  * would park a turn that was about to succeed. What a turn does next still keys off the prefixes above, which
- * say what the CLI has stopped trying — something this cannot know. */
+ * say what the CLI has stopped trying, something this cannot know. */
 const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle"];
 
 export const mentionsSpentAllowance = (text: string): boolean =>
@@ -119,15 +119,15 @@ export const mentionsSpentAllowance = (text: string): boolean =>
  * organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or
  * ask your admin to enable access".
  *
- * It matched NEITHER predicate above — not a usage-limit prefix, and it does not start with "Failed to
- * authenticate" — so the frame went out uncoded, nothing durable was written about it, and the only trace of a
+ * It matched NEITHER predicate above, not a usage-limit prefix, and it does not start with "Failed to
+ * authenticate", so the frame went out uncoded, nothing durable was written about it, and the only trace of a
  * seat that had been taken away was a red line in one chat. Meanwhile the plan's usage endpoint kept answering
  * (a seat governs Claude Code, not whether the plan publishes pools), so the account picker went on drawing a
  * fresh, confident ring over an account that could not run a single turn. That gap is what this exists to close.
  *
  * A PHRASE, not a prefix, and the difference is admitted rather than papered over: the two predicates above
  * match what the CLI itself writes when it has given up, which is why they can be exact. This sentence is the
- * API's own prose reaching us through the CLI's error text, so there is no prefix to anchor on — the same
+ * API's own prose reaching us through the CLI's error text, so there is no prefix to anchor on, the same
  * position SPENT_ALLOWANCE_PHRASES is in, and the same answer. A wording we have not seen falls through to a
  * plain uncoded failure, which is exactly where it stood before; this list grows when one shows up. */
 const NOT_ENTITLED_PHRASES = ["disabled claude subscription access", "claude code is not available"];

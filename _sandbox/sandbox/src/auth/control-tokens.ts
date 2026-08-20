@@ -5,16 +5,16 @@ import { jsonFile } from "../store/json-file.js";
 import { objectParse } from "../store/unknown-keys.js";
 import { tokenEquals } from "./auth.js";
 
-/* Control tokens: the credential anything OUTSIDE the browser presents to drive this sandbox — the ACP
- * editor bridge today, a CLI and an MCP server next — via the `x-intentic-control` header. The sync pairing
+/* Control tokens: the credential anything OUTSIDE the browser presents to drive this sandbox, the ACP
+ * editor bridge today, a CLI and an MCP server next, via the `x-intentic-control` header. The sync pairing
  * precedent (owner mints in the browser, a program redeems via header) made durable: PERSISTED (it
  * authenticates every call, not a one-time enrollment — /work/.intentic survives rebuilds with the
  * workspace), HASHED at rest (sha256; the raw `ict_…` value is returned exactly once at mint), and REVOCABLE
  * per token.
  *
  * A token carries its SCOPE, chosen by the owner at mint. Scope is stored WITH the token rather than derived
- * from the caller because the daemon cannot tell an editor from a CLI from a CI job — they are all "a program
- * holding a secret" — so the only honest moment to decide how far one reaches is when a person mints it.
+ * from the caller because the daemon cannot tell an editor from a CLI from a CI job, they are all "a program
+ * holding a secret", so the only honest moment to decide how far one reaches is when a person mints it.
  *
  * Say the cost plainly on the mint card: at `drive` and above, a stolen token is the agent's reach, because
  * driving an agent means editing files and running commands in this sandbox. `read` is the one that is
@@ -22,7 +22,7 @@ import { tokenEquals } from "./auth.js";
  */
 
 // What a token may reach, widening downward. Each is a superset of the one above it EXCEPT `editor`, which is
-// its own narrow slice (one conversation) rather than a rung on the ladder — an editor bridge has no business
+// its own narrow slice (one conversation) rather than a rung on the ladder, an editor bridge has no business
 // reading the fleet, and saying so costs one row.
 export const CONTROL_SCOPES = ["editor", "read", "drive", "land"] as const;
 export type ControlScope = (typeof CONTROL_SCOPES)[number];
@@ -42,7 +42,7 @@ export interface ControlTokenSummary {
 }
 
 export interface ControlTokens {
-    // Returns the RAW token once — only its sha256 is persisted.
+    // Returns the RAW token once, only its sha256 is persisted.
     readonly mint: (label: string, scope: ControlScope) => Promise<{ id: string; token: string }>;
     // The presented token's scope, or undefined when no stored token matches. One lookup answers both "is this
     // real" and "how far does it go", which is what the middleware needs and what a bare boolean could not say.
@@ -90,7 +90,7 @@ export const fileControlTokens = (path: string): ControlTokens => {
 /* WHAT EACH SCOPE REACHES.
  *
  * Route paths are matched as the daemon receives them (`/agents/abc/land`), not as the contract templates
- * them (`/agents/{id}/land`) — these run inside the middleware, before any router has parsed a param.
+ * them (`/agents/{id}/land`), these run inside the middleware, before any router has parsed a param.
  *
  * Pure, and a total Record over the scope union, so a new scope is a compile error until somebody writes down
  * what it reaches, and every allowlist is unit-tested without a request.
@@ -100,7 +100,7 @@ type ScopeReach = (method: string, path: string) => boolean;
 const oneOf = (path: string, ...paths: readonly string[]): boolean => paths.includes(path);
 
 // The agent-conversation seam, and nothing else: run a turn, answer a card it parked on, read the transcripts
-// and search the tree. This is the ACP bridge's whole job — it drives ONE conversation from an editor, and it
+// and search the tree. This is the ACP bridge's whole job, it drives ONE conversation from an editor, and it
 // deliberately cannot see the fleet, land work, or read a capability.
 const editorReach: ScopeReach = (method, path) => {
     if (method === "POST") {
@@ -109,7 +109,7 @@ const editorReach: ScopeReach = (method, path) => {
     return method === "GET" && (path === "/sessions" || path.startsWith("/sessions/") || path === "/workspace/search");
 };
 
-// Observation only — the fleet board's data, for a dashboard, a status check, or a phone script. The one scope
+// Observation only, the fleet board's data, for a dashboard, a status check, or a phone script. The one scope
 // that is genuinely safe to paste somewhere lossy, and the reason the ladder has a bottom rung at all.
 const readReach: ScopeReach = (method, path) => {
     if (method === "GET") {
@@ -142,7 +142,7 @@ const driveReach: ScopeReach = (method, path) => {
 };
 
 // `drive` plus the irreversible half: merging a worktree into the main tree, and throwing one away. Separate
-// because the common arrangement is a program that works and a person who decides — CI opens the diff, a human
+// because the common arrangement is a program that works and a person who decides. CI opens the diff, a human
 // presses land. A token that can do both is a choice someone should have to make on purpose.
 const landReach: ScopeReach = (method, path) => {
     if (driveReach(method, path)) {

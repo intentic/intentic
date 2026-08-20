@@ -11,13 +11,13 @@ import type { DismissedRecommendation } from "./dismissals-store.js";
  *
  * The motivating case is still the one that reads worst: the Docker Engine is baked into the base image but
  * dormant, and the container stays unprivileged until the docker capability is added. So a checked-out repo whose
- * dev database is a compose service — `pnpm db:up` in this very repo — fails with a bare "Cannot connect to the
+ * dev database is a compose service, `pnpm db:up` in this very repo, fails with a bare "Cannot connect to the
  * Docker daemon", which names neither the capability nor the one-time privileged rebuild that turns it on. The
  * same shape covers the connectors: a workspace of GitHub repos gets an agent that cannot read one issue, and
  * nothing about that failure says a card exists.
  *
- * WHY THIS IS A FILE SCAN AND NOT AN AGENT TURN. Every signal here is a fact — a remote's hostname, a file's
- * name — so a scan answers in milliseconds, for free, with the artifact it read. A model asked the same question
+ * WHY THIS IS A FILE SCAN AND NOT AN AGENT TURN. Every signal here is a fact, a remote's hostname, a file's
+ * name, so a scan answers in milliseconds, for free, with the artifact it read. A model asked the same question
  * returns an impression, and an impression cannot be rendered as evidence the reader can check. It also has to
  * work BEFORE an AI account is connected, which is exactly when these recommendations matter most and exactly
  * when no turn can run.
@@ -32,7 +32,7 @@ const COMPOSE_FILES = new Set(["docker-compose.yml", "docker-compose.yaml", "com
 // Komodo's own resource-sync files, which is what a repo that drives a Komodo core carries: `komodo.toml`, and
 // the `komodo.<anything>.toml|yaml` spellings its docs use for split syncs.
 const KOMODO_FILE = /^komodo\.[\w.-]*(toml|ya?ml)$/i;
-// A compose stack that RUNS Komodo — the other half of how people have one, and the half that says the core is
+// A compose stack that RUNS Komodo, the other half of how people have one, and the half that says the core is
 // theirs to point at rather than somebody else's.
 const KOMODO_IMAGE = /ghcr\.io\/moghtech\/komodo/i;
 // Depth 2 is the shape /work actually takes: loose files at the root, and one directory per repo below it.
@@ -83,7 +83,7 @@ const scanFiles = async (dir: string, prefix: string, depth: number): Promise<Sc
 };
 
 // Whether a card already has a connection. The docker card IS its own kind; every connector shares the single
-// `cli` kind and is told apart by the provider its card pins — which is also why a recommendation names a CARD.
+// `cli` kind and is told apart by the provider its card pins, which is also why a recommendation names a CARD.
 const isConnected = (active: readonly Capability[], card: string): boolean =>
     active.some((capability) => capability.kind === card || (capability.kind === "cli" && capability.config.provider === card));
 
@@ -97,7 +97,7 @@ interface RepoRemote {
     readonly repo: string;
     readonly host: string;
     readonly project: string;
-    // Whether this repo also carries a GitLab pipeline — what identifies a self-hosted GitLab, whose hostname
+    // Whether this repo also carries a GitLab pipeline, what identifies a self-hosted GitLab, whose hostname
     // says nothing on its own.
     readonly gitlabCi: boolean;
 }
@@ -148,7 +148,7 @@ export const capabilityRecommendations = async (
         });
     }
     // A hostname alone only catches gitlab.com and the instances polite enough to be named after it; the
-    // pipeline file next to the remote is what identifies the rest, and it identifies them exactly — which is
+    // pipeline file next to the remote is what identifies the rest, and it identifies them exactly, which is
     // what lets the instance url be filled in rather than asked for.
     const gitlab = remotes.find((remote) => remote.host === "gitlab.com" || remote.host.includes("gitlab") || remote.gitlabCi);
     if (wanted.includes("gitlab") && gitlab !== undefined) {
@@ -162,7 +162,7 @@ export const capabilityRecommendations = async (
     const files = await scanFiles(root, "", SCAN_DEPTH);
     if (wanted.includes("komodo")) {
         const sync = files.komodo[0];
-        // Reading the compose files is the price of telling "runs Komodo" from "runs anything else" — only paid
+        // Reading the compose files is the price of telling "runs Komodo" from "runs anything else", only paid
         // while the komodo card is still unconnected, and only for the head of each file.
         const stacks = await Promise.all(files.compose.map(async (path) => (KOMODO_IMAGE.test(await headOf(join(root, path))) ? path : undefined)));
         const evidence = sync ?? stacks.find((path) => path !== undefined);

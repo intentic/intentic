@@ -5,13 +5,13 @@ import type { OrpcContext } from "../context.js";
 
 export type TranslatorRoutesDeps = Pick<Services, "cliProxy">;
 
-/* THE TRANSLATOR'S OWN WORDS, ALL THE WAY TO THE CARD — the one thing every route here has to preserve.
+/* THE TRANSLATOR'S OWN WORDS, ALL THE WAY TO THE CARD, the one thing every route here has to preserve.
  *
  * oRPC replaces the message of any throw that is not an ORPCError with a bare "Internal server error", so these
  * four handlers used to delete the only useful part of every failure they could produce. And every one of those
  * failures is already a sentence written for the person looking at Sandbox ▸ Agent: the image has no translator
  * binary and wants a rebuild, Google's authorize URL didn't come back, CLIProxyAPI rejected a pasted redirect
- * URL because its handshake had expired. All of them arrived as "Internal server error" — which is how a user
+ * URL because its handshake had expired. All of them arrived as "Internal server error", which is how a user
  * whose Google credentials had lapsed, and every new user on an image without the translator pack, got a string
  * that names no cause and suggests no action.
  *
@@ -31,7 +31,7 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
 
 // Routed-provider subscriptions (Sandbox ▸ Agent). The bundled translator (CLIProxyAPI) runs codex/grok/kimi/gemini
 // UNDER the Claude Code harness on the user's subscription, so `connect` starts an OAuth login and CLIProxyAPI
-// finishes it in the background — the UI polls `accounts` until connected. Codex, Grok and Kimi use device login
+// finishes it in the background, the UI polls `accounts` until connected. Codex, Grok and Kimi use device login
 // that need nothing further; Google's browser redirect dead-ends on a loopback URL only this container binds, so
 // the user pastes that URL back through `complete`. A provider holds any number of accounts side by side (the
 // translator balances across them); `disconnect` clears ONE account's tokens by its auth-file name.

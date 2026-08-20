@@ -6,22 +6,22 @@ import { promisify } from "node:util";
  * The Environment tab's contents view shows a version beside each tool, and there are two places it could come
  * from: the install line in the recipe, or the tool itself. It has to be the tool. A recipe pins nothing at all
  * for half these entries (`bun`, and a rustup line whose toolchain is `stable`), and where it DOES pin a number
- * that number describes what the next rebuild would install — so an overlay that is approved and not yet built
+ * that number describes what the next rebuild would install, so an overlay that is approved and not yet built
  * would report versions for tools the container does not have. Reading them back from the binaries makes the
  * whole view true by construction, and it makes per-item state exact for free: an item the recipe contains and
  * this module cannot find is precisely one that arrives with the next rebuild.
  *
- * A probe is one of the reads that terminal-run.ts exempts from the visible-tmux rule — nothing here is a user
+ * A probe is one of the reads that terminal-run.ts exempts from the visible-tmux rule, nothing here is a user
  * action, and forty version checks in the terminals panel would be noise, not transparency. */
 
 const execFileAsync = promisify(execFile);
 
 // The flags tools answer a version on, in the order worth trying. `-version` is second because it is ffmpeg's
 // (and java's) spelling and nothing else's; a tool that takes neither is reported as having no version, never as
-// missing — the difference decides whether the row says "arrives after rebuild".
+// missing, the difference decides whether the row says "arrives after rebuild".
 const VERSION_FLAGS = ["--version", "-version"];
 
-/* Long enough for a JVM-ish cold start on a machine that is busy — the whole view probes dozens of commands at
+/* Long enough for a JVM-ish cold start on a machine that is busy, the whole view probes dozens of commands at
  * once, and a box already running a build spawns them far slower than an idle one. A probe that times out reads
  * as "no version", the same as one that answers nothing, so a deadline set for an idle machine quietly turns a
  * present tool into a versionless one; that is a wrong statement, not a slow one, which is why this is generous
@@ -45,14 +45,14 @@ const cache = new Map<string, Probe>();
 // click rather than a restart.
 export const clearVersionCache = (): void => cache.clear();
 
-/* The version out of whatever the tool printed. Tools are wildly inconsistent here — `rustc 1.90.0`,
- * `ffmpeg version 6.1.1-3`, `Docker version 27.3.1, build ce1223035a`, a bare `1.2.4` from bun — but they all
+/* The version out of whatever the tool printed. Tools are wildly inconsistent here, `rustc 1.90.0`,
+ * `ffmpeg version 6.1.1-3`, `Docker version 27.3.1, build ce1223035a`, a bare `1.2.4` from bun, but they all
  * lead with a dotted number, so the first one is the answer. Build metadata after it is dropped: the row has
  * space for a version, and "6.1.1" is the part anyone compares. */
 export const parseVersion = (output: string): string | undefined => /(\d+\.\d+(?:\.\d+)?)/.exec(output)?.[1];
 
-/* ONE TOOL'S VERSION, or undefined when it has none to give. `found` is the load-bearing half: a binary that is
- * not on PATH throws ENOENT, and everything else — a non-zero exit, an unknown flag, a timeout — still proves
+/* ONE TOOL'S VERSION, or undefined when it has none to give. `found` is the half that matters: a binary that is
+ * not on PATH throws ENOENT, and everything else, a non-zero exit, an unknown flag, a timeout, still proves
  * the command exists, which is why those fall through to the next flag and then to "present, version unknown"
  * rather than to "missing". Reporting a tool as absent because it dislikes `--version` would put a working
  * toolchain behind a "needs a rebuild" badge. */

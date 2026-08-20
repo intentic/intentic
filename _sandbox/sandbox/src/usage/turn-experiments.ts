@@ -4,15 +4,15 @@ import type { UsageStore } from "./usage-store.js";
 /* THE TURN-LEVEL EXPERIMENTS, read back out of the spend ledger: what the terse steer and the iq search
  * teaching are each worth, measured rather than asserted.
  *
- * A cleaned command carries its own baseline — the raw capture and the emitted result come out of the same
- * event — so the input-side report can be exact. A turn cannot: there is no second run of the same turn to see
+ * A cleaned command carries its own baseline, the raw capture and the emitted result come out of the same
+ * event, so the input-side report can be exact. A turn cannot: there is no second run of the same turn to see
  * what it would have cost unsteered. The only honest number therefore comes from a holdout, which flips a
  * fraction of eligible work to the control arm and stamps which arm ran onto the ledger. Terse output flips
  * turns; iq search teaching flips whole conversations so a session that already learned the skill can never be
  * relabelled as cold on its next turn.
  *
  * BOTH EXPERIMENTS SHARE EVERY LINE OF THE STATISTICS and differ only in which field carries the arm and what
- * the turns are judged on — so the metric is a parameter, not a second copy of Welch. A turn can sit in both at
+ * the turns are judged on, so the metric is a parameter, not a second copy of Welch. A turn can sit in both at
  * once (the flips are independent), which is exactly why each is read as its own two populations: the other
  * experiment's coin flip is then just noise, distributed evenly across both of these arms.
  *
@@ -20,13 +20,13 @@ import type { UsageStore } from "./usage-store.js";
  * ran before touching a file, off one coin flip, because the two answer different halves of the same question.
  * They are readings, not experiments: the arms underneath them are the same turns.
  *
- * WHY A NUMBER IS WITHHELD, TWICE. Per-turn quantities are wildly heteroscedastic — one turn is "yes", the next
- * is a forty-tool refactor — so a delta over a handful of turns is noise wearing a percentage sign. The first
+ * WHY A NUMBER IS WITHHELD, TWICE. Per-turn quantities are wildly heteroscedastic, one turn is "yes", the next
+ * is a forty-tool refactor, so a delta over a handful of turns is noise wearing a percentage sign. The first
  * gate is arm size: below MIN_ARM_TURNS the arms are reported without a delta, which the screen shows as
  * "measuring".
  *
  * Clearing it turned out not to be enough. The terse steer reached its thirtieth control turn and published
- * +31.2% ± 35.1pp — an interval from −3.4% to +66.7%, which is no measurement at all — and it published it
+ * +31.2% ± 35.1pp, an interval from −3.4% to +66.7%, which is no measurement at all, and it published it
  * against the arm that had happened to draw the longer tasks. So the second gate is the margin itself: an
  * interval that spans zero yields its resolution and no claim. Between them the two gates are one rule, that a
  * number reaches the screen when it means something and not when it merely exists. */
@@ -35,7 +35,7 @@ import type { UsageStore } from "./usage-store.js";
 // starts to hold for a distribution this skewed; it is also small enough to be reachable in a day of real use.
 export const MIN_ARM_TURNS = 30;
 
-// 95% two-sided normal quantile — the margin is a normal approximation (Welch), which is what MIN_ARM_TURNS
+// 95% two-sided normal quantile, the margin is a normal approximation (Welch), which is what MIN_ARM_TURNS
 // buys. A t-quantile would differ in the third digit at these sample sizes and needs a table this file would
 // otherwise have no reason to carry.
 const Z_95 = 1.96;
@@ -47,7 +47,7 @@ const Z_95 = 1.96;
  * so a fifth off the narration moved the reported number by 1.6% and the measurement was left reporting which
  * arm drew the bigger tasks.
  *
- * The search teaching is judged on SEARCHES, for exactly that reason — it changes how the agent searches, so
+ * The search teaching is judged on SEARCHES, for exactly that reason, it changes how the agent searches, so
  * searches are what can see it. Twice over, because the two readings fail differently and neither alone is
  * enough: `searchCalls` is every search the turn ran, which still grows with the size of the job;
  * `openingSearches` stops at the first file the turn opened or changed, which is the orientation the teaching
@@ -55,7 +55,7 @@ const Z_95 = 1.96;
  * both. An effect that shows only in the first is the arms drawing different-sized work again.
  *
  * A metric can also be UNMEASURED on a turn (a row written before it was recorded), which is not the same as
- * zero — `of` returns undefined there and the turn leaves the population rather than dragging the mean down. A
+ * zero, `of` returns undefined there and the turn leaves the population rather than dragging the mean down. A
  * turn that genuinely searched nothing records a zero and stays: it dilutes both arms alike, where dropping it
  * would filter the population by an outcome the treatment moves.
  *
@@ -82,7 +82,7 @@ interface Arm {
 }
 
 const armOfValues = (values: readonly number[]): Arm => {
-    // A turn the metric was never recorded on is not a turn worth zero — it is a turn from before the metric
+    // A turn the metric was never recorded on is not a turn worth zero, it is a turn from before the metric
     // existed, and averaging it in would pull both arms toward nothing at whatever rate the ledger happens to
     // hold old rows.
     if (values.length === 0) {
@@ -96,7 +96,7 @@ const armOfValues = (values: readonly number[]): Arm => {
 const armOf = (turns: readonly UsageTurn[], metric: Metric): Arm => armOfValues(turns.map(metric.of).filter((value) => value !== undefined));
 
 /* The resolution this is aiming AT. A mechanism that moves its own metric by less than a tenth is not one
- * anybody would act on — the turn-to-turn spread of what people ask for swamps it — so ±10pp is where the
+ * anybody would act on, the turn-to-turn spread of what people ask for swamps it, so ±10pp is where the
  * experiment stops being worth more data. It is a judgement, stated once here rather than left implicit in an
  * estimate that quietly chases whatever the arms happen to show today. */
 const RESOLVING_MARGIN_PCT = 10;
@@ -105,12 +105,12 @@ const RESOLVING_MARGIN_PCT = 10;
  *
  * AIMED AT A FIXED RESOLUTION, not at the effect currently on screen. Targeting "enough to clear today's delta"
  * was the first attempt and it reported FOURTEEN more turns against nine days of data that had never once
- * resolved — because the observed delta is mostly noise, and an estimate divided by noise inherits it, promising
+ * resolved, because the observed delta is mostly noise, and an estimate divided by noise inherits it, promising
  * an answer next Tuesday for as long as the noise happens to be large. Against a fixed ±10pp the same ledger
  * asks for a few hundred, which is the true shape of the thing: this holdout is not close.
  *
  * The margin falls with the square root of the smaller arm, so the control arm scales by (margin ÷ target)².
- * Only that arm is scaled, though the treatment arm grows alongside it — which makes this an OVERestimate, and
+ * Only that arm is scaled, though the treatment arm grows alongside it, which makes this an OVERestimate, and
  * an order-of-magnitude figure either way. It is read to tell "a few more days" from "not at this holdout", and
  * it is honest at that resolution and no finer. */
 const controlTurnsNeededFor = (offTurns: number, marginPct: number): number | undefined => {
@@ -121,7 +121,7 @@ const controlTurnsNeededFor = (offTurns: number, marginPct: number): number | un
 };
 
 // One metric over one experiment's two populations. The arms arrive already split, because every reading of an
-// experiment reads the SAME split — the coin flip happened once, and only the counting differs.
+// experiment reads the SAME split, the coin flip happened once, and only the counting differs.
 const readingOf = (onTurns: readonly UsageTurn[], offTurns: readonly UsageTurn[], metric: Metric): TurnMetricReading => {
     return readingOfArms(armOf(onTurns, metric), armOf(offTurns, metric), metric);
 };
@@ -141,7 +141,7 @@ const readingOfArms = (on: Arm, off: Arm, metric: Metric, claimRealizedSaving = 
     const standardError = Math.sqrt(on.variance / on.turns + off.variance / off.turns);
     const deltaPct = round1(((on.mean - off.mean) / off.mean) * 100);
     const marginPct = round1(((Z_95 * standardError) / off.mean) * 100);
-    /* THE INTERVAL SPANS ZERO, so there is no effect to report — only a resolution. Clearing MIN_ARM_TURNS
+    /* THE INTERVAL SPANS ZERO, so there is no effect to report, only a resolution. Clearing MIN_ARM_TURNS
      * proves the normal approximation holds, not that it has resolved anything: the terse steer crossed its
      * thirtieth control turn and published +31.2% ± 35.1pp, an interval from −3.4% to +66.7%. Publishing the
      * midpoint of that is publishing noise with a sign on it, and a reader acts on the sign.
@@ -156,7 +156,7 @@ const readingOfArms = (on: Arm, off: Arm, metric: Metric, claimRealizedSaving = 
         ...arms,
         marginPct,
         deltaPct,
-        // What the mechanism was worth over the turns that actually ran with it — the window's realized saving,
+        // What the mechanism was worth over the turns that actually ran with it, the window's realized saving,
         // not an extrapolation over turns it never touched.
         ...(claimRealizedSaving ? { saved: metric.round((off.mean - on.mean) * on.turns) } : {}),
     };
@@ -226,13 +226,13 @@ const conversationExperimentOf = (turns: readonly UsageTurn[], metrics: readonly
 const experimentOf = (
     turns: readonly UsageTurn[],
     arm: (turn: UsageTurn) => boolean | undefined,
-    // Headline first — the screens take the head for the big number and the tail as the lines under it, which
+    // Headline first, the screens take the head for the big number and the tail as the lines under it, which
     // is why the tuple shape travels all the way from here to the contract rather than being an array anyone
     // downstream has to check for emptiness.
     metrics: readonly [Metric, ...Metric[]],
 ): TurnExperiment | undefined => {
     // Only turns the experiment applied to. A turn with no arm stamped had the mechanism out of play entirely
-    // (a custom system prompt drops the steer, and so does the experiment being off) — pooling those into the
+    // (a custom system prompt drops the steer, and so does the experiment being off), pooling those into the
     // off-arm would compare the treated turns against a population selected by something other than the coin
     // flip.
     const on = turns.filter((turn) => arm(turn) === true);

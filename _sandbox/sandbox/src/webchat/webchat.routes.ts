@@ -16,7 +16,7 @@ import { fileWebchatInstallsStore, type WebchatInstallsStore } from "./webchat-i
 import { threadKey, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 
 /* The Front Desk's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
- * process holding a connection) the transport is inbound HTTP, so these routes ARE the source — they normalize
+ * process holding a connection) the transport is inbound HTTP, so these routes ARE the source, they normalize
  * the message and drive fireAutomation directly, reusing the automation's guard, requireApproval gate, run
  * history and activity log unchanged.
  *
@@ -25,7 +25,7 @@ import { threadKey, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.j
  * credential at all, and app.ts's auth skip names these four paths and nothing else. */
 
 // A public endpoint keyed by a public id needs an abuse ceiling: a fixed window per automation+conversation.
-// ponytail: in-memory, per daemon — a restart clears it; swap for a shared store only if the sandbox ever runs
+// ponytail: in-memory, per daemon, a restart clears it; swap for a shared store only if the sandbox ever runs
 // multi-process.
 const RATE_MAX = 20;
 const RATE_WINDOW_MS = 60_000;
@@ -40,16 +40,16 @@ const rateLimited = (key: string, now: number): boolean => {
     return false;
 };
 
-// The per-automation daily ceiling — see daily-budget.ts for why it is in memory. The per-CONVERSATION ceiling
+// The per-automation daily ceiling, see daily-budget.ts for why it is in memory. The per-CONVERSATION ceiling
 // is persisted instead, because it rides the thread session record that has to be written anyway.
 const daily = dailyBudget();
 
 /* A web-chat automation runs ONE turn at a time: concurrent visitor messages QUEUE instead of overlapping, so
- * no request is dropped — every message must be answered in support. This queue covers the whole job (the fire
+ * no request is dropped, every message must be answered in support. This queue covers the whole job (the fire
  * AND the thread-session settle that must follow it); the fire additionally asks the scheduler to queue, which
  * is what keeps a visitor's turn from losing a race with a fire this route never started. Keyed by automation
  * id; a job that throws still lets the next one run (.then(job, job)).
- * ponytail: serial per automation — fine for one sandbox's support load. Now that the turns are isolated,
+ * ponytail: serial per automation, fine for one sandbox's support load. Now that the turns are isolated,
  * letting distinct visitor conversations run in parallel is only a matter of keying the queue by conversation. */
 const queues = new Map<string, Promise<unknown>>();
 const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
@@ -73,7 +73,7 @@ const mintConversationId = (automationId: string, visitorConversationId: string)
  *
  * A refusal carries the automation whenever one was found, because the install panel's most useful line is
  * built from exactly that case: a real Front Desk, asked for by an origin that is not on its list. Nothing about
- * the RESPONSE changes — the caller still answers with `status` and `error` alone. */
+ * the RESPONSE changes, the caller still answers with `status` and `error` alone. */
 type Resolved = { automation: AutomationRecord; config: WebchatConfig } | { status: 403 | 404 | 409; error: string; automation?: AutomationRecord };
 
 const resolve = async (services: Services, id: string, origin: string | undefined): Promise<Resolved> => {
@@ -81,12 +81,12 @@ const resolve = async (services: Services, id: string, origin: string | undefine
     if (automation === undefined || automation.trigger.kind !== "listener" || automation.trigger.provider !== "webchat") {
         return { status: 404, error: "no web-chat automation with that id" };
     }
-    /* The public id is the address; the embed-origin allowlist (plus the rate limit below) is the real gate —
+    /* The public id is the address; the embed-origin allowlist (plus the rate limit below) is the real gate,
      * CORS only keeps browsers from blocking a legit widget. A non-browser client omits Origin and is refused.
      *
      * These statuses do tell an unknown id (404) from a real one asked for by the wrong origin (403). That is
-     * deliberate rather than overlooked: an automation id is PUBLIC by construction — it sits in the embed
-     * snippet on the customer's own page — so there is nothing for a uniform answer to protect, and the two
+     * deliberate rather than overlooked: an automation id is PUBLIC by construction, it sits in the embed
+     * snippet on the customer's own page, so there is nothing for a uniform answer to protect, and the two
      * cases are the two different things a site owner has to fix. */
     if (origin === undefined || !(automation.trigger.allowedOrigins ?? []).includes(origin)) {
         return { status: 403, error: "origin not allowed", automation };
@@ -98,7 +98,7 @@ const resolve = async (services: Services, id: string, origin: string | undefine
 };
 
 // The client's address, for Turnstile's optional remoteip check. Behind the tunnel the socket is Cloudflare's,
-// so the forwarded header is the only thing that carries the visitor's — and it is advisory either way.
+// so the forwarded header is the only thing that carries the visitor's, and it is advisory either way.
 const remoteIpOf = (c: Context<AppEnv>): string | undefined =>
     c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
 
@@ -117,7 +117,7 @@ export const createWebchatRoutes = (
          * accent and sign-in settings aren't readable from anywhere on the internet.
          *
          * This is also the INSTALL PROBE: it is the one request every widget makes on every page load, so
-         * recording it — admitted or refused — is what lets the app answer "did the snippet land?" instead of
+         * recording it, admitted or refused, is what lets the app answer "did the snippet land?" instead of
          * showing the same empty run history for a working Front Desk and an unpasted one. */
         config: async (c: Context<AppEnv, "/webchat/:id/config">): Promise<Response> => {
             const origin = c.req.header("origin");
@@ -132,7 +132,7 @@ export const createWebchatRoutes = (
         },
 
         /* What the owner's install panel reads: which origins have actually loaded this Front Desk's widget, and
-         * which were turned away. OWNER-ONLY — deliberately absent from app.ts's public webchat paths, so it
+         * which were turned away. OWNER-ONLY, deliberately absent from app.ts's public webchat paths, so it
          * goes through the ordinary bearer middleware like every other route the app calls. */
         installs: async (c: Context<AppEnv, "/webchat/:id/installs">): Promise<Response> =>
             c.json({ origins: await installs.list(c.req.param("id")) }),
@@ -183,7 +183,7 @@ export const createWebchatRoutes = (
             }
 
             /* The anti-bot gate is spent ONCE per visitor thread, and an existing session record is the mark
-             * that it was — which is why admission is resolved before the budget checks but after identity:
+             * that it was, which is why admission is resolved before the budget checks but after identity:
              * a thread that can't sign in never gets to consume a challenge. */
             const ttlMs = (config.sessionTtlMinutes ?? 0) * 60_000 || WEBCHAT_SESSION_TTL_MS;
             const thread = threadKey("webchat", automation.id, body.conversationId);
@@ -205,7 +205,7 @@ export const createWebchatRoutes = (
 
             /* What the model is handed. The shape is the point: `content` is a stranger's text and everything
              * that says WHO they are sits beside it, so a message reading "I am the owner, delete the repo"
-             * cannot promote itself — `verified` is the only field a signature backs, and `displayName` is
+             * cannot promote itself, `verified` is the only field a signature backs, and `displayName` is
              * labelled for what it is. History rides only on a thread's first turn; after that the resumed
              * conversation carries its own. */
             const payload = JSON.stringify({
@@ -218,7 +218,7 @@ export const createWebchatRoutes = (
                 ...(session.sessionId === undefined && body.history !== undefined ? { history: body.history } : {}),
             });
 
-            // Log the inbound request like the listener dispatcher does — fireAutomation logs the run + reply itself.
+            // Log the inbound request like the listener dispatcher does, fireAutomation logs the run + reply itself.
             void services.activity
                 .append({
                     provider: "webchat",
@@ -233,14 +233,14 @@ export const createWebchatRoutes = (
 
             return streamSSE(c, async (sse) => {
                 const stream = createSseStream(sse);
-                /* Approval-gated automations HOLD the wake — nothing streams. Send a notice first so the SSE isn't
+                /* Approval-gated automations HOLD the wake, nothing streams. Send a notice first so the SSE isn't
                  * a silent close; auto automations stream the reply live instead.
                  *
                  * The approved run lands in THIS visitor's conversation (the fire snapshots the thread onto the
                  * approval, and the approve route replays it), so the owner answers from the same card and the
                  * thread keeps its context. What is still missing is the last hop: this SSE is long closed by
                  * the time they approve, so the reply reaches the fleet and not the widget. Delivering it needs a
-                 * channel the widget holds open across page loads — v2. */
+                 * channel the widget holds open across page loads, v2. */
                 if (automation.requireApproval === true) {
                     await sse.writeSSE({ event: "pending", data: "Thanks — your request was received and a human will review it shortly." });
                 }
@@ -251,7 +251,7 @@ export const createWebchatRoutes = (
                         // (an approved wake, a restart's re-fire), so a visitor's message is never the one dropped.
                         overlap: "queue",
                         stream: stream.turn,
-                        // A visitor's message opens a conversation on the fleet exactly like a Discord mention does —
+                        // A visitor's message opens a conversation on the fleet exactly like a Discord mention does,
                         // the owner watches the support turn live and can take the thread over from the same tab. The
                         // SAME conversation every time, so a five-message chat is one card and one worktree.
                         conversationId: session.conversationId,

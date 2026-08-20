@@ -11,39 +11,39 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { isValidSessionName } from "./terminal-session.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 
-// One interactive PTY the browser drives over a WebSocket — the sandbox's "open a terminal in here" surface, so
+// One interactive PTY the browser drives over a WebSocket, the sandbox's "open a terminal in here" surface, so
 // the owner can watch processes, re-run a failed dev command and see WHY it failed, and generally poke around.
 // The container runs as root and IS the isolation boundary (the agent already has an autonomous root shell), so
 // a shell for the authenticated owner adds no new trust surface. The PTY is a `tmux attach` client, not the shell
 // itself: the tmux server outlives this socket, so a reload/drop kills only the client (onClose below) while the
-// session + its running processes survive — reconnecting re-attaches with a full screen redraw.
+// session + its running processes survive, reconnecting re-attaches with a full screen redraw.
 
-// Backpressure watermarks: a slow/stalled browser lets the socket's send buffer grow — past HIGH stop draining
+// Backpressure watermarks: a slow/stalled browser lets the socket's send buffer grow, past HIGH stop draining
 // the pty (the kernel buffer fills and the tmux client blocks on write; tmux coalesces redraws for slow clients,
 // so the flooding child never deadlocks), resume once it drains below LOW.
 const BUFFER_HIGH = 1_048_576;
 const BUFFER_LOW = 262_144;
 const DRAIN_POLL_MS = 100;
 // Protocol-level liveness: browsers answer ws pings automatically, so a missed pong means the peer is gone
-// (half-open TCP) — terminate() fires onClose, which releases the tmux attach client.
+// (half-open TCP), terminate() fires onClose, which releases the tmux attach client.
 const LIVENESS_MS = 30_000;
 // Bound on pre-pty buffering: node-server does NOT await the async onOpen, so frames arrive while the JWT
-// check is in flight — they're queued and replayed after spawn; a flood beyond the cap is dropped.
+// check is in flight, they're queued and replayed after spawn; a flood beyond the cap is dropped.
 const PENDING_MAX = 64;
-// Ceiling on concurrent attach clients (each is a node-pty process + tmux client) — a resource bound for one
+// Ceiling on concurrent attach clients (each is a node-pty process + tmux client), a resource bound for one
 // owner's browsers, not a quota. 1013 = "try again later"; the client's normal backoff handles it.
 const MAX_TERMINALS = 32;
 let active = 0;
 
 // Attach (or create) the tab's tmux session. `-A` makes new-session attach if `session` already exists, so the
 // same call serves a brand-new tab and a reconnect/reload of an existing one. `-c <dir>` sets the session's
-// working dir on CREATION only (a re-attach keeps the session's own cwd — a reattached tab shouldn't jump). `cwd`
+// working dir on CREATION only (a re-attach keeps the session's own cwd, a reattached tab shouldn't jump). `cwd`
 // is a workspace-relative path from the ?cwd= query; it must resolve inside /work (resolveWithin returns undefined
 // on escape) and exist, else we fall back to the root. The session name is validated by the caller (onOpen).
 // Panel sessions (`panel-<key>`, owned by processes/managed-processes.ts), agent sessions (`agent-<id>`, owned
 // by the agent's tmux runner) and job sessions (`job-<key>`, owned by system/terminal-run.ts) are ATTACH-ONLY:
 // create-on-attach would spawn a bare zsh masquerading as the dev server / agent terminal / job when it isn't
-// running — instead tmux prints "no such session" and exits, which the pty's exit frame relays honestly. `=`
+// running, instead tmux prints "no such session" and exits, which the pty's exit frame relays honestly. `=`
 // forces an exact target match.
 const spawnShell = (root: string, session: string, cwd: string | undefined, cols: number, rows: number): IPty => {
     const requested = cwd !== undefined && cwd !== "" ? resolveWithin(root, cwd) : undefined;
@@ -63,12 +63,12 @@ const dimension = (value: string | undefined, fallback: number): number => {
 const serverFrame = (message: TerminalServerMessage): string => JSON.stringify(message);
 
 // The /system/terminal route. node-server's upgradeWebSocket runs after the Hono auth middleware, which the
-// browser's header-less WebSocket can't satisfy — so app.ts exempts this path and we authorize the token +
+// browser's header-less WebSocket can't satisfy, so app.ts exempts this path and we authorize the token +
 // connect token from the query string here instead (short-lived Google JWT over wss/TLS via the tunnel).
 export const createTerminalRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         let pty: IPty | undefined;
-        // Client frames that raced the auth await (see PENDING_MAX) — replayed once the pty exists.
+        // Client frames that raced the auth await (see PENDING_MAX), replayed once the pty exists.
         let pending: TerminalClientMessage[] | undefined = [];
         let drain: NodeJS.Timeout | undefined;
         let liveness: NodeJS.Timeout | undefined;
@@ -106,7 +106,7 @@ export const createTerminalRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    // A PTY is a shell over the whole sandbox — the ship-and-operate tier, not the driving one.
+                    // A PTY is a shell over the whole sandbox, the ship-and-operate tier, not the driving one.
                     const caller = redeemTicket(services, url, "maintainer");
                     if (caller !== undefined) {
                         unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));

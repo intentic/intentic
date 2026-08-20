@@ -8,25 +8,25 @@ import { agentCommand, commandInvocations, toolResultText } from "./agent-instal
  * There is exactly one failure this whole area exists to prevent: an agent reads `Cannot find module 'vue'`,
  * concludes it got the import wrong, and edits working source to satisfy an error that was never about the
  * code. For a long time the defence against it was a paragraph stapled to the front of every user message for
- * as long as any project anywhere under /work was behind — true, unactionable for most of the turns that read
+ * as long as any project anywhere under /work was behind, true, unactionable for most of the turns that read
  * it, and re-read identically on every one of them.
  *
  * The moment the misreading becomes possible is the moment a command actually fails on a name. That is when
  * this speaks, and the difference is not only economy: a notice attached to the failure names THE package the
  * agent just tripped over, where the standing paragraph could only name a sample and leave the connection to be
  * guessed. The post-edit half of the same job lives in agent-diagnostics.ts; this is its command-line twin,
- * built the way agent-installs.ts builds the missing-binary steering, and for the same reason — the failure
+ * built the way agent-installs.ts builds the missing-binary steering, and for the same reason, the failure
  * itself is the only reliable trigger.
  *
  * IT VERIFIES BEFORE IT SPEAKS, which is the whole of its bug-resistance. A name lifted out of a failure is a
  * CLAIM, and the tree is the only thing that can settle it: unless the package is genuinely declared under
  * /work and genuinely not on disk, this says nothing at all. So a mistyped import stays the agent's own problem
- * — which matters more than the saving, because a notice that excused real mistakes would teach a model to
+ *, which matters more than the saving, because a notice that excused real mistakes would teach a model to
  * distrust every unresolved import it ever sees, and that is the same failure arrived at from the other side. */
 
 // The shapes an unresolved package takes on the way out of a command. Node's two loaders word it differently,
 // TypeScript's TS2307 reuses the CJS wording, and the bundlers have their own. Every one of them quotes the
-// SPECIFIER, which is all this needs — the verification step decides whether it means anything.
+// SPECIFIER, which is all this needs, the verification step decides whether it means anything.
 const UNRESOLVED: readonly RegExp[] = [
     /Cannot find module ['"]([^'"\n]+)['"]/g,
     /Cannot find package ['"]([^'"\n]+)['"]/g,
@@ -36,7 +36,7 @@ const UNRESOLVED: readonly RegExp[] = [
     /ERR_MODULE_NOT_FOUND[^\n]*?['"]([^'"\n]+)['"]/g,
 ];
 
-// How many names one notice carries. The reader's decision — trust the error, or don't — is made by the second.
+// How many names one notice carries. The reader's decision, trust the error, or don't, is made by the second.
 const NAMED = 3;
 const DIRECT_CHECK_RUNNERS = new Set(["node", "tsc", "vite", "vitest", "jest", "mocha", "eslint", "biome", "turbo", "nx"]);
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
@@ -94,7 +94,7 @@ export const dependencyDirForCommand = (start: string, workspaceRoot: string, co
  * directory, and that directory is what a manifest declares and what the drift walk looks for.
  *
  * Relative paths, absolute paths and `node:` builtins are dropped rather than normalized. None of them can be a
- * declared dependency, so a name from one could only ever produce a wasted lookup — and an unresolved relative
+ * declared dependency, so a name from one could only ever produce a wasted lookup, and an unresolved relative
  * import is precisely the mistake in the code this must never excuse. */
 const packageOf = (specifier: string): string | undefined => {
     if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("node:")) {
@@ -148,7 +148,7 @@ const notice = (issue: DependencyIssue, names: readonly string[], canInstall: bo
  * this hook exists to avoid. `told` is per project/package: the model needs the reason, not a nag.
  *
  * A name is looked up ONCE and never revisited, and that is a deliberate limit rather than an oversight. No
- * install runs while a turn is live — that is the rule this notice is built around — so the answer cannot
+ * install runs while a turn is live, that is the rule this notice is built around, so the answer cannot
  * change underneath it. The one thing it will miss is a dependency the agent itself added to a manifest this
  * turn, whose failure then arrives without the sentence explaining it; the errors are still right, and only the
  * reason goes unsaid. */
@@ -181,7 +181,7 @@ export const depsNoticeHooks = (
                         let projectIssue = issues.get(commandKey);
                         if (names.some((name) => !checked.has(keyOf(name)))) {
                             // One walk answers for every name in this failure. A walk that cannot be taken
-                            // leaves the verdicts unrecorded rather than guessed — silence is the safe answer,
+                            // leaves the verdicts unrecorded rather than guessed, silence is the safe answer,
                             // and the next failure may find the tree readable.
                             if (!issues.has(commandKey)) {
                                 try {

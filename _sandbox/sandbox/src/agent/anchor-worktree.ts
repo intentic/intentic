@@ -6,7 +6,7 @@ import { commitWorktreeRemainder } from "../git/root-repo.js";
 import type { AgentWorktrees } from "../agents/worktrees.js";
 import type { TurnAnchor } from "./turn-anchors.js";
 
-/* PIN AN ISOLATED CONVERSATION'S CHECKOUT WHERE IT STANDS — the isolated half of a turn's before-state.
+/* PIN AN ISOLATED CONVERSATION'S CHECKOUT WHERE IT STANDS, the isolated half of a turn's before-state.
  *
  * A main-tree turn is anchored by the workspace history: a capture before the agent runs, filed under the
  * message. An isolated turn has no such thing, because history covers /work and an isolated turn never touches
@@ -15,7 +15,7 @@ import type { TurnAnchor } from "./turn-anchors.js";
  *
  * WHY COMMIT RATHER THAN JUST READ HEAD. Between turns the checkout accumulates: an agent's edits are not
  * committed until it lands, syncs or is archived, so HEAD alone names a state that is missing everything the
- * previous turns actually did. Anchoring on it would send a rewind — or a fork asking for these files — back
+ * previous turns actually did. Anchoring on it would send a rewind, or a fork asking for these files, back
  * past work nobody asked to undo. On the ordinary clean checkout there is nothing to commit and this is one
  * `status` and one `rev-parse`; the commit only happens where there is something that would otherwise be lost,
  * which is exactly the attribution the main tree's fence capture performs for the same reason.
@@ -29,13 +29,13 @@ export interface AnchorDeps {
     readonly logger: Logger;
 }
 
-/* WHERE A FORK'S CHECKOUT STARTS when it asked for the files as they were at the cut — the read half of the
+/* WHERE A FORK'S CHECKOUT STARTS when it asked for the files as they were at the cut, the read half of the
  * anchors above, and the only place `forkOf.files: "then"` turns into anything.
  *
  * Answers undefined for every case that cannot honour it, and the caller then creates the fork's checkout the
  * ordinary way (today's files) rather than refusing the turn: the fork is still the fork the user asked for,
  * and starting it is worth more than failing over the half of the request that cannot be served. Those cases
- * are a source that has no anchor at that message, and a source that worked on the MAIN TREE — whose anchor is
+ * are a source that has no anchor at that message, and a source that worked on the MAIN TREE, whose anchor is
  * a workspace checkpoint, which is a different kind of thing from a commit a checkout can be created at.
  *
  * The shas come from the daemon's own record of the source, never from the request. A client that could name
@@ -61,7 +61,7 @@ export const anchorWorktree = async (
     for (const { repo } of repos) {
         const dir = services.agentWorktrees.worktreeDir(conversationId, repo);
         try {
-            /* ONE spawn to answer "is there anything to keep", which is the answer in the common case — the
+            /* ONE spawn to answer "is there anything to keep", which is the answer in the common case, the
              * same probe (and the same reasoning) the archive path uses before it commits a remainder. Porcelain
              * covers staged, unstaged AND untracked, which is what the commit would sweep; it also OVER-reports,
              * so the decision about what actually goes in stays with commitWorktreeRemainder and its index. */

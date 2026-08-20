@@ -3,16 +3,16 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { pidAlive } from "./pid-alive.js";
 
-/* Make a daemon death loud AFTER the fact. The daemon has died silently many times a day — a V8 fatal error
+/* Make a daemon death loud AFTER the fact. The daemon has died silently many times a day, a V8 fatal error
  * or an outside kill goes to the container's stderr, which `docker rm -f` takes to the grave, and pino's
  * async destination loses even the lines it was handed. So the /history volume carries a tiny marker instead:
  * boot writes "running", every deliberate exit rewrites it synchronously, and the NEXT boot reads what it
  * finds. A marker still saying "running" is a death certificate: the previous process never reached its own
- * exit handler, which means a kill -9, an OOM, or a native crash — and the log line naming it is the
+ * exit handler, which means a kill -9, an OOM, or a native crash, and the log line naming it is the
  * difference between "the sandbox restarted six times today" being invisible and being an incident report.
  *
  * Sync writes on purpose, both of them: the boot write is once before serving, and the exit write happens
- * where the loop is already dying — an async write there is exactly the write that gets lost. */
+ * where the loop is already dying, an async write there is exactly the write that gets lost. */
 
 const MARKER_FILE = "daemon-exit.json";
 
@@ -43,7 +43,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
         const previous = JSON.parse(readFileSync(path, "utf8")) as ExitMarker;
         /* A MARKER STILL SAYING RUNNING, WHOSE PID STILL IS. Not a death at all: another daemon has this history
          * root open right now, and the certificate this function exists to write would be an obituary for the
-         * living — which is exactly what it wrote on 2026-08-11, naming the live daemon as OOM-killed while it
+         * living, which is exactly what it wrote on 2026-08-11, naming the live daemon as OOM-killed while it
          * served four turns. Nothing is claimed either: the marker belongs to that run, and overwriting it would
          * lose the only record of how it ends. */
         if (previous.state === "running" && pidAlive(previous.pid)) {
@@ -54,7 +54,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             const reports = fatalReports(logsDir, previous.pid);
             logger.error(
                 {
-                    // Not `pid` — that key is the logger's own base field (THIS process), and the collision
+                    // Not `pid`, that key is the logger's own base field (THIS process), and the collision
                     // would silently relabel the dead run's pid as the live one's.
                     diedPid: previous.pid,
                     startedAt: new Date(previous.startedAt).toISOString(),
@@ -66,7 +66,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             );
         }
     } catch {
-        // First boot, or an unreadable marker — nothing to report either way.
+        // First boot, or an unreadable marker, nothing to report either way.
     }
     const write = (marker: ExitMarker): void => {
         try {

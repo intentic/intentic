@@ -8,25 +8,25 @@ import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "./browse
 import { fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
 import { hasSession, markConnected, profileOwner } from "./session-store.js";
 
-/* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself — sign in, sign up, open a NEW
- * account through an identity, and call for the owner when a step needs a person — instead of every login being
+/* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself, sign in, sign up, open a NEW
+ * account through an identity, and call for the owner when a step needs a person, instead of every login being
  * the owner's own hands in the guided window.
  *
  * The design rule throughout is the manifest's TOTP rule, applied to passwords: a stored credential must never
- * enter the model's context. So there is no "read the password" tool. The daemon TYPES it — into the focused
- * field of the account's live page, over the same CDP attach the /browsers view watches through — and when the
+ * enter the model's context. So there is no "read the password" tool. The daemon TYPES it, into the focused
+ * field of the account's live page, over the same CDP attach the /browsers view watches through, and when the
  * agent signs UP, the daemon GENERATES the password and stores it on the capability, so even a credential the
  * agent caused to exist is one it never saw. The mailbox gets the same treatment: `fetch_email_code` answers
  * with the one code or link a site just sent, never with an inbox. What the model handles is the narrow answer.
  *
- * AN `account` IS A BROWSER ENTRY OR AN IDENTITY — one address space, because the identity is account-shaped
+ * AN `account` IS A BROWSER ENTRY OR AN IDENTITY, one address space, because the identity is account-shaped
  * everywhere it matters here: it has a stored credential to type (its email, its provider password), a live
  * browser to be helped in, and a connected marker of its own. Every tool resolves the entry's PROFILE OWNER
  * (session-store.ts) to find the live page, which is how three accounts born of one identity share one browser
  * without any tool having to know.
  *
  * Scoped to the accounts THIS TURN may act through (the identity filter turn-plan already applies to the
- * browser servers), with one deliberate widening: an account BORN of a granted identity is in scope with it —
+ * browser servers), with one deliberate widening: an account BORN of a granted identity is in scope with it,
  * including one this very turn just opened, which the grant list captured at turn start cannot have named. */
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
@@ -34,7 +34,7 @@ const fail = (text: string) => ({ content: [{ type: "text" as const, text }], is
 
 /* A generated password: 20 characters, all four classes guaranteed. Sites disagree about which symbols they
  * accept, so the symbol set is the conservative handful that virtually every policy allows. Shuffled so the
- * guaranteed classes don't sit at predictable positions. crypto.randomInt throughout — this is a credential. */
+ * guaranteed classes don't sit at predictable positions. crypto.randomInt throughout, this is a credential. */
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGIT = "23456789";
@@ -50,7 +50,7 @@ export const generatePassword = (): string => {
     return chars.join("");
 };
 
-// What the daemon needs from the composition — narrowed so tests can hand in fakes. `openAccount` and
+// What the daemon needs from the composition, narrowed so tests can hand in fakes. `openAccount` and
 // `fetchCode` are closures rather than imports for the same reason `capabilities` is a two-method slice: the
 // real ones reach Services and the network, and the seam is what keeps these tools testable.
 export interface AccountsDeps {
@@ -59,21 +59,21 @@ export interface AccountsDeps {
         readonly upsert: (capability: Capability) => Promise<void>;
     };
     readonly root: string;
-    // The browser-shaped capability ids this turn's persona speaks for — accounts and identities alike, the
+    // The browser-shaped capability ids this turn's persona speaks for, accounts and identities alike, the
     // same filter the browser servers got.
     readonly accounts: readonly string[];
     readonly conversationId?: string | undefined;
     // An unattended turn gets no request_help: it would park on a person who is not there. The other tools
-    // stay — an automation may finish an email-code login with nobody watching.
+    // stay, an automation may finish an email-code login with nobody watching.
     readonly attended: boolean;
-    // File a new browser account under an identity (capabilities/open-account.ts — the switch gate lives there).
+    // File a new browser account under an identity (capabilities/open-account.ts, the switch gate lives there).
     readonly openAccount: (input: OpenAccountInput) => Promise<string>;
     // Read the newest code/link a site sent to a mailbox (email-codes.ts).
     readonly fetchCode: (mailbox: Mailbox, site: string, now: Date) => ReturnType<typeof fetchEmailCode>;
 }
 
 /* Resolved per call rather than captured at server build: the owner can add a password mid-turn (the agent
- * asked for it in chat, the owner put it on the card) and the very next type_credential should see it — and an
+ * asked for it in chat, the owner put it on the card) and the very next type_credential should see it, and an
  * account opened mid-turn by open_account must be addressable by the calls right after it. */
 const turnEntry = async (deps: AccountsDeps, id: string): Promise<Capability | undefined> => {
     const capability = await deps.capabilities.get(id);
@@ -92,7 +92,7 @@ const NO_ACCOUNT = (id: string): string =>
     `no account "${id}" this turn can act through — the account is a browser entry's (or identity's) capability id; the skill that taught you its tools names it`;
 
 /* THE SITE AN ACCOUNT IS ON, as a person would say it. The `platform` slug is the card, and for an account that
- * rides the GENERIC session the card is "website" — true and useless. The address it opens at is the fact worth
+ * rides the GENERIC session the card is "website", true and useless. The address it opens at is the fact worth
  * printing, so the host wins whenever there is one. */
 export const siteLabel = (config: BrowserConfig): string => {
     const url = config["homeUrl"] ?? config["loginUrl"];
@@ -107,7 +107,7 @@ export const siteLabel = (config: BrowserConfig): string => {
 };
 
 // One account's line in the roster: what it is, where, whether it is signed in, and the two facts that answer
-// "should I reuse this one" — what it was opened for and when.
+// "should I reuse this one", what it was opened for and when.
 export const accountLine = (root: string, capability: Capability): string => {
     const config = capability.config as BrowserConfig;
     const notes = [
@@ -119,7 +119,7 @@ export const accountLine = (root: string, capability: Capability): string => {
 };
 
 // The identity an entry answers mail through: itself, or the one it was born from. Undefined for a standalone
-// account — which is the "no identity" arm of fetch_email_code's error.
+// account, which is the "no identity" arm of fetch_email_code's error.
 const identityBehind = async (deps: AccountsDeps, capability: Capability): Promise<Capability | undefined> => {
     if (capability.kind === "identity") {
         return capability;
@@ -133,7 +133,7 @@ const identityBehind = async (deps: AccountsDeps, capability: Capability): Promi
 };
 
 // The stored value type_credential types. An identity's username IS its email; an identity-born account with
-// no username of its own falls back to its identity's email — the address its signup forms were fed.
+// no username of its own falls back to its identity's email, the address its signup forms were fed.
 const credentialValue = async (deps: AccountsDeps, capability: Capability, field: "username" | "password"): Promise<string | undefined> => {
     if (capability.kind === "identity") {
         const config = capability.config as IdentityConfig;
@@ -220,7 +220,7 @@ export const accountsServer =
                         }
                         if (capability.kind === "identity") {
                             // The identity's provider login is the one this product keeps in the owner's hands,
-                            // so its password is theirs to set on the card — never minted by a turn.
+                            // so its password is theirs to set on the card, never minted by a turn.
                             return fail(`"${account}" is an identity — its email password is the owner's to set on the identity's card`);
                         }
                         const config = capability.config as BrowserConfig;
@@ -270,8 +270,8 @@ export const accountsServer =
                                 `the identity "${identity.id}" links no readable mailbox — open its webmail in its own browser (the browser tools with account "${identity.id}") and read the one mail there`,
                             );
                         }
-                        // The site is wherever this account's browser is stuck right now — the page asking for
-                        // the code — falling back to the platform slug for a call made before any navigation.
+                        // The site is wherever this account's browser is stuck right now, the page asking for
+                        // the code, falling back to the platform slug for a call made before any navigation.
                         const page = browserAccountPage(profileOwner(capability));
                         const site =
                             page !== undefined
@@ -321,7 +321,7 @@ export const accountsServer =
                         loginUrl: z.string().optional().describe("Only when signing in happens somewhere else than the page above"),
                     },
                     async ({ account, platform, identity, purpose, homeUrl, loginUrl }) => {
-                        // The identity must be one this turn speaks for — the same scope every other tool checks.
+                        // The identity must be one this turn speaks for, the same scope every other tool checks.
                         const holder = await turnEntry(deps, identity);
                         if (holder === undefined || holder.kind !== "identity") {
                             return fail(`no identity "${identity}" this turn can act through — name the identity whose skill you are holding`);
@@ -341,7 +341,7 @@ export const accountsServer =
                     "Who this sandbox is online: every identity you can act as, the accounts each already holds (site, what it was opened for, when, and whether it is signed in), and which identities hold nothing yet. Read this BEFORE opening an account anywhere — signing in to one that exists beats minting another, and an identity with no accounts is the one to spend on a site that should not be tied to the others. Derived from the live manifest, so it is never out of date.",
                     {},
                     async () => {
-                        /* Scoped to the accounts this turn speaks for, exactly like every other tool here — a
+                        /* Scoped to the accounts this turn speaks for, exactly like every other tool here, a
                          * persona that narrows a turn to two identities must not have the roster hand back the
                          * other fourteen, which is the whole point of narrowing it. */
                         const entries = (await Promise.all(deps.accounts.map((id) => deps.capabilities.get(id)))).filter(
@@ -361,7 +361,7 @@ export const accountsServer =
                                 ? `${head}\n  no accounts yet`
                                 : [head, ...held.map((account) => accountLine(deps.root, account))].join("\n");
                         });
-                        // Accounts with no identity behind them — the owner's own hand-connected logins. Listed
+                        // Accounts with no identity behind them, the owner's own hand-connected logins. Listed
                         // because "do we already have an account here" does not care how it came to exist.
                         const standalone = accounts.filter((account) => (account.config as BrowserConfig).identity === undefined);
                         const tail =

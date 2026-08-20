@@ -3,7 +3,7 @@ import { type TrialHealth, TrialStatusSchema } from "@intentic/sandbox-contract"
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "../platform/local-tls.js";
 
-/* THE FREE TRIAL, AS THE DAEMON SEES IT — is there one, and how much of today's allowance is left.
+/* THE FREE TRIAL, AS THE DAEMON SEES IT, is there one, and how much of today's allowance is left.
  *
  * The trial is served BY the platform (its /trial routes), which is the one thing on this product's command
  * path that is: everything else the browser drives goes straight to this daemon. That asymmetry is why the
@@ -20,7 +20,7 @@ export interface TrialStatus {
     readonly used: number;
     readonly remaining: number;
     readonly health: TrialHealth;
-    // ISO stamp of the next UTC midnight — the browser renders it in local time.
+    // ISO stamp of the next UTC midnight, the browser renders it in local time.
     readonly resetsAt: string;
     readonly retryAt?: string;
     // The real model behind the trial's one published id, on this account's most recent message. The platform
@@ -33,7 +33,7 @@ export interface TrialService {
     readonly available: () => boolean;
     // The last status read, or undefined before the first successful one.
     readonly status: () => TrialStatus | undefined;
-    // Re-probe. Swallows its own failure — an unreachable platform is not an error the caller can act on, and
+    // Re-probe. Swallows its own failure, an unreachable platform is not an error the caller can act on, and
     // the cached answer stays until one arrives.
     readonly refresh: () => Promise<void>;
 }
@@ -99,7 +99,7 @@ export const createTrialService = (config: Config, get = getJson): TrialService 
                 // dropping the endpoint mid-conversation would strand a turn the user is in the middle of.
                 return;
             }
-            // 404 is the platform's own "no trial here" — for a platform that runs none, and for a sandbox it
+            // 404 is the platform's own "no trial here", for a platform that runs none, and for a sandbox it
             // does not recognise. Both mean the same thing to us, and both are final rather than transient.
             if (response.status === 404) {
                 available = false;

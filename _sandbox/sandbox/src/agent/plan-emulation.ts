@@ -2,8 +2,8 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { createRequest } from "./agent-requests.js";
 
 /* The always-plan flow for backends without a native ExitPlanMode hook (codex, grok, acp), emulated in two
- * phases: a read-only planning turn whose captured text becomes the `plan` frame, then — once approved on the
- * shared decision bridge — an execution turn resumed on the same session. Rejection feedback loops another
+ * phases: a read-only planning turn whose captured text becomes the `plan` frame, then, once approved on the
+ * shared decision bridge, an execution turn resumed on the same session. Rejection feedback loops another
  * planning turn. The skeleton owns the loop, the gates, and the revision prompts; each backend supplies how a
  * phase actually runs (its runner, sandbox modes, capture mechanics). */
 
@@ -36,14 +36,14 @@ export async function* runPlanEmulation(
         const capture = yield* planPhase(prompt, sessionId);
         sessionId = capture.sessionId ?? sessionId;
         if (capture.errored || capture.planText === undefined || capture.planText.trim() === "" || signal.aborted) {
-            // The planning turn errored/aborted (or produced no plan text) — the error frame already streamed,
+            // The planning turn errored/aborted (or produced no plan text), the error frame already streamed,
             // so don't propose a plan built from partial output.
             return;
         }
         const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
         yield { kind: "plan", requestId: id, text: capture.planText };
         const { reply: decision, resolved } = await wait(signal);
-        // Frees the turn AND freezes the card in every client's transcript — including the ones replaying this
+        // Frees the turn AND freezes the card in every client's transcript, including the ones replaying this
         // run later, which have no other record that the plan stopped being live (see the `resolved` frame).
         yield resolved;
         if (signal.aborted) {

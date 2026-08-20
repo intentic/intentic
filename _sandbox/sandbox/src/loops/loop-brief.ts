@@ -2,14 +2,14 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 
-/* WHAT A TURN IS TOLD — the loop's whole specialization surface.
+/* WHAT A TURN IS TOLD, the loop's whole specialization surface.
  *
  * The daemon has exactly one per-conversation seam, the turn's PROMPT (the system prompt is sandbox-wide), so
  * everything a loop needs to say it says here. That is not a limitation: all of it is task instruction, which
  * is what a prompt is for. Same reasoning the acceptance brief opens with.
  *
  * IT DESCRIBES A GOAL, NEVER THE MACHINERY THAT PURSUES IT. This file used to open every message with
- * "# Iteration 3 of at most 20 — you are one iteration of a loop that repeats until a goal is met", and close
+ * "# Iteration 3 of at most 20, you are one iteration of a loop that repeats until a goal is met", and close
  * it with a paragraph about not wasting the loop's budget. All of that is TRUE, and none of it is the job. A
  * model handed a page about the harness it is running inside spends attention on the harness; worse, the
  * numbers in it are the daemon's bookkeeping, so a workflow step that only ever ran once opened by announcing a
@@ -18,7 +18,7 @@ import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
  *
  * WHAT SURVIVED, and each one is a MECHANISM the model has to operate rather than a description of the loop:
  *
- * 1. THE GOAL, under the work rather than over it — the user's own words open the message. Restated at all
+ * 1. THE GOAL, under the work rather than over it, the user's own words open the message. Restated at all
  *    because in `fresh` mode this session has never seen it, and in `continue` mode it saw it fifteen turns ago
  *    behind a wall of tool output. Skipped when the prompt already contains it, which is the ordinary case for
  *    a workflow step measured against the request it was handed verbatim: a goal quoted back under the sentence
@@ -29,14 +29,14 @@ import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
  *    the state. A session that does not read the file repeats the last one's dead end, and one that does not
  *    write it condemns the next to the same.
  *
- * 3. WHAT DECIDES IT IS DONE IS SAID PLAINLY, all of it — the document to write AND every check that will be
+ * 3. WHAT DECIDES IT IS DONE IS SAID PLAINLY, all of it, the document to write AND every check that will be
  *    run. An agent told "make the tests pass" that does not know a command is being run against it optimizes
  *    for sounding finished; told the exact command, it runs it. This is the cheapest quality win in the file
  *    and it costs one sentence per check.
  */
 
 // The loop's directory under a given tree root. `root` is `/work` when the sentence is going to an AGENT and
-// the daemon's real workspace root when the daemon is going to open the file itself — the same directory
+// the daemon's real workspace root when the daemon is going to open the file itself, the same directory
 // either way, because an isolated turn's worktree is bind-mounted over /work with `.intentic` bound back in
 // SHARED, so this one spelling reaches it from inside a worktree, from the main tree, and from the daemon.
 export const loopDirIn = (root: string, conversationId: string): string => join(root, LOOP_DIR, conversationId);
@@ -48,7 +48,7 @@ export const verdictPathIn = (root: string, conversationId: string, iteration: n
 const AGENT_ROOT = WORKSPACE_ROOT;
 
 // Each check, in the agent's terms. One line each, because the agent's job is only to know what it is being
-// measured by — and knowing is most of it.
+// measured by, and knowing is most of it.
 const checkNote = (loop: Loop): string | undefined => {
     const notes = loop.checks.map((check) =>
         check.kind === `command`
@@ -108,8 +108,8 @@ const outputNote = (loop: Loop, iteration: number): string | undefined => {
 };
 
 // The memory rule for `fresh` mode. Not sent in `continue` mode: there the transcript is the memory, and a
-// second bookkeeping surface would only compete with it for the model's attention. Written as what it is — a
-// file that is this session's only memory — rather than as an explanation of the harness that arranged that.
+// second bookkeeping surface would only compete with it for the model's attention. Written as what it is, a
+// file that is this session's only memory, rather than as an explanation of the harness that arranged that.
 const progressNote = (loop: Loop): string =>
     [
         `## Your memory`,

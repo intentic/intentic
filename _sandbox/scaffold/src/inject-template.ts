@@ -14,7 +14,7 @@ const DENY_DIRS = new Set(["node_modules", ".git", ".cache", ".turbo", "dist", "
 
 const copyTree = (src: string, dest: string): Promise<void> => cp(src, dest, { recursive: true, filter: (from) => !DENY_DIRS.has(basename(from)) });
 
-// Copy each listed source dir/file into repoDir, SKIPPING any that already exist — so a shared package an earlier
+// Copy each listed source dir/file into repoDir, SKIPPING any that already exist, so a shared package an earlier
 // app laid down (e.g. _libs/api-contract) is not clobbered by a later app that also lists it. Missing sources are
 // ignored (a shell entry the source omits simply doesn't land).
 const copyItems = async (sourceDir: string, repoDir: string, items: readonly string[]): Promise<void> => {
@@ -30,7 +30,7 @@ const copyItems = async (sourceDir: string, repoDir: string, items: readonly str
 // Copy an app dir to a RENAMED target and rewrite its package.json name from `@scope/<templateKey>` to
 // `@scope/<instanceName>`. Also stamps the template key into `intentic.template` so the daemon can later
 // identify which template created this instance. Called only when the instance name differs from the template
-// key — otherwise the plain copyItems path handles it (the dir keeps its canonical name).
+// key, otherwise the plain copyItems path handles it (the dir keeps its canonical name).
 const copyAndRenameApp = async (
     sourceDir: string,
     repoDir: string,
@@ -66,7 +66,7 @@ const copyAndRenameApp = async (
 };
 
 // Lay down an EMPTY pnpm+turbo monorepo into `repoDir` from an already-materialized source tree: the shell (root
-// files) + shared packages only — no app instances — then `git init` so it can later be pushed. Apps are added
+// files) + shared packages only, no app instances, then `git init` so it can later be pushed. Apps are added
 // into this same repo afterwards via `injectApps`.
 export const injectMonorepoShell = async (opts: { repoDir: string; sourceDir: string; manifest: TemplateManifest }): Promise<void> => {
     await mkdir(opts.repoDir, { recursive: true });
@@ -109,14 +109,14 @@ export const injectApps = async (opts: {
 
         for (const item of def.instance) {
             if (isAppDir(item) && app.name !== app.template) {
-                // App-specific dir — copy and rename to the instance name.
+                // App-specific dir, copy and rename to the instance name.
                 await copyAndRenameApp(opts.sourceDir, opts.repoDir, item, app.name, app.template, opts.manifest.scope);
             } else if (isAppDir(item)) {
-                // App-specific dir but name matches template key — copy verbatim, then stamp the marker.
+                // App-specific dir but name matches template key, copy verbatim, then stamp the marker.
                 await copyItems(opts.sourceDir, opts.repoDir, [item]);
                 await stampTemplateMarker(opts.repoDir, item, app.template);
             } else {
-                // Shared dir — copy verbatim (skip-existing).
+                // Shared dir, copy verbatim (skip-existing).
                 await copyItems(opts.sourceDir, opts.repoDir, [item]);
             }
         }
@@ -124,7 +124,7 @@ export const injectApps = async (opts: {
 };
 
 // Shallow-clone the template source into a temp dir, hand it to `fn`, and always clean it up. `source` may be a
-// git URL or a local checkout. ponytail: fresh shallow clone per call — no cache; add one if latency ever matters.
+// git URL or a local checkout. ponytail: fresh shallow clone per call, no cache; add one if latency ever matters.
 const withTemplateClone = async <T>(source: string, ref: string, fn: (sourceDir: string) => Promise<T> | T): Promise<T> => {
     const sourceDir = await mkdtemp(join(tmpdir(), "intentic-template-"));
     try {
@@ -135,12 +135,12 @@ const withTemplateClone = async <T>(source: string, ref: string, fn: (sourceDir:
     }
 };
 
-// Read the source repo's template manifest without materializing anything — the daemon lists addable app types from this.
+// Read the source repo's template manifest without materializing anything, the daemon lists addable app types from this.
 export const fetchTemplateManifest = (source: string, ref: string): Promise<TemplateManifest> =>
     withTemplateClone(source, ref, (sourceDir) => readTemplateManifest(sourceDir));
 
 // The end-to-end empty-monorepo scaffold: clone the source, lay down the shell + shared packages, `git init`. No
-// install — an empty shell has nothing to run until the first app is added (which installs). Shared by the CLI
+// install, an empty shell has nothing to run until the first app is added (which installs). Shared by the CLI
 // and the sandbox daemon's monorepo capability so there is one path. Errors (bad ref) propagate.
 export const scaffoldMonorepo = (opts: { repoDir: string; source: string; ref: string }): Promise<void> =>
     withTemplateClone(opts.source, opts.ref, (sourceDir) =>
@@ -174,7 +174,7 @@ async function* runStreaming(command: string, args: string[], cwd: string): Asyn
 }
 
 // The end-to-end add: clone the source, inject the requested app instances into an existing monorepo, and (unless
-// disabled) `pnpm install`. Shared by the CLI's `add-app` and the daemon's /workspace/apps route — both stream the
+// disabled) `pnpm install`. Shared by the CLI's `add-app` and the daemon's /workspace/apps route, both stream the
 // yielded progress lines (steps + live pnpm output) to the user. Errors (bad ref, unknown app) propagate. The
 // clone/cleanup is inlined rather than via withTemplateClone: its finally would remove the tempdir as soon as the
 // generator is RETURNED, before iteration ever runs.

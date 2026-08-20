@@ -7,14 +7,14 @@ import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
 
 /* Which CI project stands behind each workspace repo. A repo is mapped when ANY of its remotes' HOSTNAMES
  * matches a connected github/gitlab capability (github.com is fixed; a gitlab host comes from the capability's
- * instance url, so self-hosted maps too) — the capability supplies the token and API base (gitHostOf, the same
+ * instance url, so self-hosted maps too), the capability supplies the token and API base (gitHostOf, the same
  * resolution git access rides). Unmatched repos simply don't participate: no remote, remotes on hosts nobody
  * connected, or a local path are all ordinary states, not errors. */
 
 export interface CiProject {
-    // The workspace repo dir ("root" for the workspace repo itself) — the id triggers and the view join on.
+    // The workspace repo dir ("root" for the workspace repo itself), the id triggers and the view join on.
     readonly repo: string;
-    // owner/name (github) or the full namespaced path (gitlab) — what the provider API addresses.
+    // owner/name (github) or the full namespaced path (gitlab), what the provider API addresses.
     readonly project: string;
     // The connected account serving this repo's host: provider, hostname, REST base, token.
     readonly account: GitHost;

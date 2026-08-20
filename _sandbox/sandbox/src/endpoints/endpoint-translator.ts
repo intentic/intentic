@@ -3,27 +3,27 @@ import type { Services } from "../composition.js";
 import { cliProxyManagementUrl } from "../agent/translator.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
 
-/* AN OPENAI-COMPATIBLE ENDPOINT, EXPRESSED AS A CLIPROXYAPI PROVIDER — the whole of what makes a self-configured
+/* AN OPENAI-COMPATIBLE ENDPOINT, EXPRESSED AS A CLIPROXYAPI PROVIDER, the whole of what makes a self-configured
  * model API drivable by a harness that speaks only the Anthropic Messages API.
  *
  * No new adapter, no second turn path: the translator is already in the image and already re-serves four
  * subscription providers this way, and its `openai-compatibility` list is the seam for arbitrary upstreams. An
  * endpoint becomes one entry in that list, and from there it is indistinguishable to the rest of the daemon from
- * a routed provider — same HarnessEndpoint, same ANTHROPIC_BASE_URL, same alias pinning.
+ * a routed provider, same HarnessEndpoint, same ANTHROPIC_BASE_URL, same alias pinning.
  *
  * THE ENTRY IS ALSO THE ROUTING TABLE. A model the entry does not declare is refused with "unknown provider for
- * model", so the declared list is not documentation — it is the set of models the endpoint can actually serve,
+ * model", so the declared list is not documentation, it is the set of models the endpoint can actually serve,
  * which is why it is rebuilt from the live catalog rather than written once at add time.
  *
  * `prefix` is what lets several endpoints coexist: two servers both publishing `qwen3-coder` would otherwise
  * collide on one global id. Every model is addressed as `<capability id>/<model>` (endpointModelId).
  *
  * TWO WRITE PATHS, AND BOTH ARE REQUIRED. The Management API's PUT is how a change reaches a running proxy
- * without a restart — but startTranslator re-renders config.yaml from scratch on every spawn AND on every rung
+ * without a restart, but startTranslator re-renders config.yaml from scratch on every spawn AND on every rung
  * of its restart ladder, so anything that lived only in the proxy's memory is erased by the next crash-restart.
  * So the config render is the source of truth and the PUT is the live update; they carry the same entries. */
 
-// What a turn hands the translator to reach one endpoint's model — the other half of the `prefix` below, and the
+// What a turn hands the translator to reach one endpoint's model, the other half of the `prefix` below, and the
 // reason it lives here rather than beside the credential resolver that sends it: the two have to agree, and this
 // is the module that decides how an endpoint is addressed.
 export const endpointModelId = (id: string, model: string): string => `${id}/${model}`;
@@ -37,7 +37,7 @@ export interface CompatEntry {
     readonly name: string;
     readonly prefix: string;
     readonly "base-url": string;
-    // Always present, empty when the user declared none — the empty record IS "no extra headers", so there is no
+    // Always present, empty when the user declared none, the empty record IS "no extra headers", so there is no
     // absent state to distinguish and the render simply omits the block.
     readonly headers: Record<string, string>;
     readonly "api-key-entries": readonly { readonly "api-key": string }[];
@@ -52,10 +52,10 @@ export const translatedEndpoints = (capabilities: readonly Capability[]): { id: 
     );
 
 /* One entry per endpoint, its models taken from the live catalog (which falls back to the last list this
- * endpoint answered with — see endpoint-catalog.ts for why that rung has to exist for this caller in particular).
+ * endpoint answered with, see endpoint-catalog.ts for why that rung has to exist for this caller in particular).
  *
  * An endpoint with no known models is emitted anyway, with an empty model list. It routes nothing, which is
- * correct — but it keeps the provider present and its failure legible as "this endpoint has published no models"
+ * correct, but it keeps the provider present and its failure legible as "this endpoint has published no models"
  * rather than as a provider that silently vanished from the picker while the user was looking at its card.
  *
  * `api-key-entries` always carries exactly one entry, empty string included: it is CLIProxyAPI's credential pool
@@ -79,7 +79,7 @@ export const endpointCompatEntries = async (services: Services): Promise<CompatE
 };
 
 // The `openai-compatibility:` block of the rendered config, or "" when there is nothing to serve. Written as text
-// like the rest of renderConfig — values go through JSON.stringify, which emits valid YAML double-quoted scalars.
+// like the rest of renderConfig, values go through JSON.stringify, which emits valid YAML double-quoted scalars.
 export const compatYaml = (entries: readonly CompatEntry[]): string => {
     if (entries.length === 0) {
         return "";
@@ -110,7 +110,7 @@ export const compatYaml = (entries: readonly CompatEntry[]): string => {
 };
 
 /* Push the current entries to a RUNNING proxy, so an endpoint added or edited from the UI serves turns without
- * waiting for a restart. The Management API replaces the whole list (a bare JSON array — the wrapper shape the
+ * waiting for a restart. The Management API replaces the whole list (a bare JSON array, the wrapper shape the
  * GET answers with is rejected), which is right because the daemon owns every entry in it: nothing else writes
  * this list, so a full replace can never clobber a stranger's row.
  *

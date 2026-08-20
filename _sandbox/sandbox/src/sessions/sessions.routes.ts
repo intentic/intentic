@@ -6,7 +6,7 @@ import type { OrpcContext } from "../context.js";
 export type SessionsRoutesDeps = Pick<Services, "sessions" | "workspace">;
 
 // Past conversations in this workspace (SDK-native session store, keyed on the working dir). A read that
-// throws (no such session) becomes NOT_FOUND — the route's documented behavior, not a swallowed error.
+// throws (no such session) becomes NOT_FOUND, the route's documented behavior, not a swallowed error.
 export const createSessionsRoutes = (services: SessionsRoutesDeps) => {
     const i = implement(sessionsContract).$context<OrpcContext>();
     return {

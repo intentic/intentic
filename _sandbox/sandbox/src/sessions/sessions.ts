@@ -18,7 +18,7 @@ export interface SessionSummary {
 }
 
 // The `message` field of a stored turn is an Anthropic message: content is a string or a block array. The
-// block union is the stored counterpart of what the live stream yields per turn — prose, extended thinking,
+// block union is the stored counterpart of what the live stream yields per turn, prose, extended thinking,
 // the tool calls the turn made, and (on the synthetic user messages between assistant turns) their results.
 interface StoredBlock {
     type?: string;
@@ -37,10 +37,10 @@ interface AnthropicMessageLike {
 
 // List the workspace's past Claude sessions (newest first, capped) for the history menu. Sessions are
 // persisted by the SDK keyed on the working dir, so passing the workspace root scopes them to this sandbox.
-// ponytail: Claude sessions only — this is the HISTORY MENU, which lists runtime sessions rather than fleet
+// ponytail: Claude sessions only, this is the HISTORY MENU, which lists runtime sessions rather than fleet
 // conversations (those are the board's, and read back through /agents/:id/transcript whatever served them).
 // Merge Codex threads here with a provider tag when users ask for Codex history.
-// The list title a stored first prompt yields: the user's words with the daemon's injections removed — an
+// The list title a stored first prompt yields: the user's words with the daemon's injections removed, an
 // opening turn preamble ("Dependencies are NOT installed…"), a re-run's interruption note, and the trailing
 // attachment note. An attachment-only opener is titled by what was dropped in, matching what the send derived
 // locally.
@@ -63,20 +63,20 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
     }));
 };
 
-/* Filter the history list by a keyword, for the chat-history search box — by the SAME rule the fleet board's
+/* Filter the history list by a keyword, for the chat-history search box, by the SAME rule the fleet board's
  * filter runs (agents.search): the session's title, and what either side SAID in it. Two search boxes in one
  * window that disagree about what "matches" means is worse than one of them not existing, and the board is
  * literally showing rows from this list underneath its own cards.
  *
  * That rule is also what let the old per-session content cap go. This used to read transcripts for the ten
  * most recent sessions only, because each hit cost a full readWorkspaceSession (tool cards, call-time diffs,
- * result settling — all of it thrown away by a substring test). readSessionLines reads the spoken text alone
+ * result settling, all of it thrown away by a substring test). readSessionLines reads the spoken text alone
  * and holds it, so scanning the whole listed set costs one pass per session for the life of the daemon.
  *
  * Result keeps the newest-first order of `list`. A session whose TITLE matched carries no snippet: the title
  * is the row's own heading, and repeating it under itself is noise rather than evidence.
  *
- * `caseSensitive` is that same shared rule's other half — the Aa switch in the field, which the board applies to
+ * `caseSensitive` is that same shared rule's other half, the Aa switch in the field, which the board applies to
  * its cards and these rows in one pass, so one query cannot come back matched two ways.
  */
 export const searchWorkspaceSessions = async (dir: string, query: string, caseSensitive: boolean): Promise<SessionSummary[]> => {
@@ -88,7 +88,7 @@ export const searchWorkspaceSessions = async (dir: string, query: string, caseSe
                 return session;
             }
             const snippet = matchLines(await readSessionLines(dir, session.id), needle, caseSensitive);
-            // Object.assign, not a spread — these summaries are this call's own, built fresh by the list above.
+            // Object.assign, not a spread, these summaries are this call's own, built fresh by the list above.
             return snippet === undefined ? undefined : Object.assign(session, { snippet });
         }),
     );
@@ -101,21 +101,21 @@ export const workspaceSessionExists = async (dir: string, id: string): Promise<b
 
 const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
     const content = (message.message as AnthropicMessageLike | undefined)?.content;
-    // A plain-string content is a bare user prompt — the one block shape the store writes unwrapped.
+    // A plain-string content is a bare user prompt, the one block shape the store writes unwrapped.
     return typeof content === "string" ? [{ type: "text", text: content }] : (content ?? []);
 };
 
 // Rebuild one stored session as the transcript a reopened tab redraws: prose, extended thinking, and the tool
 // cards each turn ran, derived from the SAME tool-calls helpers the live stream maps through (so a restored
-// card is indistinguishable from the one it replaces). `dir` is the turn's working dir — tool locations and
+// card is indistinguishable from the one it replaces). `dir` is the turn's working dir, tool locations and
 // diff paths are relative to it, exactly as they were when streamed.
 //
-// The bubble boundary is the PROSE BLOCK, not the stored message — see restoredSessionMessages.
+// The bubble boundary is the PROSE BLOCK, not the stored message, see restoredSessionMessages.
 export const readWorkspaceSession = async (dir: string, id: string): Promise<RestoredMessage[]> => {
-    // The dir-scoped read covers the workspace root and its LIVE worktrees — the SDK resolves worktree
+    // The dir-scoped read covers the workspace root and its LIVE worktrees, the SDK resolves worktree
     // project dirs through `git worktree list`. An ARCHIVED agent's transcript is keyed by its retired
     // worktree path, which that list no longer names, so the scoped search comes back empty with the file
-    // sitting right in this workspace's own store (~/.claude/projects is symlinked per sandbox — see
+    // sitting right in this workspace's own store (~/.claude/projects is symlinked per sandbox, see
     // session-store.ts). Fall back to the all-projects search before calling the session empty; ids are
     // UUIDs, so the widened search can only find the session that was asked for.
     const scoped = await getSessionMessages(id, { dir });
@@ -124,16 +124,16 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
 
 /* The stored-message → transcript reduction itself, over whatever set of SDK session messages it is handed.
  * Exported because a SUBAGENT's transcript is the same file format read from a different file
- * (getSubagentMessages — see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its
+ * (getSubagentMessages, see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its
  * parent's are assembled by identical rules and cannot come to disagree about what a stored turn looks like.
  *
- * THE BUBBLE BOUNDARY IS THE PROSE BLOCK, exactly as it is live (`text_end` — see turn-transcript.ts's fold and
+ * THE BUBBLE BOUNDARY IS THE PROSE BLOCK, exactly as it is live (`text_end`, see turn-transcript.ts's fold and
  * the client's turnReducer): everything an assistant writes accumulates into one bubble, and a text block ending
  * closes it, so the calls a paragraph introduced sit under that paragraph and the next paragraph opens a fresh
  * bubble below them.
  *
  * It used to be one bubble per stored MESSAGE, on the assumption that the store files a fresh assistant message
- * around each prose block. It files one around each CONTENT block — so a turn that made fourteen calls between
+ * around each prose block. It files one around each CONTENT block, so a turn that made fourteen calls between
  * two sentences restored as fourteen one-call bubbles, and a reopened chat showed a ladder of fourteen separate
  * runs where it had shown a single run of fourteen while it streamed. Reading a conversation back must not
  * rearrange it. */
@@ -166,7 +166,7 @@ export const restoredSessionMessages = (
     // after its bubble closed needs no second pass.
     const awaiting = new Map<string, RestoredToolCall>();
     // Which cards carry a call-time diff: a successful Edit/Write result is the redundant "file updated"
-    // snippet, so the diff stays the card's content. Errors DO replace it (the text is the reason) — the same
+    // snippet, so the diff stays the card's content. Errors DO replace it (the text is the reason), the same
     // rule the live tool_call_update applies.
     const diffed = new Set<string>();
 
@@ -198,10 +198,10 @@ export const restoredSessionMessages = (
                 }
             }
             // A user message carrying only tool_results is the SDK's plumbing, not something the user said.
-            // Neither is an injected turn preamble or the trailing attachment note — the stored prompt
+            // Neither is an injected turn preamble or the trailing attachment note, the stored prompt
             // carries them, the redrawn bubble must not: the note's paths become attachment chips again
             // (workspace-relative, the shape the client uploads and fetches previews by; the turn resolved
-            // them against the main root even for worktree turns, so `dir` — always the root here — is the
+            // them against the main root even for worktree turns, so `dir`, always the root here, is the
             // right base). An attachment-only message strips to empty text but still redraws its chips.
             if (text.length > 0) {
                 // Words of their own, so whatever the agent was still writing into is finished and closed above
@@ -209,7 +209,7 @@ export const restoredSessionMessages = (
                 flush();
                 const unwrapped = unwrapStoredPrompt(text);
                 /* A turn the daemon re-ran after an interruption stores the original prompt behind a note saying
-                 * why (RESUME_NOTES) — read exactly as the daemon's own record reads it (turn-transcript.ts): a
+                 * why (RESUME_NOTES), read exactly as the daemon's own record reads it (turn-transcript.ts): a
                  * re-run of words this transcript already holds becomes the muted line explaining the gap, in
                  * place of a second copy of the message; a restored card's answer keeps its words and carries the
                  * explanation as a note. */
@@ -242,7 +242,7 @@ export const restoredSessionMessages = (
             if (block.type === "text" && typeof block.text === "string") {
                 const current = open();
                 current.text += block.text;
-                // The block ended here, and a block that WROTE something closes its bubble — the live
+                // The block ended here, and a block that WROTE something closes its bubble, the live
                 // `text_end` rule, down to the empty-block exemption (a model can open a text block and go
                 // straight to a tool; retiring on that would strand the bubble empty).
                 if (current.text.length > 0) {
@@ -275,7 +275,7 @@ export const restoredSessionMessages = (
             }
         }
     }
-    // The last bubble of the session closes at the end of it — a turn that finished on a tool call (or was
+    // The last bubble of the session closes at the end of it, a turn that finished on a tool call (or was
     // interrupted mid-call) never wrote the prose that would have closed it.
     flush();
     return out;

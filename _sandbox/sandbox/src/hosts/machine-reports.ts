@@ -15,23 +15,23 @@ import type { Services } from "../composition.js";
 import { enrolledMachines, machineReports } from "../platform/sync.js";
 import { hostSummaries } from "./host.routes.js";
 
-/* THE COMPUTERS VIEW'S DATA — every machine on the other end of this sandbox, however it is reachable.
+/* THE COMPUTERS VIEW'S DATA, every machine on the other end of this sandbox, however it is reachable.
  *
  * Two independent doors, and this is where they meet:
  *
  *   • The desktop-sync agent VOLUNTEERS its report on the ports poll it already makes. Costs the daemon nothing,
  *     needs no capability, and is how most users' machines appear here.
- *   • A `host` capability lets the daemon ASK. That is the only sanctioned channel from a sandbox to a machine —
+ *   • A `host` capability lets the daemon ASK. That is the only sanctioned channel from a sandbox to a machine,
  *     the docker socket is never mounted (see @intentic/sandbox-run's posture comment) and the docker capability
  *     grants a NESTED engine, so a sandbox can never see its siblings by itself. It adds the two things the
  *     volunteered report cannot carry: the machine's containers, and machines with no sync agent at all.
  *
  * The pulled half deliberately runs the SAME `intentic-sync status --json` the desktop app spawns, rather than a
  * second implementation of the same questions. One producer is what stops the terminal answer and the two
- * on-screen answers from drifting — the argument the desktop app already makes for spawning connect.sh. */
+ * on-screen answers from drifting, the argument the desktop app already makes for spawning connect.sh. */
 
 // How long a pulled report is served before the machine is asked again. Every open Computers tab polls this
-// route, and the far end is somebody's laptop over a WebSocket — so the cost of the tab must not scale with how
+// route, and the far end is somebody's laptop over a WebSocket, so the cost of the tab must not scale with how
 // long it is left open. Comfortably shorter than the sync agent's own reporting cadence, so the pulled half is
 // never the stale one.
 const PULL_TTL_MS = 10_000;
@@ -40,8 +40,8 @@ const PULL_TTL_MS = 10_000;
 // better off saying so than holding the request open.
 const PULL_TIMEOUT_MS = 15_000;
 
-// The ceiling on one management flow. Far above what any of them should take — an update on a slow connection
-// pulls a multi-gigabyte image — because the machine bounds its own work and this only ever catches a socket that
+// The ceiling on one management flow. Far above what any of them should take, an update on a slow connection
+// pulls a multi-gigabyte image, because the machine bounds its own work and this only ever catches a socket that
 // died without closing. A flow cut off here has still happened; it is the WATCHING that ends, which is why the
 // view re-reads the fleet afterwards rather than trusting what it last saw.
 const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
@@ -50,7 +50,7 @@ const pulled = new Map<string, { readonly at: number; readonly result: PullResul
 
 export type PullResult = { readonly report: MachineReport } | { readonly gap: ComputerGap };
 
-/* `run_command` answers in PROSE — an exit line, then the streams under `--- stdout ---` fences (see the host
+/* `run_command` answers in PROSE, an exit line, then the streams under `--- stdout ---` fences (see the host
  * agent's describeResult). That is right for the agent, which is its only other caller, and it means a machine
  * reader has to find its JSON inside a human answer.
  *
@@ -110,9 +110,9 @@ const MachineSandboxRowsSchema = z.array(MachineSandboxSchema);
  * capability is different: the owner ticked a switch that says this sandbox may look there.
  *
  * Asked of the machine's own `list_sandboxes` tool, which owns the sidecar merging and answers the row JSON
- * directly — the machine is the one producer of "what runs on me", for this reader, for the agent and for its
+ * directly, the machine is the one producer of "what runs on me", for this reader, for the agent and for its
  * own manage_sandbox. An agent too old to have the tool refuses it, which reads here exactly like a machine
- * that runs no sandboxes — and its age is already visible on the row (agents.host). */
+ * that runs no sandboxes, and its age is already visible on the row (agents.host). */
 export const sandboxesFromTool = (text: string, refused: boolean): MachineSandbox[] => {
     if (refused) {
         return [];
@@ -127,7 +127,7 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     const { text, refused } = await callTool(services, id, "run_command", { command: "intentic-sync status --json", timeoutMs: PULL_TIMEOUT_MS });
     if (refused) {
         // The host agent refuses out-of-scope calls as a value naming the switch. Anything else refused here is
-        // still, from the reader's side, "this machine would not answer" — and the tab's remedy is the same.
+        // still, from the reader's side, "this machine would not answer", and the tab's remedy is the same.
         return { gap: "scope-off" };
     }
     const report = reportFrom(text);
@@ -153,11 +153,11 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
     return result;
 };
 
-/* WHICH OS, in the one vocabulary the view renders — the capability cards' own slugs (see the `computers`
+/* WHICH OS, in the one vocabulary the view renders, the capability cards' own slugs (see the `computers`
  * extension). A sync report states the same fact in Node's spelling, because that is what `os.platform()`
  * returns on the machine, so the two are folded together here rather than in the browser: "win32" is a token
  * this side knows the meaning of, and a view that has to know it too is a view that has to be updated when a
- * platform is added. An unrecognised token passes through as itself — better a strange word on the row than a
+ * platform is added. An unrecognised token passes through as itself, better a strange word on the row than a
  * machine that claims no OS at all. */
 const PLATFORM_SLUGS: Record<string, string> = { win32: "windows", darwin: "macos", linux: "linux" };
 
@@ -166,7 +166,7 @@ const PLATFORM_SLUGS: Record<string, string> = { win32: "windows", darwin: "maco
 const platformOf = (declared: string | undefined, report: MachineReport | undefined): string | undefined =>
     declared ?? (report === undefined ? undefined : (PLATFORM_SLUGS[report.os] ?? report.os));
 
-/* THE RECONCILIATION, as a pure function of the three things that feed it — which machines are enrolled, what
+/* THE RECONCILIATION, as a pure function of the three things that feed it, which machines are enrolled, what
  * they volunteered, and what each host capability answered. Pure because this is the part with a judgement in it,
  * and a judgement is worth testing without a WebSocket, a tmpdir and a capability store standing behind it.
  *
@@ -224,7 +224,7 @@ export const mergeComputers = (
     }
 
     // An enrolled machine with no report says so, rather than rendering as a computer that has no folders and no
-    // ports — which is exactly what one running an agent too old to report would otherwise look like.
+    // ports, which is exactly what one running an agent too old to report would otherwise look like.
     for (const row of rows) {
         if (row.report === undefined && row.gap === undefined) {
             row.gap = "unreported";
@@ -247,12 +247,12 @@ export const computers = async (services: Services): Promise<Computer[]> => {
     return mergeComputers(await enrolledMachines(services.config.historyRoot), await machineReports(services.config.historyRoot), answered);
 };
 
-/* One management action on one machine's sandbox — the Computers view's buttons — relayed to the machine and
+/* One management action on one machine's sandbox, the Computers view's buttons, relayed to the machine and
  * narrated back as it happens.
  *
  * Streamed rather than awaited because the slowest of these takes MINUTES: an update pulls an image and recreates
  * a container, and a button that spins in silence for that long is indistinguishable from one that is broken.
- * The lines are the machine's own, verbatim — this side adds no progress model of its own, exactly as the desktop
+ * The lines are the machine's own, verbatim, this side adds no progress model of its own, exactly as the desktop
  * app promotes `ic`'s output rather than inventing steps beside it.
  *
  * The daemon adds no judgement either. The machine enforces its own switches ("Manage sandboxes" for six of

@@ -9,7 +9,7 @@ import { relayWalletSign } from "./wallet-signer.js";
 import { spentTodayAtomic } from "./wallet-ledger.js";
 import { atomicToUsd, usdcBalance, usdcNetworkOf, usdToAtomic } from "./x402.js";
 
-/* The `wallet` CLI's three routes — the agent-facing surface of the sandbox wallet, scoped to the agent
+/* The `wallet` CLI's three routes, the agent-facing surface of the sandbox wallet, scoped to the agent
  * token in auth/grants.ts like `services` and `capabilities`.
  *
  * `status` and `history` are reads an agent plans around: what the wallet holds, what today's budget has

@@ -10,7 +10,7 @@ import { commitIndex } from "./changes.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
 
 // The /work workspace repo ("root"): the ENTIRE workspace is under version control, not just the nested
-// repositories — the Changes review commits/discards root files like any repo's. The git dir lives on
+// repositories, the Changes review commits/discards root files like any repo's. The git dir lives on
 // /history (agent-tamper-proof, the nested repos' --separate-git-dir pattern); the in-worktree /work/.git is
 // a pointer file this ensure (and history's healGitPointer) rewrites if the agent deletes it. Idempotent and
 // boot-cheap: init happens once, the pointer + exclude list re-converge on every boot.
@@ -24,7 +24,7 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-// The index mode git gives a nested repository — the entry a repo dir becomes when it is staged instead of
+// The index mode git gives a nested repository, the entry a repo dir becomes when it is staged instead of
 // excluded. `ls-files --stage -z` prints "<mode> <sha> <stage>\t<path>", NUL-terminated and never quoted, so a
 // path holding a space (or a newline) survives this parse intact.
 const GITLINK_MODE = "160000 ";
@@ -34,7 +34,7 @@ const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> 
         .filter((entry) => entry.startsWith(GITLINK_MODE))
         .map((entry) => entry.slice(entry.indexOf("\t") + 1));
 
-/* A gitlink DECLARED in .gitmodules is a submodule — the user's own arrangement, never an accident this
+/* A gitlink DECLARED in .gitmodules is a submodule, the user's own arrangement, never an accident this
  * convergence may undo. The container rarely sees one (repos arrive by clone, not by submodule add), but the
  * local profile serves the user's own repo where submodules are ordinary; dropping their entries would land a
  * daemon-authored commit deleting configuration nobody asked about. `git config -f` is the parser git itself
@@ -63,17 +63,17 @@ const strayGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
     return gitlinks.filter((path) => !declared.has(path));
 };
 
-/* ROOT TRACKS FILES, NEVER NESTED REPOSITORIES — the invariant behind the exclude list, enforced here in the
+/* ROOT TRACKS FILES, NEVER NESTED REPOSITORIES, the invariant behind the exclude list, enforced here in the
  * INDEX because the exclude list cannot enforce it.
  *
  * Every repo dir is excluded from root (history.ts rootExcludes) precisely so root never takes git's
  * embedded-repo handling. But an exclude rule is only ever consulted for an UNTRACKED path: the moment a repo
- * dir reaches root's index — a clone staged in the window before the derived list caught up with it, an agent's
- * own `git add -f` — the rules go inert for it forever. What the user sees from then on is a phantom `+1 -1` on
+ * dir reaches root's index, a clone staged in the window before the derived list caught up with it, an agent's
+ * own `git add -f`, the rules go inert for it forever. What the user sees from then on is a phantom `+1 -1` on
  * a one-line "file" with an empty diff, re-appearing in root's Changes review every time that repo's HEAD moves,
  * because a gitlink records the nested repo's HEAD sha and nothing inside root can make it stop.
  *
- * The entries are dropped from the index — the checkouts on disk are never touched — and the removal is
+ * The entries are dropped from the index, the checkouts on disk are never touched, and the removal is
  * COMMITTED: left staged it would only trade the phantom modification for a phantom deletion of the whole repo,
  * one Discard away from checking an empty directory back out over a live checkout.
  *
@@ -82,7 +82,7 @@ const strayGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
  * commit would be a worse bug than the one this fixes. The real index only ever sees the one removal at the end.
  *
  * Convergence, not a one-shot: it re-runs every boot, like the exclude sync above it and repo-git-dirs.ts, and
- * does nothing at all once root's index holds no gitlink — the steady state.
+ * does nothing at all once root's index holds no gitlink, the steady state.
  */
 const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
     const gitlinks = await strayGitlinks(root, git);
@@ -90,7 +90,7 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
         return;
     }
     // `update-index --force-remove`, not `git rm --cached`: rm consults the worktree and refuses an entry whose
-    // staged content matches neither the checkout nor HEAD — which is every one of these the moment the commit
+    // staged content matches neither the checkout nor HEAD, which is every one of these the moment the commit
     // below lands, since a live nested repo's HEAD has moved on and root's HEAD no longer names it at all. The
     // plumbing drops the index entry and nothing else; the repo on disk is never read, let alone touched.
     const drop = ["update-index", "--force-remove", "--", ...gitlinks];
@@ -134,12 +134,12 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
     await git(root, drop);
 };
 
-/* THE SAME INVARIANT, IN A CONVERSATION'S OWN CHECKOUT — the last place it can still be broken.
+/* THE SAME INVARIANT, IN A CONVERSATION'S OWN CHECKOUT, the last place it can still be broken.
  *
  * The turn-start sync, the land and the retire each preserve whatever an agent's worktree still holds as a
  * provenance commit on its branch (`add -A`, agents/sync.ts, land.ts, worktrees.ts). Root's exclude list is
  * derived from the repos discovered in the MAIN checkout, so it describes a conversation's tree only
- * approximately — a repo the agent cloned itself, one that appeared while the derived list was between syncs —
+ * approximately, a repo the agent cloned itself, one that appeared while the derived list was between syncs,
  * and `add -A` stages whatever the rules missed as a gitlink. The commit puts it on the branch, and from that
  * moment the path is TRACKED in this worktree's own index, where no later exclude rule reaches it again.
  *
@@ -152,7 +152,7 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
  * is what retires the phantom for good: added and removed inside the same branch, the review's anchor→tip
  * reading of it is no rows at all.
  *
- * A NESTED repo of the composition commits through plain gitCommitAll — a gitlink there is a submodule of the
+ * A NESTED repo of the composition commits through plain gitCommitAll, a gitlink there is a submodule of the
  * USER's repo, and dropping it would land a deletion nobody asked for.
  */
 export const commitWorktreeRemainder = async (repo: string, dir: string, message: string, git: GitRunner = defaultGit): Promise<boolean> => {
@@ -166,11 +166,11 @@ export const commitWorktreeRemainder = async (repo: string, dir: string, message
     }
     // commitIndex rather than gitCommitAll's own tail: the index is already exactly what should go in, and it
     // is the only one of the two that can commit a removal the staging did not produce. Nothing to --no-verify
-    // around — root's git dir is the daemon's, on /history, where the agent cannot install a hook.
+    // around, root's git dir is the daemon's, on /history, where the agent cannot install a hook.
     return commitIndex(dir, message, AGENT_GIT_AUTHOR, git);
 };
 
-// Returns true only when this boot freshly `gitInit`ed the repo — the caller then takes the baseline commit
+// Returns true only when this boot freshly `gitInit`ed the repo, the caller then takes the baseline commit
 // (commitRootBaseline) AFTER converging its /work-owned files, so those files land inside the baseline.
 export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: string, git: GitRunner = defaultGit): Promise<boolean> => {
     const gitDir = repoGitDir(historyRoot, "root");
@@ -180,7 +180,7 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
     } else if (!(await exists(join(workspace.root, ".git")))) {
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
-    // The same list as the shadow history's root scope, in $GIT_DIR/info/exclude — outside /work, so the
+    // The same list as the shadow history's root scope, in $GIT_DIR/info/exclude, outside /work, so the
     // agent can't edit the rules. Derived from the discovered repo set and re-converged every boot (a daemon
     // update may change the list) and BEFORE the baseline commit, so it can never capture a repo's files,
     // credentials, or junk. History's snapshotAll keeps it current as repos appear/disappear at runtime.
@@ -194,10 +194,10 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
     return false;
 };
 
-/* The one write the local profile makes to a repo it did NOT create: keep the daemon's own furniture — the
- * state dir and the reference shelf — out of the user's `git status`. $GIT_DIR/info/exclude is git's own
+/* The one write the local profile makes to a repo it did NOT create: keep the daemon's own furniture, the
+ * state dir and the reference shelf, out of the user's `git status`. $GIT_DIR/info/exclude is git's own
  * place for local-only ignores: nothing in the working tree changes, nothing reaches their history, and the
- * write is append-only — a file the user also edits is grown by a marked block once, never rewritten (the
+ * write is append-only, a file the user also edits is grown by a marked block once, never rewritten (the
  * full-rewrite convergence syncRootExcludes does is for git dirs the daemon owns). `--git-common-dir` rather
  * than `.git` because the opened folder may itself be a worktree, where `.git` is a pointer file. */
 const LOCAL_EXCLUDE_BLOCK = `# intentic — local workspace state, not project files\n/${STATE_DIR}/\n/${REFERENCE_DIR}/\n`;
@@ -213,18 +213,18 @@ const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<v
     await writeFile(target, `${existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`}${LOCAL_EXCLUDE_BLOCK}`);
 };
 
-/* The LOCAL profile's root ensure — the workspace root is a folder the USER owns, usually their own repo.
+/* The LOCAL profile's root ensure, the workspace root is a folder the USER owns, usually their own repo.
  *
  * The container ensure above reshapes the root on sight: a separate git dir on /history, a pointer file in
  * the tree, the gitlink convergence. Every one of those moves is wrong on a repo somebody also uses outside
- * this daemon — `git init --separate-git-dir` would physically relocate their .git, and a daemon-authored
+ * this daemon, `git init --separate-git-dir` would physically relocate their .git, and a daemon-authored
  * "untrack" commit is a mutation nobody asked for. So a root that IS already a repo is taken exactly as it
- * stands: no init, no pointer, no index surgery, no config writes. The daemon's features ride plain git —
- * worktrees, status, commits — which need none of the container shape.
+ * stands: no init, no pointer, no index surgery, no config writes. The daemon's features ride plain git,
+ * worktrees, status, commits, which need none of the container shape.
  *
  * Only a folder that is NOT a repo gets one made: in-tree .git (the least-surprise shape on a user's
  * machine), the nested-repo excludes written before the caller's baseline commit can stage a discovered
- * repo's tree, and the untracked cache that keeps repeat status scans stat-cheap — ours to set because the
+ * repo's tree, and the untracked cache that keeps repeat status scans stat-cheap, ours to set because the
  * repo is ours to create. Returns true exactly when it made the repo, same contract as ensureRootRepo. */
 export const ensureLocalRootRepo = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<boolean> => {
     if (await exists(join(workspace.root, ".git"))) {
@@ -238,10 +238,10 @@ export const ensureLocalRootRepo = async (workspace: WorkspacePaths, git: GitRun
     return true;
 };
 
-// The baseline "Initialize workspace" commit — run once, on a fresh sandbox, AFTER the daemon has converged its
+// The baseline "Initialize workspace" commit, run once, on a fresh sandbox, AFTER the daemon has converged its
 // /work-owned files (the drafts skill, baked-tool skills). Whatever exists becomes committed state so the
 // Changes review starts clean and daemon-owned files don't surface as a phantom add. --allow-empty keeps HEAD
-// born even on an empty workspace — no unborn-HEAD special case for root.
+// born even on an empty workspace, no unborn-HEAD special case for root.
 export const commitRootBaseline = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<void> => {
     await git(workspace.root, ["add", "-A"]);
     await git(workspace.root, [

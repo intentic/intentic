@@ -10,7 +10,7 @@ type ActivityConnection = ActivityStatus["connections"][number];
 
 // Resolve each connection the gateway pushed into what the panel renders: `idle` (no enabled listener automation,
 // so the gateway is deliberately not connecting) overrides the pushed state, and lastError rides only a
-// genuinely-down connection — idle/ready/connecting cards stay clean instead of inheriting a stale login error.
+// genuinely-down connection, idle/ready/connecting cards stay clean instead of inheriting a stale login error.
 export const resolveConnections = (connections: ActivityConnection[], idle: boolean, lastError: string | undefined): ActivityConnection[] =>
     connections.map((connection) => {
         const gateway = idle ? "idle" : connection.gateway;
@@ -26,7 +26,7 @@ const providerStatus = async (services: ActivityRoutesDeps, provider: string): P
     }
     // No enabled listener automation for this provider ⇒ the gateway is deliberately not connecting (idle),
     // distinct from a connection that should be up but isn't. Derived here from the same listenerState the
-    // gateway reconciles on — fresher than the gateway's ≤30s status snapshot.
+    // gateway reconciles on, fresher than the gateway's ≤30s status snapshot.
     const idle = (await listenerState(services, provider)).automations.length === 0;
     // lastError: the newest system-error in the recent log (a gateway reports login failures via /failure,
     // which lands there). ponytail: provider-level scan (multiple bots share it).
@@ -38,7 +38,7 @@ const providerStatus = async (services: ActivityRoutesDeps, provider: string): P
 export type ActivityRoutesDeps = Pick<Services, "activity" | "automations" | "capabilities" | "config" | "files" | "workspace">;
 
 // The activity audit feed. `list` reads the daemon-written log; `status` reports the realtime connection +
-// voice health that the provider gateways (extension processes) push to /listeners/<provider>/status — the
+// voice health that the provider gateways (extension processes) push to /listeners/<provider>/status, the
 // daemon holds no connection of its own to probe. Every listener provider an enabled extension declares is
 // polled, not a hardcoded one: Discord, Slack and IMAP all report through the same routes, and a fourth
 // gateway shipped as an extension shows up here with no change to this file.

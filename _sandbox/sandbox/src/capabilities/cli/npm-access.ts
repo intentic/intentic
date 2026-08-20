@@ -3,15 +3,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ConnectorHook } from "./connector-hooks.js";
 
-/* npm auth as a ConnectorHook: the npm card's token has to reach the npm CLI ITSELF — publish, dist-tag,
+/* npm auth as a ConnectorHook: the npm card's token has to reach the npm CLI ITSELF, publish, dist-tag,
  * deprecate, owner and private installs all read ~/.npmrc, and npm takes no bearer per-invocation the way curl
  * takes a header. So apply upserts the registry's _authToken line into ~/.npmrc (0600; the ~/.git-credentials
- * precedent — a secret-bearing write is a plain fs call, never a visible command), remove strips it, and
+ * precedent, a secret-bearing write is a plain fs call, never a visible command), remove strips it, and
  * restore rewrites it at boot: the line lives in the container's ephemeral HOME and dies with a recreate while
- * the connection survives on /work (the same seam git access rides — see connector-hooks.ts).
+ * the connection survives on /work (the same seam git access rides, see connector-hooks.ts).
  *
  * One line per REGISTRY, not per instance: two npm connections both authenticate registry.npmjs.org, so the
- * last-applied token wins and removing either strips the line — the same semantics two github connections
+ * last-applied token wins and removing either strips the line, the same semantics two github connections
  * already have on one ~/.git-credentials host line. */
 
 const NPM_AUTH_KEY = "//registry.npmjs.org/:_authToken=";
@@ -35,7 +35,7 @@ const writeNpmAuth = async (token: string): Promise<void> => {
     await writeFile(npmrcPath(), upsertNpmAuth(current, token), { mode: 0o600 });
 };
 
-// Whether the container-local credential is actually in place — what the npm card's status asks, so a wiped
+// Whether the container-local credential is actually in place, what the npm card's status asks, so a wiped
 // HOME reads as "needs a re-add" instead of an active card over a 401ing npm.
 export const npmAuthWired = async (): Promise<boolean> => (await readFile(npmrcPath(), "utf8").catch(() => "")).includes(NPM_AUTH_KEY);
 

@@ -9,17 +9,17 @@ import { discoverPanels, panelKey } from "./panels.js";
 
 const exec = promisify(execFile);
 
-/* THE SANDBOX'S OWN PUBLIC NAMES — panel dev servers (`preview-<panel>`), forwarded ports (`port-<slot>`)
+/* THE SANDBOX'S OWN PUBLIC NAMES, panel dev servers (`preview-<panel>`), forwarded ports (`port-<slot>`)
  * and the outbox (`public-<slot>`), all served by the preview proxy under the tunnel hub's ONE wildcard.
  *
  * This used to ask the PLATFORM to mint a DNS record per label (its /sandbox/preview-route relay, since
  * deleted): the fabric was Cloudflare's, only the platform held a token for the zone, and every name cost the
  * zone a record against its quota. Under the self-hosted hub a name is a row on the controller rather than
- * DNS, and the box holds its OWN account token — so the sandbox attaches its names itself and the platform is
+ * DNS, and the box holds its OWN account token, so the sandbox attaches its names itself and the platform is
  * off the naming path entirely. One less thing a compromised platform could do to a sandbox.
  *
  * Called BEFORE a hostname is handed to a browser, and never rejects: a panel must start even when the hub is
- * unreachable — the warn log is the operator's signal and the next ensure retries.
+ * unreachable, the warn log is the operator's signal and the next ensure retries.
  */
 export const ensureAllPreviewRoutes = async (services: Services): Promise<void> => {
     const discovered = await discoverPanels(services.workspace);
@@ -30,7 +30,7 @@ export const ensureAllPreviewRoutes = async (services: Services): Promise<void> 
 };
 
 export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((labels: readonly string[]) => Promise<void>) => {
-    // Names already shared this boot — one share per label per daemon lifetime. The hub is idempotent about a
+    // Names already shared this boot, one share per label per daemon lifetime. The hub is idempotent about a
     // name it already knows, so a restart re-sharing is cheap; this just avoids spawning the agent for nothing.
     const ensured = new Set<string>();
     // Serialized: each share is an agent invocation, and a burst of panel starts would otherwise race a dozen
@@ -53,7 +53,7 @@ export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((lab
                 try {
                     /* Two calls, because the hub separates the NAME from the share that answers on it: the name
                      * is claimed in the namespace first (a hostname reserved to this account), then a public
-                     * share is bound to it, pointed at the preview proxy — which already routes by Host header,
+                     * share is bound to it, pointed at the preview proxy, which already routes by Host header,
                      * so every preview name lands on the same port and the daemon's existing dispatch does the
                      * rest. Both calls return immediately: the in-box agent (started by the entrypoint) is what
                      * actually holds the share, so nothing here has to stay resident. A name that exists and a

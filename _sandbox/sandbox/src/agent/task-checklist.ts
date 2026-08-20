@@ -3,9 +3,9 @@ import type { TodoItem } from "@intentic/sandbox-contract";
 /* The agent's working checklist, reconstructed from the Task tool family.
  *
  * Claude Code 2.1.220 DISABLED TodoWrite: its `isEnabled()` is `!tasksEnabled() && ...`, and tasks are on
- * unless CLAUDE_CODE_ENABLE_TASKS=false — so under the Agent SDK the checklist is TaskCreate/TaskUpdate/
+ * unless CLAUDE_CODE_ENABLE_TASKS=false, so under the Agent SDK the checklist is TaskCreate/TaskUpdate/
  * TaskList, and a TodoWrite call never arrives. There is no structured SDK message for these (the
- * SDKTask*Message family carries BACKGROUND agent tasks — subagent_type, output_file — not the checklist),
+ * SDKTask*Message family carries BACKGROUND agent tasks, subagent_type, output_file, not the checklist),
  * so the state lives only in the tool calls and their results, and this is where it gets reassembled.
  *
  * The three shapes, verbatim off the wire:
@@ -15,7 +15,7 @@ import type { TodoItem } from "@intentic/sandbox-contract";
  *
  * A create only learns its id from its RESULT, so creates are applied there; an update names its id in its
  * INPUT, so those apply at call time and the list moves the instant the agent says so. TaskList is the
- * authoritative resync — it heals any drift (a resumed session whose earlier tasks this process never saw). */
+ * authoritative resync, it heals any drift (a resumed session whose earlier tasks this process never saw). */
 
 const CREATED = /^Task #(\d+) created successfully/;
 const LISTED = /^#(\d+) \[(pending|in_progress|completed)] (.+)$/;
@@ -46,7 +46,7 @@ export class TaskChecklist {
         return [...this.tasks.values()];
     }
 
-    // A TaskCreate call: remember what it asked for. Nothing to render yet — the id arrives with the result.
+    // A TaskCreate call: remember what it asked for. Nothing to render yet, the id arrives with the result.
     created(toolUseId: string, input: unknown): void {
         const content = stringField(input, "subject");
         if (content === undefined) {
@@ -73,7 +73,7 @@ export class TaskChecklist {
     }
 
     // A TaskUpdate call. `status: "deleted"` drops the task; every other field patches in place. An update
-    // naming a task this process never saw is ignored — inventing a row from a patch would render a checklist
+    // naming a task this process never saw is ignored, inventing a row from a patch would render a checklist
     // item with no subject.
     updated(input: unknown): TodoItem[] | undefined {
         const id = stringField(input, "taskId");

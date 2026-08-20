@@ -2,13 +2,13 @@ import type { InvariantCheck } from "../invariants/invariants.js";
 import type { TurnJournal } from "./turn-journal.js";
 import { liveTurnConversations } from "./turn-runs.js";
 
-/* EVERY LIVE TURN IS WRITTEN DOWN — or it dies with the container and nobody finds out until it has.
+/* EVERY LIVE TURN IS WRITTEN DOWN, or it dies with the container and nobody finds out until it has.
  *
  * The journal exists because intentic's own flows kill turns: every update, every environment approval and every
  * dev swap recreates the container. A turn in the journal comes back; a turn that is not simply ends, mid-answer,
  * with the fleet card reading `interrupted` and forty minutes of work gone.
  *
- * The write is deliberately best-effort — turn-runs.ts states the trade in as many words: "A journal write that
+ * The write is deliberately best-effort, turn-runs.ts states the trade in as many words: "A journal write that
  * fails changes nothing else: the turn is the thing that matters, and the cost is one turn that will not come
  * back from a restart." That trade is right. Its SILENCE is not: the failure is swallowed, nothing re-reads the
  * directory, and the bill arrives at a restart days later looking like an unrelated bug.
@@ -37,7 +37,7 @@ export const checks = ({ turnJournal, live = liveTurnConversations, now = Date.n
     {
         name: "live-turns-are-journalled",
         /* Not `boot`: at boot the journal holds the PREVIOUS life's turns and the live map is empty, which is
-         * the entire point of it — the two disagreeing there is correct, not broken. `turn-settled` as well as
+         * the entire point of it, the two disagreeing there is correct, not broken. `turn-settled` as well as
          * the sweep, because a turn ending is the moment the OTHER live turns' entries matter most: it is when
          * a container recreate is most likely to be seconds away (an update, an approval, a swap). */
         on: ["sweep", "turn-settled"],
@@ -55,7 +55,7 @@ export const checks = ({ turnJournal, live = liveTurnConversations, now = Date.n
     },
 ];
 
-/* DEFERRED: the other direction — a journal entry for a turn that already settled, which the next boot would
+/* DEFERRED: the other direction, a journal entry for a turn that already settled, which the next boot would
  * dutifully re-run and bill to the owner's allowance unwatched. It is a real risk and it is deliberately not
  * checked here, because the daemon records no moment at which a turn settled: the clear is queued, the settled
  * notification fires without awaiting it, and an entry seen with no live run is indistinguishable between "leaked"

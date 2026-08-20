@@ -36,7 +36,7 @@ import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 
-// The implemented oRPC router — the per-domain route factories assembled into the sandboxContract shape. The
+// The implemented oRPC router, the per-domain route factories assembled into the sandboxContract shape. The
 // OpenAPIHandler in app.ts serves it.
 export const createRouter = (services: Services) => ({
     activity: createActivityRoutes(services),

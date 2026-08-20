@@ -11,19 +11,19 @@ import type { StoredShare } from "./share-store.js";
 
 /* The /share routes: turning a conversation into a page anyone with its link can read, and taking it back.
  *
- * Every one of these is a deliberate act by the owner on one named conversation — there is no route here that
+ * Every one of these is a deliberate act by the owner on one named conversation, there is no route here that
  * publishes anything by default, and nothing about a conversation changes when it is shared. What lands in the
  * outbox is a rendering (share-payload.ts decides what of it travels); the conversation itself is untouched
  * and keeps running.
  *
- * A share is FROZEN. `create` takes a snapshot, `update` takes another under the same id — and therefore the
- * same link, which has already been sent — and nothing else moves a published page. That is what makes the
+ * A share is FROZEN. `create` takes a snapshot, `update` takes another under the same id, and therefore the
+ * same link, which has already been sent, and nothing else moves a published page. That is what makes the
  * feature safe to use on a conversation you intend to keep working in: the next turn is private until you say
  * otherwise. */
 
 export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "ensurePreviewRoutes" | "shares" | "transcripts" | "workspace">;
 
-// 64 bits of the address, and the only thing between a stranger and the conversation — see share-paths.ts.
+// 64 bits of the address, and the only thing between a stranger and the conversation, see share-paths.ts.
 const RANDOM_BYTES = 8;
 
 export const createShareRoutes = (services: ShareRoutesDeps) => {
@@ -34,7 +34,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
     const base = publicUrl(slot, zone, sandboxId);
 
     // A share's address. Trailing slash: the page is `<id>/index.html`, and the outbox serves a directory's
-    // index (public-files.ts rule 4) — so the link people paste names the conversation, not a file.
+    // index (public-files.ts rule 4), so the link people paste names the conversation, not a file.
     const urlOf = (id: string): string | undefined => (base === undefined ? undefined : `${base}/${SHARE_DIR}/${encodeURIComponent(id)}/`);
     const withUrl = (share: StoredShare): SharedConversation => {
         const url = urlOf(share.id);
@@ -42,7 +42,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
     };
 
     /* Take the snapshot and write the page. The one path both create and update run, because they differ only
-     * in where the id comes from — which is exactly the difference between a new link and the one already in
+     * in where the id comes from, which is exactly the difference between a new link and the one already in
      * somebody's messages. */
     const snapshot = async (id: string, conversationId: string, title: string, detail: ShareDetail): Promise<SharedConversation> => {
         const agent = services.agents.entry(conversationId);
@@ -54,7 +54,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation has nothing to share yet" });
         }
         const sharedAt = Date.now();
-        // Resolved here, per share, rather than when these routes are built — see viewerDist. A sandbox image
+        // Resolved here, per share, rather than when these routes are built, see viewerDist. A sandbox image
         // that somehow shipped without the page bundle fails this one call with a message the owner can act
         // on, instead of failing to boot.
         let viewer: string;
@@ -64,7 +64,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "this sandbox image is missing the shared-conversation page" });
         }
         await publishShare(services.workspace.root, viewer, id, { title, sharedAt, detail, messages }, pictures);
-        // Almost always a memoized no-op — the boot sweep pre-mints the outbox label. It pays a platform call
+        // Almost always a memoized no-op, the boot sweep pre-mints the outbox label. It pays a platform call
         // only when boot ran with the platform unreachable, which is exactly when the first share would
         // otherwise hand out a hostname that does not resolve. Same reasoning as the publish route's.
         await services.ensurePreviewRoutes([publicLabel(slot)]);
@@ -102,7 +102,7 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
         }),
 
         remove: i.remove.handler(async ({ input }) => {
-            // The id addresses a directory, so it is checked before it is joined onto one — even though it can
+            // The id addresses a directory, so it is checked before it is joined onto one, even though it can
             // only have come from this daemon's own minting.
             if (!SHARE_ID.test(input.id)) {
                 throw new ORPCError("BAD_REQUEST", { message: "not a share" });

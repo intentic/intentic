@@ -4,8 +4,8 @@ import type { GateVerdict, WorkflowRun, WorkflowStepRun, WorkflowStepState } fro
  *
  * Every way this can go wrong except one lands on `blocked`, and that asymmetry IS the design. There is
  * exactly one thing a gate can say that should stop a release: the step ran, wrote the field it promised, and
- * the value is not one of the ones that ship. Everything else — a step that failed, a run that was stopped or
- * ran out of money, a deadline, a document that never arrived, a field missing from one that did — means the
+ * the value is not one of the ones that ship. Everything else, a step that failed, a run that was stopped or
+ * ran out of money, a deadline, a document that never arrived, a field missing from one that did, means the
  * gate never got to judge, and calling that `fail` tells a team their product is broken when what broke was
  * the check.
  *
@@ -29,7 +29,7 @@ const NEVER_JUDGED: Record<Exclude<WorkflowStepState, "done">, string> = {
     stopped: "was stopped",
 };
 
-// The step's own title, which the verdict quotes — read off the snapshot rather than the run's step record,
+// The step's own title, which the verdict quotes, read off the snapshot rather than the run's step record,
 // since only the workflow definition carries it.
 const titleOf = (run: WorkflowRun, step: WorkflowStepRun): string =>
     run.workflow.steps.find((entry) => entry.id === step.stepId)?.title ?? step.stepId;

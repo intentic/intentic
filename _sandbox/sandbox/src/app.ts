@@ -124,25 +124,25 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
     services.logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "unhandled error");
 };
 
-// The webhook fire route for event automations — its callers are external systems, so it's exempt from the
+// The webhook fire route for event automations, its callers are external systems, so it's exempt from the
 // bearer middleware and authenticated by the automation's own token instead (see the route).
 const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 
-/* The Front Desk's public surface — its callers are anonymous website visitors (no Google token), so these are
+/* The Front Desk's public surface, its callers are anonymous website visitors (no Google token), so these are
  * exempt from the bearer middleware and gated by the automation's origin allowlist + rate limit + bot check
  * instead (see webchat/webchat.routes.ts).
  *
  * This is the WHOLE list of what a stranger can reach on this daemon, so it is one predicate rather than a
  * constant per route: the set IS the boundary, and a boundary spread across four names is one somebody widens
- * by accident. `widget.js` is the only fixed path — the rest are per-automation. */
+ * by accident. `widget.js` is the only fixed path, the rest are per-automation. */
 const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|config|challenge)$/.test(path);
 
-// The CI pipeline webhook receiver — its callers are github/gitlab delivery agents (no Google token), so it's
+// The CI pipeline webhook receiver, its callers are github/gitlab delivery agents (no Google token), so it's
 // exempt from the bearer middleware and gated by the per-sandbox webhook secret instead (github signs the
-// body, gitlab echoes the token — see ci/webhook.routes.ts).
+// body, gitlab echoes the token, see ci/webhook.routes.ts).
 const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
 
-// The release gate — its callers are pipeline runners (no Google token, and no Origin either, which is why it
+// The release gate, its callers are pipeline runners (no Google token, and no Origin either, which is why it
 // cannot ride the Front Desk's allowlist), so it's exempt from the bearer middleware and gated by the workflow's
 // own minted gate token instead (see workflows/gate.routes.ts).
 const gatePath = /^\/workflows\/[^/]+\/gate$/;
@@ -150,7 +150,7 @@ const gatePath = /^\/workflows\/[^/]+\/gate$/;
 /* The two doors a connected computer opens, both exempt from the bearer middleware because neither caller has a
  * Google identity to present:
  *
- *   /system/hosts/connect  the machine's WebSocket — it authenticates in its first frame instead of the URL
+ *   /system/hosts/connect  the machine's WebSocket, it authenticates in its first frame instead of the URL
  *                          (host-protocol.ts explains why), and /system/hosts/enroll redeems its one-time pairing.
  *   /mcp/hosts/<id>        the AGENT's MCP door onto that machine, carrying the per-boot host bridge token.
  *
@@ -164,7 +164,7 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
     return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
 };
 
-// A grant request's email + role, or undefined when either is absent/malformed. The role is required — a
+// A grant request's email + role, or undefined when either is absent/malformed. The role is required, a
 // grant IS a role decision, and a default picked here would be a policy nobody chose.
 const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole } | undefined> => {
     const body = (await c.req.json().catch(() => undefined)) as { email?: unknown; role?: unknown } | undefined;
@@ -180,17 +180,17 @@ const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRo
  * The liveness probe and the /events stream lead the list because they are how the boot is OBSERVED: /health
  * carries the progress snapshot for the launch scripts and the loopback probe, /events streams each transition
  * to the browser, and between them a browser can wait visibly instead of firing a workspace's worth of reads
- * at routes that would only park them. The WebSocket upgrades follow — their sessions live outside the
+ * at routes that would only park them. The WebSocket upgrades follow, their sessions live outside the
  * boot-converged state entirely.
  *
  * /system/session and /system/presence are exempt for the same reason, arrived at from the opposite direction:
  * both are boot-independent (the session secret lives on /history, the roster is in memory), and parking the
  * session exchange left a browser with no stored session unable to open the very stream that reports the boot
- * — the failure mode where clearing site data "fixed" a sandbox that was only ever starting up.
+ *, the failure mode where clearing site data "fixed" a sandbox that was only ever starting up.
  *
  * Everything else reads state a boot step builds (registry, git dirs, claude session links), so it waits. */
 // Long-lived streams, exempt from the request timer below. Each is SUPPOSED to stay open — /events for the
-// life of a tab, an attach for the life of a turn — so timing them would file every healthy connection as the
+// life of a tab, an attach for the life of a turn, so timing them would file every healthy connection as the
 // slowest thing the daemon ever did and bury the requests that genuinely stalled. The other event-iterator
 // routes (a capability install, an intentic run) are bounded operations whose duration is worth knowing.
 const STREAM_PATHS = new Set(["/events", "/agent/attach", "/intentic/apply/events"]);
@@ -215,7 +215,7 @@ const READY_EXEMPT = new Set([
 // /workspace/raw, registered before the catch-all.
 //
 // services.boot is the boot gate: the listeners come up the moment the process can serve so a restart stops
-// reading as an outage, and every data route awaits the boot chain instead of racing it — a request that lands
+// reading as an outage, and every data route awaits the boot chain instead of racing it, a request that lands
 // early waits a few seconds where it used to get connection-refused for the whole boot.
 export const createApp = (services: Services): Hono<AppEnv> => {
     const orpcHandler = new OpenAPIHandler(createRouter(services), {
@@ -226,7 +226,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 } catch (error) {
                     // A client that vanished mid-request (tab closed, a cancelled query, a dropped tunnel hop) leaves
                     // the node request stream aborted, and node-server's fast path rejects a read on a disturbed
-                    // stream — so oRPC's input decode throws `TypeError: Body is unusable`. Not an incident: oRPC
+                    // stream, so oRPC's input decode throws `TypeError: Body is unusable`. Not an incident: oRPC
                     // downgrades it to a 400 that goes to a socket nobody is holding. The window is real because the
                     // bearer middleware awaits `authorize` (JWKS verify + owner read) before the body is ever read,
                     // so every in-flight POST the browser cancels during a busy stretch lands here.
@@ -242,18 +242,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const app = new Hono<AppEnv>();
 
     /* Response hardening, above everything so it covers the error paths too. The daemon serves JSON and the
-     * occasional raw workspace file, so most of this set is inert here — it is on for the two that are not:
+     * occasional raw workspace file, so most of this set is inert here, it is on for the two that are not:
      * `nosniff`, because /workspace/raw returns whatever bytes are on disk under a by-extension content type,
      * and `Referrer-Policy`, because the sandbox's own hostname carries its id and should not ride outbound
      * navigations from anything this origin serves.
      *
      * Cross-Origin-Resource-Policy is the one default that has to go: /webchat/widget.js is loaded as a plain
-     * <script> from arbitrary third-party sites, which is precisely the no-cors request CORP blocks — leaving
+     * <script> from arbitrary third-party sites, which is precisely the no-cors request CORP blocks, leaving
      * it on would take every embedded Front Desk down. (COEP is off for the same family of reasons.) */
     app.use("*", secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false }));
 
     /* Outermost: what the BROWSER waited for. Every other measurement in this daemon times a piece of the
-     * work; this one times the answer, which is the only number the user's complaint is actually about — and
+     * work; this one times the answer, which is the only number the user's complaint is actually about, and
      * the only one that also contains the parts nothing else sees (the boot gate below, auth's JWKS verify,
      * oRPC's zod validation of a six-figure change list, the serialization of the response).
      *
@@ -277,7 +277,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // The boot gate, first so nothing below runs against half-built state. Waiting is deliberate: the caller
     // already retried through the whole connection-refused window this replaces, so holding the request the
-    // last few seconds of a boot is strictly less waiting. Read per request, never captured — a tracker whose
+    // last few seconds of a boot is strictly less waiting. Read per request, never captured, a tracker whose
     // chain main() declares AFTER the app is built still gates the requests that arrive next, and one that
     // declared nothing (tests, the host-internal preview) resolves at once.
     app.use("*", async (c, next) => {
@@ -289,16 +289,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     /* CORS is emitted in EVERY auth mode, from the same allowlist the authorizer would use. It used to live
      * inside the auth block below, because the only authless daemons were tests and the host-internal preview
-     * — same-origin callers that never trip CORS. The local profile broke that assumption: its host serves
+     *, same-origin callers that never trip CORS. The local profile broke that assumption: its host serves
      * the app from its own origin (an editor webview is one), so the browser preflights loopback like any
      * cross-origin call, and a daemon that emits nothing is unreachable from the very UI it exists to serve.
-     * The allowlist reasoning is identical with or without auth — see the /health note below. */
+     * The allowlist reasoning is identical with or without auth, see the /health note below. */
     const allowOrigins = services.config.webOrigin
         .split(",")
         .map((origin) => origin.trim())
         .filter((origin) => origin !== "");
     /* An allowlist entry may name a FAMILY: `https://*.example.net` admits any single label in the wildcard
-     * position. Editor webviews are why — a webview's origin is minted per session from a fixed suffix, so no
+     * position. Editor webviews are why, a webview's origin is minted per session from a fixed suffix, so no
      * exact spelling can be written down ahead of time. Still an allowlist, never a wildcard: the scheme and
      * the suffix are pinned, only one label floats, and the entry is the operator's own explicit config. */
     const originAllowed = (origin: string): boolean =>
@@ -315,12 +315,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.use(
         "*",
         cors({
-            /* The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
+            /* The daemon is owner-driven from one origin, except the web-chat widget, which is embedded on
              * arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
              * browser-blocked; the route's own allowedOrigins check is the real gate there.
              *
              * Everywhere else this is an ALLOWLIST, never a wildcard, and the reason is /health. CORS buys
-             * nothing on a route that checks a bearer — a stranger has no token to send — but /health
+             * nothing on a route that checks a bearer, a stranger has no token to send, but /health
              * deliberately checks nothing and answers with the sandbox id, and the loopback listener's port
              * is derived from that id (@intentic/sandbox-run localDaemonPort). Under `*` any page in the
              * user's browser could walk that port range, read the id, and derive every preview hostname the
@@ -331,7 +331,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 }
                 // Reflect only a match (exact, or one family entry's single floating label): returning the
                 // list's first entry for a foreign origin would hand the browser a header naming someone
-                // else, which it correctly ignores — but it also hides the misconfiguration. null ⇒ no
+                // else, which it correctly ignores, but it also hides the misconfiguration. null ⇒ no
                 // header at all, which is the honest answer.
                 return originAllowed(origin) ? origin : null;
             },
@@ -359,17 +359,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             if (
                 c.req.path === "/health" ||
                 c.req.path === "/system/terminal" ||
-                // /system/browser-profile is a WebSocket upgrade too — it authorizes token+connect from the query
+                // /system/browser-profile is a WebSocket upgrade too, it authorizes token+connect from the query
                 // string itself (see createBrowserProfileRoute), same as /system/terminal.
                 c.req.path === "/system/browser-profile" ||
                 // …and so is /system/browser-view, the same screencast pointed at the browser the AGENT drives.
                 c.req.path === "/system/browser-view" ||
                 // /workspace/media is fetched by a <video>/<audio> element, which cannot carry a header either.
-                // It checks its own path-scoped ticket (auth/media-tickets.ts) — a strictly narrower grant than
+                // It checks its own path-scoped ticket (auth/media-tickets.ts), a strictly narrower grant than
                 // the bearer, and the route refuses outright without one.
                 c.req.path === "/workspace/media" ||
                 // /bundles/download is NAVIGATED to, so the browser's own download manager streams the bytes to
-                // disk — and a navigation carries no Authorization header either. Same containment as the media
+                // disk, and a navigation carries no Authorization header either. Same containment as the media
                 // route: its own ticket, minted by an owner-gated POST and scoped to the one bundle it names.
                 c.req.path === "/bundles/download" ||
                 c.req.path === "/enroll" ||
@@ -386,7 +386,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             ) {
                 return next();
             }
-            /* The non-bearer credentials — a panel's backend, the in-container `vpn` CLI, a control token
+            /* The non-bearer credentials, a panel's backend, the in-container `vpn` CLI, a control token
              * (the ACP bridge, and whatever drives this sandbox from outside), the desktop-sync agent. One
              * table in auth/grants.ts says what each reaches; this loop is the only place any of them is
              * admitted. Identity stays unset for all four (documented-legal, the panel-token precedent):
@@ -411,14 +411,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.set("identity", caller);
                 /* The role floor (auth/role-floor.ts), after authentication and in one place: a member below a
                  * route's tier gets a 403 that NAMES the tier, so the browser can render "ask a maintainer"
-                 * instead of a bare refusal. The owner-only routes keep their in-route gates besides — this
+                 * instead of a bare refusal. The owner-only routes keep their in-route gates besides, this
                  * floor is what keeps a viewer read-only and a collaborator off the ship controls. */
                 const floor = routeFloor(c.req.method, c.req.path);
                 if (!roleAtLeast(caller.role, floor)) {
                     return c.json({ error: `${floor} access required`, floor }, 403);
                 }
             } catch (error) {
-                // 403 = verified identity that isn't the owner/a member — the browser renders "no access" for it,
+                // 403 = verified identity that isn't the owner/a member, the browser renders "no access" for it,
                 // distinct from 401 (missing/invalid token), which it treats like any other unreachable daemon.
                 if (error instanceof ForbiddenError) {
                     return c.json({ error: error.message }, 403);
@@ -429,44 +429,44 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     }
 
-    /* Unauthenticated by design (the gate above exempts it) — it is the "is a daemon there" probe every flow
+    /* Unauthenticated by design (the gate above exempts it), it is the "is a daemon there" probe every flow
      * makes: the launch scripts' readiness loop, /setup's attach check, and the browser's LOOPBACK PROBE.
      *
      * That last one is why the sandbox id is here. A browser on the same machine dials 127.0.0.1 at a port
      * derived from this sandbox's id (@intentic/sandbox-run localDaemonPort) instead of going out to
-     * Cloudflare and back — but a port is not an identity: a second sandbox, or an unrelated process, can be
+     * Cloudflare and back, but a port is not an identity: a second sandbox, or an unrelated process, can be
      * behind it. Answering with the id lets the probe prove it reached THIS daemon before routing a session's
      * traffic at it; a mismatch means the browser silently keeps using the tunnel. The id is already the
      * leading label of the sandbox's public hostname, so naming it here discloses nothing new.
      *
-     * `boot` rides along for the callers that poll this before a stream exists — the launch scripts' readiness
-     * loop and /setup's attach check — so "not answering yet" and "answering, still converging" stop looking
+     * `boot` rides along for the callers that poll this before a stream exists, the launch scripts' readiness
+     * loop and /setup's attach check, so "not answering yet" and "answering, still converging" stop looking
      * alike from the outside. Purely additive: `ok` and `sandboxId` are unchanged. */
     /* `announce` rides along for the one probe that can see it: the browser and the platform each know their
-     * own half of the setup chain, but whether THIS DAEMON reached the platform is knowable only in here —
+     * own half of the setup chain, but whether THIS DAEMON reached the platform is knowable only in here,
      * ic's postflight and doctor read it via docker exec, and name that link when it is the broken one. */
     app.get("/health", (c) =>
         c.json({
             ok: true,
             sandboxId: sandboxIdFromToken(services.config.connectToken),
-            // Which posture answers (see platform/profile.ts) — on the liveness probe because a client needs
+            // Which posture answers (see platform/profile.ts), on the liveness probe because a client needs
             // it before any authenticated read: a local daemon has no auth to establish at all.
             profile: services.config.sandbox.profile,
             boot: services.boot.progress(),
             announce: services.announcer.status(),
             // …and its other half: whether this sandbox's PUBLIC address answers, which the box establishes by
-            // probing itself. Same readers, same reason — except that a broken tunnel is the one failure a
+            // probing itself. Same readers, same reason, except that a broken tunnel is the one failure a
             // caller cannot learn any other way, because every other route to the answer runs through it.
             reach: services.reach.status(),
         }),
     );
 
-    // The same bytes, for one side of a diff rather than a file in the tree — an image the review surfaces can
+    // The same bytes, for one side of a diff rather than a file in the tree, an image the review surfaces can
     // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it
     // is not an oRPC route: the body is a streamed binary, not JSON.
     app.route("/", createDiffRawRoute(services));
 
-    // The composer's voice input — a WAV utterance in, its text out. A byte route for the same reason as its
+    // The composer's voice input, a WAV utterance in, its text out. A byte route for the same reason as its
     // neighbours: the JSON contract has no business carrying audio (see speech/speech.routes.ts).
     app.route("/", createSpeechRoute(services));
 
@@ -494,7 +494,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
     };
 
-    // Raw bytes for any file under /work, with a Content-Type by extension — the browser previews images/PDF
+    // Raw bytes for any file under /work, with a Content-Type by extension, the browser previews images/PDF
     // here (the text route utf8-decodes and would corrupt them). Same guards/order as workspace.file: 400 on
     // escape, 404 on missing, 413 on oversize.
     app.get("/workspace/raw", async (c) => {
@@ -532,13 +532,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      * /workspace/raw answers one whole file into memory, and its 25 MiB ceiling exists precisely because it
      * does. Under that contract a recording is either refused outright or must download in full before its
      * first frame paints, and a seek to 40:00 can only wait for the 39 minutes in front of it. None of that is
-     * a size problem: it is the shape of the answer. So this route answers a RANGE, streamed off disk — the
+     * a size problem: it is the shape of the answer. So this route answers a RANGE, streamed off disk, the
      * element asks for the header, then the index, then whatever window the user just dragged to, and each one
      * costs a seek and a 64 KiB chunk instead of the file. There is no byte cap here for the same reason: what
      * MAX_RAW_BYTES protects is the daemon's heap, and nothing is ever held.
      *
      * The credential is the other difference. Every other route on this daemon takes a bearer, and a media
-     * element cannot send one — so this one takes a ticket from the query string, minted over the ordinary
+     * element cannot send one, so this one takes a ticket from the query string, minted over the ordinary
      * authenticated contract (workspace.mediaTicket) and bound to a single path. See auth/media-tickets.ts for
      * why that binding is what makes a longer-lived, replayable credential an acceptable trade here.
      *
@@ -571,7 +571,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const headers: Record<string, string> = {
             "Content-Type": contentTypeForPath(target),
             "Content-Length": String(length),
-            // Without this the element never issues a Range at all — it downloads linearly and the scrubber
+            // Without this the element never issues a Range at all, it downloads linearly and the scrubber
             // can only reach what has already arrived.
             "Accept-Ranges": "bytes",
             // The agent rewrites files under the reader's feet; a cached window of a file that has since
@@ -581,22 +581,22 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (range.partial) {
             headers["Content-Range"] = `bytes ${range.start}-${range.end}/${size}`;
         }
-        /* SAVE THIS RATHER THAN PLAY IT. The browser's own `download` attribute is no use here — the daemon is
-         * a different origin, where it is ignored and the link merely navigates — so the intent has to come
+        /* SAVE THIS RATHER THAN PLAY IT. The browser's own `download` attribute is no use here, the daemon is
+         * a different origin, where it is ignored and the link merely navigates, so the intent has to come
          * from the server. Which also makes this the download path for a file /workspace/raw would refuse:
          * nothing is buffered, so size stops mattering. RFC 5987 encoding, because a workspace filename is
          * whatever the user called it. */
         if (c.req.query("download") !== undefined) {
             headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(path.slice(path.lastIndexOf("/") + 1))}`;
         }
-        // An empty file has no range to open — createReadStream(start: 0, end: -1) would throw.
+        // An empty file has no range to open, createReadStream(start: 0, end: -1) would throw.
         if (length === 0) {
             return c.body(null, 200, headers);
         }
         return c.body(openWorkspaceFileRange(target, range.start, range.end), range.partial ? 206 : 200, headers);
     });
 
-    // Write one file under /work — the drag-drop upload AND the editor's text save both post here (bytes / utf8
+    // Write one file under /work, the drag-drop upload AND the editor's text save both post here (bytes / utf8
     // body are the same to persist), so writes stay off oRPC like the raw read above. The body streams straight to
     // disk (no full-buffer), so multi-GB uploads stay flat in memory; parent dirs are auto-created, so a nested
     // dropped-folder path materializes its tree. Guards: 400 on escape, 413 on oversize (Content-Length first,
@@ -623,10 +623,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "file too large" }, 413);
         }
         // The editor's guarded save: `x-intentic-base-hash` carries the sha256 of the text the browser last knew
-        // on disk (its baseline), and the write is refused when the file no longer matches — an agent or terminal
+        // on disk (its baseline), and the write is refused when the file no longer matches, an agent or terminal
         // write landed since that read, and a blind overwrite would clobber it. 409 keeps the file untouched; the
         // browser shows its changed-on-disk banner with the user's edits preserved. Drag-drop uploads send no
-        // hash and overwrite as before. Check-then-write, not atomic — the guard shrinks the race window from
+        // hash and overwrite as before. Check-then-write, not atomic, the guard shrinks the race window from
         // the whole edit session to this handler, which is what the agent needs (its writes echo over the SSE in
         // ~250ms; the guard covers exactly that gap).
         const baseHash = c.req.header("x-intentic-base-hash");
@@ -638,7 +638,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         const body = c.req.raw.body;
         // An empty body (a new empty file, or saving an emptied editor buffer) has no stream to pipe. Only at
-        // offset 0 — an empty later part must not wipe the parts already written.
+        // offset 0, an empty later part must not wipe the parts already written.
         if (body === null) {
             if (offset === 0) {
                 await services.files.write(target, "");
@@ -666,7 +666,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Re-upload diff: the client posts a manifest of what it's about to upload (path + source size + mtime) and
     // we answer which paths are already identical on disk (same size + whole-second mtime), so the browser drops
     // those and re-sends only what changed. Live-stats /work (unlike the filtered tree, this sees `.git` and has
-    // no entry cap). Read-only — never writes; escaping/denied paths simply aren't reported as skippable.
+    // no entry cap). Read-only, never writes; escaping/denied paths simply aren't reported as skippable.
     app.post("/workspace/upload-diff", async (c) => {
         const { files } = await c.req.json<{ files?: UploadManifestEntry[] }>();
         return c.json({ skip: await computeUploadSkip(services.workspace.root, files ?? []) });
@@ -675,7 +675,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Bulk directory upload: the browser streams ONE tar of a large dropped tree here (over per-file POSTs, which
     // cost a round-trip each) and we extract it entry-by-entry into /work. Same guards as the single upload,
     // applied per entry: 400 on any escaping path (aborts), silently skips the daemon's control-plane files
-    // (isControlPlanePath), 413 once the running total passes the cap. `.git` IS written — a dropped repo keeps
+    // (isControlPlanePath), 413 once the running total passes the cap. `.git` IS written, a dropped repo keeps
     // its own, so it stays connected to its remote. Streamed both ways, so a huge tree never lands in memory.
     app.post("/workspace/upload-archive", async (c) => {
         const body = c.req.raw.body;
@@ -698,7 +698,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     /* Mint the one-shot ticket the three WebSocket upgrades below redeem. This route is ordinary HTTP, so it
-     * rides the bearer middleware like everything else — which is the entire trick: the credential is presented
+     * rides the bearer middleware like everything else, which is the entire trick: the credential is presented
      * in a header here, and what travels in the upgrade's query string is a value that is worthless the moment
      * it is used. Identity comes from the middleware, never the body.
      *
@@ -718,15 +718,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // Desktop sync's transport: this container's sshd, as a byte stream over the same HTTPS surface the
     // workspace is served on (platform/sync-ssh.ts). Authorized by the enrolled machine's sync token through
-    // the ordinary grant table — a Node client can set a header, so this needs no query-string ticket.
+    // the ordinary grant table, a Node client can set a header, so this needs no query-string ticket.
     app.get("/system/sync/ssh", createSyncSshRoute(services));
 
     // A `browser`-kind capability's own Chromium, in the owner's hands: a WebSocket that screencasts the
-    // platform's persistent profile — to sign into, or to use the connected account by hand (see
+    // platform's persistent profile, to sign into, or to use the connected account by hand (see
     // createBrowserProfileRoute). Same shared `ws` server + query-string auth as the terminal.
     app.get("/system/browser-profile", createBrowserProfileRoute(services));
 
-    // Watch the browser the AGENT is driving — the same screencast wire as the profile window, attached to a
+    // Watch the browser the AGENT is driving, the same screencast wire as the profile window, attached to a
     // live `browser-*` session instead of the platform's own profile (see createBrowserViewRoute).
     app.get("/system/browser-view", createBrowserViewRoute(services));
 
@@ -755,8 +755,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     // Webhook fire for event automations: external systems (GitHub/Sentry/monitors) POST here to wake the
-    // agent, authenticated by the automation's own token as ?token=… — the only mechanism every webhook sender
-    // supports. Enforced ALWAYS (fail-closed even in loopback, unlike /enroll — the token always exists). The
+    // agent, authenticated by the automation's own token as ?token=…, the only mechanism every webhook sender
+    // supports. Enforced ALWAYS (fail-closed even in loopback, unlike /enroll, the token always exists). The
     // body (any format, capped) reaches the guard as AUTOMATION_PAYLOAD and is appended to the wake prompt.
     // Responds immediately; the agent turn runs detached, exactly like a scheduler fire.
     app.post("/automations/:id/fire", async (c) => {
@@ -777,7 +777,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         const payload = await c.req.text();
         // A webhook is an outside message too, so its wake opens a surfaced conversation like a Discord mention's
-        // does — the sender is a system, not a person, so the origin carries no author or channel.
+        // does, the sender is a system, not a person, so the origin carries no author or channel.
         void fireAutomation(services, automation, streamAgent, {
             ...(payload === "" ? {} : { payload }),
             origin: { automationId: automation.id, provider: "webhook" },
@@ -788,7 +788,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     /* The release gate: a pipeline runner POSTs here to run a workflow and WAIT for its verdict. Public
      * (gatePath above), authenticated by the workflow's own minted gate token, and the only route in the
-     * daemon that holds a request open for the work it started — see workflows/gate.routes.ts for why. */
+     * daemon that holds a request open for the work it started, see workflows/gate.routes.ts for why. */
     app.post("/workflows/:id/gate", createGateRoute(services));
 
     /* The Front Desk: the embeddable widget bundle, the per-automation config it renders itself from, its bot
@@ -805,12 +805,12 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // owner's install diagnostic, so it takes the ordinary bearer middleware like every other app route.
     app.get("/webchat/:id/installs", webchat.installs);
 
-    // Owner-only management of the sandbox's shared-access list — the emails the auth check above admits besides
+    // Owner-only management of the sandbox's shared-access list, the emails the auth check above admits besides
     // the owner. The owner's browser calls these when inviting/removing collaborators; the platform mirrors the
     // grants for discovery, but THIS list is the enforced one. Loopback mode (no auth) skips the owner gate, like
     // every other route. The bearer middleware already ran (caller is at least a member); the owner gate narrows it.
     // Returns the denial response, or undefined when the caller is the owner: 403 for a verified non-owner
-    // (ForbiddenError), 401 for authentication failures — the latter matters on the middleware-exempt
+    // (ForbiddenError), 401 for authentication failures, the latter matters on the middleware-exempt
     // /system/authorized-key routes, where this gate is the only auth at all.
     const ownerDenied = async (c: Context): Promise<Response | undefined> => {
         if (services.auth === undefined) {
@@ -879,14 +879,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile). Members see the state; only the
     // owner approves (copying it to the approved file) or rejects (deleting the proposal). The rebuild itself
-    // runs OUTSIDE the container — recreate.sh locally, the workspace provider on a server — pinned to the
+    // runs OUTSIDE the container, recreate.sh locally, the workspace provider on a server, pinned to the
     // approved hash, so approval here never mutates the running sandbox.
     app.get("/environment", async (c) => c.json(await readEnvironment(services)));
-    /* The same sandbox read as CONTENTS rather than as a recipe — what it has, with each tool's version read back
+    /* The same sandbox read as CONTENTS rather than as a recipe, what it has, with each tool's version read back
      * from the tool. A route of its own because it costs process spawns: /environment above is polled by the
      * shell's rebuild banner and re-fetched on every write under .intentic/environment., and making that pay for
      * forty version checks would be a tax on the whole app for one tab. `refresh` re-probes, which is what the
-     * card's refresh button is for — a tool installed mid-session is otherwise cached as missing. */
+     * card's refresh button is for, a tool installed mid-session is otherwise cached as missing. */
     app.get("/environment/contents", async (c) => {
         if (c.req.query("refresh") !== undefined) {
             clearVersionCache();
@@ -929,14 +929,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     /* The environment BUNDLE: this sandbox's two volumes packed for a move, and the restore that unpacks one.
      *
-     * Raw Hono rather than oRPC for the same reason the upload routes are — a restore and a download are streams
+     * Raw Hono rather than oRPC for the same reason the upload routes are, a restore and a download are streams
      * of arbitrary size, and neither end may hold one. Owner-only throughout and not merely by convention: an
      * export reads every repo and (at the owner's choice) every credential the sandbox holds, and a restore
      * overwrites the workspace a fleet may be working in.
      *
      * The EXPORT is an artifact, not a response. `POST /bundles` starts the pack and answers with its name at
      * once; the bytes land in the daemon's export directory and `GET /bundles` reads that directory back. This
-     * is what makes an export survive the tab that asked for it — see portability/exports.ts for why the first
+     * is what makes an export survive the tab that asked for it, see portability/exports.ts for why the first
      * cut, which streamed the pack down the click's own response, could not.
      */
     app.get("/bundles", async (c) => {
@@ -947,7 +947,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ exports: await listExports(services.config.historyRoot) });
     });
 
-    // Start one. `?secrets=1` is the owner's choice and it changes the BYTES, not the framing — the bundle
+    // Start one. `?secrets=1` is the owner's choice and it changes the BYTES, not the framing, the bundle
     // records what it was made with, and the restore report explains what the choice cost. Default off: the
     // safe bundle is the one you can hand to somebody else.
     app.post("/bundles", async (c) => {
@@ -978,7 +978,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
      *
      * A download has the same problem a <video> has (see /workspace/media): the browser must fetch it ITSELF for
      * the bytes to stream to disk rather than through the tab's memory, and a navigation cannot carry an
-     * Authorization header. The containment is the same too — the ticket names one bundle and buys nothing else.
+     * Authorization header. The containment is the same too, the ticket names one bundle and buys nothing else.
      * Namespaced `bundle:` so a ticket minted here can never be replayed against a workspace path, nor a media
      * ticket against a bundle.
      */
@@ -999,7 +999,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (services.auth !== undefined && !services.mediaTickets.valid(c.req.query("ticket") ?? "", `bundle:${name}`)) {
             return c.json({ error: "unauthorized" }, 401);
         }
-        // Resolved through the export LIST, so only a finished bundle this daemon produced can be named here —
+        // Resolved through the export LIST, so only a finished bundle this daemon produced can be named here,
         // a query string can never walk it onto another file.
         const opened = await openExport(services.config.historyRoot, name);
         if (opened === undefined) {
@@ -1031,7 +1031,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 MAX_UPLOAD_BYTES,
             );
             // The restore wrote manifests the daemon's own state is derived from (capabilities, the custom
-            // overlay section), so recompose before answering — the Environment card then renders the target's
+            // overlay section), so recompose before answering, the Environment card then renders the target's
             // own composition, against ITS base image, instead of whatever the source last had.
             await composeEnvironment(services);
             services.history.notifyUserWrite();
@@ -1048,7 +1048,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
 
     /* MIGRATIONS: importing a FOREIGN assistant's setup (a packed `~/.hermes`), preview-first. Raw Hono beside
-     * the bundle routes for the same reason they are — the plan's input is an upload stream — and owner-only
+     * the bundle routes for the same reason they are, the plan's input is an upload stream, and owner-only
      * throughout: the archive is somebody's credential store and the apply writes settings, skills, automations
      * and capabilities. Two calls: `plan` parses the upload into a checklist and holds it in memory under a
      * token; `apply` names the ticked ids. See migrations/migrations.ts for why nothing is held on disk. */
@@ -1071,7 +1071,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             throw error;
         }
     });
-    /* The owner's own computers as import sources — probed live, because the whole value is that the offer
+    /* The owner's own computers as import sources, probed live, because the whole value is that the offer
      * appears BEFORE they read a packing instruction. Never fails the card: a machine that is asleep or holds
      * nothing is a row saying so, which is why every probe is caught into its own `detail`. */
     app.get("/migrations/hosts", async (c) => {
@@ -1126,7 +1126,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ ok: migrations.abandon() });
     });
 
-    // An extension's prebuilt ESM bundle — raw JS bytes, so a plain Hono route like /environment (oRPC is for
+    // An extension's prebuilt ESM bundle, raw JS bytes, so a plain Hono route like /environment (oRPC is for
     // JSON). The web loader fetches this with auth → Blob URL → import(). The ETag is the code identity: the
     // pinned HEAD sha for a git-installed extension (sha-pinned installs make the bundle immutable per commit),
     // and the content hash for a workspace one, whose dir is live-edited and has no commit to stand for it.
@@ -1152,7 +1152,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     /* Extension backend namespaces — /x/<id>/* proxied verbatim to the backend host (extensions/backend/).
      * The request has already been through everything above: the boot gate, CORS, and the bearer middleware
-     * with its role floor (an unlisted GET floors at viewer, an unlisted mutation at maintainer — the same
+     * with its role floor (an unlisted GET floors at viewer, an unlisted mutation at maintainer, the same
      * defaults every unclassified core route gets). What is forwarded is the request MINUS its credentials:
      * the backend acts on the daemon through its own scoped token, and handing it the owner's bearer would
      * quietly re-grant everything the token model just took away. A host mid-restart answers 503 with the
@@ -1176,15 +1176,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return new Response(upstream.body, { status: upstream.status, headers: endToEndHeaders(upstream.headers) });
     });
 
-    /* The creator pool's metered services, relayed to the platform (platform/pool-services.ts) — the catalog
+    /* The creator pool's metered services, relayed to the platform (platform/pool-services.ts), the catalog
      * with the owner's credit meter, and one priced run. The daemon contributes the connect token; the
      * platform holds the member gate, the meter and the refund discipline, and its refusals are already
      * written for the reader. These are the routes an extension backend declares in `permissions.daemon` to
-     * spend the owner's credits — a mutation, so the bearer middleware floors the run at maintainer for
+     * spend the owner's credits, a mutation, so the bearer middleware floors the run at maintainer for
      * browsers, like every unlisted POST.
      *
-     * WHO GETS GATED: the AGENT's own run call — the request that presented the agent token, which commits it
-     * to that grant (grants.ts) — parks on an owner-approval card before anything is spent
+     * WHO GETS GATED: the AGENT's own run call, the request that presented the agent token, which commits it
+     * to that grant (grants.ts), parks on an owner-approval card before anything is spent
      * (platform/service-offer.ts). An extension backend passes straight through: which services it may run is
      * declared in its manifest and was approved at install. A browser session is the owner acting directly. */
     app.get("/pool/services", async (c) => {
@@ -1192,7 +1192,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.newResponse(answer.body, answer.status as 200, { "content-type": answer.contentType });
     });
     // The wanted list: an agent that read the catalog and found nothing that answers files what it looked
-    // for. No spend, no card — the platform bounds it (length, a daily cap per owner) and publishes only the
+    // for. No spend, no card, the platform bounds it (length, a daily cap per owner) and publishes only the
     // aggregate, so this relays as plainly as the catalog read above.
     app.post("/pool/wanted", async (c) => {
         const answer = await relayServiceWant(services.config, await c.req.text());
@@ -1230,8 +1230,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     });
 
-    /* The capability setup gate — the `capabilities` CLI's two routes (capabilities/ask.routes.ts).
-     * `connectable` is discovery (every card, whether it's connected — names only, never config); `ask` parks
+    /* The capability setup gate, the `capabilities` CLI's two routes (capabilities/ask.routes.ts).
+     * `connectable` is discovery (every card, whether it's connected, names only, never config); `ask` parks
      * the agent's call on an owner-decided card in chat, exactly the consent shape the priced-services gate
      * above enforces: the model may ask, and only the owner's click makes anything happen. Registered before
      * the oRPC catch-all so the exact paths win over the /capabilities REST surface. */
@@ -1239,7 +1239,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/capabilities/connectable", askRoutes.connectable);
     app.post("/capabilities/ask", askRoutes.ask);
 
-    /* The wallet surface — the `wallet` CLI's three routes (wallet/wallet.routes.ts). `status` and `history`
+    /* The wallet surface, the `wallet` CLI's three routes (wallet/wallet.routes.ts). `status` and `history`
      * are reads; `fetch` is the one door money can leave through, and it enforces the whole consent story
      * inline: the daemon makes the request itself, parses the endpoint's x402 challenge, checks the owner's
      * policy, parks the agent's call on an approval card for anything outside the standing auto-approve
@@ -1254,21 +1254,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
     // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),
     // and reports failures/status. Reached with the per-boot panel token (the x-intentic-panel middleware branch
-    // above), like every other panel-process call — registered before the oRPC catch-all.
+    // above), like every other panel-process call, registered before the oRPC catch-all.
     const listenerRoutes = createListenerRoutes(services);
     app.get("/listeners/:provider/state", listenerRoutes.state);
     app.post("/listeners/:provider/dispatch", listenerRoutes.dispatch);
     app.post("/listeners/:provider/failure", listenerRoutes.failure);
     app.post("/listeners/:provider/status", listenerRoutes.status);
 
-    // The CI pipeline webhook receiver — public (ciWebhookPath above), secret-gated in the handler. Completed
+    // The CI pipeline webhook receiver, public (ciWebhookPath above), secret-gated in the handler. Completed
     // pipelines freshen the runs cache and wake `ci` listener automations (see ci/webhook.routes.ts).
     app.post("/ci/webhook/:host", createCiWebhookRoute(services));
 
     // Desktop enrollment (Mutagen). The browser mints a short-lived pairing token; the desktop agent redeems it
-    // once at /system/authorized-key to land its SSH key — so the agent needs no OAuth, and trust roots in the
+    // once at /system/authorized-key to land its SSH key, so the agent needs no OAuth, and trust roots in the
     // Google identity that minted the token. The pairing carries the MODE it may enroll: the owner gets full
-    // file "sync" (default, or "mirror" on request), a member (collaborator) can only get port "mirror" — so
+    // file "sync" (default, or "mirror" on request), a member (collaborator) can only get port "mirror", so
     // live previews are everyone's while the single-holder file-sync lock stays owner-territory. The route runs
     // through the bearer middleware (not exempt), so an unauthenticated caller is already 401'd here. Sits before
     // the oRPC catch-all, like /members and /workspace/raw.
@@ -1278,8 +1278,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ ...mintPairing(mode), mode });
     });
 
-    /* The user's own computers (hosts/). Same trust root as desktop sync — the owner mints a single-use pairing
-     * in the browser and the connect one-liner carries it — narrowed in one way that matters: a pairing is bound
+    /* The user's own computers (hosts/). Same trust root as desktop sync, the owner mints a single-use pairing
+     * in the browser and the connect one-liner carries it, narrowed in one way that matters: a pairing is bound
      * to ONE host capability, so a redeemed token can only ever become the machine the owner was looking at when
      * they clicked Connect. Owner-only to mint: giving a member hands on the owner's laptop is not a collaboration
      * feature. */
@@ -1295,7 +1295,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         return c.json(services.hosts.mintPairing(id));
     });
-    // Redeemed by the machine's installer, authorized by the pairing alone (exempt from the bearer middleware) —
+    // Redeemed by the machine's installer, authorized by the pairing alone (exempt from the bearer middleware),
     // so nobody signs into Google on the machine being connected.
     app.post("/system/hosts/enroll", async (c) => {
         const enrolled = await services.hosts.enroll(c.req.header("x-intentic-pair") ?? "");
@@ -1322,7 +1322,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/mcp/hosts/:id", hostMcp);
     app.get("/mcp/hosts/:id", hostMcp);
     app.delete("/mcp/hosts/:id", hostMcp);
-    /* Control tokens — owner-minted (the sync-pair trust model, made durable + revocable), raw value returned
+    /* Control tokens, owner-minted (the sync-pair trust model, made durable + revocable), raw value returned
      * exactly once. What each scope reaches is auth/control-tokens.ts. Plain routes before the oRPC catch-all,
      * like the pair block.
      *
@@ -1358,11 +1358,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return (await services.controlTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
     });
     /* Sign out every browser: re-key the session signer, so all sessions minted for this sandbox stop
-     * verifying at once (auth/session.ts). Owner-only, and the owner's OWN browser is included — it 401s on its
+     * verifying at once (auth/session.ts). Owner-only, and the owner's OWN browser is included, it 401s on its
      * next call and silently re-establishes from the Google credential it already holds, which is what makes
      * this safe to offer as a button rather than a support procedure.
      *
-     * Here rather than on the members routes because it is not about who may access the sandbox — it is about
+     * Here rather than on the members routes because it is not about who may access the sandbox, it is about
      * what is still holding a credential to it, which is the question a lost laptop actually asks. Loopback
      * mode has no sessions to rotate and no owner to check, so it answers ok without doing anything. */
     app.post("/system/sessions/revoke", async (c) => {
@@ -1407,7 +1407,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (key === undefined || !isValidAuthorizedKey(key)) {
             return c.json({ error: "invalid key" }, 400);
         }
-        // The mode comes from the pairing (minted per the requester's role), never from the agent — so a member's
+        // The mode comes from the pairing (minted per the requester's role), never from the agent, so a member's
         // pairing can only ever enroll "mirror". The owner-Google fallback path defaults to full "sync".
         const mode: SyncMode = viaPair ? (pairingMode(pair) ?? "mirror") : "sync";
         // A "sync" enroll is single-holder: if a different machine holds it and this isn't a takeover, 423 Locked
@@ -1423,23 +1423,23 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         /* No address travels back any more, because there is no longer one to choose: the agent reaches sshd
          * through THIS daemon (platform/sync-ssh.ts), at the public URL it is already talking to. That is what
-         * makes every sandbox sync the same way — the enroll used to answer 409 whenever the sandbox's
+         * makes every sandbox sync the same way, the enroll used to answer 409 whenever the sandbox's
          * reachability could not also carry TCP, which is every sandbox on the platform's own hub. */
         return c.json({ ok: true, syncToken: result.syncToken, mode });
     });
     app.get("/system/sync", async (c) => {
-        // Any collaborator (owner or member) may read enrollment state — the bearer middleware already blocked a
-        // non-member — so a member's Desktop-sync card can render and mint its mirror-only pairing.
+        // Any collaborator (owner or member) may read enrollment state, the bearer middleware already blocked a
+        // non-member, so a member's Desktop-sync card can render and mint its mirror-only pairing.
         const holder = await syncHolder(services.config.historyRoot);
         const mirrors = await mirrorMachines(services.config.historyRoot);
         // Always 200, and `available` is now always true: sync rides this daemon's own HTTPS surface, so every
         // sandbox that can serve this response can also carry the transport (platform/sync-ssh.ts). It stays in
         // the body because the card branches on it, and because a sandbox that CANNOT do sync is a state worth
         // being able to express again rather than one to delete the vocabulary for. syncingFrom names the single
-        // machine holding file sync (takeover target) and when it was last heard from — an enrollment nobody has
+        // machine holding file sync (takeover target) and when it was last heard from, an enrollment nobody has
         // used for hours is a sync that has stopped, which the card must not report as healthy. mirroredBy lists
-        // every machine mirroring ports (unlimited — each collaborator on their own localhost).
-        // `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher) — the half the
+        // every machine mirroring ports (unlimited, each collaborator on their own localhost).
+        // `machines` is what each enrolled computer says about ITSELF (folders, ports, watcher), the half the
         // enrollment record above has never been able to answer. Empty until a machine's watcher posts one, which
         // is also what an old agent looks like, so the card must render without it.
         return c.json({
@@ -1450,7 +1450,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             machines: (await machineReports(services.config.historyRoot)).map((entry) => entry.report),
         });
     });
-    /* Every computer on the other end of this sandbox — the volunteered reports and the ones pulled through a
+    /* Every computer on the other end of this sandbox, the volunteered reports and the ones pulled through a
      * host capability, merged (hosts/machine-reports.ts). Readable by any collaborator, like /system/sync beside
      * it: the bearer middleware already blocked a non-member, and a member's own mirroring machine appears here. */
     app.get("/system/computers", async (c) => c.json({ computers: await computers(services) }));
@@ -1472,7 +1472,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
     app.delete("/system/authorized-key", async (c) => {
         // Two revoke paths: an agent uninstalling self-revokes with its own sync token (removes just its
-        // enrollment); the owner (Google) clears EVERY enrollment — the "Disable desktop sync" kill switch.
+        // enrollment); the owner (Google) clears EVERY enrollment, the "Disable desktop sync" kill switch.
         const sync = c.req.header("x-intentic-sync") ?? undefined;
         if (sync !== undefined && sync !== "") {
             return (await revokeEnrollmentByToken(services.config.historyRoot, sync))

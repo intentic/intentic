@@ -6,7 +6,7 @@ import { activeResolvers, interfaceAddress, interfaceRoutes, logTail, processAli
 import type { VpnDialOptions, VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { interfaceName, logPath, pidPath, vpnDir } from "./vpn-paths.js";
 
-// A FortiGate SSL-VPN — what FortiClient's <sslvpn> connections speak — dialled with openconnect's fortinet
+// A FortiGate SSL-VPN, what FortiClient's <sslvpn> connections speak, dialled with openconnect's fortinet
 // protocol. openconnect rather than openfortivpn because it routes over a tun device instead of spawning pppd:
 // it needs exactly the /dev/net/tun + NET_ADMIN grant the vpn capability already carries, whereas pppd would
 // additionally need /dev/ppp, which the rebuild executors' runtime allowlist deliberately does not include.
@@ -23,7 +23,7 @@ const DIAL_TIMEOUT_MS = 90_000;
 
 const fortinetGateway = (raw: FortinetVpnConfig): string => `${raw.server}:${raw.port}`;
 
-// openconnect's argv. Credentials never appear here — the password and any OTP ride stdin — so the full command
+// openconnect's argv. Credentials never appear here, the password and any OTP ride stdin, so the full command
 // is safe to log, and `ps` in the sandbox never shows a VPN password.
 const openconnectArgs = (id: string, raw: FortinetVpnConfig): string[] => [
     "--protocol=fortinet",
@@ -61,7 +61,7 @@ const dialFailureHint = (log: string): string | undefined => {
 
 // Run openconnect to completion in the FOREGROUND, with its output going straight to a log file rather than a
 // pipe: the backgrounded grandchild inherits those descriptors and keeps writing to the log, while the pipe
-// this promise waits on is only stdin — so the parent's exit is observable instead of blocking on a fd the
+// this promise waits on is only stdin, so the parent's exit is observable instead of blocking on a fd the
 // daemon would still hold open.
 const dial = async (id: string, raw: FortinetVpnConfig, otp: string | undefined): Promise<number> => {
     const handle = await open(logPath(id), "w", 0o600);
@@ -78,7 +78,7 @@ const dial = async (id: string, raw: FortinetVpnConfig, otp: string | undefined)
                 // A signalled exit is the timeout above; report it as a distinct non-zero rather than 0.
                 resolve(signal !== null ? 124 : (code ?? 1));
             });
-            // stdio[0] is "pipe" above, so stdin is always a stream here — the guard keeps the compiler honest
+            // stdio[0] is "pipe" above, so stdin is always a stream here, the guard keeps the compiler honest
             // about spawn's general signature rather than covering a reachable case.
             child.stdin?.end(dialStdin(raw.password, otp));
         });
@@ -87,7 +87,7 @@ const dial = async (id: string, raw: FortinetVpnConfig, otp: string | undefined)
     }
 };
 
-// The pid openconnect left behind, but only when it is still a live openconnect — a recycled pid must never
+// The pid openconnect left behind, but only when it is still a live openconnect, a recycled pid must never
 // read as a connected tunnel.
 const livePid = async (id: string): Promise<number | undefined> => {
     const pid = await readPid(pidPath(id));
@@ -113,7 +113,7 @@ export const fortinetDriver: VpnDriver = {
             return;
         }
         await mkdir(vpnDir(), { recursive: true, mode: 0o700 });
-        // Stale pidfile from a client that was killed rather than shut down — clear it so a failed dial below
+        // Stale pidfile from a client that was killed rather than shut down, clear it so a failed dial below
         // can't be read as the previous run still being up.
         await rm(pidPath(id), { force: true });
         yield { kind: "log", message: `Dialling ${fortinetGateway(fortinet)} as ${fortinet.username}…` };
@@ -144,7 +144,7 @@ export const fortinetDriver: VpnDriver = {
             if (await toolMissing("openconnect")) {
                 return { state: "unavailable" };
             }
-            // A log with content but no live client is a dial that failed or a tunnel that died — surfacing the
+            // A log with content but no live client is a dial that failed or a tunnel that died, surfacing the
             // reason beats a bare "disconnected" the user can't act on.
             const log = await logTail(logPath(id), 4);
             const hint = dialFailureHint(log);
@@ -152,7 +152,7 @@ export const fortinetDriver: VpnDriver = {
         }
         const address = await interfaceAddress(name);
         if (address === undefined) {
-            // The client is alive but the gateway hasn't finished configuring the interface — the dial window.
+            // The client is alive but the gateway hasn't finished configuring the interface, the dial window.
             return { state: "connecting", interface: name };
         }
         return { state: "connected", interface: name, address, routes: await interfaceRoutes(name), dns: await activeResolvers() };

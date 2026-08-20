@@ -4,7 +4,7 @@ import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../sett
 import type { CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
-// A computer of the user's OWN — one capability per machine, the id being its name. `apply` writes the platform's
+// A computer of the user's OWN, one capability per machine, the id being its name. `apply` writes the platform's
 // skill pack and pushes the scopes to the machine if it is up; the machine itself is connected out-of-band, by
 // running the card's one-liner on it (which enrolls over /system/hosts/enroll and dials back in). Distinct from
 // `ssh`, where the sandbox does the dialling and there is nothing to install on the far end.
@@ -14,7 +14,7 @@ import { contributedSkill, contributionKey, contributionRegistry, hostOf } from 
 
 export const hostHandler: CapabilityHandler = {
     // A connected computer's credential is its enrollment token, which lives on /history (hosts-store.ts) and is
-    // never in the manifest — rotating it is re-running the installer there, not an edit in /secrets. So: no secret.
+    // never in the manifest, rotating it is re-running the installer there, not an edit in /secrets. So: no secret.
     echo: (config) => {
         // Every field is a permission and none is secret: the card renders the grant back to the owner.
         const host = config as HostConfig;
@@ -80,7 +80,7 @@ export const hostHandler: CapabilityHandler = {
         return ctx.hostHub.online(id) ? { state: "active" } : { state: "pending", detail: "the computer is offline" };
     },
     // Removing the capability revokes the machine's key and cuts its socket. What stays is the agent binary
-    // installed over there — only somebody at that machine can uninstall it, and with its enrollment gone it can
+    // installed over there, only somebody at that machine can uninstall it, and with its enrollment gone it can
     // no longer reach this sandbox at all.
     remove: async (ctx, id) => {
         ctx.hostHub.disconnect(id, "this computer was disconnected from the sandbox");

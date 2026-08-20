@@ -64,18 +64,18 @@ import { closeSubagents, subagentCountsOf, subagentHooks, type SubagentTurn } fr
 
 export interface AgentRequest {
     readonly prompt: string;
-    // Which conversation this turn belongs to. Only the subagent registry reads it — a child is filed under the
+    // Which conversation this turn belongs to. Only the subagent registry reads it, a child is filed under the
     // parent whose turn spawned it, which is what lets the Subagents area group by agent and the fleet card count
     // its own. Absent ⇒ a turn with no conversation behind it (the bench), whose children are not registered.
     readonly conversationId?: string;
     // Absolute paths of user-attached files, consumed by the CODEX adapter (images ride as native
-    // local_image inputs). The Claude path folds these into the prompt in streamAgent instead — its Read
+    // local_image inputs). The Claude path folds these into the prompt in streamAgent instead, its Read
     // tool handles images/PDFs from disk natively.
     readonly attachments?: readonly string[];
-    // The working dir the agent edits — the workspace root, so it can touch all three repos. Under `isolation`
+    // The working dir the agent edits, the workspace root, so it can touch all three repos. Under `isolation`
     // this is the root as seen INSIDE the namespace, where it resolves to the conversation's worktree.
     readonly cwd: string;
-    // The MAIN checkout, as the DAEMON sees it — which `cwd` is not, for an isolated turn (it names the
+    // The MAIN checkout, as the DAEMON sees it, which `cwd` is not, for an isolated turn (it names the
     // worktree) nor for a persona that starts in a subfolder. Carried for the daemon-side readers that must ask
     // about the real workspace: the installed dependency tree an isolated turn merely mounts is the main one,
     // so a question about it asked anywhere else finds empty directories and answers nonsense. Every planned
@@ -101,8 +101,8 @@ export interface AgentRequest {
     // the sandbox's own stored credentials (the platform no longer relays it); undefined falls back to the
     // container's ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN env.
     readonly oauthToken?: string;
-    // Re-mint `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given — expired
-    // under a long turn, or revoked account-wide — and carries on with what comes back, so a credential that
+    // Re-mint `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given, expired
+    // under a long turn, or revoked account-wide, and carries on with what comes back, so a credential that
     // dies while the agent is working costs a pause rather than the turn. Returning undefined (or the same
     // token) means no replacement exists, and the turn fails as it did before.
     readonly refreshOauthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
@@ -112,7 +112,7 @@ export interface AgentRequest {
     // a foreign endpoint. Absent ⇒ native Anthropic endpoint with the OAuth token above.
     readonly baseUrl?: string;
     readonly authToken?: string;
-    // Whose allowance a routed turn spends, and when a spent one reopens — neither readable from the harness,
+    // Whose allowance a routed turn spends, and when a spent one reopens, neither readable from the harness,
     // which sees only that a 429 came back. Set alongside `baseUrl` by harness-credentials; absent on a native
     // Claude turn. See TurnAllowance.
     readonly allowance?: TurnAllowance;
@@ -123,35 +123,35 @@ export interface AgentRequest {
     readonly codexHome?: string;
     // Serve this NATIVE Codex turn through the sandbox translator's OpenAI-compatible endpoint on the connected
     // ChatGPT SUBSCRIPTION (Codex path only): the adapter points Codex's own Responses wire format at baseUrl
-    // and authenticates with the fixed local bearer — no per-account OAuth auth.json. codexHome then holds only
+    // and authenticates with the fixed local bearer, no per-account OAuth auth.json. codexHome then holds only
     // sessions/rollouts, never a credential.
     readonly codexEndpoint?: { readonly baseUrl: string; readonly authToken: string };
-    // How tool calls are gated this turn. Defaults to the autonomous sandbox posture (bypassPermissions) —
+    // How tool calls are gated this turn. Defaults to the autonomous sandbox posture (bypassPermissions),
     // the container's isolation is what makes that safe. The agent can move itself out of it mid-turn.
     readonly permissionMode?: PermissionMode;
-    /* Narrows the turn to these tool NAMES (the SDK option of the same name) — not to be confused with `tools`
+    /* Narrows the turn to these tool NAMES (the SDK option of the same name), not to be confused with `tools`
      * below, which are MCP servers. Absent ⇒ the runtime's full toolbox.
      *
      * This is the only real bound on a turn nobody is watching. bypassPermissions above is the default posture
-     * because the container is the isolation — but a Front Desk turn is driven by an anonymous website visitor,
+     * because the container is the isolation, but a Front Desk turn is driven by an anonymous website visitor,
      * where "the container is disposable" is not the whole answer: the automation's allowlist is what stops an
      * instruction smuggled into a support question from reaching Bash. */
     readonly allowedTools?: readonly string[];
     // Reasoning controls forwarded to the SDK (effort level / extended thinking).
     readonly effort?: string;
     readonly thinking?: boolean;
-    // Ask the harness to serve this turn at fast speed. Only ever set for a NATIVE Claude turn — turn-plan
-    // withholds it from a routed one, whose translator endpoint the harness would refuse as not first-party —
+    // Ask the harness to serve this turn at fast speed. Only ever set for a NATIVE Claude turn, turn-plan
+    // withholds it from a routed one, whose translator endpoint the harness would refuse as not first-party,
     // so by the time it is read here the only remaining questions (plan, model, pool) belong to the harness.
     readonly fast?: boolean;
     // The agent's MCP tools for this turn: intent-declared internal services (set in this container's env) plus
     // platform-configured external integrations. Each becomes a remote `http` MCP server. The daemon merges
     // both sources before calling; absent ⇒ the agent runs with no MCP tools (its plain autonomous posture).
     readonly tools?: readonly AgentTool[];
-    // Env vars for the agent's shell from cli-kind capabilities (e.g. DISCORD_BOT_TOKEN) — the stored
+    // Env vars for the agent's shell from cli-kind capabilities (e.g. DISCORD_BOT_TOKEN), the stored
     // credentials their CLI tools read. Merged into the SDK `env` each turn; absent ⇒ no extra env.
     readonly cliEnv?: Record<string, string>;
-    /* The JS execution backend's plan for this turn (execution/js-runtime.ts) — what a script may read, write
+    /* The JS execution backend's plan for this turn (execution/js-runtime.ts), what a script may read, write
      * and start, resolved from the persona's card where every runtime's request is assembled (turn-plan's
      * honoured) and carried as a first-class peer of `cliEnv` and `isolation`. Absent ⇒ the backend is not
      * mounted at all: the card switched it off, or the serving runtime doesn't host it
@@ -159,21 +159,21 @@ export interface AgentRequest {
      * gate and secret exit its Bash runs through. */
     readonly jsExecution?: JsExecutionPlan;
     /* The owner's rules standing at `turn.ending` (rules/rules.ts), plus the way to run one's command. Their
-     * conditions are read at the Stop rather than here — a turn is planned before it runs, so nothing yet knows
+     * conditions are read at the Stop rather than here, a turn is planned before it runs, so nothing yet knows
      * which files it will touch (rules/turn-ending.ts).
      *
      * Absent/empty ⇒ the ledger and its Stop hook are not wired at all, so a workspace with no rule at this
-     * moment pays nothing — not even the bookkeeping. */
+     * moment pays nothing, not even the bookkeeping. */
     readonly turnEndingRules?: readonly Rule[];
     readonly runRuleCommand?: TurnRuleCommand;
     // Told when one of them actually said something, so the settings list can show which rules are earning
     // their place and which have been silent for three weeks.
     readonly onRuleFired?: (rule: Rule) => void;
     // Absolute Claude Code plugin checkout dirs from plugin-kind capabilities, rebuilt each turn (see
-    // pluginDirsOf). The SDK's plugin loader parses their skills/agents/hooks/commands/.mcp.json — the daemon
+    // pluginDirsOf). The SDK's plugin loader parses their skills/agents/hooks/commands/.mcp.json, the daemon
     // never does, so the plugin format tracks Claude Code via SDK upgrades alone.
     readonly plugins?: readonly string[];
-    // In-process SDK MCP servers — daemon-side tools whose handlers run in the daemon itself (e.g. the
+    // In-process SDK MCP servers, daemon-side tools whose handlers run in the daemon itself (e.g. the
     // Discord voice session tools). Merged into mcpServers alongside the remote `tools` above.
     readonly sdkServers?: Record<string, McpServerConfig>;
     // The accounts tools (browser/accounts-tools.ts) as a FACTORY rather than a built server, because two of its
@@ -181,7 +181,7 @@ export interface AgentRequest {
     // and its abort signal. turn-plan closes it over the capability store and this turn's account list; absent ⇒
     // the turn reaches no browser accounts and gets no accounts tools.
     readonly accountsServer?: AccountsServerFactory;
-    // Where the browser tools' artifacts belong — the same directory `--output-dir` names, threaded here
+    // Where the browser tools' artifacts belong, the same directory `--output-dir` names, threaded here
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
     readonly browserOutputDir?: string;
@@ -194,7 +194,7 @@ export interface AgentRequest {
     // hold no identity.
     readonly browserPasskeys?: Record<string, string>;
     // The routed browser server's account→owner map (browser/browser-tools.ts), so the observer resolves a
-    // call's `account` argument to the profile it drives — the tool prefix no longer says.
+    // call's `account` argument to the profile it drives, the tool prefix no longer says.
     readonly browserAccounts?: Record<string, string>;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools,
@@ -207,10 +207,10 @@ export interface AgentRequest {
     // literal "off" to disable the filter (INTENTIC_RUN_FILTER=0, raw baseline). Empty/undefined ⇒ the filter's
     // all-on default. See settings/outputCleaners + bin/cleaners.mjs.
     readonly outputCleaners?: string;
-    // The sniffer's rulebook (settings.actionRules) — verdicts per classified outbound call, enforced by the
+    // The sniffer's rulebook (settings.actionRules), verdicts per classified outbound call, enforced by the
     // PreToolUse outbound gate. Absent/empty ⇒ the gate is not wired at all (guard/outbound-gate.ts).
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
-    /* The command gate's rulebook (settings.commandRules) — a verdict per class of shell command, enforced
+    /* The command gate's rulebook (settings.commandRules), a verdict per class of shell command, enforced
      * before the command runs. A "hold" parks the turn on a permission card, in every posture, which is what
      * makes it the layer that still applies once bypassPermissions has taken the cards away
      * (guard/command-gate.ts). Absent/empty is no longer "no hook": the gate is wired on every turn because it
@@ -218,14 +218,14 @@ export interface AgentRequest {
      * read. A turn with no rules and no outside content still reaches every decide and is allowed by all of
      * them, which costs one classify per Bash call. */
     readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
-    /* Whether this turn was woken BY outside content — a listener message, a webchat visitor — carrying the
+    /* Whether this turn was woken BY outside content, a listener message, a webchat visitor, carrying the
      * source's name. The mid-turn half (a fetched page, a foreign MCP result) marks itself through the wrap
      * seam; this is the half only the caller knows (guard/turn-taint.ts). */
     readonly outsideWake?: string;
     // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
     // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
     readonly outputHoldout?: number;
-    /* Every named credential this sandbox stores, and the ledger their uses feed — the one object behind all
+    /* Every named credential this sandbox stores, and the ledger their uses feed, the one object behind all
      * three secret seams: the read path masks each value to its `{{secret:name}}` reference in every tool
      * result (agent/agent-redaction.ts), the shell exit resolves references back to values as a command runs
      * (agent/agent-secrets.ts), and the browser exit types one into a focused field
@@ -233,7 +233,7 @@ export interface AgentRequest {
     readonly secrets?: SecretAccess;
     /* THE HARNESS'S OWN DELEGATION CEILINGS, each raised or lowered by the matching sandbox setting: how many
      * subagents may run at once, how many one conversation may spawn in total, and how deep they may nest.
-     * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands — which turn-plan relies on,
+     * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands, which turn-plan relies on,
      * so an untouched setting cannot pin a default the harness means to be able to move.
      *
      * The refusals these produce are worth knowing when reading a transcript that stopped delegating: the agent
@@ -242,34 +242,34 @@ export interface AgentRequest {
     readonly subagentsPerTurn?: number;
     readonly subagentDepth?: number;
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
-    // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
+    // delegation note when Codex/Grok accounts are connected, see agent/delegation.ts).
     readonly systemAppend?: string;
     // Which base this turn's system prompt is built on (SandboxSettings.systemPromptMode). Absent ⇒ "intentic",
     // the product default, so a caller that constructs a request directly (the bench) gets what the app runs.
     readonly systemPromptMode?: SystemPromptMode;
-    // The owner's own prompt text, used only when the mode is "custom" — it is then the entire system prompt
+    // The owner's own prompt text, used only when the mode is "custom", it is then the entire system prompt
     // and nothing else is appended, `systemAppend` included. See system-prompt.ts.
     readonly systemPrompt?: string;
     // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
     // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
     readonly steering?: SteeringQueue;
-    /* PUT THE BRANCH BACK ON TODAY'S MAIN LINE — the pre-turn rebase (agents/sync.ts), offered again at the
+    /* PUT THE BRANCH BACK ON TODAY'S MAIN LINE, the pre-turn rebase (agents/sync.ts), offered again at the
      * moments this turn stops and waits for a person. agent.routes.ts owns what it does; this module owns
      * WHEN, because only the harness knows when the model is genuinely parked.
      *
      * A card is not a pause, it is a gap: measured over this sandbox's own transcripts a question card waits a
      * median 2.6 minutes and a plan approval up to ten, and the user's main line moves during one park in
-     * five. Every one of those minutes the turn spends holding a base that is quietly going stale — and unlike
+     * five. Every one of those minutes the turn spends holding a base that is quietly going stale, and unlike
      * the gap between turns, nothing reconciles it before the work resumes. The answer arrives, the model
      * carries on against a dead base, and the auto-land at the end of the turn is where that surfaces.
      *
      * Answers with the frame the transcript needs, and with undefined on the ordinary settle where the branch
-     * was already current. The MODEL is told nothing — the rebase is a mechanism, not news it has to act on
+     * was already current. The MODEL is told nothing, the rebase is a mechanism, not news it has to act on
      * (turn-preamble.ts). Absent on a main-tree turn (no branch to move) and on every runtime but the harness. */
     readonly resync?: () => Promise<AgentEvent | undefined>;
     // Nobody is watching this turn: it was started by a benchmark, a schedule or another program rather than
     // by someone sitting in front of the chat. The interactive surface is then not merely useless but a
-    // DEADLOCK — a plan approval or a question card parks the turn on an answer that can never arrive, and the
+    // DEADLOCK, a plan approval or a question card parks the turn on an answer that can never arrive, and the
     // turn burns until something aborts it. So an unattended turn is given no plan tools and no ask tool, and
     // its permission gate refuses rather than waits.
     readonly unattended?: boolean;
@@ -280,7 +280,7 @@ export interface AgentRequest {
 // too), so this text is read on the NEXT turn, where "proceed on defaults" would be an instruction to resume
 // work the user just pulled the plug on.
 // Exported for the restart path: a restored question card's answer arrives with no tool call left to feed, so
-// it rides a resumed turn's prompt instead — worded by the same function, so the model reads one shape of
+// it rides a resumed turn's prompt instead, worded by the same function, so the model reads one shape of
 // answer wherever the daemon was in between (turn-resume.ts).
 export const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
     if (reply.cancelled || reply.answers === undefined) {
@@ -303,9 +303,9 @@ export const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentRepl
  *
  * QUIET, because this is the one difference from the same pass at turn start: there, nothing of the turn's is
  * running yet. Here the model is parked but the TURN need not be, and a rebase under a live writer fails in
- * ways nobody sees — files swapped mid-read, and a half-written one swept into the commit the rebase takes
+ * ways nobody sees, files swapped mid-read, and a half-written one swept into the commit the rebase takes
  * first. Two writers can outlive the card and they are asked about separately because they are separately
- * invisible: a command still running in the turn's shell (agent-terminals.ts — a background job, a build, a
+ * invisible: a command still running in the turn's shell (agent-terminals.ts, a background job, a build, a
  * pane the user is typing in), and a subagent, which does its own editing and answers to nothing here. Either
  * one skips the sync: the branch stays where it is, which is exactly where it would have stayed if the agent
  * had never asked.
@@ -328,7 +328,7 @@ const syncOnAnswer = async (
         return;
     }
     /* THE ANSWER OUTRANKS THE REBASE, so a fault in it cannot reach the card. The user has already clicked;
-     * a throw from here would come back to them as a failed question or a plan approval that did not take —
+     * a throw from here would come back to them as a failed question or a plan approval that did not take,
      * losing the one thing this whole exchange was for, to report a branch that simply stayed where it was.
      *
      * Silent because it is not silent where it happens: the implementation this calls owns the git and logs
@@ -354,7 +354,7 @@ const errorMessage = (error: unknown, stderr: string): string => {
 
 /* Map the output-cleaner settings to the env the Bash output filter reads: a spec selects cleaners, a non-zero
  * holdout bypasses that fraction of commands as a measured control, and empty leaves it at the filter's all-on
- * default. The literal "off" — the master toggle — turns the filter off outright, which is the only thing that
+ * default. The literal "off", the master toggle, turns the filter off outright, which is the only thing that
  * can: every other value here selects WHICH cleaners run, not WHETHER any do. */
 const cleanerEnv = (request: AgentRequest): Record<string, string> => {
     if (request.outputCleaners === "off") {
@@ -370,13 +370,13 @@ const cleanerEnv = (request: AgentRequest): Record<string, string> => {
     };
 };
 
-/* The delegation ceilings, in the harness's own vocabulary — the three env vars the CLI reads before it lets an
+/* The delegation ceilings, in the harness's own vocabulary, the three env vars the CLI reads before it lets an
  * Agent tool call through, and the ONLY way to move them: they are read inside the CLI process, not passed as
  * options, and each refusal it raises names the variable for the user to raise ("ask them to increase
  * CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"). Which is what makes this worth a setting rather than a container env:
  * the agent's own escalation path used to end at a file the user cannot edit from the app.
  *
- * An absent field emits nothing, so the CLI's default answers — see the request fields for why that is not the
+ * An absent field emits nothing, so the CLI's default answers, see the request fields for why that is not the
  * same as sending today's default back to it. */
 const subagentEnv = (request: AgentRequest): Record<string, string> => ({
     ...opt("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS", request.subagentsAtOnce?.toString()),
@@ -385,7 +385,7 @@ const subagentEnv = (request: AgentRequest): Record<string, string> => ({
 });
 
 // Combine hook sets, CONCATENATING the matchers registered for the same event. A plain object spread would
-// have the last contributor silently win the key — two producers of PreToolUse:Bash (the tmux wrapper and the
+// have the last contributor silently win the key, two producers of PreToolUse:Bash (the tmux wrapper and the
 // install steer) and only one of them would ever fire.
 export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatcher[]>>[]): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const merged: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
@@ -401,20 +401,20 @@ export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatche
 // workspace that never opened the feature pays nothing for it (turn-plan forwards none either way).
 const hasRules = <T extends object>(rules: T | undefined): rules is T => rules !== undefined && Object.keys(rules).length > 0;
 
-// The two built-ins that are a conversation with the USER rather than an action on the workspace — which is
+// The two built-ins that are a conversation with the USER rather than an action on the workspace, which is
 // why an unattended turn cannot have them.
 const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
 
 /* The CLI's own scheduling tools, removed from EVERY turn. Claude Code implements them inside a process that
- * stays alive to fire them — its interactive terminal app — and here the CLI dies when the turn settles, so a
+ * stays alive to fire them, its interactive terminal app, and here the CLI dies when the turn settles, so a
  * wakeup or cron job is accepted and then never fires: a dead letter the model cannot see is one. Worse than
- * useless, because the tools still ANSWER — an agent that needed to outwait a CI run found ScheduleWakeup,
+ * useless, because the tools still ANSWER, an agent that needed to outwait a CI run found ScheduleWakeup,
  * read its way to "not for this", and hand-rolled a polling loop instead. The daemon-side replacements are
  * the automations scheduler (owner-configured) and the watch tools (agent-armed, agent/watchers.ts). */
 const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
 
-// Tools removed from the model's context: the scheduler tools always (dead letters here — see above), the
-// caller's own list (hashlineEdits drops the native Edit/Write), plus — on an unattended turn — the plan
+// Tools removed from the model's context: the scheduler tools always (dead letters here, see above), the
+// caller's own list (hashlineEdits drops the native Edit/Write), plus, on an unattended turn, the plan
 // tools, which would park the turn on an approval nobody can give.
 const disallowedToolsOf = (request: AgentRequest): string[] => [
     ...CLI_SCHEDULER_TOOLS,
@@ -424,22 +424,22 @@ const disallowedToolsOf = (request: AgentRequest): string[] => [
 
 /* The CLI's mid-turn credential recovery. On a 401 it raises an `oauth_token_refresh` control request; the SDK
  * answers it from this callback and the turn RESUMES on the returned token instead of dying. Without it the
- * subscription token is a snapshot taken at spawn: a turn outliving its token — or caught by an account-wide
- * revocation, which kills tokens that still look valid — fails outright, mid-work, with
+ * subscription token is a snapshot taken at spawn: a turn outliving its token, or caught by an account-wide
+ * revocation, which kills tokens that still look valid, fails outright, mid-work, with
  * "Failed to authenticate. API Error: 401 ...". That is the difference between this harness and the VSCode
  * extension, which owns the whole credential (refresh token included) and re-mints it in place.
  *
  * Declared here because `@anthropic-ai/claude-agent-sdk@0.3.233` implements the option in sdk.mjs (it is
  * destructured alongside `canUseTool` and gates `hasBidirectionalNeeds`) but omits it from sdk.d.ts. Returning
  * the SAME token the CLI already holds is how we say "no refresh available"; it detects that and stops. */
-/* The SDK's spawn seam, used for what it was built for — running the CLI somewhere other than plainly here.
+/* The SDK's spawn seam, used for what it was built for, running the CLI somewhere other than plainly here.
  * The command and args are handed straight through; only the namespace they land in changes, because
  * `nsenter` execs the CLI into the turn's anchor (isolation.ts) rather than supervising it. So the SDK still
  * owns a direct child: its stdio pipes, its exit code, and the SIGTERM it sends on abort all reach the real
  * CLI.
  *
  * `cwd` comes from the anchor, not from `options`: it is the workspace root as the namespace sees it, which
- * inside IS the worktree. A failure here is a failed turn rather than a silent fall back to the shared tree —
+ * inside IS the worktree. A failure here is a failed turn rather than a silent fall back to the shared tree,
  * an agent that quietly gets the main checkout is the exact bug this whole path exists to prevent. */
 const namespacedSpawn =
     (anchor: IsolationAnchor) =>
@@ -456,7 +456,7 @@ export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };
 
-// The two reasoning knobs, together — because the API refuses one combination of them and the picker's filter
+// The two reasoning knobs, together, because the API refuses one combination of them and the picker's filter
 // (effortAllowed) only covers turns that came from the picker. sendableEffort holds the rule and the reason.
 const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => ({
     ...opt("effort", sendableEffort(request.effort, request.thinking) as EffortLevel | undefined),
@@ -473,7 +473,7 @@ const baseOptions = (
     // (the bench), so its children are not surfaced and the hooks are not wired.
     subagents: SubagentTurn | undefined,
     // The turn's event sink. A hook can park the turn on a card the same way canUseTool does, and the command
-    // gate is the one that needs to — its whole point is holding a command in the posture where canUseTool is
+    // gate is the one that needs to, its whole point is holding a command in the posture where canUseTool is
     // never called at all.
     push: (event: AgentEvent) => void,
 ): OauthRecoveryOptions => {
@@ -481,7 +481,7 @@ const baseOptions = (
      * below: the wrap hook SETS it (a page fetched, a foreign server answered) and the command gate READS it
      * per command. Born set when a stranger caused the wake at all (guard/turn-taint.ts). */
     const taint = createTurnTaint(request.outsideWake);
-    /* Published for the consult sites that live OUTSIDE this generator — today the wallet's payment gate,
+    /* Published for the consult sites that live OUTSIDE this generator, today the wallet's payment gate,
      * which runs in the daemon's HTTP layer and suspends the owner's auto-approve band while this is set
      * (guard/turn-taint.ts). Cleared when the turn settles, wired in composition.ts. */
     if (request.conversationId !== undefined) {
@@ -494,13 +494,13 @@ const baseOptions = (
         ...opt("getOAuthToken", request.baseUrl === undefined ? request.refreshOauthToken : undefined),
         includePartialMessages: true,
         // Forward a subagent's own prose and thinking, not just its tool calls. Without it a child's transcript is a
-        // list of tool rows with no narration — enough for the parent's card (whose report arrives as the tool's
+        // list of tool rows with no narration, enough for the parent's card (whose report arrives as the tool's
         // result anyway) and nowhere near enough for the Subagents area, which renders the child as a conversation.
         forwardSubagentText: true,
         permissionMode,
         ...opt("allowedTools", request.allowedTools?.slice()),
         abortController,
-        // Claude Code's coding-tuned preset plus this harness's own guidance — or, when the owner has written a
+        // Claude Code's coding-tuned preset plus this harness's own guidance, or, when the owner has written a
         // system prompt of their own, that text alone (system-prompt.ts owns the choice and everything it drops).
         // The preset matters because the Agent SDK sends an EMPTY system prompt when this is omitted, which is the
         // main reason a bare SDK turn feels weaker at coding than the CLI/VSCode product.
@@ -512,19 +512,19 @@ const baseOptions = (
             browserOutputDir: request.browserOutputDir,
         }),
         // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
-        // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
+        // hooks, and .mcp.json, plus the user tier. The SDK default is [] (loads nothing), so every filesystem
         // capability was invisible until now. New skills/subagents/hooks then arrive as files, no code change.
         settingSources: ["user", "project"],
-        /* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks — the harness reports exactly
-         * that as `sdk_opt_in_required` — and this inline `settings` object is the ask. It lands in the harness's
+        /* THE FAST-MODE OPT-IN. Fast mode is off for an SDK consumer until it asks, the harness reports exactly
+         * that as `sdk_opt_in_required`, and this inline `settings` object is the ask. It lands in the harness's
          * "flag settings" layer, above the user/project files loaded by settingSources and below managed policy, so
          * a workspace that pins its own answer in .claude/settings.json is overridden for this turn and an
          * IT-managed policy still wins. Everything else about fast mode (which plans have it, which models offer
-         * it, whether the pool is in cooldown) stays the harness's to decide — this only says the consumer is
+         * it, whether the pool is in cooldown) stays the harness's to decide, this only says the consumer is
          * willing.
          *
-         * `fastModePerSessionOptIn` is the load-bearing half. Without it the harness PERSISTS the choice to the
-         * settings file, and the sandbox's user tier is shared by every conversation in the container — so one
+         * `fastModePerSessionOptIn` is the half that matters. Without it the harness PERSISTS the choice to the
+         * settings file, and the sandbox's user tier is shared by every conversation in the container, so one
          * chat's toggle would silently start billing every other chat, and every automation and front desk turn, at
          * fast-mode rates. Per-session keeps it what the composer says it is: a property of this turn.
          *
@@ -542,20 +542,20 @@ const baseOptions = (
             // the environment is marked already-sandboxed) plus this turn's credential. A custom endpoint points the
             // harness at ANTHROPIC_BASE_URL + its bearer and WITHHOLDS the subscription OAuth token; a native Claude
             // turn keeps the token and the default (unset) base URL. The per-turn value wins over any container-env
-            // ANTHROPIC_BASE_URL default. Shared with the quick-model one-shot — see harnessEnv.
+            // ANTHROPIC_BASE_URL default. Shared with the quick-model one-shot, see harnessEnv.
             ...harnessEnv(request),
             // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
             ...cleanerEnv(request),
-            // How much this turn may delegate — only the ceilings the owner moved off the harness's own defaults.
+            // How much this turn may delegate, only the ceilings the owner moved off the harness's own defaults.
             ...subagentEnv(request),
             // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
-            // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
+            // and not this turn's (isolation.ts). Only for an anchored turn, the only one whose wrapper runs
             // inside a namespace at all.
             ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
             /* Whose work this is, for the sweep that reclaims what a turn leaves behind (platform/leftovers.ts).
              * The CLI's MCP servers and their browsers inherit this without knowing it exists, which is the whole
              * reason it is an env var: nothing below the CLI is ours to hold a handle on. A turn with no
-             * conversation behind it (the bench) is left unstamped rather than given a made-up owner — the sweep
+             * conversation behind it (the bench) is left unstamped rather than given a made-up owner, the sweep
              * reclaims only what it can attribute, and an owner nothing can report on would read as finished. */
             ...(request.conversationId !== undefined ? workloadStamp(request.conversationId) : {}),
         },
@@ -576,14 +576,14 @@ const baseOptions = (
                 signal: request.signal,
                 taint,
             }),
-            /* The outside-content envelope on everything the agent PULLS IN mid-turn — a fetched page, a foreign
+            /* The outside-content envelope on everything the agent PULLS IN mid-turn, a fetched page, a foreign
              * MCP server's answer, the output of a curl that reached the internet (guard/outside-results.ts). Its
              * twin wraps a stranger's message at turn birth, before the prompt exists. Wrapping is also what sets
              * the taint the command gate above reads, so the two are one mechanism seen from both ends. */
             outsideResultHooks((source) => {
                 taint.mark(source);
             }),
-            /* The tmux wrapper also carries the shell secret exit — `{{secret:name}}` resolved into the line the
+            /* The tmux wrapper also carries the shell secret exit, `{{secret:name}}` resolved into the line the
              * pane executes, inside the same rewrite so the two compose in a known order. Without tmux the exit
              * still exists, as its own matcher (a reference passed through literally would land in a config as
              * text). */
@@ -594,18 +594,18 @@ const baseOptions = (
                   : {},
             /* Every stored credential masked to its reference in every tool RESULT. The Bash filter masks the
              * terminal lane and only that one, so which of Read/Grep/an MCP call fetched a secret decided whether
-             * the model saw it — this makes the answer the same for all of them (agent/agent-redaction.ts). */
+             * the model saw it, this makes the answer the same for all of them (agent/agent-redaction.ts). */
             request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
             installSteeringHooks(request.dependencyInstallAllowed === true),
             // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
-            // the owner's action rules BEFORE they run — and hooks fire even under bypassPermissions, which is what
+            // the owner's action rules BEFORE they run, and hooks fire even under bypassPermissions, which is what
             // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
             hasRules(request.actionRules) ? outboundGateHooks(request.actionRules) : {},
             // The persona's folder limit, and its answer to whether this session may edit the sandbox's own
-            // configuration. Same posture as the gate above and for the same reason — an unattended wake has no
+            // configuration. Same posture as the gate above and for the same reason, an unattended wake has no
             // permission cards, so a hook is the only layer between it and the path it was told to open.
             request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},
-            /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish — the proof
+            /* The `turn.ending` moment: every rule the owner has standing where a turn tries to finish, the proof
              * ledger's follow-up, a standing instruction, a command that has to pass first. No rule ⇒ nothing is
              * wired, so a workspace that has never opened this pays nothing for it. */
             turnEndingHooks(request.turnEndingRules ?? [], {
@@ -623,14 +623,14 @@ const baseOptions = (
             // than left to the prompt because a convention only holds for the agents that happen to read it.
             request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
             // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
-            // is where the watchable session is registered. The hook only names what already exists — the browser
+            // is where the watchable session is registered. The hook only names what already exists, the browser
             // is the MCP's to launch and to kill (browser/browser-sessions.ts).
             request.browserPorts !== undefined
                 ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.browserAccounts ?? {}, request.conversationId)
                 : {},
             // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
             // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure
-            // record-keeping — the card already learned the child exists from the task stream.
+            // record-keeping, the card already learned the child exists from the task stream.
             subagents !== undefined ? subagentHooks(subagents) : {},
             // Handed the turn's placement whole, because where the check STANDS is the difference between an answer
             // and a fiction: an anchored turn's dependencies exist only inside its namespace, so the check is placed
@@ -656,7 +656,7 @@ const baseOptions = (
 };
 
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
-// because the built-in renders its own picker inside the CLI — headless, that UI has nowhere to go. Aliasing
+// because the built-in renders its own picker inside the CLI, headless, that UI has nowhere to go. Aliasing
 // the built-in NAME onto this tool (see toolAliases below) keeps the model's trained call site working while
 // the answer round-trips through our own card. `alwaysLoad` keeps it in the prompt instead of behind tool
 // search: a tool the model has to go looking for is a tool it writes plain-text options instead of using.
@@ -700,7 +700,7 @@ const askServer = (
                     // or second-window transcript freezes the card with (see the `resolved` frame).
                     push(resolved);
                     // Then the ground, before the model acts on what it just heard. The tool result carries the
-                    // user's answer and nothing else — the rebase is announced to the transcript, not folded
+                    // user's answer and nothing else, the rebase is announced to the transcript, not folded
                     // into the words the model reads next.
                     await syncOnAnswer(request, push, shell, !reply.cancelled && reply.answers !== undefined);
                     return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
@@ -715,7 +715,7 @@ const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
 
 /* The posture EVERY approved plan executes in, whatever the turn started in and whichever client approved it.
  * Approval is the one moment the user has read what the agent intends to do and said yes to all of it, so
- * re-asking per tool afterwards interrupts without adding a decision — the shape this replaces landed a turn
+ * re-asking per tool afterwards interrupts without adding a decision, the shape this replaces landed a turn
  * that started in plan mode on `acceptEdits`, which auto-accepts edits but still raised a card for every Bash
  * command, so approving a plan bought the user a permission prompt for `git log`.
  *
@@ -727,15 +727,15 @@ const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
  * make "the sandbox restarted in between" cost the user a permission prompt per tool (turn-resume.ts). */
 export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
 
-/* A PERMISSION THE USER GRANTED ACROSS A RESTART — one tool, one conversation, consumed by the first ask.
+/* A PERMISSION THE USER GRANTED ACROSS A RESTART, one tool, one conversation, consumed by the first ask.
  *
  * The live gate hands an allow straight back to the SDK's waiting canUseTool; a RESTORED permission card has no
- * waiting tool call — the process holding it died — so its "Allow" starts a resumed turn that re-runs the tool
+ * waiting tool call, the process holding it died, so its "Allow" starts a resumed turn that re-runs the tool
  * (turn-resume.ts). That re-run asks the gate again, and without this the user would answer the same question
  * twice, the second time with less faith in the first click. The grant is the first answer, carried to the ask
  * it belongs to.
  *
- * Deliberately narrow: keyed by conversation, matched by tool name, deleted on use — and expired after a few
+ * Deliberately narrow: keyed by conversation, matched by tool name, deleted on use, and expired after a few
  * minutes so a resumed turn that never re-attempts the tool cannot leave a standing allow behind for some
  * later turn's identically-named ask. `always` carries the "don't ask again" flavour through, so the one click
  * writes the same session-wide rule it would have written live. */
@@ -757,8 +757,8 @@ const consumeRestoredGrant = (conversationId: string | undefined, tool: string, 
 };
 
 // What "always" persists on top of the SDK's own suggestions: allow this TOOL, for the rest of the session.
-// The suggestions are narrowly scoped — for Bash they carry the command prefix (`pnpm install:*`), so the next
-// command re-asks — which is not what a button reading "Don't ask again for Bash" promises. The container IS
+// The suggestions are narrowly scoped, for Bash they carry the command prefix (`pnpm install:*`), so the next
+// command re-asks, which is not what a button reading "Don't ask again for Bash" promises. The container IS
 // the isolation boundary here, so the tool-wide grant is the honest reading of the button. Session-scoped: a
 // settings-file rule would be written into a throwaway worktree nobody reads twice.
 const toolWideAllow = (toolName: string): PermissionUpdate => ({
@@ -769,7 +769,7 @@ const toolWideAllow = (toolName: string): PermissionUpdate => ({
 });
 
 // A workspace-root-relative path for the permission card, matching the tree/file route space the rest of the
-// UI uses. A path outside the workspace (rare — an additionalDirectories read) stays absolute.
+// UI uses. A path outside the workspace (rare, an additionalDirectories read) stays absolute.
 const relativePath = (absolute: string | undefined, cwd: string): string | undefined => {
     if (absolute === undefined || absolute === "") {
         return undefined;
@@ -780,7 +780,7 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 
 // Every permission decision the turn needs from the user, as the SDK's canUseTool. The SDK only calls this
 // when the active mode actually requires a prompt (bypassPermissions never does; acceptEdits skips edits;
-// default skips reads), so there is no mode branching here — if we were called, the user is the decider.
+// default skips reads), so there is no mode branching here, if we were called, the user is the decider.
 const permissionGate =
     (request: AgentRequest, push: (event: AgentEvent) => void, shell: { sessionId: string | undefined }): CanUseTool =>
     async (toolName, input, options) => {
@@ -799,7 +799,7 @@ const permissionGate =
             }
             // Setting the mode on the session is what actually moves the SDK out of plan mode.
             push({ kind: "mode", mode: POST_PLAN_MODE });
-            /* Then the ground, before the agent starts building on a plan it wrote against an older tree —
+            /* Then the ground, before the agent starts building on a plan it wrote against an older tree,
              * the longest park of the three cards, and the one followed by the most writing. The move itself
              * is the point; the agent is not told it happened (turn-preamble.ts). */
             await syncOnAnswer(request, push, shell, true);
@@ -831,7 +831,7 @@ const permissionGate =
             decision: "deny",
             feedback: "The turn was cancelled before you answered.",
         });
-        // The bridge already rendered the prompt sentence, the button noun, and the reason — pass them
+        // The bridge already rendered the prompt sentence, the button noun, and the reason, pass them
         // through rather than re-deriving worse copy from the raw tool name and input.
         const suggestions = options.suggestions ?? [];
         const path = relativePath(options.blockedPath, request.cwd);
@@ -851,7 +851,7 @@ const permissionGate =
         const { reply, resolved } = await wait(request.signal);
         push(resolved);
         if (reply.decision === "deny") {
-            // A denial carrying feedback is a redirection — the turn runs on and takes it. A bare one is the
+            // A denial carrying feedback is a redirection, the turn runs on and takes it. A bare one is the
             // user pulling the plug (the card has no free-text field, and the client stops the turn on it), so
             // "find another way" would be a standing order to work around a refusal, read back on the next turn.
             return {
@@ -873,7 +873,7 @@ const permissionGate =
 
 // Run one agent turn over `request.cwd`, streaming typed events. ONE path for every permission mode: the
 // interactive surface (question cards, plan approval, per-tool permission prompts) is always wired, and which
-// of it actually fires is the SDK's call given the turn's mode — which the agent itself can change mid-turn
+// of it actually fires is the SDK's call given the turn's mode, which the agent itself can change mid-turn
 // via EnterPlanMode/ExitPlanMode. `canUseTool` and the `ask` handler run concurrently with the SDK loop, so a
 // queue bridges their events and the stream's into this generator.
 //
@@ -903,7 +903,7 @@ export async function* runAgent(
         request.conversationId === undefined
             ? undefined
             : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined, subagentsDir: undefined };
-    /* The turn's tmux session, by the id the CLI mints for it — read by the parked cards to ask whether a
+    /* The turn's tmux session, by the id the CLI mints for it, read by the parked cards to ask whether a
      * command is still running before anything rebases under it. Mutable for the same reason the subagent
      * handle is: the ask tool and the permission gate are wired here, before a fresh turn's id exists.
      *
@@ -916,9 +916,9 @@ export async function* runAgent(
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
         /* Always on, whatever mode the turn STARTS in: the flag legalises bypassPermissions, it does not
-         * activate it — `permissionMode` above still decides the posture. Any turn can land in bypass
+         * activate it, `permissionMode` above still decides the posture. Any turn can land in bypass
          * mid-session (an approved plan setModes to POST_PLAN_MODE), and the CLI refuses that switch unless
-         * the session was LAUNCHED with the flag — gating it on the starting mode is how an approved plan
+         * the session was LAUNCHED with the flag, gating it on the starting mode is how an approved plan
          * silently fell to `default` and re-asked for every Bash and Write. */
         allowDangerouslySkipPermissions: true,
         stderr: (data) => {
@@ -932,7 +932,7 @@ export async function* runAgent(
             // The accounts tools get the same two live handles the ask tool does: the stream their help card
             // rides, and the signal that settles a park when the turn dies under it.
             ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
-            /* Handing the TERMINAL to the owner (terminal/terminal-help.ts) — the same handles again, plus the
+            /* Handing the TERMINAL to the owner (terminal/terminal-help.ts), the same handles again, plus the
              * `shell` handle that names which tmux session this turn's commands run in. Two gates, and both are
              * about the tool being answerable rather than about taste: an unattended turn would park on a person
              * who is not there (the `ui` and request_help rule), and without the tmux wrapper the agent's Bash
@@ -948,11 +948,11 @@ export async function* runAgent(
                       }),
                   }),
             /* The JS execution backend, mounted from its own request field the way `ui` and `terminal` are
-             * from theirs — never through the generic server bags below, whose entries the backend is not one
+             * from theirs, never through the generic server bags below, whose entries the backend is not one
              * of. Its PreToolUse gate is already wired (commandGateHooks reads the script), its results ride
              * the matcher-less redaction, and its `{{secret:name}}` exit runs in the handler. */
             // `code` is the literal JS_SERVER_NAME, spelled out (and first inside its brace) because the
-            // outside-results conformance scan reads this block textually — a computed key, or a comment
+            // outside-results conformance scan reads this block textually, a computed key, or a comment
             // between the brace and the key, hides the mount from it.
             ...(request.jsExecution === undefined
                 ? {}
@@ -980,7 +980,7 @@ export async function* runAgent(
 
     // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle
     // (usage/claude-usage.ts, the same reader the idle sweep uses); translator, endpoint and container-env turns
-    // have no pools to read — and no account to file a reading under (agent.routes persists only attributed
+    // have no pools to read, and no account to file a reading under (agent.routes persists only attributed
     // frames).
     const oauthToken = request.oauthToken;
     const readUsage =
@@ -989,7 +989,7 @@ export async function* runAgent(
             : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
 
     // The swallowed-prompt recovery (sdkTurns): the turn's own prompt, pushed back through the steering queue,
-    // once. Built here because this is where both halves live — the prompt text and the queue the streaming
+    // once. Built here because this is where both halves live, the prompt text and the queue the streaming
     // input reads. An unsteerable turn has no road back, so the empty result then ends the turn as before.
     const steering = request.steering;
     let redelivered = false;

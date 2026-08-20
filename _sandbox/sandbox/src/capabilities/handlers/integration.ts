@@ -4,11 +4,11 @@ import type { CapabilityHandler } from "../capability.js";
 
 // An external integration (Stripe/Redmine/Outline/IMAP): declare it as i.have.<provider> in deploy.config.ts.
 // The non-secret coordinates (url / host / port / username) are carried straight through to the entry; the secret
-// key is read from the sandbox env (e.g. STRIPE_API_KEY) at provision time — never sent over the wire. Requires DevOps.
+// key is read from the sandbox env (e.g. STRIPE_API_KEY) at provision time, never sent over the wire. Requires DevOps.
 export const integrationHandler: CapabilityHandler = {
     echo: (config) => ({ provider: (config as IntegrationConfig).provider }),
     requires: ["devops"],
-    // The name is the entry's name in the intent repo, and the re-apply writes it there under the new one — so
+    // The name is the entry's name in the intent repo, and the re-apply writes it there under the new one, so
     // this only withdraws the old declaration. Both are ordinary commits to that repo, which is what adding and
     // removing an integration already are.
     rename: { carry: async (ctx, from) => removeManagedEntry(ctx.config, from, `chore(intentic): rename "${from}"`) },

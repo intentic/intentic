@@ -3,7 +3,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../env.config.js";
 import { postToPlatform } from "./platform-post.js";
 
-/* CAN ANYBODY ACTUALLY REACH THIS SANDBOX — the question the announce next door does not answer and was read
+/* CAN ANYBODY ACTUALLY REACH THIS SANDBOX, the question the announce next door does not answer and was read
  * as answering, at a cost measured in stranded users.
  *
  * The announce says "the daemon started". The setup wizard took that for "the sandbox is usable" and handed
@@ -12,10 +12,10 @@ import { postToPlatform } from "./platform-post.js";
  * healthy sandbox, the wizard handed over, and the person met a spinner with no reason attached to it. Every
  * link of that chain was individually fine; the missing one was never checked by anyone.
  *
- * Nobody else CAN check it. The platform never dials a sandbox (that is the whole trust model — a breach
+ * Nobody else CAN check it. The platform never dials a sandbox (that is the whole trust model, a breach
  * cannot reach into a box), the browser was deliberately kept off the hostname during setup, and the tunnel
  * agent's own opinion of itself is not evidence. What is left is the box asking its own PUBLIC address
- * whether it answers — out through the hub and back in — which is the same round trip a browser makes and is
+ * whether it answers, out through the hub and back in, which is the same round trip a browser makes and is
  * therefore the only probe that proves the thing users care about.
  *
  * The verdict goes to the platform over the connect token, on the daemon's outbound channel and pointedly not
@@ -34,19 +34,19 @@ const PROBE_TIMEOUT_MS = 10_000;
 // Retry while unreachable, backing off 3s → 6s → … to here. The share the entrypoint binds can take a few
 // seconds to come up on a cold box, so the first answers are EXPECTED to be no.
 const MAX_BACKOFF_MS = 30_000;
-/* Stop after this long. Not a guess — it is how long the wizard is willing to hold somebody on the setup page
+/* Stop after this long. Not a guess, it is how long the wizard is willing to hold somebody on the setup page
  * before it stops promising the sandbox is coming, and the two must agree or the page would wait on a report
  * that stopped being written. A restart re-arms the whole thing. */
 const REACH_GIVE_UP_MS = 5 * 60_000;
 
 // Where reachability stands, in the same shape (and for the same readers) as the announce block beside it:
 // /health carries both, so `ic sandbox doctor` and the connect postflight can name whichever link is broken
-// without a tunnel in the loop — which matters most precisely when it is this link.
+// without a tunnel in the loop, which matters most precisely when it is this link.
 export interface ReachState {
-    // "off" — nothing to probe (headless, loopback dev, no public address); "checking" — no verdict yet;
-    // "reachable" — its own public address answered, with our id on it; "unreachable" — it did not.
+    // "off", nothing to probe (headless, loopback dev, no public address); "checking", no verdict yet;
+    // "reachable", its own public address answered, with our id on it; "unreachable", it did not.
     readonly state: "off" | "checking" | "reachable" | "unreachable";
-    // Why, for "unreachable" — already in the user's terms, because the wizard renders it verbatim.
+    // Why, for "unreachable", already in the user's terms, because the wizard renders it verbatim.
     readonly detail?: string;
     // False once the give-up window is spent and only a restart retries.
     readonly retrying?: boolean;
@@ -60,7 +60,7 @@ export interface ReachReporter {
 }
 
 /* One round trip to our own public address. Deliberately plain `fetch`: this goes out to the real internet
- * and comes back through the hub, so it must verify TLS like any browser would — the platform's local-dev
+ * and comes back through the hub, so it must verify TLS like any browser would, the platform's local-dev
  * escape hatch has no business on this path.
  *
  * Every failure is worded for the person reading the setup page, because that is where it lands. */

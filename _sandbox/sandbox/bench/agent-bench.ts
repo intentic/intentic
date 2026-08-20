@@ -7,30 +7,30 @@ import { type AgentRequest, runAgent } from "../src/agent/agent.js";
 import { sumUsage, type UsageFrame } from "../src/agent/turn-usage.js";
 import { type BenchTask, taskFor } from "./agent-tasks.js";
 
-/* AGENT-ARCHITECTURE A/B BENCHMARK — does delegating the tedious work beat one agent doing all of it?
+/* AGENT-ARCHITECTURE A/B BENCHMARK, does delegating the tedious work beat one agent doing all of it?
  *
  *   pnpm --filter @intentic/sandbox bench:agents                        # both tasks, both arms, 1 run each
  *   pnpm --filter @intentic/sandbox bench:agents --tasks sweep --runs 5
  *   pnpm --filter @intentic/sandbox bench:agents --tasks arc:135a2760 --model opus
  *   pnpm --filter @intentic/sandbox bench:agents --tasks defects --model opus --timeout 1200 --transcripts ./bench-runs
  *
- * Both arms run runAgent directly — no daemon, no tunnel, no browser — on the same task, prompt, workspace,
+ * Both arms run runAgent directly, no daemon, no tunnel, no browser, on the same task, prompt, workspace,
  * model, effort and posture. The ONLY difference is whether the agent may spawn subagents. Each run gets a
  * fresh throwaway workspace and grading is mechanical.
  *
  * Needs a Claude credential (CLAUDE_CODE_OAUTH_TOKEN, or ANTHROPIC_API_KEY); it asks for one if neither is set
- * and checks it before spending anything. It spends real tokens — start with `--runs 1 --tasks sweep`.
+ * and checks it before spending anything. It spends real tokens, start with `--runs 1 --tasks sweep`.
  *
  * READ THE NUMBERS HONESTLY.
  *
- * One run per arm catches a big effect and nowhere near a small one — the per-run lines are printed for that
+ * One run per arm catches a big effect and nowhere near a small one, the per-run lines are printed for that
  * reason, and `--transcripts` keeps the frames so a surprising result can be read back rather than re-run.
  *
  * `fed` is every token sent to a model summed over every request, which is what you are billed for; it climbs
  * with the NUMBER of requests as much as with context size, since an agent that reads files one at a time
  * re-sends everything read so far on each later call. `peak` is how full the window actually got. They can
  * differ by 50x, and only one of them is the thing people mean by "context". A caveat on `fed`: a subagent
- * runs in its own session, so what IT spends may not appear in the parent's accounting — cost, which comes
+ * runs in its own session, so what IT spends may not appear in the parent's accounting, cost, which comes
  * from the SDK's own total, is the figure to trust when the two arms disagree.
  */
 
@@ -53,7 +53,7 @@ interface Arm {
 
 const ARMS: readonly Arm[] = [
     // Withheld so this really is ONE agent: the preset offers subagents, and a solo run that quietly spawned
-    // them would be the `subagent` arm under a different name — the comparison that must not blur. BOTH names
+    // them would be the `subagent` arm under a different name, the comparison that must not blur. BOTH names
     // are listed because the SDK calls this tool `Agent` (its input type is AgentInput/subagent_type) while
     // older harnesses called it `Task`; disallowing only `Task` silently blocked nothing at all.
     { name: "solo", what: "one agent, every tool, no delegation", run: (request) => runAgent({ ...request, disallowedTools: SUBAGENT_TOOLS }) },
@@ -83,12 +83,12 @@ interface RunResult {
     // High-water context fill seen mid-turn, the one accounting figure that survives a timeout.
     readonly contextPeak: number;
     // Which tools were reached for, by name. Both arms hold the same surface bar delegation, so a difference
-    // here — `Grep` where the other shells out to `Bash`, or how often `Agent` appears — is a difference in
+    // here, `Grep` where the other shells out to `Bash`, or how often `Agent` appears, is a difference in
     // tool SELECTION rather than in the task, and it is invisible in a bare call count.
     readonly toolsByName: Record<string, number>;
     readonly errors: number;
     // The FIRST error the run reported, verbatim. Counting errors and dropping their text turns every failure
-    // into "something went wrong" — which is exactly how an expired token reads as a broken benchmark.
+    // into "something went wrong", which is exactly how an expired token reads as a broken benchmark.
     readonly error: string | undefined;
     readonly timedOut: boolean;
     readonly wallMs: number;
@@ -133,7 +133,7 @@ const parseArgs = (argv: readonly string[]): Options => {
     };
 };
 
-// One run: fresh workspace, one turn, mechanical grade. Never throws for an agent-side failure — a crashed or
+// One run: fresh workspace, one turn, mechanical grade. Never throws for an agent-side failure, a crashed or
 // timed-out run is a data point (scored 0), not a reason to abandon the sweep.
 const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Options): Promise<RunResult> => {
     const dir = await mkdtemp(join(tmpdir(), `agent-bench-${task.id.replace(/[^a-z0-9]+/gi, "-")}-`));
@@ -156,7 +156,7 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
             signal: controller.signal,
             // Nothing here can answer a card, so say so: an agent that reaches for a plan approval or a
             // question would otherwise park until the timeout and score as a failure that never happened. A
-            // run measured before this flag existed did exactly that — EnterPlanMode, work, ExitPlanMode,
+            // run measured before this flag existed did exactly that. EnterPlanMode, work, ExitPlanMode,
             // then 600s of waiting for a user who was never there.
             permissionMode: "bypassPermissions",
             unattended: true,
@@ -220,13 +220,13 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
 
 // Everything fed INTO the models across the WHOLE run: fresh input plus both cache buckets, summed over every
 // request. This is what you are billed for, and it grows with the NUMBER of requests as much as with context
-// size — an agent that reads 18 files one at a time re-sends everything it has read on each subsequent call,
+// size, an agent that reads 18 files one at a time re-sends everything it has read on each subsequent call,
 // so `fed` climbs quadratically while the window itself is nowhere near full. `contextPeak` is the other
 // half of the story: how full the window actually got.
 const context = (result: RunResult): number => result.inputTokens + result.cacheReadTokens + result.cacheCreationTokens;
 
-// Means over runs that actually finished. A timed-out run has no accounting at all — the SDK reports usage
-// only when a turn completes — so folding its zeroes into a cost or token average understates precisely the
+// Means over runs that actually finished. A timed-out run has no accounting at all, the SDK reports usage
+// only when a turn completes, so folding its zeroes into a cost or token average understates precisely the
 // arm that could not finish. Absent rather than zero is the honest reading.
 const meanOfFinished = (runs: readonly RunResult[], of: (result: RunResult) => number): number | undefined => {
     const finished = runs.filter((result) => !result.timedOut);
@@ -282,7 +282,7 @@ const report = (results: readonly RunResult[]): void => {
         process.stdout.write("\n");
     }
     // Which tools each arm reached for. Both arms hold the SAME tool surface, so a difference here is a
-    // difference in tool SELECTION — the claim that a small model picks tools better when picking tools is the
+    // difference in tool SELECTION, the claim that a small model picks tools better when picking tools is the
     // only thing it has been asked to do, which a bare call count cannot show.
     process.stdout.write("\ntool mix (calls per run, by arm):\n");
     for (const [, runs] of groups) {
@@ -300,7 +300,7 @@ const report = (results: readonly RunResult[]): void => {
         process.stdout.write(`  ${pad(task, 18)}${pad(arm, 10)}${mix === "" ? "(no tool calls)" : mix}\n`);
     }
 
-    // Per-task deltas, but only where both arms actually ran — the whole point is the comparison.
+    // Per-task deltas, but only where both arms actually ran, the whole point is the comparison.
     const tasks = [...new Set(results.map((result) => result.task))];
     for (const task of tasks) {
         const solo = results.filter((result) => result.task === task && result.arm === "solo");
@@ -334,7 +334,7 @@ const report = (results: readonly RunResult[]): void => {
 };
 
 // Check the credential BEFORE spending anything. Without this, a token that is expired, mistyped or mangled by
-// the terminal produces a whole sweep of runs that fail with `authentication_failed` and a table of zeroes —
+// the terminal produces a whole sweep of runs that fail with `authentication_failed` and a table of zeroes,
 // which reads as "the benchmark is broken" rather than "your token is bad". One free call to the account's own
 // model list settles it. A network failure is NOT fatal: being briefly unable to reach Anthropic is no reason
 // to refuse to run, so it warns and continues.
@@ -372,7 +372,7 @@ const verifyCredential = async (): Promise<void> => {
 };
 
 // Ask for the credential rather than refusing to start. It is read from the terminal with echo off and lives
-// only in this process's env for the length of the run — never written to disk, never printed, never passed on
+// only in this process's env for the length of the run, never written to disk, never printed, never passed on
 // a command line where it would land in shell history.
 const ENTER = new Set(["\r", "\n"]);
 const CTRL_C = "\u0003";
@@ -443,7 +443,7 @@ const main = async (): Promise<void> => {
     // loads the user tier by default, and it differs per machine, which is exactly what a benchmark cannot have.
     //
     // This is ALSO why a credential is required rather than optional. An isolated config dir has no stored
-    // login, so the CLI can only authenticate with the token in the environment — whereas pointed at the real
+    // login, so the CLI can only authenticate with the token in the environment, whereas pointed at the real
     // ~/.claude it authenticates as the machine's own session and IGNORES the token you were asked for, which
     // would quietly benchmark someone else's account and someone else's CLAUDE.md.
     const configDir = await mkdtemp(join(tmpdir(), "imp-bench-claude-"));

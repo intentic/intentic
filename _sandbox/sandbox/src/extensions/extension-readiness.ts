@@ -5,7 +5,7 @@ import { bundleProblem, bundleSpecifiers, type ExtensionManifest } from "@intent
 import { extensionRead } from "../capabilities/extension-dirs.js";
 import type { InstalledExtension } from "./installed-extensions.js";
 
-/* IS THIS EXTENSION FIT TO PUBLISH — the checks that can be answered from the files alone, and the reason they
+/* IS THIS EXTENSION FIT TO PUBLISH, the checks that can be answered from the files alone, and the reason they
  * are worth answering before anybody else runs them.
  *
  * All four failures below are SILENT in the workspace and fatal once published, which is the whole argument for
@@ -14,7 +14,7 @@ import type { InstalledExtension } from "./installed-extensions.js";
  * These are the things a human had to verify by hand for the first four extensions ever published from here, and
  * a hand check that has to be repeated is a check that will eventually be skipped.
  *
- * DELIBERATELY NOT AN AGENT. Every question here has one right answer readable off the bytes — whether a file
+ * DELIBERATELY NOT AN AGENT. Every question here has one right answer readable off the bytes, whether a file
  * exists, what a line imports, whether two version strings match. Handing that to a model would make a slower,
  * dearer, less certain version of a function, and would put a judgement call where there is none. The judgement
  * lives one layer up, in what an author does about a warning. */
@@ -26,7 +26,7 @@ export interface ReadinessCheck {
     // What was checked, in the author's terms rather than the implementation's.
     readonly label: string;
     readonly status: ReadinessStatus;
-    // What was found. Always populated for warn/fail — a status with no stated reason is an opinion.
+    // What was found. Always populated for warn/fail, a status with no stated reason is an opinion.
     readonly detail: string;
 }
 
@@ -37,7 +37,7 @@ const exists = async (path: string): Promise<boolean> =>
 
 // Everything the manifest promises is on disk, gathered as (what it is → where it says it is) so a failure can
 // name both. A missing one is fatal at a different moment for each: the entry at activation, the bin at the
-// agent's next turn, the fragment at the next image build — all of them long after publication.
+// agent's next turn, the fragment at the next image build, all of them long after publication.
 const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; readonly path: string }[] => {
     const promised: { what: string; path: string }[] = [];
     const contributes = manifest.contributes;
@@ -69,17 +69,17 @@ const promisedPaths = (manifest: ExtensionManifest): { readonly what: string; re
  * the check below) and four wordings of one fact is four chances to describe a different situation.
  *
  * Deliberately free of the word "rebuild": the trees behind these manifests arrive as a publish-time build
- * context, so the environment overlay — which is what "rebuild" means to this app, and what the web sends a
- * rebuild-worded status to — cannot install them. The only move is a sandbox on the standard image. */
+ * context, so the environment overlay, which is what "rebuild" means to this app, and what the web sends a
+ * rebuild-worded status to, cannot install them. The only move is a sandbox on the standard image. */
 export const RUNTIME_ABSENT_DETAIL = "not included in this image — ships with the standard sandbox image";
 
-/* IS THE EXTENSION'S CODE IN THIS IMAGE AT ALL — the same promised-paths question pathsCheck asks before
+/* IS THE EXTENSION'S CODE IN THIS IMAGE AT ALL, the same promised-paths question pathsCheck asks before
  * publication, asked at runtime, because the image split can now answer it "no" for an extension nobody has
  * done anything wrong to. The core image bakes the messaging extensions' MANIFESTS so their connector cards
  * exist in every image; the gateway trees behind them are the standard image's bake-only `messaging` pack.
  *
  * BAKED ONLY, and that restriction is the point. A git-installed checkout and a workspace directory hold files
- * the owner or the author put there, so a missing one is a rotted install or work in progress — pathsCheck
+ * the owner or the author put there, so a missing one is a rotted install or work in progress, pathsCheck
  * already reports that in their terms, and an author mid-build should still watch their own gateway try to
  * start and fail rather than be silently refused. Only an image-baked extension can be complete, correct and
  * still absent.
@@ -87,7 +87,7 @@ export const RUNTIME_ABSENT_DETAIL = "not included in this image — ships with 
  * The DECLARED files rather than the built ones, though a gateway's absent dist/ is the visible symptom: a pack
  * copies an extension's whole tree or none of it, so the tracked files answer the same question, and they
  * answer it the same way every time. Probing a build output would make a spawn gate that says yes or no
- * depending on whether anybody had run a build — the one thing a gate must never do. */
+ * depending on whether anybody had run a build, the one thing a gate must never do. */
 export const extensionRuntimeAbsent = async (extension: InstalledExtension): Promise<boolean> => {
     if (extension.source !== "builtin") {
         return false;
@@ -133,7 +133,7 @@ const pathsCheck = async (extension: InstalledExtension): Promise<ReadinessCheck
     }
     if (missing.length > 0) {
         /* An image-baked extension is missing files because the IMAGE does not carry them, not because anyone
-         * forgot one — and there is nothing whoever is reading this can add. A warning rather than a failure for
+         * forgot one, and there is nothing whoever is reading this can add. A warning rather than a failure for
          * the same reason: the extension is fit to publish, it is simply not runnable HERE. */
         if (extension.source === "builtin") {
             return { id, label, status: "warn", detail: `This extension's code is ${RUNTIME_ABSENT_DETAIL}.` };

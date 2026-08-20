@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { loopRunning, runLoop, stopLoop } from "./loop-runner.js";
 
-/* The loop routes. Thin by design — the pump owns everything that happens after `start` acks, because a loop
+/* The loop routes. Thin by design, the pump owns everything that happens after `start` acks, because a loop
  * outlives the request that began it by minutes or hours and there is nothing useful for a handler to await.
  */
 export const createLoopsRoutes = (services: Services) => {
@@ -42,7 +42,7 @@ export const createLoopsRoutes = (services: Services) => {
 
         designs: i.designs.handler(async () => ({ designs: await services.loopDesigns.list() })),
         saveDesign: i.saveDesign.handler(async ({ input }) => {
-            /* The same refusal `start` makes, made at the moment of SAVING instead — which is the point of
+            /* The same refusal `start` makes, made at the moment of SAVING instead, which is the point of
              * saving. An ad-hoc loop with no output and no check wastes one person's afternoon; a SAVED one
              * that cannot converge is a trap left lying around for everybody who picks it afterwards, and every
              * one of them pays a full run to discover it. */

@@ -2,25 +2,25 @@ import type { Services } from "../composition.js";
 import { askQuickModel } from "./quick-model.js";
 import { isDeclinedAnswer, isFailureSentence } from "./failure-sentences.js";
 
-/* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn — the second half of the
+/* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn, the second half of the
  * naming rule that starts in the contract's title.ts.
  *
  * deriveTitle can only CUT. It finds the user's first real sentence and clamps it, so what the fleet board and
  * the chat tabs wear is a request rather than a name: `Remove this feature that is responsible for suggest…`.
- * A column of those is unscannable, and unscannable in the specific way that matters — the words that would
+ * A column of those is unscannable, and unscannable in the specific way that matters, the words that would
  * tell two rows apart sit past the truncation, and the words that survive (the opening verb, an article, a
  * demonstrative) are the ones every row shares. Writing a name instead of cutting one takes a model, so one
  * quick-model call reads the opening prompt and writes it.
  *
  * AT TURN START, not turn end. The whole window in which the name is worth having is the one the user spends
- * watching the turn run, and the opening prompt — the thing the user just typed — is already the best witness
+ * watching the turn run, and the opening prompt, the thing the user just typed, is already the best witness
  * to what the conversation is FOR. Waiting for the closing reply buys a slightly better-informed name and pays
  * the entire first turn for it, spent under the cut sentence this exists to replace.
  *
  * Runs only while the title is still `derived`, which makes the pass self-limiting three ways over:
  * promoteTitle's ranking makes a model name final against every later automatic source, a plan heading or a
  * rename beats it outright, and the gate here keeps the call itself from being spent on a conversation that
- * already answers to a better name. A turn that fails to produce one — no account connected, an empty reply —
+ * already answers to a better name. A turn that fails to produce one, no account connected, an empty reply,
  * changes nothing, and the next turn's start simply tries again. */
 
 // Enough of the prompt to name the job without paying for the stack trace pasted under it: opening messages
@@ -31,14 +31,14 @@ const excerpt = (text: string): string => (text.length <= EXCERPT_CAP ? text : `
 
 /* SUBJECT FIRST, ACTION LAST, because a board is read down its left edge and not across its rows.
  *
- * Every title this repo used to write opened on a verb — Add, Fix, Remove, Review, Investigate — so the first
+ * Every title this repo used to write opened on a verb. Add, Fix, Remove, Review, Investigate, so the first
  * word a scanning eye landed on was reliably the word that told two rows apart LEAST, and the feature name (the
  * only thing the user is actually looking for) sat wherever the sentence happened to put it. Leading with the
  * subject puts the discriminating word where the eye already is; the action rides at the tail as a single word,
  * forming a second column that answers "and what is being done to it" without ever competing for the first
  * glance. Five words is the ceiling because a title that needs a sixth is describing rather than naming.
  *
- * The examples are load-bearing and deliberately SHORT: a model asked for "3-8 words" and shown a seven-word
+ * The examples matter and are deliberately SHORT: a model asked for "3-8 words" and shown a seven-word
  * example writes seven words every time, which is how the previous rule here produced titles the length of the
  * sentences it was meant to replace. */
 const namePrompt = (prompt: string): string =>
@@ -72,13 +72,13 @@ const namePrompt = (prompt: string): string =>
         `Reply with the name only — no quotes, no trailing period, no explanation.`,
     ].join(`\n`);
 
-// Wrappers a model reaches for even when told not to — same instinct as cleanCommitSubject: the name is right
+// Wrappers a model reaches for even when told not to, same instinct as cleanCommitSubject: the name is right
 // and only its packaging is wrong, so unwrap rather than refuse.
 const FENCE = /^```[\w-]*\n?|\n?```$/g;
 const LABEL = /^(?:title|name|session\s*(?:title|name)?)\s*:\s*/i;
 const BULLET = /^[-*]\s+/;
 
-/* The separator the shape asks for, against the ones a model reaches for instead — normalised for the same
+/* The separator the shape asks for, against the ones a model reaches for instead, normalised for the same
  * reason the wrappers above are stripped, so that a right name in wrong punctuation still lands as one column
  * plus a tag rather than as prose. (The browser's sessionCategory.ts reads that tag to tint the session's
  * identity tile; a stray em dash there would cost the card its colour and its glyph.)
@@ -105,14 +105,14 @@ export const cleanSessionTitle = (reply: string): string => {
 
 /* Name a conversation from the prompt that just opened its turn, replacing the derivation's cut sentence.
  * Resolves without effect whenever there is nothing to do; throws only what askQuickModel throws (nothing
- * connected, a credential that fails resolution) — the call site treats that as a log line, not a failure. */
+ * connected, a credential that fails resolution), the call site treats that as a log line, not a failure. */
 export const nameAgentTitle = async (services: Services, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return;
     }
     // A stored title that is itself a provider failure sentence was stolen by an earlier pass whose quick-model
-    // call hit the condition — it counts as no name at all, so this pass runs again over it (the registry's
+    // call hit the condition, it counts as no name at all, so this pass runs again over it (the registry's
     // ranking forfeits its rank the same way; see promoteTitle) and the entry heals on its next turn.
     const poisoned = entry.title !== undefined && isFailureSentence(entry.title);
     if ((entry.titleSource ?? "derived") !== "derived" && !poisoned) {
@@ -123,12 +123,12 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
     /* Two ways this reply can fail to be a name, and only the first is anybody's fault.
      *
      * The refusal check repeats here because the quick model may run on a DIFFERENT provider than the turn it is
-     * naming — its own limit hit or refused credential arrives as this reply's text, not as a thrown error, on
+     * naming, its own limit hit or refused credential arrives as this reply's text, not as a thrown error, on
      * providers whose failures stream as prose rather than reaching one-shot's flag.
      *
      * The decline check is for a healthy model that simply would not do it: an opening prompt too thin to name
      * ("continue", a pasted stack trace, a bare slash command) gets answered with a question back, and writing
-     * that down would name the conversation after the model's confusion — permanently, since a model title
+     * that down would name the conversation after the model's confusion, permanently, since a model title
      * outranks every later automatic source. Skipping leaves the derived title standing and lets the next turn,
      * which has more to go on, try again. */
     if (title === `` || isFailureSentence(title) || isDeclinedAnswer(title)) {

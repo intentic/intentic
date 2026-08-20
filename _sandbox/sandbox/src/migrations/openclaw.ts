@@ -17,12 +17,12 @@ import {
 } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
 
-/* THE OPENCLAW ADAPTER — `~/.openclaw` read into a migration plan; pure, like the Hermes one beside it, and
+/* THE OPENCLAW ADAPTER, `~/.openclaw` read into a migration plan; pure, like the Hermes one beside it, and
  * shaped by the same rule: translate judgment-free, refuse by name, never throw.
  *
  * The layout it reads (their configuration reference and their own `migrate` command's inventory):
  *
- *   openclaw.json            JSON5 — agents.defaults (model/workspace/heartbeat/skills), channels, mcp, env
+ *   openclaw.json            JSON5, agents.defaults (model/workspace/heartbeat/skills), channels, mcp, env
  *   .env                     the global env fallback
  *   workspace/               SOUL.md, IDENTITY.md, USER.md, AGENTS.md, MEMORY.md, memory/YYYY-MM-DD.md,
  *                            HEARTBEAT.md, BOOTSTRAP.md (first-run ritual, skipped), skills/ (highest
@@ -30,12 +30,12 @@ import { parseJson5ish } from "./json5ish.js";
  *   skills/                  managed/installed skills at the state root
  *   cron/jobs.json           gateway cron jobs ({name, schedule:{kind,expr|everyMs,tz}, payload:{message}})
  *   agents/<id>/agent/auth-profiles.json   model credentials (api keys taken with consent; OAuth refused)
- *   credentials/             channel state — never even held (the archive reader skips the segment; WhatsApp
+ *   credentials/             channel state, never even held (the archive reader skips the segment; WhatsApp
  *                            ratchets DESYNC when copied, per their own migration guide)
  *
  * The one wrinkle Hermes does not have: the workspace is relocatable (`agents.defaults.workspace`). A packed
  * `~/.openclaw` only contains it when it lives at the default path, so a config naming somewhere else gets a
- * needs-action telling the owner to pack it in — guessing at sibling directories in the tar would mean
+ * needs-action telling the owner to pack it in, guessing at sibling directories in the tar would mean
  * importing whichever lookalike folder happened to ride along. */
 
 const WS = "workspace/";
@@ -44,7 +44,7 @@ export const detectOpenclaw = (files: Files): boolean =>
     files.has("openclaw.json") &&
     (files.has(".env") || [...files.keys()].some((path) => path.startsWith(WS) || path.startsWith("cron/") || path.startsWith("skills/")));
 
-// "30m" / "2h" / "1d" → ms. Undefined for anything else — the caller words the fallback.
+// "30m" / "2h" / "1d" → ms. Undefined for anything else, the caller words the fallback.
 const durationMs = (raw: string): number | undefined => {
     const match = raw.match(/^(\d+)\s*(s|m|h|d)$/);
     if (match === null) {
@@ -55,7 +55,7 @@ const durationMs = (raw: string): number | undefined => {
 };
 
 /* An interval into a cron line, only where cron can say it cleanly. "Every 90 minutes" has no honest cron
- * spelling, and approximating one would fire the owner's job on a rhythm they never chose — refusing with the
+ * spelling, and approximating one would fire the owner's job on a rhythm they never chose, refusing with the
  * reason is the better answer. */
 const everyCron = (ms: number): string | undefined => {
     if (ms < 60_000 || ms % 60_000 !== 0) {

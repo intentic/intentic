@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
-/* CLAUDE CODE'S OWN SYSTEM PROMPT, READ OUT OF THE CLI THAT IS INSTALLED — not transcribed into this repo.
+/* CLAUDE CODE'S OWN SYSTEM PROMPT, READ OUT OF THE CLI THAT IS INSTALLED, not transcribed into this repo.
  *
  * The settings page lets the owner REPLACE the system prompt, and a replace-only editor is a trap unless they
  * can see what they are replacing and get back to it. Neither the SDK nor the CLI exposes the preset text
@@ -13,15 +13,15 @@ import type { BuiltinPromptText } from "@intentic/sandbox-contract";
  *
  * So: stand up a loopback endpoint, point the CLI's ANTHROPIC_BASE_URL at it, and run one throwaway turn. The
  * first /v1/messages carries the fully expanded system prompt; we keep it and answer with a canned stream so
- * the CLI finishes instead of retrying. Nothing reaches Anthropic — no credential is used (the token is a
- * placeholder), no tokens are billed, and the answer is fabricated locally — which also means the owner can
+ * the CLI finishes instead of retrying. Nothing reaches Anthropic, no credential is used (the token is a
+ * placeholder), no tokens are billed, and the answer is fabricated locally, which also means the owner can
  * read the default before connecting any account at all.
  *
  * The alternative was shipping a copy of the prompt in this repo. That copy would be wrong the first time the
  * image bumped the CLI, and wrong silently: the page would show a prompt the agent hadn't run in months. */
 
 // One capture per daemon process. The prompt only changes when the CLI does, and the CLI changes when the
-// image is rebuilt — which restarts the daemon. So there is no invalidation to get wrong.
+// image is rebuilt, which restarts the daemon. So there is no invalidation to get wrong.
 let cached: BuiltinPromptText | undefined;
 
 // The CLI opens the system array with a billing/telemetry line rather than prompt text. It is not part of what
@@ -30,7 +30,7 @@ let cached: BuiltinPromptText | undefined;
 const BILLING_PREFIX = "x-anthropic-billing-header:";
 
 // A minimal Anthropic streaming answer. The CLI needs a well-formed message to consider the turn finished; the
-// content is irrelevant because nothing reads it — the capture already happened on the request.
+// content is irrelevant because nothing reads it, the capture already happened on the request.
 const CANNED_STREAM = [
     [
         "message_start",
@@ -86,7 +86,7 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
         request.on("data", (chunk: Buffer) => chunks.push(chunk));
         request.on("end", () => {
             if (text === undefined) {
-                // A malformed body is not worth failing on — the capture simply hasn't happened yet, and the
+                // A malformed body is not worth failing on, the capture simply hasn't happened yet, and the
                 // timeout below is what reports a probe that never produces one.
                 try {
                     text = promptTextOf((JSON.parse(Buffer.concat(chunks).toString()) as { system?: unknown }).system);

@@ -13,7 +13,7 @@ import { dailyBudget } from "../store/daily-budget.js";
 import { gateVerdictOf } from "./workflow-gate.js";
 import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
 
-/* THE RELEASE GATE — the daemon's third door for a caller with no identity, and the only one that ANSWERS.
+/* THE RELEASE GATE, the daemon's third door for a caller with no identity, and the only one that ANSWERS.
  *
  * The Front Desk proved the shape: a route that is itself the source, normalizing an outside request and driving
  * the existing machinery rather than wrapping a second copy of it. This is that shape pointed at a workflow
@@ -25,18 +25,18 @@ import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
  * decides otherwise.
  *
  * WHY IT IS TOKEN-AUTHED AND NOT ORIGIN-AUTHED. The Front Desk's gate is its embed-origin allowlist, which works
- * because its caller is a browser on a page the owner controls. A pipeline runner sends no Origin at all — the
- * Front Desk would refuse it by design — so this takes the event automation's model instead: a minted token in
+ * because its caller is a browser on a page the owner controls. A pipeline runner sends no Origin at all, the
+ * Front Desk would refuse it by design, so this takes the event automation's model instead: a minted token in
  * the query string, the one mechanism every CI system can carry. Enforced ALWAYS, fail-closed even in loopback,
  * because the token always exists once a gate is declared.
  *
  * WHY THERE IS NO `enabled` TOGGLE. A workflow does not have one, on the argument that nothing fires it on its
- * own. Something does now — but the GATE's presence is the switch: declare one and the door opens, drop it and
+ * own. Something does now, but the GATE's presence is the switch: declare one and the door opens, drop it and
  * the door is gone along with the token behind it. A second toggle would be a way to leave a token live on a
  * closed door.
  *
  * CONCURRENT CALLS ARE FINE and deliberately not serialized. Two pipelines gating two commits derive different
- * run ids and different conversation ids, so nothing is shared and nothing collides — which is the property
+ * run ids and different conversation ids, so nothing is shared and nothing collides, which is the property
  * that makes "gate every pull request" a thing anyone can actually turn on.
  */
 
@@ -87,9 +87,9 @@ export const createGateRoute =
         if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
             return c.json({ error: "payload too large" }, 413);
         }
-        /* ADMISSION — the same session.start guard every automation wake passes, with this door's own source.
+        /* ADMISSION, the same session.start guard every automation wake passes, with this door's own source.
          * The workflow floor is allow|deny only (a hold here is indistinguishable from a timeout to the CI
-         * runner holding the connection), so a refusal answers 403 with the policy's sentence — a fact about
+         * runner holding the connection), so a refusal answers 403 with the policy's sentence, a fact about
          * this workspace's configuration, which the caller's on-call can act on. Before the daily spend: a
          * refused call must not eat the day's budget. */
         const { admission } = await services.sandboxSettings.get();
@@ -101,15 +101,15 @@ export const createGateRoute =
             return c.json({ error: "this gate has reached today's run limit" }, 429);
         }
 
-        /* The body becomes the run's REQUEST — the sentence every step is handed on top of its own prompt.
+        /* The body becomes the run's REQUEST, the sentence every step is handed on top of its own prompt.
          * That seam already exists for the composer, and it is exactly the right one: the commit under test,
          * the preview URL it was deployed to, the branch, whatever this pipeline knows and the workflow's
          * prompts were written to expect. The daemon does not parse it, because what it means is the graph's
-         * business and not this route's — which is the property that lets one door serve an acceptance sweep
+         * business and not this route's, which is the property that lets one door serve an acceptance sweep
          * and a security review without learning what either of them is. */
         const request = (await c.req.text()).slice(0, PAYLOAD_MAX);
         /* A design whose steps take their goal from the request cannot be run by a caller that sent an empty
-         * body — there would be nothing to tell the model at all. Refused here rather than discovered by the
+         * body, there would be nothing to tell the model at all. Refused here rather than discovered by the
          * first step, because this door spends a whole fan-out of sessions per call and a gate wired into a
          * push-triggered pipeline would spend it on every commit. 400, not 500: the body is the caller's. */
         const runFaults = workflowRunFaults(workflow, request);
@@ -122,7 +122,7 @@ export const createGateRoute =
         }
         const run = await services.workflowRuns.start(openRun(workflow, repos, Date.now(), request === "" ? undefined : request));
 
-        /* Held, unlike every other run-starting route here — holding it IS the product. A pipeline step's whole
+        /* Held, unlike every other run-starting route here, holding it IS the product. A pipeline step's whole
          * job is to block until it knows, and the alternative (ack now, make the caller poll) pushes the wait
          * into a shell loop in everybody's workflow file.
          *

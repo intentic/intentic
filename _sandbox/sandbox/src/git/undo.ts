@@ -3,27 +3,27 @@ import { operationInProgress } from "./operation.js";
 
 /* UNDOING THE LAST THING THAT MOVED A BRANCH.
  *
- * Git has no `undo`. What it has is the REFLOG — a per-ref record of every position that ref has held — so
+ * Git has no `undo`. What it has is the REFLOG, a per-ref record of every position that ref has held, so
  * undoing an action means moving the branch back to the position it held before it, which is what this reads.
  *
  * WHY THIS IS NOT THE CHECKPOINTS TIMELINE, which already exists and already covers destructive git verbs: a
  * checkpoint restores the WORKING TREE, and this moves the BRANCH. After a bad rebase or a reset the files may
  * be exactly right and the ref exactly wrong, and restoring a whole worktree snapshot to fix a ref is both a
- * much bigger hammer and the wrong tool — it would take every unrelated edit made since back with it. The two
+ * much bigger hammer and the wrong tool, it would take every unrelated edit made since back with it. The two
  * are complements, and the safety net under this one is the other: the route checkpoints before it resets.
  *
  * IT READS THE BRANCH'S OWN REFLOG, NOT HEAD'S. HEAD's reflog also records checkouts, so the entry before the
- * current one routinely belongs to a DIFFERENT branch — and resetting to it would move the wrong branch to a
+ * current one routinely belongs to a DIFFERENT branch, and resetting to it would move the wrong branch to a
  * position it never held. That is a data-loss bug wearing an undo button, and the reason for the extra lookup. */
 
 // What the last reflog entry was, as far as we can name it. `other` is deliberate rather than a failure: an
-// action this does not recognise is still undoable — the reflog records where the ref was regardless — and the
+// action this does not recognise is still undoable, the reflog records where the ref was regardless, and the
 // UI can say so honestly instead of hiding a working button behind a vocabulary gap.
 export type UndoKind = "commit" | "amend" | "merge" | "rebase" | "cherry-pick" | "revert" | "reset" | "pull" | "other";
 
 export interface UndoableAction {
     readonly kind: UndoKind;
-    // The reflog's own subject line ("commit: fix the parser") — what the button names, in git's words.
+    // The reflog's own subject line ("commit: fix the parser"), what the button names, in git's words.
     readonly description: string;
     readonly branch: string;
     // Where the branch is now, and where undoing returns it to.
@@ -40,8 +40,8 @@ const WORKING_TREE_KINDS = new Set<UndoKind>(["merge", "rebase", "cherry-pick", 
 /* The reflog subject → what happened. Order matters: git writes `commit (amend)` and `commit (merge)` as
  * prefixes of `commit`, so the specific spellings have to be tested first or every amend reads as a commit.
  *
- * A subject that names the branch COMING INTO EXISTENCE has no earlier position to return to — undoing it would
- * mean deleting the branch, which is a different verb with different consequences — so those answer undefined
+ * A subject that names the branch COMING INTO EXISTENCE has no earlier position to return to, undoing it would
+ * mean deleting the branch, which is a different verb with different consequences, so those answer undefined
  * rather than `other`. */
 const kindOf = (subject: string): UndoKind | undefined => {
     if (subject.startsWith("branch:") || subject.startsWith("clone:") || subject.startsWith("checkout:")) {
@@ -82,7 +82,7 @@ const kindOf = (subject: string): UndoKind | undefined => {
 const SEP = "\x1f";
 
 export const undoableAction = async (dir: string, git: GitRunner = defaultGit): Promise<UndoableAction | undefined> => {
-    // A halted merge/rebase/cherry-pick ends by ABORTING it, not by moving the branch — offering both would be
+    // A halted merge/rebase/cherry-pick ends by ABORTING it, not by moving the branch, offering both would be
     // offering two different recoveries for one state, and only one of them is correct.
     if ((await operationInProgress(dir)) !== undefined) {
         return undefined;
@@ -103,7 +103,7 @@ export const undoableAction = async (dir: string, git: GitRunner = defaultGit): 
         .map((line) => line.split(SEP));
 
     // Each entry records the position the ref moved TO, so the entry BEFORE the current one holds the position
-    // to return to. A branch with only one entry has never moved since it was created — nothing to undo.
+    // to return to. A branch with only one entry has never moved since it was created, nothing to undo.
     const [current, previous] = entries;
     const sha = current?.[0]?.trim() ?? "";
     const previousSha = previous?.[0]?.trim() ?? "";
@@ -120,7 +120,7 @@ export const undoableAction = async (dir: string, git: GitRunner = defaultGit): 
 };
 
 /* Move the branch back. `expectedPreviousSha` is the position the CALLER was shown, and the undo is refused when
- * it no longer matches — so an undo prepared against a stale view (another browser committed, the agent landed)
+ * it no longer matches, so an undo prepared against a stale view (another browser committed, the agent landed)
  * cannot quietly land somewhere the user never looked at. That check is the whole reason this re-reads rather
  * than trusting its argument.
  *

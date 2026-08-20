@@ -19,10 +19,10 @@ const GUARD_TIMEOUT_MS = 60_000;
 const GUARD_DETAIL_TAIL = 500;
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
-// The contract's cap on AgentTurn.title — a surfaced wake's title is built from a message, so it's clamped here.
+// The contract's cap on AgentTurn.title, a surfaced wake's title is built from a message, so it's clamped here.
 export const TITLE_MAX = 80;
 
-// "Wake the agent" — streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
+// "Wake the agent", streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
 // would put this module downstream of agent.routes, which is itself an emitter of the workspace events
 // workspace-events.ts turns back into fireAutomation calls: a cycle. Same reason turn-runs takes its TurnFn.
 export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
@@ -32,7 +32,7 @@ export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal 
  * live delivery: the agent sends its own reply (per its provider skill), as before.
  *
  * `failed` is the third frame because a turn that produces NO text is otherwise indistinguishable from a turn
- * that errored — and the two are opposite things to say to whoever is waiting. Every sink used to end on `end`
+ * that errored, and the two are opposite things to say to whoever is waiting. Every sink used to end on `end`
  * alone, so a Front Desk visitor whose wake died on a revoked credential watched the typing dots disappear and
  * got nothing at all, while the daemon had the provider's exact sentence and wrote it to a row nobody was
  * looking at. It carries the RAW reason: what an audience may be told differs per sink (a stranger on a
@@ -50,14 +50,14 @@ const STREAM_NOTE =
     "Your reply is delivered to the user live as you type it — just answer normally in plain text. Do NOT send it yourself with any tool (no curl/API post of your reply); use provider send tools only to act elsewhere (react, or post to a different channel).";
 
 /* THE SPIN-LOOP GUARD. An automation that fails is normal; one that fails EVERY time is misconfigured, and the
- * scheduler will otherwise keep spending a turn's worth of tokens on it on every tick — nightly, hourly, or
- * once a minute — until a human happens to look at the row.
+ * scheduler will otherwise keep spending a turn's worth of tokens on it on every tick, nightly, hourly, or
+ * once a minute, until a human happens to look at the row.
  *
  * So after `automationFailureLimit` consecutive errors the job is disabled rather than fired again. Disabled,
  * not deleted and not marked broken: `enabled` is the field the user's own toggle writes, so re-enabling it is
  * the switch they already know, and the run history that earned the quarantine stays on the row underneath it.
  *
- * Returns the sentence to put on the run's activity record, or undefined when nothing was quarantined — the
+ * Returns the sentence to put on the run's activity record, or undefined when nothing was quarantined, the
  * guard is off (0), the streak is short, or the automation was edited away underneath this fire. */
 const quarantineIfSpinning = async (services: Services, id: string): Promise<string | undefined> => {
     const { automationFailureLimit } = await services.sandboxSettings.get();
@@ -80,7 +80,7 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
 
 // Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
 // guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
-// the UI). Plain process env otherwise — guards are sandbox scripts, not agent turns.
+// the UI). Plain process env otherwise, guards are sandbox scripts, not agent turns.
 const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
     try {
         await execFileAsync("sh", ["-c", command], {
@@ -96,14 +96,14 @@ const runGuard = async (command: string, cwd: string, payload: string | undefine
     }
 };
 
-// An automation never overlaps itself — but what happens to the fire that arrives while one is running depends
+// An automation never overlaps itself, but what happens to the fire that arrives while one is running depends
 // on who sent it (see FireOptions.overlap), so the entry is the run in PROGRESS rather than a bare mark: it is
 // what a queued fire waits on. A module singleton (like agent-requests' bridge) so the scheduler's tick, the
 // listener dispatchers and the /automations/{id}/fire route all share one lock per automation.
 const inFlight = new Map<string, Promise<unknown>>();
 
 // A conversation id is a branch name (agent/<id>) and a worktree dir, so it is bounded and charset-checked by
-// the contract's ConversationIdSchema — this builds one that satisfies it from the automation's id. Room for
+// the contract's ConversationIdSchema, this builds one that satisfies it from the automation's id. Room for
 // the "a-" prefix and the suffix is bought out of the automation id, which is the part that repeats.
 const AUTOMATION_ID_IN_CONVERSATION = 40;
 // Two fires of one automation can't share a millisecond (fires are serialized per automation), but the counter
@@ -116,33 +116,33 @@ export const mintConversationId = (automationId: string, now: number): string =>
 // the external dispatchers set a different subset than the tick does, and `payload, wake, false, undefined,
 // origin` reads as nothing at all at the call site.
 export interface FireOptions {
-    // The trigger's payload — appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
+    // The trigger's payload, appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
     readonly payload?: string;
     /* Which of the two pre-wake gates this fire has ALREADY satisfied and so must not put itself through again.
-     * One field rather than a flag per gate, because the gates are not independent in practice — every caller
-     * that clears the guard has also cleared the approval — and `preApproved, byHand` at a call site reads as
+     * One field rather than a flag per gate, because the gates are not independent in practice, every caller
+     * that clears the guard has also cleared the approval, and `preApproved, byHand` at a call site reads as
      * neither.
      *
-     * "approval" — the owner has approved THIS fire: they pressed Run now (the click is the approval, and holding
+     * "approval", the owner has approved THIS fire: they pressed Run now (the click is the approval, and holding
      *   it in their own queue for their own approval is a queue entry that says nothing), or a restart is
      *   re-firing a wake that was already past the gate and running when the daemon died. The guard still runs,
      *   deliberately: it is the check on whether the work is still wanted, and "skipped by guard" is the single
      *   most useful thing a by-hand fire can report about an automation that appears to do nothing.
-     * "both" — the approve route replaying a held wake. Its guard ran and passed when the wake was held; running
+     * "both", the approve route replaying a held wake. Its guard ran and passed when the wake was held; running
      *   it a second time would be asking a question already answered. */
     readonly cleared?: "approval" | "both";
     // How many times a boot has already re-fired this wake, carried through the journal so an interrupted fire
     // that dies the same way again is not re-fired forever (see turn-resume's boot pass). A first fire is 0.
     readonly attempts?: number;
     /* Set by the restart path, and by any dispatcher that owns a CONTINUING thread rather than a one-off wake:
-     * the Front Desk hands the same id every time a visitor writes, so their whole chat is one conversation —
+     * the Front Desk hands the same id every time a visitor writes, so their whole chat is one conversation,
      * one fleet card, one worktree, one agent that remembers the last message. A first fire mints its own
      * identity after the guard/approval gates clear. */
     readonly conversationId?: string;
     // The provider session that conversation last ran on, resumed so the turn continues rather than restarts.
     // Only meaningful alongside conversationId, and only for a thread that has already completed a turn.
     readonly sessionId?: string;
-    // Narrows the wake's toolbox (AgentTurn.allowedTools) — the automation's own allowlist, carried in by the
+    // Narrows the wake's toolbox (AgentTurn.allowedTools), the automation's own allowlist, carried in by the
     // dispatcher so the turn a stranger's message drives can be smaller than the one the owner's own is.
     readonly allowedTools?: readonly string[];
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
@@ -152,7 +152,7 @@ export interface FireOptions {
     // provenance. Present ⇒ an isolated worktree conversation. Absent (schedules, chores) ⇒ a shared-workspace
     // conversation.
     readonly origin?: AgentOrigin;
-    // The card/tab title for a surfaced wake — the inbound message's first line, which is the only thing that
+    // The card/tab title for a surfaced wake, the inbound message's first line, which is the only thing that
     // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
     readonly title?: string;
     /* What to do when this automation is ALREADY running. "drop" (the default) suits a trigger that fires again
@@ -160,7 +160,7 @@ export interface FireOptions {
      * twice, and the next tick comes round regardless.
      *
      * "queue" is for an inbound MESSAGE, and the difference is that there is no next tick. Somebody is waiting
-     * for an answer and the dispatcher holds the only copy of what they said, so a drop loses it outright —
+     * for an answer and the dispatcher holds the only copy of what they said, so a drop loses it outright,
      * a Discord mention that arrived while an unrelated fire of the same automation happened to be running was
      * never answered and never retried, and the channel saw nothing at all. A queued fire waits for the run in
      * progress and then takes its turn, keeping its reply sink open across the wait. */
@@ -174,14 +174,14 @@ export interface FireOutcome {
     readonly sessionId?: string;
 }
 
-/* Fire one automation now, one turn at a time. This half owns only the overlap policy — whether a fire that
- * meets a running one is refused or made to wait — and `runFire` below is the fire itself.
+/* Fire one automation now, one turn at a time. This half owns only the overlap policy, whether a fire that
+ * meets a running one is refused or made to wait, and `runFire` below is the fire itself.
  *
  * Callers run it detached from their tick/request lifecycles; tests await it directly. */
 export const fireAutomation = async (services: Services, automation: AutomationRecord, wake: WakeFn, options: FireOptions = {}): Promise<FireOutcome> => {
     const running = inFlight.get(automation.id);
     if (running !== undefined && options.overlap !== "queue") {
-        // Dropped as overlapping — which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink, and
+        // Dropped as overlapping, which is a REPLY THAT WILL NEVER COME for anyone waiting on the sink, and
         // runFire's finally is never reached from here, so this exit closes the sink itself or nothing does.
         // A QUEUED fire keeps its sink open instead: it is still going to answer, just not yet.
         options.stream?.failed("this automation is already running, so the message was not picked up");
@@ -189,7 +189,7 @@ export const fireAutomation = async (services: Services, automation: AutomationR
         return {};
     }
     // The chain IS the lock: each fire runs after the one before it, and a fire that fails still lets the next
-    // one start (`.then(job, job)` — the same queue the web-chat route runs its visitor turns through).
+    // one start (`.then(job, job)`, the same queue the web-chat route runs its visitor turns through).
     const turn = (running ?? Promise.resolve()).then(
         () => runFire(services, automation, wake, options),
         () => runFire(services, automation, wake, options),
@@ -201,7 +201,7 @@ export const fireAutomation = async (services: Services, automation: AutomationR
     inFlight.set(automation.id, settled);
     void settled.then(() => {
         // Only the LAST fire in the chain clears the slot. An earlier one finishing must not unlock an
-        // automation whose next turn is already queued behind it — that is the overlap this exists to prevent.
+        // automation whose next turn is already queued behind it, that is the overlap this exists to prevent.
         if (inFlight.get(automation.id) === settled) {
             inFlight.delete(automation.id);
         }
@@ -212,7 +212,7 @@ export const fireAutomation = async (services: Services, automation: AutomationR
 /* Wait for whatever fire is running for one automation, if any. The tick fires DETACHED, so seeing a run
  * recorded is not the same as the automation being free again: the record is written inside the fire, and the
  * overlap lock only releases once the fire returns. Anything that must fire the same automation a second time
- * and mean it (a test's next tick, a caller driving two fires in a row) awaits this in between — otherwise the
+ * and mean it (a test's next tick, a caller driving two fires in a row) awaits this in between, otherwise the
  * second fire lands in that window and is dropped as overlapping. */
 export const automationIdle = async (id: string): Promise<void> => {
     await inFlight.get(id);
@@ -238,9 +238,9 @@ const runFire = async (
 ): Promise<FireOutcome> => {
     try {
         const capped = payload?.slice(0, PAYLOAD_MAX);
-        /* ADMISSION — the session.start guard, consulted on EVERY fire including approved replays. A deny
+        /* ADMISSION, the session.start guard, consulted on EVERY fire including approved replays. A deny
          * refuses even a `cleared` fire (the checks re-run live, so approve-then-tighten does not execute); a
-         * hold is what `cleared` satisfies — the owner's click, or the approve route's replay, already answered
+         * hold is what `cleared` satisfies, the owner's click, or the approve route's replay, already answered
          * it. The verdict folds the workspace admission floor and the automation's own requireApproval /
          * holdForSeconds into one decision (guard/actions.ts owns the precedence). */
         const { admission } = await services.sandboxSettings.get();
@@ -256,7 +256,7 @@ const runFire = async (
                 outcome: "skipped",
                 detail: verdict.reason,
             });
-            // Refused by policy is the workspace working as configured — but to whoever is waiting on the
+            // Refused by policy is the workspace working as configured, but to whoever is waiting on the
             // sink it is still a reply that never arrives, so it is said rather than left silent.
             stream?.failed(verdict.reason);
             return {};
@@ -270,24 +270,24 @@ const runFire = async (
                         outcome: "skipped",
                         ...(precheck.detail !== undefined ? { detail: precheck.detail } : {}),
                     });
-                    // A guard saying no is the automation working as configured — but to whoever is waiting on
+                    // A guard saying no is the automation working as configured, but to whoever is waiting on
                     // the sink it is still a reply that never arrives, so it is said rather than left silent.
                     stream?.failed(precheck.detail ?? "this automation's guard skipped the run");
                     return {};
                 }
             }
             // Approval gate: hold the wake (payload snapshotted) instead of running. inFlight releases in the
-            // finally, so the lock is NOT held while it waits for the owner — the approve route runs it later,
+            // finally, so the lock is NOT held while it waits for the owner, the approve route runs it later,
             // or (a countdown hold) the scheduler's own tick does once the countdown passes unanswered.
             if (verdict.effect === "hold" && cleared === undefined) {
                 await services.approvals.add({
                     automationId: automation.id,
-                    // Only a pure-countdown hold carries autoRunAfterS (guard/actions.ts): "ask me" — whether
-                    // the automation's own requireApproval or the admission floor — never auto-runs.
+                    // Only a pure-countdown hold carries autoRunAfterS (guard/actions.ts): "ask me", whether
+                    // the automation's own requireApproval or the admission floor, never auto-runs.
                     ...(verdict.autoRunAfterS !== undefined ? { autoRunAt: Date.now() + verdict.autoRunAfterS * 1_000 } : {}),
                     ...(capped !== undefined ? { payload: capped } : {}),
                     // Snapshotted with the payload so the approved run opens the same conversation this fire
-                    // would have — an approved Discord mention lands on the board as a Discord agent, not as
+                    // would have, an approved Discord mention lands on the board as a Discord agent, not as
                     // an anonymous turn.
                     ...(origin !== undefined ? { origin } : {}),
                     ...(title !== undefined ? { title } : {}),
@@ -306,13 +306,13 @@ const runFire = async (
                         ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
-                // A held wake goes nowhere until the owner acts, and nothing else will tell them — an
+                // A held wake goes nowhere until the owner acts, and nothing else will tell them, an
                 // automation fires precisely when they are not looking. notifyIfAway keeps it quiet if they are.
                 void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
                 return {};
             }
         }
-        /* This fire is now in flight — written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
+        /* This fire is now in flight, written down so a daemon death doesn't erase it. Its TRIGGER inputs, not
          * the resolved turn: a re-fire goes back through this same function (see turn-resume's boot pass), which
          * is what keeps the overlap guard, the run record and the activity append, and re-reads a prompt the
          * owner may have fixed in the meantime. Awaited, unlike the chat-turn journal: nothing is waiting on a
@@ -330,10 +330,10 @@ const runFire = async (
                 attempts,
             })
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
-        /* The wake's prompt is the automation's configured one plus the context that woke it — which is exactly
+        /* The wake's prompt is the automation's configured one plus the context that woke it, which is exactly
          * a chat's opening message, written by the configuration instead of by a person. A LISTENER's payload is
          * a stranger's words (a Discord message, a webchat visitor), so it rides inside the outside-content
-         * envelope — wrapped HERE, at the one point every listener provider's payload joins a prompt, and only
+         * envelope, wrapped HERE, at the one point every listener provider's payload joins a prompt, and only
          * here: the guard's AUTOMATION_PAYLOAD env, the held snapshot and the journal keep the raw payload, so a
          * guard command parses what arrived and an approved replay wraps freshly on its way back through. A
          * schedule/event/workspace payload is the workspace talking to itself and rides bare. */
@@ -350,13 +350,13 @@ const runFire = async (
         // conversation exists.
         const turn: AgentTurn & { conversationId: string } = {
             // STREAM_NOTE is applied here rather than folded into `body`, so it belongs to THIS fire and not to
-            // the journal entry above. A re-fire has no live sink to write into — the Discord message the deltas
-            // were being edited into died with the daemon — and a wake still told "your reply is delivered live,
+            // the journal entry above. A re-fire has no live sink to write into, the Discord message the deltas
+            // were being edited into died with the daemon, and a wake still told "your reply is delivered live,
             // don't send it yourself" would answer into nothing. Without the note it sends its own reply, which
             // is exactly what an unstreamed wake does.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             conversationId,
-            /* NOBODY IS AT A COMPOSER FOR THIS ONE — which is what the flag means (AgentTurn.unattended names a
+            /* NOBODY IS AT A COMPOSER FOR THIS ONE, which is what the flag means (AgentTurn.unattended names a
              * Maintenance chore among its examples), and every module downstream already assumed it: the
              * command gate's unattended branch exists so an automation turn gets a refusal instead of a
              * permission card nobody can answer, and the plan/ask tools are withheld for the same reason. The
@@ -368,7 +368,7 @@ const runFire = async (
              * otherwise. Its prompt is the automation's standing brief, whose first 400 characters are a brief
              * about being a brief. */
             unattended: true,
-            /* SOMEBODY ELSE'S WORDS STARTED THIS TURN — set for a listener wake only, and named by the provider
+            /* SOMEBODY ELSE'S WORDS STARTED THIS TURN, set for a listener wake only, and named by the provider
              * that carried it. It is the same fact the envelope above states to the model, said once more to
              * the guard layer, which does not depend on the model believing it (guard/turn-taint.ts). A
              * schedule, a workspace event and a webhook are the workspace talking to itself and set nothing. */
@@ -385,10 +385,10 @@ const runFire = async (
                   }
                 : {}),
             ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
-            // The pinned account, when the owner chose one. Absent leaves the resolution where it was — the
-            // provider's first account — so an automation nobody configured keeps behaving as it always has.
+            // The pinned account, when the owner chose one. Absent leaves the resolution where it was, the
+            // provider's first account, so an automation nobody configured keeps behaving as it always has.
             ...(automation.account !== undefined ? { account: automation.account } : {}),
-            /* The persona this wake shows the outside world — and, unlike `account` on the line above, absence here
+            /* The persona this wake shows the outside world, and, unlike `account` on the line above, absence here
              * is a DECISION rather than a deferral. `unattended: true` is already set, which means the resolver
              * (personas/personas.ts) reads a missing persona as "no logged-in account at all" rather than
              * "all of them". So an automation the owner never pinned cannot post as anybody, and one they did
@@ -401,7 +401,7 @@ const runFire = async (
             ...(automation.model !== undefined ? { model: automation.model } : {}),
         };
         const events: AgentEvent[] = [];
-        // When this wake's turn began — the stamp its recorded message carries, taken here rather than at the
+        // When this wake's turn began, the stamp its recorded message carries, taken here rather than at the
         // append below, which on a long turn runs many minutes later (see RestoredMessage.sentAt).
         const startedAt = Date.now();
         // Opened before the provider runs, like every other conversation turn. A first fire has nothing to adopt;
@@ -427,14 +427,14 @@ const runFire = async (
             await recordTurnTranscript(services, turn, events, startedAt);
         }
         /* Tell the sink the turn is not going to answer, BEFORE the finally closes it. The daemon has always
-         * known this — it is on the run record below and in the activity feed — and used to keep it: a wake
+         * known this, it is on the run record below and in the activity feed, and used to keep it: a wake
          * that died on a revoked credential closed the stream with no text, which every audience reads as the
          * agent having nothing to say. The raw reason goes out; each sink decides what its audience is told. */
         if (failure !== undefined) {
             stream?.failed(failure);
         }
         // The stable conversation rides onto the run record, which makes every wake that reached a turn
-        // openable from its row — even when the provider never minted a runtime session.
+        // openable from its row, even when the provider never minted a runtime session.
         await services.automations.recordRun(automation.id, {
             at: Date.now(),
             ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
@@ -480,10 +480,10 @@ export interface AutomationsScheduler {
 }
 
 /* Run a wake the approvals queue was holding, with everything the hold snapshotted: `cleared: "both"` (its
- * guard ran when it was held, and whoever calls this holds the release — the owner's click or a countdown
+ * guard ran when it was held, and whoever calls this holds the release, the owner's click or a countdown
  * that ran out), and the thread it belonged to settled afterwards so the next message resumes the same
- * conversation. One function because there are now two releases — the approve route and the scheduler's
- * countdown scan — and the thread-settling half is exactly the part a second copy would forget. */
+ * conversation. One function because there are now two releases, the approve route and the scheduler's
+ * countdown scan, and the thread-settling half is exactly the part a second copy would forget. */
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
     const settled = await fireAutomation(services, automation, wake, {
         cleared: "both",
@@ -500,7 +500,7 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
 };
 
-// Polls the automations manifest and fires whatever came due since the last pass — so edits are picked up with
+// Polls the automations manifest and fires whatever came due since the last pass, so edits are picked up with
 // no resync bookkeeping. Fires run detached from the tick (an agent turn can outlast many polls). Event-kind
 // automations don't tick; they fire from the /automations/{id}/fire route.
 export const createAutomationsScheduler = (services: Services, wake: WakeFn, intervalMs = 30_000): AutomationsScheduler => {
@@ -528,7 +528,7 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
                 services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
             );
         }
-        /* Countdown holds whose deadline passed unanswered — silence is consent (holdForSeconds), but only
+        /* Countdown holds whose deadline passed unanswered, silence is consent (holdForSeconds), but only
          * while no turn is live: the wake edits the tree, and the countdown's whole point is not starting
          * work under someone. A busy fleet just leaves the hold for a later tick; the row keeps showing it.
          * The entry is removed BEFORE the run so a wake that fails cannot re-fire on every tick, and an

@@ -3,7 +3,7 @@ import type { ExtensionHost } from "../extensions/installed-extensions.js";
 import { contributionEnv, contributionFor, contributionRegistry } from "./contributions.js";
 
 // The env vars the agent's shell needs for its connected CLI tools, derived from cli-kind capabilities each
-// turn — the parallel to mcpToolsOf for the CLI path. Merged into the agent SDK's `env` (see agent.ts). Each
+// turn, the parallel to mcpToolsOf for the CLI path. Merged into the agent SDK's `env` (see agent.ts). Each
 // connector's env template is expanded (contributionEnv) and every var suffixed with the instance id so two of the
 // same provider coexist; the per-instance SKILL.md (written by cliHandler.apply) names the exact vars, so the
 // agent never has to guess them. Provider data lives in an installed extension's connector (contributionRegistry).

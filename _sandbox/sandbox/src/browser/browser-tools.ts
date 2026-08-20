@@ -14,20 +14,20 @@ import { ensureXvfb } from "./display.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
-// The agent's browser tools come from Microsoft's official @playwright/mcp — we don't reimplement browser
+// The agent's browser tools come from Microsoft's official @playwright/mcp, we don't reimplement browser
 // tools, this is pure wiring. There are two servers, and they exist for different reasons:
 //
-//   - `web` — ALWAYS available, credential-free, profile in memory (`--isolated`). Reading a page is an
+//   - `web`. ALWAYS available, credential-free, profile in memory (`--isolated`). Reading a page is an
 //     ordinary part of coding work: check a docs page, screenshot your own dev server, look at the site you
 //     just changed. This used to require a logged-in browser capability, which meant an agent asked to
-//     "look at this URL" had no browser at all — and one duly spent a quarter of its turn downloading
+//     "look at this URL" had no browser at all, and one duly spent a quarter of its turn downloading
 //     114 MiB of Chromium through `npx playwright install` to rebuild what was already sitting in the image.
-//   - `browser` — ONE server for every signed-in account and identity the turn holds, whose tools each take
+//   - `browser`. ONE server for every signed-in account and identity the turn holds, whose tools each take
 //     an `account` parameter (bin/browser-router.mjs). Behind it, one @playwright/mcp backend per PROFILE
-//     OWNER — the identity when an account was born from one, the entry itself otherwise — bound to that
+//     OWNER, the identity when an account was born from one, the entry itself otherwise, bound to that
 //     owner's PERSISTED profile, headed on Xvfb with the stealth patch, spawned only when a call names it.
 //     Everything here (the persistence, the anti-fingerprinting) is in service of acting as the owner on a
-//     site — including a site the account has NOT signed into yet, because performing that sign-in (or
+//     site, including a site the account has NOT signed into yet, because performing that sign-in (or
 //     sign-up) is the agent's job too; the accounts tools mark it connected when it lands. One server rather
 //     than one per account because the prompt pays per SERVER: N accounts used to pin N copies of the same
 //     ~21 tool schemas into every turn.
@@ -35,7 +35,7 @@ import { ensureStealthScript } from "./stealth.js";
 // The server name becomes the tool prefix, so these surface as `mcp__web__browser_*` and
 // `mcp__browser__browser_*`.
 
-// The one server name every signed-in browser stands behind — the router's mount point, and the marker the
+// The one server name every signed-in browser stands behind, the router's mount point, and the marker the
 // observer keys on to read a call's `account` argument instead of the prefix (browser-sessions.ts).
 export const ROUTED_BROWSER_SERVER = "browser";
 
@@ -61,8 +61,8 @@ const resolveMcpCli = (): string => {
 
 /* WHY EVERY BROWSER IS LAUNCHED WITH A DEBUGGING PORT.
  *
- * The MCP owns its Chromium — it launches it lazily on the first browser tool call and kills it when the turn
- * ends — and that is worth keeping: a turn that never browses starts nothing, and there is no daemon-owned
+ * The MCP owns its Chromium, it launches it lazily on the first browser tool call and kills it when the turn
+ * ends, and that is worth keeping: a turn that never browses starts nothing, and there is no daemon-owned
  * process to leak. So instead of taking the browser over, we ask for a window into it: `--remote-debugging-port`
  * makes Chromium ALSO listen on loopback TCP (Playwright drives it over a pipe, so the two don't collide), and
  * browser-sessions.ts attaches there to watch. Without this one flag the agent's browser is unobservable.
@@ -81,7 +81,7 @@ const configDir = mkdtempSync(join(tmpdir(), CONFIG_PREFIX));
 // timer or a shutdown path that a crash would skip anyway.
 const STALE_CONFIG_MS = 6 * 3_600_000;
 
-// The newest thing a directory holds — its own mtime when it holds nothing, so a directory nobody has written
+// The newest thing a directory holds, its own mtime when it holds nothing, so a directory nobody has written
 // to since it was created still reads as old once it is.
 const freshestMs = async (dir: string): Promise<number> => {
     const own = await stat(dir).catch(() => undefined);
@@ -96,7 +96,7 @@ const freshestMs = async (dir: string): Promise<number> => {
 /* The DIRECTORY itself outlives its daemon, and nothing was removing it: mkdtemp per process, one per restart,
  * kept forever. A long-lived sandbox accumulated hundreds of them, a couple of dozen files deep each. So the
  * same pass that trims stale files inside our own directory also removes the directories of daemons that have
- * written nothing for the whole stale window — a live-but-idle daemon's would rebuild itself on its next write
+ * written nothing for the whole stale window, a live-but-idle daemon's would rebuild itself on its next write
  * (mkdir below restores the 0700), and its mux sockets are long dead by then anyway. */
 const sweepDeadDirs = async (now: number): Promise<void> => {
     const parent = tmpdir();
@@ -130,7 +130,7 @@ const sweepConfigs = async (now: number): Promise<void> => {
 /* A free loopback port, taken by binding one and letting go.
  *
  * The gap between letting go and Chromium's own bind is where a second turn planned in the same moment could
- * be handed the same number — and that is the one collision that would actually mislead, because the daemon
+ * be handed the same number, and that is the one collision that would actually mislead, because the daemon
  * would attach to whichever browser won the race and screencast the WRONG turn's browsing. So issued ports are
  * remembered and never offered twice while they could still be in flight; the kernel's own reuse guard covers
  * the rest. `issued` is bounded because a long-lived sandbox would otherwise accumulate one number per turn
@@ -158,7 +158,7 @@ const freePort = async (): Promise<number> => {
             return port;
         }
     }
-    // Every try came back a port we had already handed out — vanishingly unlikely, and the honest answer is
+    // Every try came back a port we had already handed out, vanishingly unlikely, and the honest answer is
     // the last one rather than a loop that never ends. The browser still runs; at worst it isn't watchable.
     return bindEphemeral();
 };
@@ -166,9 +166,9 @@ const freePort = async (): Promise<number> => {
 /* A NONCE, not owner+port, because owner+port REPEATS and the repeat used to end the turn.
  *
  * Ports come back around: freePort refuses to reissue one it remembers, but that memory is the last ISSUED_MEMORY
- * of them, and a turn takes one per profile — a sandbox with twenty accounts burns through the whole memory in a
+ * of them, and a turn takes one per profile, a sandbox with twenty accounts burns through the whole memory in a
  * dozen turns, while the files stay readable for STALE_CONFIG_MS. So the kernel hands back a port whose file is
- * still sitting there, `wx` refuses to replace it (rightly — that flag is what stops a planted config naming an
+ * still sitting there, `wx` refuses to replace it (rightly, that flag is what stops a planted config naming an
  * executable the child would trust), and the EEXIST propagates out of turn planning, which happens BEFORE the
  * model is asked anything: the whole turn dies with a raw filesystem error and no browser was even involved.
  * The name never had to be derivable, so it isn't. Owner and port stay in it for reading a directory by eye. */
@@ -184,11 +184,11 @@ export const writeBrowserConfig = async (server: string, port: number): Promise<
 
 // @playwright/mcp bundles its own Playwright, which may expect a different Chromium revision than the one our
 // `playwright` dep installed. Instead of pinning the two together, install Chromium via our stable playwright and
-// point the MCP at that exact binary with `--executable-path` — one install serves both. HEADED (no --headless)
+// point the MCP at that exact binary with `--executable-path`, one install serves both. HEADED (no --headless)
 // on the shared Xvfb via `DISPLAY`, so the browser isn't fingerprinted as a headless bot; `--init-script` loads
 // the same stealth patch as the login. `--no-sandbox` because Chromium runs as root and the container IS the
 // isolation boundary; `--user-data-dir` is
-// the persisted logged-in profile. Runs on the daemon's own node — no PATH/npx lookup.
+// the persisted logged-in profile. Runs on the daemon's own node, no PATH/npx lookup.
 export const browserServerSpec = (
     cli: string,
     executablePath: string,
@@ -221,7 +221,7 @@ export const browserServerSpec = (
 });
 
 // The credential-free browser. HEADLESS and `--isolated` (profile in memory): it needs no persisted identity,
-// so it needs neither Xvfb nor a --user-data-dir — which also means two concurrent turns can each have one,
+// so it needs neither Xvfb nor a --user-data-dir, which also means two concurrent turns can each have one,
 // where a shared profile directory would deadlock on Chromium's lock. Screenshots and traces land in the
 // workspace under .intentic so the agent can Read them straight back.
 export const isolatedBrowserSpec = (cli: string, executablePath: string, outputDir: string, configPath: string): McpServerConfig => ({
@@ -248,41 +248,41 @@ export const isolatedBrowserSpec = (cli: string, executablePath: string, outputD
     env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>,
     timeout: BROWSER_CALL_TIMEOUT_MS,
     // NOT alwaysLoad: @playwright/mcp carries ~20 tools, and pinning them into every turn's prompt taxes the
-    // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in — the system append
+    // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in, the system append
     // names the server so the model knows it is there to look for.
 });
 
 /* WHY A BROWSER TOOL CALL HAS A DEADLINE.
  *
- * @playwright/mcp bounds its own ACTIONS — a click waits 5s for the element, a navigation 60s for the load, and
+ * @playwright/mcp bounds its own ACTIONS, a click waits 5s for the element, a navigation 60s for the load, and
  * both come back as errors the agent can read and work around. One tool escapes that entirely: `browser_evaluate`
  * hands the page an expression and AWAITS whatever promise it returns, and `page.evaluate` has no timeout in
  * Playwright's API at all (verified: setDefaultTimeout does not reach it). So an in-page wait that never settles
- * is a tool call that never returns, and the turn stops there — no error, no frame, nothing to retry. It is not a
+ * is a tool call that never returns, and the turn stops there, no error, no frame, nothing to retry. It is not a
  * hypothetical: a session diagnosing THIS repo's pop-out overlays wrote `while (document.querySelector('.p-popover'))
  * { click(pill); await sleep(150) }` to close a picker before the next probe, against the very bug that stopped
  * the picker from closing. The loop could not terminate, and the turn sat there until the owner killed the
- * browser from /browsers — the one thing that ends it, because destroying the page rejects the pending evaluate.
+ * browser from /browsers, the one thing that ends it, because destroying the page rejects the pending evaluate.
  *
  * The SDK's per-server `timeout` is the fix at the right level: a hard wall-clock ceiling per tool call, applied
  * to the browser servers alone. It has to be per-server rather than the MCP_TOOL_TIMEOUT env var, because the
- * same agent process holds MCP tools that are SUPPOSED to wait indefinitely — the ones that ask the owner a
+ * same agent process holds MCP tools that are SUPPOSED to wait indefinitely, the ones that ask the owner a
  * question and wait for a human to answer. Two minutes clears every legitimate browser call by a wide margin
  * (the slowest bounded thing in there is a 60s navigation) and turns an unbounded stall into an error the agent
  * reads and moves on from. */
 const BROWSER_CALL_TIMEOUT_MS = 120_000;
 
-/* THE LAZY PATH for the logged-in browsers — why a turn starts no process per connected account.
+/* THE LAZY PATH for the logged-in browsers, why a turn starts no process per connected account.
  *
  * The harness connects to every configured stdio server at startup and runs the handshake (initialize +
- * tools/list) whether or not the turn ever uses it — verified against the real binary: DEFERRED servers are
+ * tools/list) whether or not the turn ever uses it, verified against the real binary: DEFERRED servers are
  * spawned and handshaken at startup too; deferral only keeps their schemas out of the prompt. One
  * node+playwright process per account meant ~30 processes and ~3.5 GB per turn before the agent said a word,
- * times every concurrent turn — the sandbox's single largest memory load, nearly all of it for browsers nobody
+ * times every concurrent turn, the sandbox's single largest memory load, nearly all of it for browsers nobody
  * would touch that turn.
  *
  * So the harness spawns ONE process, the router (bin/browser-router.mjs): it answers the startup questions
- * from a version-keyed schema cache, and an owner's REAL server — this very spec — is spawned by the router
+ * from a version-keyed schema cache, and an owner's REAL server, this very spec, is spawned by the router
  * only when a tool call actually names one of that owner's accounts. The specs below therefore describe what
  * the router launches, not what the harness does. Backends are the router's children and the router is the
  * harness's, so the turn ending is the whole teardown; the workload stamp on the router's environment lets
@@ -305,14 +305,14 @@ const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
         // probe, and without it the MCP would spawn and fail on the first navigate instead of standing down here.
         return existsSync(executablePath) ? { cli, executablePath } : undefined;
     } catch {
-        // @playwright/mcp or playwright absent — contribute no browser tools rather than break the turn.
+        // @playwright/mcp or playwright absent, contribute no browser tools rather than break the turn.
         return undefined;
     }
 };
 
 // What one turn gets: the MCP servers themselves, the account→owner map behind the `browser` server, the
 // debugging port each owner's Chromium was told to open, and each owner's passkey store. The ports travel with
-// the servers because they are the same decision — a browser the agent can drive and a browser the owner can
+// the servers because they are the same decision, a browser the agent can drive and a browser the owner can
 // watch have to be the same browser (browser-sessions.ts holds the other end); the passkey stores ride the
 // same map because the observer that watches those pages is also what plugs the account's software security
 // key into them (passkeys.ts). `accounts` is the same map the router enforces with, exported so the session
@@ -322,19 +322,19 @@ export interface BrowserTurnTools {
     // Account or identity id → the profile owner whose browser it lives in. Owners map to themselves.
     readonly accounts: Record<string, string>;
     readonly ports: Record<string, number>;
-    // Owner → that profile's passkey store path. Absent for `web` — the credential-free browser holds no identity.
+    // Owner → that profile's passkey store path. Absent for `web`, the credential-free browser holds no identity.
     readonly passkeys: Record<string, string>;
 }
 
 const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {} };
 
-// The turn's browser servers. An account is included whether or not it has signed in yet — a PENDING account's
+// The turn's browser servers. An account is included whether or not it has signed in yet, a PENDING account's
 // backend runs over the very same persisted profile the guided login would write, which is what lets the agent
 // perform the sign-in (or sign-up) itself and leave the account exactly as connected as a hand login would
 // have. The one gate left is the profile lock: never while the owner's own window holds it (Chromium locks the
 // --user-data-dir).
 //
-// One backend PER PROFILE OWNER behind the one `browser` server, keyed by profileOwner's answer — the identity
+// One backend PER PROFILE OWNER behind the one `browser` server, keyed by profileOwner's answer, the identity
 // when an account was born from one, the entry itself otherwise. Two standalone accounts of one site
 // (reddit-work, reddit-personal) are two backends over two separate profiles, both drivable in the same turn;
 // an identity and every account born from it are ONE backend over the shared profile, because they are one
@@ -342,7 +342,7 @@ const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {
 // `reddit-work` (not its identity) still act: the account names its shared browser by itself, keyed by the
 // identity's id.
 //
-// `anonymous` is the credential-free browser — the persona shelf of the same name, and the reason this is a
+// `anonymous` is the credential-free browser, the persona shelf of the same name, and the reason this is a
 // parameter rather than the unconditional server it used to be. It is asked separately from the accounts above
 // because it is a different question: that one is "whose name may this turn use", this one is "may it read the
 // web at all", and a persona that reads docs pages while touching nobody's account is an ordinary answer.
@@ -350,7 +350,7 @@ export const browserServersOf = async (
     capabilities: readonly Capability[],
     root: string,
     anonymous = true,
-    // The conversation the turn belongs to — the router's workload stamp, so the reaper can claim anything a
+    // The conversation the turn belongs to, the router's workload stamp, so the reaper can claim anything a
     // hard-killed harness left behind. Absent (the bench) the router simply runs unstamped.
     conversationId?: string,
 ): Promise<BrowserTurnTools> => {
@@ -373,7 +373,7 @@ export const browserServersOf = async (
         return { ...NO_BROWSER_TOOLS, servers, ports };
     }
     /* The router's manifest: every granted account or identity id resolves to the profile owner whose browser
-     * it lives in — owners map to themselves, so an identity id names its own browser and a standalone account
+     * it lives in, owners map to themselves, so an identity id names its own browser and a standalone account
      * its own. An id whose owner's profile is held open by the user's own login window is left out with it: the
      * router's refusal then says so instead of a backend fighting Chromium for the lock. */
     const accounts: Record<string, string> = {};
@@ -384,7 +384,7 @@ export const browserServersOf = async (
             accounts[owner] = owner;
         }
     }
-    // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
+    // Only the persisted-profile path pays for Xvfb and the stealth script, a turn that never logs in anywhere
     // must not start a virtual display just to have a browser available.
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
@@ -404,14 +404,14 @@ export const browserServersOf = async (
         if (spec.type !== "stdio") {
             return { ...NO_BROWSER_TOOLS, servers, ports };
         }
-        // Argv and the DISPLAY delta only, never the whole environment: the backends inherit the rest — the
-        // conversation stamp included — from the router at spawn time.
+        // Argv and the DISPLAY delta only, never the whole environment: the backends inherit the rest, the
+        // conversation stamp included, from the router at spawn time.
         backends[owner] = { command: spec.command, args: spec.args ?? [], env: { DISPLAY: display } };
     }
     const manifest = {
         schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
         // The schema probe: an isolated headless server, initialize + tools/list and gone. The tool list is a
-        // property of the MCP package, not of any launch flag — profile, display and ports shape the browser,
+        // property of the MCP package, not of any launch flag, profile, display and ports shape the browser,
         // never the tool surface.
         probe: {
             command: process.execPath,
@@ -423,7 +423,7 @@ export const browserServersOf = async (
     const manifestPath = join(configDir, `router-${randomBytes(4).toString("hex")}.json`);
     await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
     /* The one server the harness spawns for every signed-in browser: the router, whose tools are pinned into
-     * the prompt ONCE (alwaysLoad) however many accounts stand behind them — a model that does not know it can
+     * the prompt ONCE (alwaysLoad) however many accounts stand behind them, a model that does not know it can
      * act as its accounts never will. Same per-call ceiling as the backends it launches. */
     servers[ROUTED_BROWSER_SERVER] = {
         type: "stdio",

@@ -4,15 +4,15 @@ import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { discoverCodexModels, discoverTranslatorCodexModels, humanizeModelId, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
-/* The Codex model catalog service — the Codex twin of opencode.ts's xaiModels(). Resolves the ids a Codex turn
+/* The Codex model catalog service, the Codex twin of opencode.ts's xaiModels(). Resolves the ids a Codex turn
  * can actually drive, ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model
  * (never the CLI's rejected gpt-5-codex fallback). Source, in order:
- *   1. the bundled translator's OpenAI-compatible /v1/models — it holds the Codex SUBSCRIPTION credential and
+ *   1. the bundled translator's OpenAI-compatible /v1/models, it holds the Codex SUBSCRIPTION credential and
  *      reports exactly the subscription's usable ids (the authoritative source once the translator is up);
  *   2. OpenAI's REST /v1/models with the container OPENAI_API_KEY (best-effort dev fallback with no translator);
  *   3. the persisted last-known-good catalog (recorded by a turn's self-heal, refresh-independent);
  *   4. the compile-time SEED_CODEX_MODELS floor.
- * Cached briefly, and only real (discovered/recorded) results are cached — the seed stays uncached so a usable
+ * Cached briefly, and only real (discovered/recorded) results are cached, the seed stays uncached so a usable
  * source is retried on the next read. */
 export interface CodexCatalog {
     // The Codex models (+ default id), never empty.
@@ -24,7 +24,7 @@ export interface CodexCatalog {
 const MODELS_TTL_MS = 60_000;
 
 // The OpenAI-compatible /v1/models both discovery sources speak publishes a SET, not a ranking (see
-// model-order.ts), so the app imposes the order here — on every rung alike, since the persisted list inherits
+// model-order.ts), so the app imposes the order here, on every rung alike, since the persisted list inherits
 // whatever order a turn's rejection named its ids in. That is what makes `default` the frontier newest rather
 // than whichever id the endpoint happened to list first, and it is the order the picker's groups render in.
 // Unranked, so same-tier same-release siblings (the gpt-5.6-* line) break their tie on the id: the translator

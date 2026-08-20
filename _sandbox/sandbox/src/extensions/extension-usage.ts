@@ -8,7 +8,7 @@ import { statePath } from "../workspace/state-paths.js";
  * `permissions.sandbox` is the one part of a manifest that is a promise about behaviour rather than a
  * description of it, and until now nothing anywhere could tell whether the promise was tight. An author copies a
  * list from an example, keeps the two routes they need and three they don't, and every owner who installs it is
- * asked to approve reach that was never used. The gate that refuses undeclared routes already sees every call —
+ * asked to approve reach that was never used. The gate that refuses undeclared routes already sees every call,
  * this is the same observation, kept.
  *
  * KEYED BY THE DECLARED ENTRY, not by the concrete path that was called. Three reasons, and the first is the

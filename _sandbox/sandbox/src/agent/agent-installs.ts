@@ -1,12 +1,12 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { stateRelPath } from "../workspace/state-paths.js";
 
-/* Steering the image boundary: a runtime install toward the owner-approved overlay, and — from the opposite
- * direction — a tool that turned out not to be there toward the same place.
+/* Steering the image boundary: a runtime install toward the owner-approved overlay, and, from the opposite
+ * direction, a tool that turned out not to be there toward the same place.
  *
  * Anything installed outside /work dies with the container. The environment skill already explains how to
  * propose Dockerfile steps the owner approves, but an agent mid-task does not go and read a skill it has no
- * reason to suspect exists — it types `apt-get install` and moves on. One turn spent 250s and a 114 MiB
+ * reason to suspect exists, it types `apt-get install` and moves on. One turn spent 250s and a 114 MiB
  * `npx playwright install chromium` rebuilding a browser the image now ships, and the layer it wrote is gone
  * on the next recreate. The moment the agent reaches for the install IS the moment it can be told, so this
  * rides in as PreToolUse context rather than as more standing prose in the system prompt.
@@ -17,7 +17,7 @@ import { stateRelPath } from "../workspace/state-paths.js";
  * other mounted turn. */
 
 // A venv is the sanctioned way to use pip here (Debian marks the system interpreter externally-managed), and
-// it lands wherever the agent puts it — so a pip install INSIDE one is project scope, not image scope.
+// it lands wherever the agent puts it, so a pip install INSIDE one is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
 const NODE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up", "upgrade", "remove", "rm", "uninstall", "prune", "dedupe"]);
@@ -138,7 +138,7 @@ const BROWSER_ALREADY_BAKED =
     "`mcp__web__browser_take_screenshot`) instead of installing a browser. ";
 
 // The overlay is the only place an image-scoped tool can outlive the container, so both notices below end by
-// naming it — the same sentence, because they are the same instruction arrived at from opposite directions.
+// naming it, the same sentence, because they are the same instruction arrived at from opposite directions.
 const OVERLAY_DRAFT =
     // Interpolated for real: as a plain string this notice told the agent to write under a literal
     // dollar-brace STATE_DIR spelling, template syntax and all.
@@ -154,7 +154,7 @@ const GUIDANCE =
 
 /* The other half of that boundary: the turn that never reaches for an install at all.
  *
- * A missing tool does not present itself as a decision — `command not found` scrolls past inside a tool result
+ * A missing tool does not present itself as a decision, `command not found` scrolls past inside a tool result
  * and the model quietly picks a worse route, so the rule above never gets the chance to fire. Mining this
  * workspace's transcripts found `file` reached for in eight separate sessions and installed in none of them;
  * the image now ships it and thirty-odd other staples, but the tail is endless and the next one is unknowable.
@@ -173,7 +173,7 @@ const MISSING_GUIDANCE =
     `now, and ALSO ${OVERLAY_DRAFT}`;
 
 // The captured name must also appear in the command that produced it. A tool result is full of other people's
-// text — a grep over a log, a test asserting on an error string — and without this guard the notice fires on
+// text, a grep over a log, a test asserting on an error string, and without this guard the notice fires on
 // output that merely QUOTES a shell failure. Anything genuinely missing was named in the command by definition
 // (the tmux wrapper keeps the inner command verbatim), so the guard costs no true positives; a tool missing
 // from inside a script the command merely invoked is given up deliberately, in exchange for never crying wolf.

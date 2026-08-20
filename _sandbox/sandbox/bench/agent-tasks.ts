@@ -4,22 +4,22 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /* The tasks agent-bench runs, and the only thing that decides whether a run passed. Every task grades
- * MECHANICALLY — an exact grid, an exact integer — because an LLM judge would put the thing under test on both
+ * MECHANICALLY, an exact grid, an exact integer, because an LLM judge would put the thing under test on both
  * sides of the measurement, and because a benchmark you re-run weekly has to be free.
  *
  * Two tasks, picked for the two claims imp mode makes:
  *
- *   arc   — does splitting thinking from doing make the pair SMARTER? One task from the ARC-AGI-2 public
+ *   arc  , does splitting thinking from doing make the pair SMARTER? One task from the ARC-AGI-2 public
  *           evaluation set (Apache-2.0, fetched by id, never vendored). That set is deliberately brutal for
  *           frontier models, and it is a fair test of the split rather than a pure-reasoning quiz because the
  *           only strategy that works agentically is: guess the rule, write a program, run it against the
  *           training pairs, look at what broke, revise. The guessing is the architect's; the writing and
  *           running is the imp's.
  *
- *   sweep — is the pair more TOKEN-EFFICIENT on the retrieval-heavy work it was built for? "Count this
+ *   sweep, is the pair more TOKEN-EFFICIENT on the retrieval-heavy work it was built for? "Count this
  *           identifier across the codebase, excluding comments" over a real, large TypeScript tree. Naive
  *           grepping gets it wrong (comments and word boundaries), so it needs a small program written and run
- *           — again, reasoning on one side, mechanics on the other — and the answer is one integer either
+ *          , again, reasoning on one side, mechanics on the other, and the answer is one integer either
  *           right or wrong. This stands in for a CursorBench-style "real request over a real codebase with a
  *           curated answer": CursorBench itself is Cursor-internal and not published, so it cannot be run here.
  */
@@ -116,7 +116,7 @@ const arcTask = (id: string): BenchTask => ({
             throw new Error(`ARC task ${id} has no test pair`);
         }
         // The fixture carries the training pairs and the test INPUT only. The expected output never touches the
-        // workspace — otherwise the "solution" is a file read.
+        // workspace, otherwise the "solution" is a file read.
         await writeFile(join(dir, "task.json"), `${JSON.stringify({ train: task.train, test: [{ input: task.test[0]!.input }] }, undefined, 2)}\n`);
         return {
             prompt: [
@@ -196,7 +196,7 @@ export const stripComments = (source: string): string => {
     return out;
 };
 
-// Whole-word, case-sensitive occurrences — the same rule the prompt states.
+// Whole-word, case-sensitive occurrences, the same rule the prompt states.
 export const countWord = (text: string, word: string): number => text.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0;
 
 // The files the sweep counts over, and the files it copies: the fixture's own sources, tests excluded.
@@ -222,7 +222,7 @@ const walkFiles = async (dir: string, keep: (path: string) => boolean): Promise<
 const SWEEP_WORD = "sessionId";
 
 // A COPY of the real sources, never the live checkout: the agent may write anywhere in its workspace, and this
-// repo is routinely being edited by someone else while a bench runs. Tests are left out — they would skew both
+// repo is routinely being edited by someone else while a bench runs. Tests are left out, they would skew both
 // the identifier count and the import graph, and they are not what either question is about.
 const copyDaemonFixture = async (dir: string): Promise<string> => {
     const workspace = join(dir, "daemon");
@@ -239,7 +239,7 @@ const copyDaemonFixture = async (dir: string): Promise<string> => {
 const DEPS_ENTRY = "src/agent/agent.routes.ts";
 
 // Relative import specifiers in a source file: `from "./x.js"` and `await import("../y/z.js")`. Bare
-// specifiers (`@intentic/…`, `node:fs`) are deliberately not followed — the graph is this tree's own.
+// specifiers (`@intentic/…`, `node:fs`) are deliberately not followed, the graph is this tree's own.
 const relativeSpecifiers = (text: string): string[] => [
     ...[...text.matchAll(/from\s+"(\.[^"]+)"/g)].map((match) => match[1]!),
     ...[...text.matchAll(/import\("(\.[^"]+)"\)/g)].map((match) => match[1]!),
@@ -316,7 +316,7 @@ const depsTask: BenchTask = {
 // ---- defects: read a large codebase and notice what is WRONG in it ----------------------------------------
 
 // Four deliberate defects planted into the copied tree. Each is syntactically valid, semantically wrong, and
-// contradicted by intent that is visible right where it sits — a comment, a name, or the obvious purpose of the
+// contradicted by intent that is visible right where it sits, a comment, a name, or the obvious purpose of the
 // function. None is findable by pattern: no regex knows that truncating a descriptive window slug to zero
 // characters contradicts the function's purpose, so an agent has to READ and UNDERSTAND, across a tree far
 // too large to hold at once.
@@ -327,7 +327,7 @@ interface Defect {
     readonly file: string;
     readonly find: string;
     readonly replace: string;
-    // Why it is wrong — never shown to the agent, only used when reporting what it missed.
+    // Why it is wrong, never shown to the agent, only used when reporting what it missed.
     readonly why: string;
 }
 
@@ -384,7 +384,7 @@ const plantDefects = async (workspace: string): Promise<PlantedDefect[]> => {
     return planted;
 };
 
-// A reported defect matches a planted one when it names the same file and lands within a couple of lines —
+// A reported defect matches a planted one when it names the same file and lands within a couple of lines,
 // close enough that the agent clearly found THIS defect, loose enough not to punish an off-by-one.
 const LINE_TOLERANCE = 2;
 const matches = (claim: { file?: unknown; line?: unknown }, planted: PlantedDefect): boolean =>
@@ -395,7 +395,7 @@ const matches = (claim: { file?: unknown; line?: unknown }, planted: PlantedDefe
 
 // How many files the agent is actually asked to read. Sized on purpose: large enough that holding all of it
 // while judging each line is real work (~46k tokens of dense code), small enough that a careful agent FINISHES.
-// An unscoped version of this task had a run read all 235 files of the tree and still have no answer at 600s —
+// An unscoped version of this task had a run read all 235 files of the tree and still have no answer at 600s,
 // a benchmark nobody completes produces no comparison at all, only timeouts.
 const DEFECT_SCOPE = "src/agent";
 
@@ -444,7 +444,7 @@ const sweepTask: BenchTask = {
     prepare: async (dir) => {
         const workspace = await copyDaemonFixture(dir);
 
-        // Ground truth is computed from the fixture the agent is looking at, not hardcoded — so the task stays
+        // Ground truth is computed from the fixture the agent is looking at, not hardcoded, so the task stays
         // valid as this repo changes, and the expected number can never silently rot.
         const files = await walkFiles(workspace, isCountedFile);
         let expected = 0;
@@ -483,7 +483,7 @@ const sweepTask: BenchTask = {
 
 // ---- registry ----------------------------------------------------------------------------------------------
 
-// The default ARC task. Any id from the ARC-AGI-2 public evaluation set works — pass `arc:<id>` to swap it,
+// The default ARC task. Any id from the ARC-AGI-2 public evaluation set works, pass `arc:<id>` to swap it,
 // which is how you check that a result is about imp mode rather than about one puzzle.
 const DEFAULT_ARC_ID = "0934a4d8";
 

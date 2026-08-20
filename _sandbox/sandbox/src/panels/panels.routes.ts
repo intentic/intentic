@@ -14,12 +14,12 @@ import type { ListeningPort } from "../ports/port-scan.js";
 import { panelSession } from "../processes/managed-processes.js";
 
 // The per-repository panel routes. `list` enumerates every repo with its runtime status + the content FACTS
-// the web app's extensions detect on (role, marker files — evidence, not identity); `start`/`stop` drive the
+// the web app's extensions detect on (role, marker files, evidence, not identity); `start`/`stop` drive the
 // repo's dev server (its tmux session lists on the global GET /system/terminals). Panels talk back to the
 // daemon via the injected INTENTIC_PANEL_TOKEN.
 
 // Vitest evidence for repos without a root config: the workspace catalog / root manifest names it.
-// ponytail: substring match, not a manifest parse — parse catalog/devDependencies if a stray mention ever bites.
+// ponytail: substring match, not a manifest parse, parse catalog/devDependencies if a stray mention ever bites.
 const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSync(file, "utf8").includes("vitest");
 
 // The convention the acceptance extension detects on: a repo describing its features as user stories,
@@ -37,13 +37,13 @@ export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" |
  *
  * The panel's ASSIGNED port is probed alongside the attributed ones even when the scan didn't claim it: a dev
  * server that honors PORT is the ordinary case, and a cwd procfs wouldn't give up must not turn a serving app
- * into a dead one. That synthesized candidate takes the panel's own session, which is not a guess — the daemon
+ * into a dead one. That synthesized candidate takes the panel's own session, which is not a guess, the daemon
  * started it there.
  *
  * THE SESSION IS WHY THIS LIST IS ACTIONABLE. Every address here is something occupying a port, and the only
  * useful next question is where it is running: a repo the daemon started answers "the panel's terminal", a dev
  * server someone launched by hand answers with THEIR terminal, and something outside the sandbox answers
- * nothing — which a surface must be able to say out loud rather than offering a terminal that never existed.
+ * nothing, which a surface must be able to say out loud rather than offering a terminal that never existed.
  * Ordered by port so the list is stable across polls. */
 const detectServers = async (
     workspaceRoot: string,
@@ -111,7 +111,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                         repo,
                         hasPanel,
                         running: port !== undefined,
-                        // Something the repo owns is answering — which a repo whose dev server someone started
+                        // Something the repo owns is answering, which a repo whose dev server someone started
                         // in their own terminal also satisfies, deliberately: the acceptance run only needs an
                         // address that responds, and offering Start for an app already serving would collide on
                         // the very ports it pinned.
@@ -147,24 +147,24 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             if (runDir === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
             }
-            // Kick off the preview-route mint fire-and-forget (never rejects; see preview-route.ts) — the tmux
+            // Kick off the preview-route mint fire-and-forget (never rejects; see preview-route.ts), the tmux
             // session the browser attaches to must not wait on a platform round-trip. The route resolves long
             // before the dev server (behind a possibly minutes-long install) is healthy enough to preview.
             void services.ensurePreviewRoutes([previewLabel(key)]);
             await services.processes.start(key, {
-                // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
+                // Install deps on first start (async, the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its
                 // dev runs turbo across _apps/*) so the whole workspace must install; the flat operator/ panels
                 // have no ancestor workspace, so it's a standalone install there either way.
-                // ponytail: assumes NODE_ENV != "production" (dev tooling lives in devDependencies) — if a base
+                // ponytail: assumes NODE_ENV != "production" (dev tooling lives in devDependencies), if a base
                 // image ever pins it, inject NODE_ENV=development into the panel env below.
                 // `&&` (left-assoc: `(test || install) && dev`) so a failed install stops with ITS error above
-                // the prompt instead of burying it under the dev command's cascading failure. No `exec` — the
+                // the prompt instead of burying it under the dev command's cascading failure. No `exec`, the
                 // chain runs inside the pane's interactive shell (see managed-processes launch), which must
                 // survive the command so Ctrl+C lands at a prompt and ↑ re-runs it.
                 command: "test -d node_modules || pnpm install && pnpm dev",
                 cwd: runDir,
-                // The panel's backend calls the daemon with these (server-side, inside the sandbox) — no browser
+                // The panel's backend calls the daemon with these (server-side, inside the sandbox), no browser
                 // token flows into the iframe.
                 env: {
                     INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`,

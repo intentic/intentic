@@ -2,13 +2,13 @@
  *
  * Every door this daemon opens to a caller with no identity needs one, and for the same reason: a per-minute
  * rate window bounds the RATE without bounding the DAY. Twenty a minute, sustained, is tens of thousands of
- * agent turns before anyone notices — and every one of them is billed to the owner.
+ * agent turns before anyone notices, and every one of them is billed to the owner.
  *
  * DELIBERATELY NOT PERSISTED. Its job is to bound a runaway day, and a daemon restart resetting it is a smaller
  * problem than a counter file written on every inbound request. Anything that must survive a restart rides a
  * record that was being written anyway (the Front Desk's per-conversation ceiling rides its thread session).
  *
- * ponytail: in-memory, per daemon — swap for a shared store only if the sandbox ever runs multi-process.
+ * ponytail: in-memory, per daemon, swap for a shared store only if the sandbox ever runs multi-process.
  */
 
 const dayOf = (now: number): number => Math.floor(now / 86_400_000);

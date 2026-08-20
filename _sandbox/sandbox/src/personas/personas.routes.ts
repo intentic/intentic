@@ -15,7 +15,7 @@ import {
 } from "./persona-kit.js";
 
 // The sandbox's named personas. No apply step and no teardown: saving a card connects nothing and removing one
-// disconnects nothing (personas.contract.ts says why at length) — the accounts themselves are capabilities and
+// disconnects nothing (personas.contract.ts says why at length), the accounts themselves are capabilities and
 // keep their own lifecycle. What a card DOES own is its kit folder, which the routes below write and `remove`
 // takes with it.
 export const createPersonasRoutes = (services: Services) => {
@@ -23,7 +23,7 @@ export const createPersonasRoutes = (services: Services) => {
     const root = services.workspace.root;
 
     /* Every kit write goes through the card first, for two reasons that are really one: a kit belonging to no
-     * persona is unreachable — nothing can wear it — so writing one would put the owner's prose somewhere no
+     * persona is unreachable, nothing can wear it, so writing one would put the owner's prose somewhere no
      * list shows it; and the manifest the plugin loader needs carries the card's label, which only the card can
      * supply. Answering a missing card with a 404 rather than creating one keeps this surface unable to mint a
      * persona by side effect. */
@@ -40,7 +40,7 @@ export const createPersonasRoutes = (services: Services) => {
             const [personas, capabilities] = await Promise.all([services.personas.list(), services.capabilities.list()]);
             /* Which of the accounts these cards name can actually act right now. `hasSession` rather than mere
              * presence in the manifest: a browser capability exists from the moment it is added, and is only
-             * usable once the owner has finished its guided login — which is exactly the state a cloned
+             * usable once the owner has finished its guided login, which is exactly the state a cloned
              * workspace's whole roster sits in, so conflating the two would show every persona as ready on the one
              * occasion none of them are. */
             const connected = capabilities

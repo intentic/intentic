@@ -8,10 +8,10 @@ import type {
 import { type AgentEvent, type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract";
 import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../agent/tool-calls.js";
 
-/* Pure mapping of ACP session/update notifications onto AgentEvent frames — the ACP-native producer of the
+/* Pure mapping of ACP session/update notifications onto AgentEvent frames, the ACP-native producer of the
  * contract's tool-call vocabulary, so kind/status/locations/diff pass through near-verbatim. Updates with no
  * UI mapping are dropped (the streamSdk philosophy). ACP's `plan` is a TodoWrite-style progress checklist,
- * NOT intentic's approval plan frame — it maps to `todos`. */
+ * NOT intentic's approval plan frame, it maps to `todos`. */
 
 // Our ToolKind is ACP's vocabulary verbatim; anything newer (e.g. switch_mode) falls back through the shared
 // name→kind table over the title.
@@ -35,7 +35,7 @@ const mapContent = (entries: AcpToolCallContent[] | null | undefined, cwd: strin
             mapped.push(diffContent(workspacePath(entry.path, cwd) ?? entry.path, entry.oldText ?? undefined, entry.newText));
         } else {
             // A terminal-embed entry: the live view is the surfaced tmux session in the terminal panel (the
-            // adapter emits its terminal frame on the first terminal/create) — the card notes where to look.
+            // adapter emits its terminal frame on the first terminal/create), the card notes where to look.
             mapped.push({ type: "text", text: "[running in the live terminal panel]" });
         }
     }
@@ -99,7 +99,7 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
         case "usage_update":
             return update.size > 0 ? { kind: "context_usage", tokens: update.used, contextWindow: update.size } : undefined;
         case "available_commands_update":
-            // The agent's own slash commands — the composer's `/` popover lists them; invoking one is plain
+            // The agent's own slash commands, the composer's `/` popover lists them; invoking one is plain
             // "/name …" prompt text (the ACP convention), so no invocation channel is needed.
             return {
                 kind: "commands",
@@ -110,7 +110,7 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
                 })),
             };
         // user_message_chunk (prompt echo), current_mode/config_option/session_info updates, and the
-        // experimental plan_update/plan_removed have no UI mapping — dropped.
+        // experimental plan_update/plan_removed have no UI mapping, dropped.
         default:
             return undefined;
     }

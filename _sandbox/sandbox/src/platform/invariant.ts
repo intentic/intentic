@@ -1,12 +1,12 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
 import { claimHolder, type ContainerRole, type DaemonRoots } from "./container-owner.js";
 
-/* ONE CONTAINER, ONE DAEMON — still true, or no longer true.
+/* ONE CONTAINER, ONE DAEMON, still true, or no longer true.
  *
  * container-owner.ts asks the question once, at boot, because that is the only moment it can act on the answer:
  * take the container or run as a guest. Everything downstream then trusts that answer forever. Four boot jobs
- * converged HOME on it, the leftover sweep reclaims processes on it, and the singletons with one address — the
- * translator, the platform announce, the scheduler, the drafts publisher, the CI reconciler — each run because
+ * converged HOME on it, the leftover sweep reclaims processes on it, and the singletons with one address, the
+ * translator, the platform announce, the scheduler, the drafts publisher, the CI reconciler, each run because
  * of it.
  *
  * The claim is a FILE in a HOME two daemons share, and the second daemon's own boot is what overwrites it. So

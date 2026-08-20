@@ -4,16 +4,16 @@ import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { discoverGeminiModels, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
-/* The Google-channel model catalog service — the twin of codex-catalog.ts. Resolves the ids a turn on this
+/* The Google-channel model catalog service, the twin of codex-catalog.ts. Resolves the ids a turn on this
  * provider can drive, ALWAYS non-empty so the picker is never blank and a turn always resolves a concrete model.
  * Source, in order:
- *   1. the bundled translator's model endpoints — it holds the Google account and reports exactly the ids that
+ *   1. the bundled translator's model endpoints, it holds the Google account and reports exactly the ids that
  *      account can drive (the authoritative source once a Google account is connected);
  *   2. the persisted last-known-good catalog;
  *   3. the compile-time SEED_GEMINI_MODELS floor.
  * There is no API-key fallback source: this channel is account-only, so with no translator (a bare `tsx watch`
  * dev run) the seed floor is what the picker shows and a turn surfaces the routed-provider error. Cached briefly,
- * and only real (discovered) results are cached — the seed stays uncached so a usable source is retried on the
+ * and only real (discovered) results are cached, the seed stays uncached so a usable source is retried on the
  * next read (e.g. once the user connects their Google account).
  *
  * Labels are PERSISTED alongside the ids rather than re-derived, because the translator publishes real display
@@ -26,7 +26,7 @@ export interface GeminiCatalog {
 const MODELS_TTL_MS = 60_000;
 
 // The translator's model endpoints publish a SET, not a ranking (see model-order.ts), so the app imposes the
-// order — which is what keeps Pro above Flash in the picker and makes `default` the frontier newest rather than
+// order, which is what keeps Pro above Flash in the picker and makes `default` the frontier newest rather than
 // whichever id the endpoint happened to list first.
 const toCatalog = (models: readonly { id: string; label: string }[]): { models: { id: string; label: string }[]; default: string } => {
     const ordered = models.toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));

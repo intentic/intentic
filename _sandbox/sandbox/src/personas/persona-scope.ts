@@ -2,13 +2,13 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { TurnPersona } from "./personas.js";
 
-/* WHERE A PERSONA'S FILE TOOLS MAY POINT — the `folders` half of a card's workspace scope, and the `sandbox`
+/* WHERE A PERSONA'S FILE TOOLS MAY POINT, the `folders` half of a card's workspace scope, and the `sandbox`
  * switch, enforced at the one moment a path is a fact rather than an intention.
  *
  * A REFUSAL, NOT A WALL, AND THE CARD SAYS SO WHERE IT IS SET. This is a PreToolUse hook, so it sees exactly
  * what worktree-redirect.ts sees: the paths that arrive as structured tool input. It stops the whole class of
- * mistake these limits are bought for — a chore wandering out of its repo, a Front-Desk-driven turn reading a
- * file the visitor named, an instruction smuggled into a support question — and it does not stop a shell, which
+ * mistake these limits are bought for, a chore wandering out of its repo, a Front-Desk-driven turn reading a
+ * file the visitor named, an instruction smuggled into a support question, and it does not stop a shell, which
  * computes its own paths and never shows them to a hook. That is why the shelf above it is `shell`: switching
  * that off is what turns this from a strong default into a fence, and PersonaPowersSchema says the same thing
  * one layer up.
@@ -22,7 +22,7 @@ import type { TurnPersona } from "./personas.js";
  * question, answered by the container itself. Judging those here would refuse an attachment the user just
  * uploaded and read as a broken tool. */
 
-// The built-in tools that take a path as STRUCTURED input, and the field each calls it — the same enumeration
+// The built-in tools that take a path as STRUCTURED input, and the field each calls it, the same enumeration
 // worktree-redirect.ts makes, for the same reason: these are the calls a check can serve exactly.
 const PATH_FIELDS: Record<string, string> = {
     Read: "file_path",
@@ -34,7 +34,7 @@ const PATH_FIELDS: Record<string, string> = {
 };
 
 // The tools that CHANGE a file. The `sandbox` switch is about editing the sandbox's own configuration, not
-// about reading it — an agent reads .intentic to answer questions about itself all day, and refusing that
+// about reading it, an agent reads .intentic to answer questions about itself all day, and refusing that
 // would break far more than it protects.
 const WRITE_TOOLS = new Set(["Write", "Edit", "NotebookEdit"]);
 
@@ -53,7 +53,7 @@ const inside = (target: string, folder: string): boolean => {
 };
 
 export interface PersonaScope {
-    // The turn's own root — the worktree for an isolated turn, the workspace for a main-tree one. Every
+    // The turn's own root, the worktree for an isolated turn, the workspace for a main-tree one. Every
     // workspace-relative folder on the card resolves against this, so a scoped persona means the same folders
     // in its own copy as it does in the shared tree.
     readonly cwd: string;
@@ -63,7 +63,7 @@ export interface PersonaScope {
     readonly sandbox: boolean;
 }
 
-// The scope a persona asks for, or undefined when it asks for nothing — which is what keeps a workspace that
+// The scope a persona asks for, or undefined when it asks for nothing, which is what keeps a workspace that
 // has never set one from paying for a hook at all.
 export const personaScopeOf = (persona: TurnPersona, cwd: string): PersonaScope | undefined => {
     const folders = persona.workspace?.folders ?? [];
@@ -74,9 +74,9 @@ export const personaScopeOf = (persona: TurnPersona, cwd: string): PersonaScope 
 };
 
 /* Why a path is refused, in the words the agent needs to do something useful about it. Naming the folders it
- * MAY use is the load-bearing half: "denied" on its own produces a retry one directory over, and then another,
+ * MAY use is the half that matters: "denied" on its own produces a retry one directory over, and then another,
  * where "you work inside app/, api/" produces either the right path or an honest "this task needs more than I
- * have" — which is the answer the owner actually wants from a bounded session. */
+ * have", which is the answer the owner actually wants from a bounded session. */
 const refusal = (scope: PersonaScope, sandboxPath: boolean): string =>
     sandboxPath
         ? `This persona may not change the sandbox's own configuration or its public outbox. If the task genuinely needs that, stop and say so rather than working around it.`
@@ -96,7 +96,7 @@ export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent
                         return {};
                     }
                     const path = (input.tool_input as Record<string, unknown>)[field];
-                    // An absent path is the tool's own default — Glob and Grep search the cwd, which is inside
+                    // An absent path is the tool's own default. Glob and Grep search the cwd, which is inside
                     // the scope by construction. Nothing to judge, and refusing it would break the common call.
                     if (typeof path !== "string") {
                         return {};

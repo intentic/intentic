@@ -4,22 +4,22 @@
  * the translator's own model endpoints the only catalog source worth consulting: they report exactly the ids the
  * connected account can drive, and it is the same list the turn will be routed against.
  *
- * The channel is Antigravity — Google's own agent product — and it vends MORE THAN GEMINI: Claude Opus/Sonnet
+ * The channel is Antigravity. Google's own agent product, and it vends MORE THAN GEMINI: Claude Opus/Sonnet
  * and GPT-OSS ride the same plain Google sign-in. So membership is decided by `owned_by`, the channel the
  * translator itself stamps on each model, rather than by an id prefix: a `/^gemini/` filter dropped the strongest
  * models a free Google account can reach, purely because of how they are named. */
 
 // A model the user could chat with, as opposed to the image/audio/embedding endpoints Google ships beside them
-// under the same channel. Named ids only — this is the one membership rule the seed floor can be checked against.
+// under the same channel. Named ids only, this is the one membership rule the seed floor can be checked against.
 export const isChatModel = (id: string): boolean => !/(image|embedding|imagen|tts|audio|veo|moderation)/i.test(id);
 
-// The translator's own name for the Google channel (`gemini` is this app's wire id for the same thing — see
+// The translator's own name for the Google channel (`gemini` is this app's wire id for the same thing, see
 // CLIPROXY_PROVIDER in translator.ts).
 const CHANNEL = "antigravity";
 
 // The never-empty floor for the catalog: served only when live discovery yields nothing AND no last-known-good
 // catalog was persisted (no Google account connected yet, or a translator that is still booting). These are ids
-// the pinned CLIProxyAPI serves on the channel, strongest first. It doubles as the picker's SHOP WINDOW — with
+// the pinned CLIProxyAPI serves on the channel, strongest first. It doubles as the picker's SHOP WINDOW, with
 // nothing connected this is the list a user sees under "Free · Google sign-in", so it names what the sign-in
 // actually buys rather than a token placeholder. Discovery records the account's real catalog, so a stale seed
 // costs at most one refresh.
@@ -53,7 +53,7 @@ const getJson = async <T>(url: string, token: string, fetchImpl: typeof fetch): 
 };
 
 // The vendor's own display names, keyed by id. The OpenAI-compatible /v1/models carries the channel but no name;
-// the Gemini-shaped /v1beta/models carries the name but not the channel — so the catalog is the join of the two.
+// the Gemini-shaped /v1beta/models carries the name but not the channel, so the catalog is the join of the two.
 // It matters: humanizing alone renders "gemini-pro-agent" as "Gemini Pro Agent", a model that does not exist,
 // where the translator publishes "Gemini 3.1 Pro (High)".
 const publishedNames = async (translatorUrl: string, token: string, fetchImpl: typeof fetch): Promise<Map<string, string>> => {

@@ -4,8 +4,8 @@ import { request } from "node:https";
  * been written out five times and the fifth one got it wrong by omission.
  *
  * A platform being developed on the owner's own machine arrives as a self-signed cert on localhost or
- * host.docker.internal. Every sandbox→platform caller already makes this exception — announce, the trial
- * poll, the membership gate, the services relay — so a caller that DOESN'T is not stricter, it is simply
+ * host.docker.internal. Every sandbox→platform caller already makes this exception, announce, the trial
+ * poll, the membership gate, the services relay, so a caller that DOESN'T is not stricter, it is simply
  * broken against a dev platform, and it fails in the most confusing way available: the request never
  * completes, the failure is swallowed as "no answer", and the surface above reports the SERVER as faulty.
  * That is exactly what the free-trial card was doing.
@@ -18,8 +18,8 @@ const bodiless = (status: number): boolean => status === 204 || status === 304;
 
 /* `fetch`, except that an https URL on one of those hosts may present a self-signed certificate.
  *
- * undici cannot skip verification for a single request — which is the whole reason the callers above drop to
- * node:https by hand — so this wraps that one escape hatch in a fetch-shaped function. Everything else is
+ * undici cannot skip verification for a single request, which is the whole reason the callers above drop to
+ * node:https by hand, so this wraps that one escape hatch in a fetch-shaped function. Everything else is
  * handed to the real fetch untouched, so a public URL is verified exactly as strictly as before and there is
  * no second HTTP client to keep in step. Reads GET/POST with headers and a string body, which is all any
  * caller here asks of it; the answer is a real Response, so `ok`, `status` and `json()` come for free. */

@@ -1,7 +1,7 @@
 import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow } from "@intentic/sandbox-contract";
 import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payload.js";
 
-/* The READER for the routed subscriptions — the counterpart to claude-usage.ts, and the other half of what
+/* The READER for the routed subscriptions, the counterpart to claude-usage.ts, and the other half of what
  * fills account-usage.ts next door. Its whole job is to come back with an AccountUsage; where that snapshot is
  * then kept, merged or drawn is not its business.
  *
@@ -11,7 +11,7 @@ import { asNumber, asRecord, asString, clampPercent, resetFromIso } from "./payl
  * server-side, so quota is readable without a credential ever being downloaded here or handed to the browser.
  *
  * Every upstream shape is parsed defensively and both casings are accepted throughout: these are the providers'
- * private endpoints, not published contracts, and a field that changes name must cost a ring — never an
+ * private endpoints, not published contracts, and a field that changes name must cost a ring, never an
  * exception on the connection list. */
 
 export interface TranslatorAuthFile {
@@ -29,7 +29,7 @@ interface ApiCallResult {
     readonly body?: string;
 }
 
-// Codex alone sends its resets as NUMBERS — an epoch instant or a relative offset — where the others send
+// Codex alone sends its resets as NUMBERS, an epoch instant or a relative offset, where the others send
 // ISO-8601 (resetFromIso, payload.ts).
 const resetSeconds = (absolute: unknown, relative: unknown, measuredAt: number): number | undefined => {
     const direct = asNumber(absolute);
@@ -166,7 +166,7 @@ export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Da
  * uses and needs nothing from CLIProxyAPI beyond the token substitution every reader here already gets.
  *
  * Two pools arrive under different keys and mean different things: `usage` is the PLAN's pool (a week, whose
- * exhaustion is the "billing cycle" 403), and each `limits[]` entry is a shorter throttle inside it — today a
+ * exhaustion is the "billing cycle" 403), and each `limits[]` entry is a shorter throttle inside it, today a
  * single 5-hour window. Both are used/limit COUNTS, as decimal strings, so utilization is computed here rather
  * than read; a pool with no limit is dropped rather than divided by. */
 const KIMI_UNIT_SECONDS: Record<string, number> = {
@@ -208,7 +208,7 @@ const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number 
     const pool = asRecord(value);
     const used = asNumber(pool?.[`used`]);
     const limit = asNumber(pool?.[`limit`]);
-    // A limit of zero is not a spent pool, it is a pool the plan does not meter — dividing by it would report
+    // A limit of zero is not a spent pool, it is a pool the plan does not meter, dividing by it would report
     // every such account as permanently exhausted.
     if (used === undefined || limit === undefined || limit <= 0) {
         return;
@@ -234,7 +234,7 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
         return undefined;
     }
     const windows: UsageWindow[] = [];
-    // The plan pool carries no window of its own — the platform leaves it implicit, and it is the weekly one the
+    // The plan pool carries no window of its own, the platform leaves it implicit, and it is the weekly one the
     // subscription is sold by, which is also what the vendor's own client assumes when it synthesizes it.
     appendKimiPool(windows, body[`usage`], 604_800);
     for (const entry of Array.isArray(body[`limits`]) ? body[`limits`] : []) {
@@ -252,19 +252,19 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
  * fraction and its own reset instant. An account is routinely spent for one and healthy for the other, and a
  * fleet of Google sign-ins settles into exactly that state.
  *
- * Reading an account's pools as one allowance is what put "resets Mon 9:41 PM" — the GEMINI pool's instant, on
- * an account that was not even serving the turn — under a refused Claude Opus turn, while a connected account
+ * Reading an account's pools as one allowance is what put "resets Mon 9:41 PM", the GEMINI pool's instant, on
+ * an account that was not even serving the turn, under a refused Claude Opus turn, while a connected account
  * still held 27% of the pool that turn was actually spending.
  *
  * Codex and Kimi answer `undefined`, and that is not "unknown": their windows are LENGTHS of one undivided plan
  * (a 5-hour throttle inside a weekly pool) and every model spends all of them, so every window gates every turn.
- * A bucket id the provider has since renamed also matches nothing — which costs the caller its counts rather
+ * A bucket id the provider has since renamed also matches nothing, which costs the caller its counts rather
  * than handing it the wrong pool, and a caller with no counts claims nothing about the fleet. */
 
 export interface QuotaPool {
     // The recorded UsageWindow.kind this model's spend lands in.
     readonly kind: string;
-    // How the provider names the group, as the subject of a sentence — Google's own wording, from the payload
+    // How the provider names the group, as the subject of a sentence. Google's own wording, from the payload
     // above, because the pool a refusal names has to be the one the user reads on their Antigravity screen.
     readonly label: string;
 }
@@ -275,12 +275,12 @@ const GOOGLE_THIRD_PARTY_POOL: QuotaPool = { kind: "google:3p-weekly", label: "C
 export const quotaPoolFor = (provider: KeyedProvider, model: string): QuotaPool | undefined =>
     provider !== "gemini" ? undefined : model.startsWith("gemini") ? GOOGLE_GEMINI_POOL : GOOGLE_THIRD_PARTY_POOL;
 
-/* WHAT THE RECORDED QUOTA SAYS ABOUT THAT POOL ACROSS EVERY CONNECTED ACCOUNT — the answer a refused routed
+/* WHAT THE RECORDED QUOTA SAYS ABOUT THAT POOL ACROSS EVERY CONNECTED ACCOUNT, the answer a refused routed
  * turn needs, and three facts rather than one instant.
  *
  * `withHeadroom` is the fact the old single-instant answer could not carry, and the one that changes what the
  * turn means: CLIProxyAPI balances across every auth file it holds, so a refusal is fleet-wide by construction.
- * If an account still has room in this pool then the quota is NOT what refused the turn — the translator had
+ * If an account still has room in this pool then the quota is NOT what refused the turn, the translator had
  * every credential cooling for some other reason (a transient upstream error cools a credential for a minute),
  * and naming a weekly reset would send the user away for days over a condition that clears in seconds.
  *
@@ -291,7 +291,7 @@ export interface TurnLimit {
     readonly pool?: string;
     readonly spent: number;
     readonly withHeadroom: number;
-    // When the earliest spent account reopens. Only ever set when nothing has headroom — with headroom on file
+    // When the earliest spent account reopens. Only ever set when nothing has headroom, with headroom on file
     // the pool is not the blocker, and there is no reset that answers "when can I send this again".
     readonly reopensAt?: number;
 }
@@ -354,7 +354,7 @@ export const fetchTranslatorUsage = async (params: {
     readonly provider: KeyedProvider;
     readonly file: TranslatorAuthFile;
 }): Promise<AccountUsage | undefined> => {
-    // A provider with no obtainable reading (reportsPlanLimits) never enters the refresh path — an unreadable
+    // A provider with no obtainable reading (reportsPlanLimits) never enters the refresh path, an unreadable
     // quota is not a failure to retry, and its rows stay dots on purpose.
     const authIndex = asString(params.file.auth_index);
     if (authIndex === undefined || !reportsPlanLimits(params.provider)) {

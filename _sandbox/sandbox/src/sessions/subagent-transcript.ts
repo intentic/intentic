@@ -14,17 +14,17 @@ import { subagentTurn } from "./turn-transcript.js";
  *
  * The split here is the one the daemon already makes for a conversation, and it is why surfacing a subagent needed
  * no new streaming channel: a RUNNING child is served from its parent turn's frame log (its frames are in there,
- * tagged with the tool call that spawned it — see subagentTurn), and a FINISHED one is served from whatever store
+ * tagged with the tool call that spawned it, see subagentTurn), and a FINISHED one is served from whatever store
  * actually ran it. So nothing is buffered twice, and nothing depends on how eagerly a provider flushes its own
  * files while work is in flight.
  *
  * Each kind has its reader already, which is the whole reason delegations could join this surface at the same
  * cost as the SDK's own children:
- *   • subagent — the SDK writes a per-child JSONL beside its session's, and exposes getSubagentMessages over it.
+ *   • subagent, the SDK writes a per-child JSONL beside its session's, and exposes getSubagentMessages over it.
  *     Reduced by the SAME function a parent conversation is (restoredSessionMessages), so a child's cards read
  *     identically to its parent's.
- *   • codex — a rollout under CODEX_HOME, already read by readCodexSession.
- *   • grok — an OpenCode session in the store the delegated `opencode run` shares with the daemon's warm server
+ *   • codex, a rollout under CODEX_HOME, already read by readCodexSession.
+ *   • grok, an OpenCode session in the store the delegated `opencode run` shares with the daemon's warm server
  *     (composition.ts wires them to one XDG_DATA_HOME), so its own client can read it.
  *
  * An empty result is a real answer: a child that has produced nothing yet, or one whose store has been swept. The
@@ -48,11 +48,11 @@ export interface SubagentTranscriptDeps {
  * The slack absorbs the gap between the tool call being streamed and the CLI actually writing its first line. Two
  * delegations to the SAME provider started inside that window could in principle be resolved to each other's
  * thread; the honest fix is the CLI naming its own session id on the command line, and until then this is the
- * failure worth having — a transcript from the wrong sibling, rather than none for either.
+ * failure worth having, a transcript from the wrong sibling, rather than none for either.
  */
 const RESOLVE_SLACK_MS = 5_000;
 
-// Rollouts are filed under sessions/YYYY/MM/DD, so the walk is shallow and the NAME carries the timestamp — no
+// Rollouts are filed under sessions/YYYY/MM/DD, so the walk is shallow and the NAME carries the timestamp, no
 // file has to be opened to rank candidates.
 const rollouts = async (dir: string): Promise<{ readonly threadId: string; readonly at: number }[]> => {
     const found: { threadId: string; at: number }[] = [];
@@ -89,7 +89,7 @@ const grokSessionSince = async (openCode: OpenCodeService, cwd: string, since: n
 /* An OpenCode session read back as a transcript. Its own vocabulary is close to ours: one message per turn with a
  * `parts` array, where a text part is prose and a tool part is a card carrying its own state. Read through a
  * narrow local shape rather than the SDK's full union (the same thing sessions.ts does for stored Anthropic
- * blocks) — this needs five fields, and pinning to more of a generated type buys nothing but breakage. */
+ * blocks), this needs five fields, and pinning to more of a generated type buys nothing but breakage. */
 interface OpenCodePart {
     readonly type?: string;
     readonly text?: string;
@@ -134,7 +134,7 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
     if (source === undefined) {
         return [];
     }
-    /* WHILE IT RUNS, the parent's frame log is the only complete account — and for a subagent it is a BETTER one
+    /* WHILE IT RUNS, the parent's frame log is the only complete account, and for a subagent it is a BETTER one
      * than the file, because the frames were normalized on their way through (display names, call-time diffs) by
      * the same helpers a card is built from. A delegation has no frames of its own (its work happens inside one
      * Bash call), so it falls through to its store even while running, and its live view stays the terminal.

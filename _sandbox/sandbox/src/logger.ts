@@ -20,7 +20,7 @@ export const createLogger = (config: Pick<Config, "logLevel" | "logPretty" | "hi
         return pino({ ...options, transport: { target: "pino-pretty" } });
     }
     // JSON lines go to stdout AND historyRoot/logs/daemon.log: `docker logs` dies with the container (a
-    // capability rebuild `docker rm -f`s it) while the /history volume survives — GET /logs/file serves the
+    // capability rebuild `docker rm -f`s it) while the /history volume survives. GET /logs/file serves the
     // tail. Best-effort: an unwritable historyRoot (local dev, tests) means stdout only, and empty historyRoot
     // is the explicit opt-out. The hourly pruneLogFiles sweep caps the file's size.
     const file = ((): DestinationStream | undefined => {

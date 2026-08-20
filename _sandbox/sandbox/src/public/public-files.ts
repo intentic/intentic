@@ -4,12 +4,12 @@ import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import type { Refusal } from "../panels/interstitial.js";
 import { escapeHtml } from "../panels/interstitial.js";
 
-/* THE OUTBOX'S RULES — what a request for a published file resolves to, and what the /public route lists.
+/* THE OUTBOX'S RULES, what a request for a published file resolves to, and what the /public route lists.
  *
  * Everything under the workspace's `public/` directory is served to anyone who has the URL, with no auth in
  * front of it (public-serve.ts). The directory's existence is the user's decision to publish; these rules are
  * the part that has to hold even when a file landed there by accident, because the write path cannot be
- * trusted — a `cp -r` from an agent that misread a task writes files just as effectively as the user does.
+ * trusted, a `cp -r` from an agent that misread a task writes files just as effectively as the user does.
  * So every guard below runs at SERVE time against the bytes on disk, not once at the moment something was
  * copied in: the same file can be safe on Monday and a credential dump on Tuesday.
  *
@@ -18,19 +18,19 @@ import { escapeHtml } from "../panels/interstitial.js";
  *      it (`ln -s ~/.aws/credentials public/x`), so the resolved REAL path is re-checked against the real root.
  *   2. Hidden segments. Any path component starting with "." is refused, which retires `.env`, `.git`, `.ssh`
  *      and `.npmrc` in one rule rather than a list that has to keep up.
- *   3. Credential-shaped names — the high-RECALL half: `*.pem`, `*.key`, `id_rsa`, `credentials`. Cheap, and it
+ *   3. Credential-shaped names, the high-RECALL half: `*.pem`, `*.key`, `id_rsa`, `credentials`. Cheap, and it
  *      catches the files whose whole content is a secret.
  *   4. No directory listing, ever. A directory serves its `index.html` (the static-site case is the point) or
  *      nothing. Without a listing, an outsider needs the 12-hex hostname slot AND the filename to reach
  *      anything, which is the difference between "unguessable" and "one leaked link exposes the folder".
- *   5. A content sniff — the high-PRECISION half. Only patterns that are self-identifying (a PEM block, an AWS
+ *   5. A content sniff, the high-PRECISION half. Only patterns that are self-identifying (a PEM block, an AWS
  *      AKIA, a `ghp_`/`sk-`/`xox…` token) qualify. The tempting generic rule, `secret|token|password` followed
  *      by a long value, is deliberately absent: it fires on a Firebase config, on a form field, on any docs page
  *      that quotes a fake key, and a publisher whose legitimate page is refused for no visible reason learns to
  *      distrust the whole feature. Recall lives in rules 2 and 3, where a false positive costs a rename.
  *   6. A size ceiling. A backstop against a public URL becoming someone's CDN, not a policy about file types. */
 
-// The outbox on disk. Absent by definition until the user publishes something — its existence IS the switch.
+// The outbox on disk. Absent by definition until the user publishes something, its existence IS the switch.
 export const publicRoot = (workspaceRoot: string): string => join(workspaceRoot, PUBLIC_DIR);
 
 // Beyond this a file is refused rather than streamed. Generous on purpose: a screen recording is a normal thing
@@ -45,7 +45,7 @@ const MAX_DEPTH = 8;
 // Extension → what the browser is told, and whether it may render it inline. Everything absent from this map is
 // served as an attachment: an unknown type is either a download (a .zip, a .tar.gz) or something whose renderer
 // nobody has audited, and "download it" is the honest answer for both. The one type worth calling out is `.svg`,
-// which is a document that can carry script — it is served with a CSP that leaves presentation intact and takes
+// which is a document that can carry script, it is served with a CSP that leaves presentation intact and takes
 // scripting away, because publishing a diagram must not also publish an execution context on the outbox origin.
 const TYPES: Record<string, { readonly type: string; readonly inline: boolean }> = {
     ".html": { type: "text/html; charset=utf-8", inline: true },
@@ -84,12 +84,12 @@ const DOWNLOAD = { type: "application/octet-stream", inline: false } as const;
 const CREDENTIAL_NAMES = /^(?:id_[rd]sa|id_ecdsa|id_ed25519|credentials|\.?netrc|\.?htpasswd)$/i;
 const CREDENTIAL_EXTS = new Set([".pem", ".key", ".p12", ".pfx", ".ppk", ".jks", ".keystore", ".kdbx", ".asc", ".gpg"]);
 
-/* Rule 5: self-identifying secrets only — every pattern here names its own issuer, so a match is evidence
+/* Rule 5: self-identifying secrets only, every pattern here names its own issuer, so a match is evidence
  * rather than a guess. Deliberately NOT a general `key = <long string>` rule; see the header.
  *
  * Exported because a conversation published as a page (src/share) has to be held to the SAME rule, and from
  * the other direction: a file is REFUSED for matching one of these, but a shared page is rewritten to remove
- * them. The two have to be one list — a share redacted against a shorter list would be a page the outbox then
+ * them. The two have to be one list, a share redacted against a shorter list would be a page the outbox then
  * refuses to serve, which reads to its owner as a broken feature rather than as a guard doing its job. */
 export const SECRET_PATTERNS = [
     /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/,
@@ -119,7 +119,7 @@ export const BLOCK_REASON: Record<PublicBlock, string> = {
     escapes: "a symlink pointing outside the folder",
 };
 
-// Rules 2 + 3, on a single path — the checks that need only the name, so the listing can apply them without
+// Rules 2 + 3, on a single path, the checks that need only the name, so the listing can apply them without
 // opening anything.
 export const blockByName = (relPath: string): PublicBlock | undefined => {
     const segments = relPath.split("/").filter((segment) => segment.length > 0);
@@ -165,7 +165,7 @@ export type PublicResolution =
 
 // Every refusal answers 404 with the same sentence, whatever the reason. A viewer is not owed the difference
 // between "no such file" and "that one is a private key", and telling them would turn the outbox into an oracle
-// for probing what the folder holds. The publisher gets the real reason — in the Public view, where it belongs.
+// for probing what the folder holds. The publisher gets the real reason, in the Public view, where it belongs.
 const notFound = (): PublicResolution => ({
     kind: "refused",
     status: 404,
@@ -174,7 +174,7 @@ const notFound = (): PublicResolution => ({
 });
 
 // The request path, minus query/fragment and percent-decoded. undefined for malformed encoding or an embedded
-// NUL — both are only ever an attempt to confuse the path resolution below.
+// NUL, both are only ever an attempt to confuse the path resolution below.
 const requestPath = (url: string | undefined): string | undefined => {
     const raw = (url ?? "/").split("?")[0]?.split("#")[0] ?? "/";
     let decoded: string;
@@ -207,7 +207,7 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
     if (stats === undefined) {
         return notFound();
     }
-    // A directory serves its index.html and nothing else — never a listing (rule 4).
+    // A directory serves its index.html and nothing else, never a listing (rule 4).
     if (stats.isDirectory()) {
         return resolvePublicFile(root, `${requested.replace(/\/+$/, "")}/index.html`);
     }
@@ -240,7 +240,7 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
 
 // One published file, as the Public view lists it.
 export interface PublicEntry {
-    // Outbox-relative, forward-slash ("report.pdf", "site/index.html") — the path that rides the public URL.
+    // Outbox-relative, forward-slash ("report.pdf", "site/index.html"), the path that rides the public URL.
     readonly path: string;
     readonly size: number;
     readonly modifiedAt: number;
@@ -249,7 +249,7 @@ export interface PublicEntry {
     readonly blocked?: PublicBlock;
 }
 
-/* Everything in the outbox, with each file's verdict. Runs the same guards the serve path runs — including the
+/* Everything in the outbox, with each file's verdict. Runs the same guards the serve path runs, including the
  * content sniff, which is why this is the honest answer to "what did I publish?" rather than a directory
  * listing with a different opinion. An absent outbox lists as empty: publishing is simply off. */
 export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {

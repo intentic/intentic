@@ -2,20 +2,20 @@ import type { Files } from "./adapter-shared.js";
 
 /* WHY AN UPLOAD WAS NOT RECOGNIZED, said in terms of what was actually in it.
  *
- * The first version answered every unrecognized archive by repeating the packing instruction — the one thing
+ * The first version answered every unrecognized archive by repeating the packing instruction, the one thing
  * the user had already tried and which had already failed them. An upload arrives after a real chore (pack on
  * a server, copy the file over, find it in a dialog), so the answer has to move them forward: the reader holds
  * the whole file list, so it can say which mistake this is.
  *
  * Four mistakes cover nearly all of it, and each has a different next move:
- *   an empty archive          — the pack command errored and they did not see it
+ *   an empty archive         , the pack command errored and they did not see it
  *   workspace files, no config— they packed the workspace folder instead of the whole setup folder
- *   a home directory          — they packed `~` and the setup folder is somewhere in it (or not)
- *   something else entirely   — name what the top level actually holds, so they can see the mismatch
+ *   a home directory         , they packed `~` and the setup folder is somewhere in it (or not)
+ *   something else entirely  , name what the top level actually holds, so they can see the mismatch
  */
 
 const ANCHORS = ["config.yaml", "openclaw.json"];
-// Files that only exist inside one of these tools' WORKSPACES — seeing them without a config is the single
+// Files that only exist inside one of these tools' WORKSPACES, seeing them without a config is the single
 // most common near-miss, because the workspace is the folder a user thinks of as "my assistant's stuff".
 const WORKSPACE_MARKERS = ["SOUL.md", "AGENTS.md", "IDENTITY.md", "MEMORY.md", "USER.md", "HEARTBEAT.md"];
 

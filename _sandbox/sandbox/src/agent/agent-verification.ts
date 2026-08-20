@@ -2,17 +2,17 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 
-/* DID THIS TURN PROVE ANYTHING? — the one question a turn that edited code should not end without answering,
+/* DID THIS TURN PROVE ANYTHING?, the one question a turn that edited code should not end without answering,
  * and the one nothing in the daemon was asking.
  *
  * Post-edit diagnostics (agent-diagnostics.ts) already answer a NARROWER question, per edit: does this file
  * still type-check. That catches the broken import and the renamed field, and it catches them early enough to
  * be free. What it cannot catch is the whole class of change that compiles perfectly and does the wrong thing
- * — which is most of them. The suite is what catches those, and whether the suite ran is not a property of any
+ *, which is most of them. The suite is what catches those, and whether the suite ran is not a property of any
  * single edit, so no per-edit hook can see it.
  *
- * So this is a LEDGER over the turn rather than a check on a file. Two facts go in — which code files this turn
- * changed, and which commands it ran that constitute evidence — and one question comes out at the end: is
+ * So this is a LEDGER over the turn rather than a check on a file. Two facts go in, which code files this turn
+ * changed, and which commands it ran that constitute evidence, and one question comes out at the end: is
  * there a passing check that ran AFTER the last edit. If there is, the turn ends silently and has cost
  * nothing. If there is not, the model is handed one bounded follow-up naming the commands this workspace
  * actually has, and the turn continues instead of ending on unverified work.
@@ -22,14 +22,14 @@ import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
  * verified under any scheme that only asks "did a test run this turn". The counter makes "after" mean after.
  *
  * PER-TURN AND IN MEMORY, deliberately. Evidence from an earlier turn says nothing about edits made in this
- * one, so there is nothing to persist and no store to age out — the ledger is born with the hooks and dies
+ * one, so there is nothing to persist and no store to age out, the ledger is born with the hooks and dies
  * with them. hermes-agent keeps the equivalent in SQLite keyed by session + workspace root with 30-day
  * retention, which it needs because its ledger also answers cross-session questions; ours does not.
  *
- * WHAT IT WILL NOT DO. It never runs a command itself — it reads what the agent already ran and decides
+ * WHAT IT WILL NOT DO. It never runs a command itself, it reads what the agent already ran and decides
  * whether to ask for one more. It never upgrades a targeted check into "the repo is green": a passing
  * `vitest run src/foo.test.ts` clears the nudge because it IS evidence about the change, and claiming more
- * than that is the failure mode this whole mechanism exists to prevent. And it never nudges on prose — a turn
+ * than that is the failure mode this whole mechanism exists to prevent. And it never nudges on prose, a turn
  * that touched only markdown has nothing a test could speak to.
  *
  * Off by default (`verifyOnStop`), like every other steer that spends tokens on the user's behalf: this one
@@ -37,7 +37,7 @@ import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
  * canonical checks it cannot know in advance. */
 
 // Extensions whose edits no suite can speak to. A turn that touched ONLY these is done when it says it is.
-// Everything not listed is treated as code — the safe direction, since the cost of a false negative here is a
+// Everything not listed is treated as code, the safe direction, since the cost of a false negative here is a
 // silent unverified change and the cost of a false positive is one skipped nudge.
 const PROSE_EXTENSIONS = new Set([".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc", ".org", ".csv", ".tsv", ".log"]);
 
@@ -48,7 +48,7 @@ const PROSE_FILENAMES = new Set(["license", "licence", "notice", "authors", "con
 // suite: the output is still in the transcript directly above.
 const EVIDENCE_DETAIL_MAX = 800;
 
-// Scripts worth suggesting, most-load-bearing first — a name is offered only if the workspace actually defines
+// Scripts worth suggesting, most important first. A name is offered only if the workspace actually defines
 // it, so this is a preference order over what exists rather than a guess at what should.
 const SUGGESTED_SCRIPTS = ["test", "typecheck", "check", "lint", "build"] as const;
 
@@ -66,7 +66,7 @@ interface Evidence {
 export interface VerificationVerdict {
     // Code paths edited with no passing check after them, newest last.
     readonly paths: readonly string[];
-    // The last check that ran after the final edit and did NOT pass, when there was one — the difference
+    // The last check that ran after the final edit and did NOT pass, when there was one, the difference
     // between "you never checked" and "you checked and it broke", which want different follow-ups.
     readonly failed: Evidence | undefined;
 }
@@ -76,10 +76,10 @@ export interface VerificationLedger {
     readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
     // Undefined ⇒ nothing to ask for: no code was edited, or a passing check followed the last edit.
     readonly verdict: () => VerificationVerdict | undefined;
-    /* Every code path this turn edited, deduped, newest last — whether or not anything has since proven them.
+    /* Every code path this turn edited, deduped, newest last, whether or not anything has since proven them.
      * `verdict` cannot answer this: it goes quiet precisely when the work WAS verified, and a rule that reads
      * "before a turn ending that touched the database" has to fire on a turn that did its job properly. So the
-     * ledger is two readers over one record — what still wants proof, and what was touched at all. */
+     * ledger is two readers over one record, what still wants proof, and what was touched at all. */
     readonly edited: () => readonly string[];
 }
 
@@ -93,14 +93,14 @@ const isProsePath = (path: string): boolean => {
 const SEGMENTS = /(?:&&|\|\||;|\|)/;
 
 // Wrappers and prefixes that stand in front of the command that matters. Dropped so the token after them is
-// what gets classified — `pnpm -C _libs/foo test` classifies on `test`, not on `pnpm`.
+// what gets classified, `pnpm -C _libs/foo test` classifies on `test`, not on `pnpm`.
 const RUNNERS = new Set(["pnpm", "npm", "npx", "yarn", "bun", "bunx", "run", "exec", "time", "sudo", "env"]);
 
 // Flags that take a value, so the value is not mistaken for the command (`pnpm -C dir test`).
 const VALUED_FLAGS = new Set(["-C", "--dir", "--filter", "-w", "--workspace"]);
 
 // What a bare token proves. Matched on the binary's basename, so `./node_modules/.bin/vitest` and `vitest` are
-// the same fact. Deliberately not exhaustive — an unrecognised command is simply not evidence, which costs one
+// the same fact. Deliberately not exhaustive, an unrecognised command is simply not evidence, which costs one
 // nudge the agent can satisfy by naming a check this table knows.
 const KINDS: ReadonlyArray<readonly [VerificationKind, ReadonlySet<string>]> = [
     ["test", new Set(["test", "vitest", "jest", "pytest", "mocha", "ava", "tap", "phpunit", "rspec"])],
@@ -138,7 +138,7 @@ export const classifyCommand = (segment: string): VerificationKind | undefined =
             continue;
         }
         if (SUBCOMMAND_TOOLS.has(token)) {
-            // The next non-flag token is the subcommand — `cargo test`, `go build`.
+            // The next non-flag token is the subcommand, `cargo test`, `go build`.
             const next = tokens.slice(i + 1).find((t) => !t.startsWith("-"));
             return next === undefined ? undefined : kindOf(basename(next));
         }
@@ -162,7 +162,7 @@ export const createVerificationLedger = (): VerificationLedger => {
      * reading this record. It stopped being right the moment rule conditions started reading it too: "before a
      * turn that touched docs/**, remind me to check the docs build" is a perfectly reasonable rule, and a
      * ledger that had already discarded the docs edit could never fire it. Filtering at the reader keeps both
-     * honest — nothing asks for proof of a README, and nothing pretends the README was never written. */
+     * honest, nothing asks for proof of a README, and nothing pretends the README was never written. */
     const edits: { path: string; at: number; prose: boolean }[] = [];
     const evidence: Evidence[] = [];
     let counter = 0;
@@ -181,7 +181,7 @@ export const createVerificationLedger = (): VerificationLedger => {
         },
         edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
-            // Only code counts here — a turn that touched nothing else is done when it says it is, and the
+            // Only code counts here, a turn that touched nothing else is done when it says it is, and the
             // ORDER question ("did a check run after the last edit") is about the last edit a check could
             // speak to, not the last edit of any kind.
             const code = edits.filter((edit) => !edit.prose);
@@ -251,7 +251,7 @@ const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): s
 /* THE `verify-edits` BUILT-IN, as one function: what this turn should be told, or nothing.
  *
  * A built-in action rather than something the rule table could express, because what it does is not a command
- * and never will be — it reads a running record of what the turn edited against what the turn proved, and only
+ * and never will be, it reads a running record of what the turn edited against what the turn proved, and only
  * the daemon is standing where both of those are visible. The rule table's job is to say WHEN it applies and
  * under what conditions; this is the part that would be absurd to ask an owner to write.
  *

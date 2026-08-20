@@ -8,7 +8,7 @@ import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } fro
 
 // Workspace READINESS: whether the projects under /work actually have their dependencies installed, and the
 // one-shot install that gets them there. A drag-dropped project arrives without node_modules on purpose (the
-// drop omits it — it would be slow to upload and wrong to reuse, having been built against the laptop's
+// drop omits it, it would be slow to upload and wrong to reuse, having been built against the laptop's
 // libc), so "the files are here" and "this workspace works" are different states. Everything that would
 // otherwise mislead reads this: the import UI offers the install, the agent's post-edit type-check stays
 // silent rather than reporting every import as broken (agent-diagnostics.ts), a failed `pnpm test` is answered
@@ -16,7 +16,7 @@ import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } fro
 // ask outright has tools that answer from here (deps-tools.ts).
 
 // Bound the scan the same way repo-discovery does: a project deeper than this isn't found, and a pathological
-// tree stops rather than stalling the daemon. Shallower than repo discovery's 4 — a manifest that deep is a
+// tree stops rather than stalling the daemon. Shallower than repo discovery's 4, a manifest that deep is a
 // workspace member, and members install from their root.
 const MAX_DEPTH = 3;
 const MAX_DIRS = 5_000;
@@ -27,21 +27,21 @@ export interface WorkspaceProject {
     readonly recipe: SetupRecipe;
 }
 
-// ready       — the marker (node_modules/.venv) is on disk AND satisfies the manifests; tooling can be trusted.
-// installing  — this project's install panel is running right now.
-// needs-setup — no marker, and the manager is available to fix it.
-// unsupported — no marker and the manager isn't in this sandbox, so offering an install would just fail in a
+// ready      , the marker (node_modules/.venv) is on disk AND satisfies the manifests; tooling can be trusted.
+// installing , this project's install panel is running right now.
+// needs-setup, no marker, and the manager is available to fix it.
+// unsupported, no marker and the manager isn't in this sandbox, so offering an install would just fail in a
 //               terminal. The UI names the missing binary instead (it rides `manager`).
-// stale       — the marker is there and the tree behind it is out of date: something declares a dependency that
+// stale      , the marker is there and the tree behind it is out of date: something declares a dependency that
 //               is not installed (dependency-drift.ts). A DISTINCT state rather than folding into needs-setup,
-//               because the two read completely differently to whoever sees them — "this project has never been
+//               because the two read completely differently to whoever sees them, "this project has never been
 //               set up" is a property of a fresh import, "your last change hasn't been installed yet" is an
-//               event that just happened — even though the same command resolves both.
+//               event that just happened, even though the same command resolves both.
 export type SetupState = "ready" | "installing" | "needs-setup" | "unsupported" | "stale";
 
 // The states an install would actually change something about. Named once, because three surfaces decide it and
 // they must not drift apart: the install route, the import flow behind it, and the post-land reconciler.
-// `installing` is excluded on purpose — a second install of a running one is what `processes.start` no-ops, and
+// `installing` is excluded on purpose, a second install of a running one is what `processes.start` no-ops, and
 // asking for it is still a bug in the caller.
 export const INSTALLABLE: ReadonlySet<SetupState> = new Set<SetupState>(["needs-setup", "stale"]);
 
@@ -54,7 +54,7 @@ export interface ProjectSetupStatus extends WorkspaceProject {
 }
 
 // tmux session names carry `panel-<key>`, so a key must survive as one: a nested dir's separator and any
-// punctuation collapse to `_`. The `--install` suffix matches the `--add_apps` convention — an underscore
+// punctuation collapse to `_`. The `--install` suffix matches the `--add_apps` convention, an underscore
 // inside the suffix means it can never collide with an app panel key (`<repo>--<app>`, app being a slug).
 export const installPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--install`;
 
@@ -68,7 +68,7 @@ const exists = async (path: string): Promise<boolean> => {
 };
 
 // The `packageManager` declaration, when this dir has a package.json to read it from. An unreadable or
-// malformed manifest yields undefined and detection falls back to the lockfile — never an error, since this
+// malformed manifest yields undefined and detection falls back to the lockfile, never an error, since this
 // runs over whatever a user dropped.
 const packageManagerField = async (dir: string, names: readonly string[]): Promise<string | undefined> => {
     if (!names.includes("package.json")) {
@@ -80,7 +80,7 @@ const packageManagerField = async (dir: string, names: readonly string[]): Promi
 
 // Every project under `root`. The walk STOPS at the first manifest on a branch: a monorepo installs once from
 // its root, so descending into its members would report N projects that are really one. Hidden dirs, the
-// junk denylist (node_modules, dist, …) and the reference shelf are never descended into — same pruning as the
+// junk denylist (node_modules, dist, …) and the reference shelf are never descended into, same pruning as the
 // tree walk (a cloned reference repo is consulted, not installed, so its missing node_modules must not nag).
 export const discoverProjects = async (root: string): Promise<WorkspaceProject[]> => {
     const projects: WorkspaceProject[] = [];
@@ -122,7 +122,7 @@ export const discoverProjects = async (root: string): Promise<WorkspaceProject[]
  *
  * The drift walk runs only AFTER the marker is found, and only for node: it is the one ecosystem whose declared
  * dependencies can be read off a manifest and looked for by name. A python project with a .venv is reported
- * `ready` on the marker alone, exactly as before — claiming to have measured it would be the same conflation
+ * `ready` on the marker alone, exactly as before, claiming to have measured it would be the same conflation
  * the chores probes refuse (unmeasured is not clean).
  */
 export const setupStateOf = async (
@@ -156,7 +156,7 @@ export const workspaceSetup = async (root: string, processes: ManagedProcesses):
 // by the tail.
 export const missingCount = (status: ProjectSetupStatus): number => (status.unresolved ?? []).reduce((total, entry) => total + entry.names.length, 0);
 
-// Start one project's install as a one-shot panel process — the same mechanism as a dev server or `add-app`,
+// Start one project's install as a one-shot panel process, the same mechanism as a dev server or `add-app`,
 // deliberately: it runs in an attachable tmux session, so a minutes-long install survives a page reload, the
 // owner can watch it, Ctrl+C it, and `↑` re-run it, and its output stays in the terminal history logs for a
 // post-mortem. `start` no-ops while the session lives, so a re-drop mid-install can't spawn a second one.
@@ -169,7 +169,7 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 };
 
 /* The single line an agent turn is told when something under /work isn't installed. Naming the exact command
- * per project is what stops the model rediscovering it the expensive way — through a `not found` from a
+ * per project is what stops the model rediscovering it the expensive way, through a `not found` from a
  * package script, an `npx` that hits the registry for a binary that was never a package, and a file of
  * type-check errors that are all false.
  *
@@ -181,27 +181,27 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
  * A STALE project is told about differently, and the difference is the point. It is not asked to install
  * anything: the daemon reconciles a stale tree by itself (agent.routes.ts), and an install inside an isolated
  * turn would write into an overlay that dies with the conversation anyway. What the turn is given is the one
- * fact it cannot deduce and will otherwise be misled by — that an import failing to resolve right now is the
+ * fact it cannot deduce and will otherwise be misled by, that an import failing to resolve right now is the
  * install being behind, not the code being wrong. Without it the model reads a wall of true-looking errors and
  * starts editing correct source to satisfy them.
  *
  * WHEN the repair arrives is stated as NEXT TURN, and that precision is the whole of what this paragraph got
- * wrong for a long time. It used to promise the workspace "reconciles itself once it is idle" — true, and
+ * wrong for a long time. It used to promise the workspace "reconciles itself once it is idle", true, and
  * unactionable from where it is read: the reconciler defers while any turn is live (reconcile-deps.ts), and the
  * agent reading the sentence IS a live turn. So the relief it promised could not arrive until the reader
  * stopped, and nothing ever signalled that it had. A model told to wait, given no end to the wait, concludes it
- * cannot verify anything at all — and then reports work as done on reasoning alone, which is the failure this
+ * cannot verify anything at all, and then reports work as done on reasoning alone, which is the failure this
  * notice exists to prevent, arrived at from the other side. Saying "next turn" converts a dead end into a
  * handoff, and the sentence after it says the part the model otherwise infers wrongly: only THIS project's own
  * checks are deferred, and the rest of the workspace tests normally.
  *
  * The install is also refused with its REASON attached rather than as bare instruction. The reason is not the
- * agent's own wasted minutes — it is that a turn's install rewrites the dependency tree every other live
+ * agent's own wasted minutes, it is that a turn's install rewrites the dependency tree every other live
  * conversation has mounted beneath it (agents/isolation.ts). A rule whose cost falls on somebody else has to
  * say so, or the first model that decides it knows better is right to.
  */
 
-// The notice's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
+// The notice's fixed opening, what stripTurnPreamble anchors on to recognize an injected note in a stored
 // user message (turn-preamble.ts).
 export const SETUP_NOTICE_HEADER =
     "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
@@ -210,7 +210,7 @@ export const SETUP_NOTICE_HEADER =
  *
  * The two halves are independent: a workspace whose projects are all installed-but-behind emits a notice that
  * never carries the header above, and the stripper anchors on a known opening or does nothing. So on this
- * workspace — which produces exactly that shape — the preamble was never recognized, and every stored message
+ * workspace, which produces exactly that shape, the preamble was never recognized, and every stored message
  * came back out of restore with the whole paragraph stapled to the front of it as the user's own words. The
  * chat then showed a "hello" as three sentences about node_modules. Being a prefix rather than a line of its
  * own is what keeps the notice reading as prose while still giving the stripper something to anchor on. */

@@ -19,28 +19,28 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: every scope (the /work root plus each discovered repo under it) gets a
 // bare git dir under <historyRoot>/scopes, and snapshots are taken with a private index (add -A → write-tree →
-// commit-tree → update-ref refs/snapshots/head). The agent's own repos are never touched — no commits land on
-// its branches, no HEAD/index moves — and the history lives outside /work, so workspace accidents (rm -rf,
+// commit-tree → update-ref refs/snapshots/head). The agent's own repos are never touched, no commits land on
+// its branches, no HEAD/index moves, and the history lives outside /work, so workspace accidents (rm -rf,
 // git clean, a deleted .git) can't destroy it. One shared uuid in every scope's commit message groups the
-// per-scope commits into a single logical "workspace snapshot". A restore rewrites worktree files only — the
+// per-scope commits into a single logical "workspace snapshot". A restore rewrites worktree files only, the
 // real repos' HEADs stay put, so the restored-vs-HEAD delta surfaces in the Changes review afterwards
 // (intended: restore is the safety net, commit/discard is the review).
 //
 // The timeline users see is CHECKPOINTS, not raw captures: only turn / user / pre-restore / restore snapshots
 // are listed (turns labeled with the turn's prompt, carried in the commit body), while "interval" captures stay
-// a hidden safety net — the only cover for terminal-made edits, which never ping notifyUserWrite. A visible
+// a hidden safety net, the only cover for terminal-made edits, which never ping notifyUserWrite. A visible
 // checkpoint's diff therefore compares against the PREVIOUS VISIBLE checkpoint, not the raw git parent, so
 // hidden captures dissolve into the next checkpoint instead of fragmenting it.
 
 const exec = promisify(execFile);
 
 const SNAPSHOT_INTERVAL_MS = 60_000;
-// Trailing debounce for user-write pings — long enough to coalesce a sequential multi-file drop into one snapshot.
+// Trailing debounce for user-write pings, long enough to coalesce a sequential multi-file drop into one snapshot.
 const USER_WRITE_DEBOUNCE_MS = 2_000;
 // The triggers that surface as timeline checkpoints; "interval" captures are hidden safety sweeps.
 const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", "pre-restore", "restore"]);
 const MAX_LABEL_LENGTH = 160;
-// git's well-known empty tree — the diff base for a scope's first snapshot (and an unborn HEAD in git/changes.ts).
+// git's well-known empty tree, the diff base for a scope's first snapshot (and an unborn HEAD in git/changes.ts).
 export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 // File contents above this are flagged `truncated` instead of shipped to the diff UI (shared with the git
 // routes' working-tree file diff so both diff surfaces guard identically).
@@ -61,21 +61,21 @@ const defaultRunner: HistoryGitRunner = (args, options) =>
 export const repoGitDir = (historyRoot: string, name: string): string => join(historyRoot, "gits", encodeURIComponent(name));
 
 /* Junk + secret patterns every scope excludes (the worktree's own .gitignore files apply on top). Lives in
- * $GIT_DIR/info/exclude — outside /work — so the agent can't edit the rules. A self-contained list (the secret
+ * $GIT_DIR/info/exclude, outside /work, so the agent can't edit the rules. A self-contained list (the secret
  * files + workspace-ignore's IGNORED_DIRS): history snapshots keep excluding secrets even though the file tree
  * now lists them.
  *
  * WHAT IS LEFT HERE IS ONLY WHAT IS SECRET WHEREVER IT APPEARS. `capabilities.json` and `extension-settings.json`
  * used to be on this list and are not any more, and both halves of that matter.
  *
- * These patterns are UNANCHORED, so they match at any depth and they are appended AFTER the carve-outs — which
+ * These patterns are UNANCHORED, so they match at any depth and they are appended AFTER the carve-outs, which
  * made them the last word. The contract classing those two files `versioned` produced a `!/.intentic/…` negation
  * that this list then overrode, silently: the state table said "reviewable", the exclude file said no, and the
  * carve-out was dead on arrival. A hand-kept list winning over a derived one is the exact inversion rootExcludes
  * is built to avoid, and it can only be resolved by the list not naming them.
  *
  * It is safe now for the reason it was needed then: the credential VALUES left both files for the vault, so
- * neither is a secret to exclude. And the unanchored match was always too wide — a `capabilities.json` inside
+ * neither is a secret to exclude. And the unanchored match was always too wide, a `capabilities.json` inside
  * somebody's own repo is their code, and it was being dropped from their history for sharing a name with a
  * daemon manifest two directories up. */
 const COMMON_EXCLUDES = [
@@ -100,28 +100,28 @@ const COMMON_EXCLUDES = [
     ".ruff_cache/",
     ".gradle/",
 ];
-// The root scope additionally skips every discovered repo dir (each repo is its own scope — also avoids git's
+// The root scope additionally skips every discovered repo dir (each repo is its own scope, also avoids git's
 // embedded-repo gitlink handling), /.intentic/ (daemon-internal manifests + credentials), and the reference
-// shelf (/refs/ — dropped clones are re-fetchable consultation material, not workspace state worth snapshotting;
+// shelf (/refs/, dropped clones are re-fetchable consultation material, not workspace state worth snapshotting;
 // its nested repos are never in repoIds because discovery skips the shelf). Repos can appear anywhere under
 // /work, so the list is DERIVED from the live repo set, not static.
 export const rootExcludes = (repoIds: readonly string[]): string[] => [
     ...repoIds.map((id) => `/${id}/`),
-    /* .intentic is daemon-internal manifests + credentials and stays out of version control — with carve-outs
+    /* .intentic is daemon-internal manifests + credentials and stays out of version control, with carve-outs
      * beneath it. The pattern is the directory's CONTENTS (`/*`) rather than the directory itself, which is the
      * only spelling that leaves room for the negations on the next line: git does not descend into an excluded
      * DIRECTORY, so `/.intentic/` followed by a `!` rule re-includes nothing. Excluding the children by glob
-     * keeps every one of them ignored — including any file added under here later, which is what makes the
-     * carve-outs safe to leave standing — while the parent stays walkable.
+     * keeps every one of them ignored, including any file added under here later, which is what makes the
+     * carve-outs safe to leave standing, while the parent stays walkable.
      *
      * WHICH children come back is the contract's answer, not this file's (workspace-state.ts `versioned`): the
-     * owner's CONFIGURATION — settings, personas, automations, workflow designs, the environment overlay, which
+     * owner's CONFIGURATION, settings, personas, automations, workflow designs, the environment overlay, which
      * extensions are on. Those decide how this sandbox behaves, so a change to one belongs in review and in
      * `git log` beside the workspace's instructions rather than happening silently mid-session.
      *
      * Deriving them is what keeps this safe as the state table grows. An ignore-pattern list maintained HERE
      * would track anything added later by default, so next month's credential store would be committed on its
-     * first write; an allowlist the contract owns inverts that — a new entry is ignored until someone marks it,
+     * first write; an allowlist the contract owns inverts that, a new entry is ignored until someone marks it,
      * and the guard test refuses the mark on anything classed secret or identity. A DIRECTORY entry keeps its
      * trailing slash through the mapping, which is what lets git descend into it (environment.d/). */
     ...trackedStateExcludes(),
@@ -129,12 +129,12 @@ export const rootExcludes = (repoIds: readonly string[]): string[] => [
     ...COMMON_EXCLUDES,
 ];
 
-/* THE CARVE-OUT, LAYER BY LAYER — because git's "cannot re-include inside an excluded directory" rule bites once
+/* THE CARVE-OUT, LAYER BY LAYER, because git's "cannot re-include inside an excluded directory" rule bites once
  * per level, and the state dir now has two.
  *
  * The single `/.intentic/*` above used to be enough: every tracked entry sat directly under it, so excluding the
  * CONTENTS rather than the directory left the parent walkable and each `!` rule could reach its file. Grouping
- * the state dir moved those entries down a level, and `/.intentic/*` matches `.intentic/config` — a DIRECTORY —
+ * the state dir moved those entries down a level, and `/.intentic/*` matches `.intentic/config`, a DIRECTORY,
  * so git stopped descending and every negation beneath it re-included nothing. The baseline commit came back
  * empty: not one setting, persona, skill or draft tracked, silently, with the exclude file looking correct.
  *
@@ -158,8 +158,8 @@ const trackedStateExcludes = (): string[] => {
     ];
 };
 
-// Converge the root exclude list onto both consumers — the real /work repo's git dir (git/root-repo.ts; its
-// info/ is shared with every agent worktree) and the history root scope's — so history and the Changes review
+// Converge the root exclude list onto both consumers, the real /work repo's git dir (git/root-repo.ts; its
+// info/ is shared with every agent worktree) and the history root scope's, so history and the Changes review
 // agree on what's versionable. Compare-then-write keeps the every-snapshot call stat-cheap; a target whose git
 // dir doesn't exist yet (fresh boot) is skipped and converges when it's created.
 export const syncRootExcludes = async (historyRoot: string, repoIds: readonly string[]): Promise<void> => {
@@ -190,7 +190,7 @@ export interface WorkspaceHistory {
     // undefined ⇒ unknown snapshot id (routes map it to NOT_FOUND). What the snapshot changed vs its parent.
     readonly diff: (id: string) => Promise<SnapshotChange[] | undefined>;
     readonly fileDiff: (id: string, scope: string, path: string) => Promise<FileDiff | undefined>;
-    // Where one side of that same diff's BYTES live — the bare scope repo and the rev-spec inside it — for the
+    // Where one side of that same diff's BYTES live, the bare scope repo and the rev-spec inside it, for the
     // raw route that serves what fileDiff refuses to ship (an image, which the browser renders from the bytes
     // and fileDiff can only flag as binary). Reading them is the route's job, so every diff source funnels
     // through one size guard and one 404. undefined ⇒ unknown checkpoint/scope, or a side this file never had.
@@ -199,7 +199,7 @@ export interface WorkspaceHistory {
 }
 
 interface Scope {
-    // "root" or a repo id (the root-relative repo dir, e.g. "intent" or "clients/foo") — the wire-visible
+    // "root" or a repo id (the root-relative repo dir, e.g. "intent" or "clients/foo"), the wire-visible
     // scope name.
     readonly name: string;
     readonly gitDir: string;
@@ -224,7 +224,7 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-// Labels live in commit bodies and come from free-form prompts — collapse to one bounded line so `git log`
+// Labels live in commit bodies and come from free-form prompts, collapse to one bounded line so `git log`
 // parsing and the timeline row stay tame.
 const sanitizeLabel = (label: string): string | undefined => {
     const clean = label
@@ -244,8 +244,8 @@ const scopeEnv = (scope: Scope): Record<string, string> => ({
 });
 
 // Is the worktree down to deletion remnants? A deletion (local rm carried in by desktop sync, an agent's
-// rm -rf) removes every tracked file but CANNOT remove what sync ignores — node_modules, dist, the .git
-// pointer — so "the directory still exists" proves nothing. This readdir is the cheap gate in front of the
+// rm -rf) removes every tracked file but CANNOT remove what sync ignores, node_modules, dist, the .git
+// pointer, so "the directory still exists" proves nothing. This readdir is the cheap gate in front of the
 // real check (deletionState): a live repo virtually always has a plain file or dir at its root, so the healthy
 // case costs one readdir and no git spawn.
 const looksEmptied = async (worktree: string): Promise<boolean> => {
@@ -268,7 +268,7 @@ export const createWorkspaceHistory = (
         worktree: name === "root" ? workspace.root : join(workspace.root, name),
     });
 
-    // Tree-to-tree ops (log/diff-tree/cat-file) need no worktree — they must work after a repo is deleted.
+    // Tree-to-tree ops (log/diff-tree/cat-file) need no worktree, they must work after a repo is deleted.
     const bare = (scope: Scope): { cwd: string; env: Record<string, string> } => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
 
     const ensureScope = async (scope: Scope): Promise<void> => {
@@ -277,7 +277,7 @@ export const createWorkspaceHistory = (
         }
         await git(["init", "--bare", "-q", "--initial-branch=main", scope.gitDir], { cwd: historyRoot, env: {} });
         // The root scope's list is immediately re-derived from the live repo set (syncRootExcludes in
-        // snapshotAll) — this seed just guarantees the file exists before the first add -A.
+        // snapshotAll), this seed just guarantees the file exists before the first add -A.
         await writeFile(join(scope.gitDir, "info", "exclude"), `${COMMON_EXCLUDES.join("\n")}\n`);
     };
 
@@ -293,8 +293,8 @@ export const createWorkspaceHistory = (
     };
 
     // A repo the user deleted must STAY deleted: its parked git dir moves to <historyRoot>/trash (kept, not
-    // erased — it may hold unpushed commits) so nothing re-adopts a future dir of the same name and heal stops
-    // resurrecting it. Its scope repo is deliberately NOT reaped — deleted repos stay on the Checkpoints
+    // erased, it may hold unpushed commits) so nothing re-adopts a future dir of the same name and heal stops
+    // resurrecting it. Its scope repo is deliberately NOT reaped, deleted repos stay on the Checkpoints
     // timeline, diffable and restorable, and a restore recreates the worktree (restoreScope) which a later
     // snapshot cycle then re-discovers as an ordinary in-tree repo.
     const reapGitDir = async (entry: string, reason: string): Promise<void> => {
@@ -327,12 +327,12 @@ export const createWorkspaceHistory = (
     const REAP_GRACE_MS = SNAPSHOT_INTERVAL_MS * 1.5;
 
     // Pre-discovery heal for every DAEMON-created repo (/history/gits/*): a repo whose in-worktree .git the
-    // agent deleted would otherwise vanish from .git-based discovery — and with it from history. Repos the
+    // agent deleted would otherwise vanish from .git-based discovery, and with it from history. Repos the
     // AGENT created (in-worktree .git dirs, no /history/gits entry) that lose their .git intentionally stop
     // being repos: their files dissolve into the root scope, which still covers them.
     //
     // Healing is for ACCIDENTS, so it first rules out intent. Rewriting the pointer into a deletion's remnant
-    // dir used to resurrect the repo as thousands of phantom deletions, forever — sync could never remove the
+    // dir used to resurrect the repo as thousands of phantom deletions, forever, sync could never remove the
     // ignored remnants keeping the dir alive, and every cycle re-adopted them. A worktree that is gone, or
     // holds none of its tracked files, is a deletion: reap the git dir instead of healing it.
     const healGitPointers = async (): Promise<void> => {
@@ -364,7 +364,7 @@ export const createWorkspaceHistory = (
                     }
                     continue;
                 }
-                // Deleted. Without a pointer the intent is doubly clear — reap now. With one still in place,
+                // Deleted. Without a pointer the intent is doubly clear, reap now. With one still in place,
                 // hold for a grace cycle, then reap AND drop the pointer so discovery stops finding a repo
                 // whose git dir is gone.
                 if (!hasPointer) {
@@ -422,7 +422,7 @@ export const createWorkspaceHistory = (
                     ...(prev !== undefined ? ["-p", prev] : []),
                     "-m",
                     `snapshot ${id} ${trigger}`,
-                    // The label rides in the commit body — the subject keeps its fixed 3-word grammar.
+                    // The label rides in the commit body, the subject keeps its fixed 3-word grammar.
                     ...(label !== undefined ? ["-m", label] : []),
                 ],
                 run,
@@ -434,7 +434,7 @@ export const createWorkspaceHistory = (
         return commit;
     };
 
-    // Every scope that ever recorded history — deleted repos stay listable, diffable, and restorable.
+    // Every scope that ever recorded history, deleted repos stay listable, diffable, and restorable.
     const knownScopes = async (): Promise<Scope[]> => {
         const entries = await readdir(scopesRoot).catch(() => []);
         return entries.filter((name) => name.endsWith(".git")).map((name) => scopeOf(decodeURIComponent(name.slice(0, -".git".length))));
@@ -443,7 +443,7 @@ export const createWorkspaceHistory = (
     const scopeLog = async (scope: Scope): Promise<ScopeCommit[]> => {
         let stdout: string;
         try {
-            // -z separates records with NUL — the body (%b) carries the label, which a newline split would shred.
+            // -z separates records with NUL, the body (%b) carries the label, which a newline split would shred.
             stdout = (await git(["log", "-z", "-n", "500", "--format=%H%x1f%ct%x1f%s%x1f%b", "refs/snapshots/head"], bare(scope))).stdout;
         } catch {
             return [];
@@ -474,9 +474,9 @@ export const createWorkspaceHistory = (
     }
 
     interface HistoryIndex {
-        // Every snapshot group, newest first — hidden interval captures included (restore/stateAt need them).
+        // Every snapshot group, newest first, hidden interval captures included (restore/stateAt need them).
         readonly groups: SnapshotGroup[];
-        // scope name → its full snapshot log, newest first — backs stateAt without re-running `git log`.
+        // scope name → its full snapshot log, newest first, backs stateAt without re-running `git log`.
         readonly logs: Map<string, ScopeCommit[]>;
     }
 
@@ -511,12 +511,12 @@ export const createWorkspaceHistory = (
         return indexCache;
     };
 
-    // The checkpoint timeline — what list/diff/restore expose; interval captures never surface here.
+    // The checkpoint timeline, what list/diff/restore expose; interval captures never surface here.
     const visibleGroups = async (): Promise<SnapshotGroup[]> => (await historyIndex()).groups.filter((group) => VISIBLE_TRIGGERS.has(group.trigger));
 
     const findGroup = async (id: string): Promise<SnapshotGroup | undefined> => (await visibleGroups()).find((group) => group.id === id);
 
-    // The checkpoint a visible group is diffed against — undefined for the oldest (⇒ the empty tree).
+    // The checkpoint a visible group is diffed against, undefined for the oldest (⇒ the empty tree).
     const previousVisible = async (group: SnapshotGroup): Promise<SnapshotGroup | undefined> => {
         const visible = await visibleGroups();
         const position = visible.findIndex((candidate) => candidate.id === group.id);
@@ -564,7 +564,7 @@ export const createWorkspaceHistory = (
         return content.includes("\0") ? { binary: true } : { content };
     };
 
-    // Serialize snapshot + restore — they share the per-scope snapshot.index files.
+    // Serialize snapshot + restore, they share the per-scope snapshot.index files.
     let chain: Promise<unknown> = Promise.resolve();
     const serialize = <T>(task: () => Promise<T>): Promise<T> => {
         const next = chain.then(task, task);
@@ -600,8 +600,8 @@ export const createWorkspaceHistory = (
         return changed ? id : undefined;
     };
 
-    // Make the worktree match the scope's tree at `sha`: files created since are cleaned (ignored files —
-    // secrets, node_modules — survive; clean judges "untracked" against the just-read index), then the
+    // Make the worktree match the scope's tree at `sha`: files created since are cleaned (ignored files,
+    // secrets, node_modules, survive; clean judges "untracked" against the just-read index), then the
     // snapshot's files are written out. -u refreshes stat info so the next scan stays cheap.
     const restoreScope = async (scope: Scope, sha: string): Promise<void> => {
         await mkdir(scope.worktree, { recursive: true });
@@ -618,12 +618,12 @@ export const createWorkspaceHistory = (
         // The repo dirs being restored must be in the root excludes BEFORE the root scope's clean runs: the
         // restore brings back dirs that live discovery (post-deletion) no longer excludes, and without this
         // the root clean would wipe the just-restored nested worktrees. The trailing snapshotAll re-derives
-        // the list from live discovery — a restored repo without a .git then dissolves into the root scope.
+        // the list from live discovery, a restored repo without a .git then dissolves into the root scope.
         await syncRootExcludes(
             historyRoot,
             scopes.filter((scope) => scope.name !== "root").map((scope) => scope.name),
         );
-        // Restore EVERY known scope to its state at the group's moment — a snapshot only lists the scopes that
+        // Restore EVERY known scope to its state at the group's moment, a snapshot only lists the scopes that
         // changed in it, but "bring the workspace back" means all of them. A scope with no commit at-or-before
         // that moment (created later) is left in place.
         for (const scope of scopes) {
@@ -680,7 +680,7 @@ export const createWorkspaceHistory = (
         },
         list: async () =>
             (await visibleGroups()).map(({ id, at, trigger, label }) => (label !== undefined ? { id, at, trigger, label } : { id, at, trigger })),
-        // A checkpoint's diff spans everything since the previous visible checkpoint — hidden interval captures
+        // A checkpoint's diff spans everything since the previous visible checkpoint, hidden interval captures
         // in between are the point of the base choice, not an accident.
         diff: async (id) => {
             const group = await findGroup(id);
@@ -723,7 +723,7 @@ export const createWorkspaceHistory = (
                 ...(before?.truncated === true || after?.truncated === true ? { truncated: true } : {}),
             };
         },
-        // The same two commits fileDiff pairs, handed over as rev-specs instead of read as text — so the raw
+        // The same two commits fileDiff pairs, handed over as rev-specs instead of read as text, so the raw
         // route serves exactly the side the checkpoint's diff was showing, never a neighbouring capture's.
         // Bare repos take a plain `-C <gitdir>`, so the spec pairs with the scope's dir like any other source.
         fileBlob: async (id, scopeName, path, side) => {

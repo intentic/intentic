@@ -6,7 +6,7 @@ import { jsonFile } from "../store/json-file.js";
  * (<workspace>/.intentic/records/automation-runs.json). The scheduler polls the manifest; the /automations routes edit
  * it. Mirrors the capabilities store. No secrets live here, so neither is on the file-route denylist.
  *
- * TWO FILES, because they answer to different readers. The manifest is CONFIGURATION — a handful of entries a
+ * TWO FILES, because they answer to different readers. The manifest is CONFIGURATION, a handful of entries a
  * person authors, and one of the few things under `.intentic` the root repo tracks, so an edit to it earns a
  * diff in the Changes review and a line in `git log`. The runs are a LEDGER, written by the daemon every time
  * an automation fires and never edited by anyone.
@@ -14,37 +14,37 @@ import { jsonFile } from "../store/json-file.js";
  * Holding both in one file made the second overwrite the first's whole point: a scheduled automation firing
  * three times a day rewrote the tracked manifest three times a day, so run timestamps and conversation ids
  * were committed beside the prompt they belonged to and any real edit to the automation arrived buried in
- * them. Splitting is the whole fix — the tracked file now changes only when someone changes an automation, and
+ * them. Splitting is the whole fix, the tracked file now changes only when someone changes an automation, and
  * a fire touches nothing tracked. sandbox-contract's workspace-state.ts carries the same argument as the
  * general rule the ledgers there are already classified by.
  *
  * The ledger is keyed by automation id, which is what makes an edit keep its history for free: `upsert`
  * rewrites the config record and never touches the runs. The two files are separately atomic and separately
- * queued, so the invariant they hold between them — the ledger has an entry only for an id the manifest has —
+ * queued, so the invariant they hold between them, the ledger has an entry only for an id the manifest has,
  * is maintained by the two writes that can break it (`remove` drops the key, `upsert` of a NEW id clears any
  * stale one) rather than by a lock across both. */
 
-// Kept per automation — enough for the UI's run history without the ledger growing forever.
+// Kept per automation, enough for the UI's run history without the ledger growing forever.
 const RUNS_KEPT = 20;
 
 // The joined read model every caller sees: the stored automation with its runs read back from the ledger. The
-// two files are an implementation detail of this store — nothing above it knows the history lives apart.
+// two files are an implementation detail of this store, nothing above it knows the history lives apart.
 export type AutomationRecord = Automation & { runs: AutomationRun[] };
 
 const RunLedgerSchema = z.record(z.string(), z.array(AutomationRunSchema));
 type RunLedger = z.infer<typeof RunLedgerSchema>;
 
-// Runs for an id the manifest no longer has are invisible by construction — the join is driven by the manifest,
+// Runs for an id the manifest no longer has are invisible by construction, the join is driven by the manifest,
 // never by the ledger's keys, so an orphaned history can never surface as an automation.
 const withRuns = (automations: readonly Automation[], runs: RunLedger): AutomationRecord[] =>
     automations.map((automation) => ({ ...automation, runs: runs[automation.id] ?? [] }));
 
-/* How many times in a row this automation has now failed — the number the spin-loop guard reads.
+/* How many times in a row this automation has now failed, the number the spin-loop guard reads.
  *
  * Runs are newest-first, so this counts from the front and stops at the first run that was not an `error`. Only
  * `error` breaks the streak's silence: a `completed` run obviously resets it, and so does a `skipped` one,
  * because a guard saying no is the automation working exactly as configured. `interrupted` is the interesting
- * case and it also resets — the daemon died under that fire, which says nothing about whether the automation
+ * case and it also resets, the daemon died under that fire, which says nothing about whether the automation
  * itself is broken, and counting it would let a couple of container restarts quarantine a healthy job.
  *
  * Bounded by RUNS_KEPT, which is the honest ceiling: past 20 the history has already rolled and a longer
@@ -74,8 +74,8 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
         fallback: () => [],
     });
     /* Unreadable runs fall back to "no history", which is the right loss to take: the manifest still lists every
-     * automation and the scheduler still fires them, with empty rows where the history was. The alternative —
-     * letting a damaged ledger read as an absent manifest — would silently stop every automation in the
+     * automation and the scheduler still fires them, with empty rows where the history was. The alternative,
+     * letting a damaged ledger read as an absent manifest, would silently stop every automation in the
      * sandbox. It is not on the unreadable-manifest notice either (see workspace-state.ts): nobody hand-edits
      * a run history, so there is nothing for an owner to repair, and the next recorded run rebuilds it. */
     const ledger = jsonFile<RunLedger>(runsPath, {
@@ -95,8 +95,8 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
                 return [...automations.filter((record) => record.id !== automation.id), automation];
             });
             /* A NEW automation starts with no history, even when its id was used before. Removing an automation
-             * drops its runs below, so this only fires in the gap that write cannot close — a run recorded
-             * against an id in the instant it was being removed — and it is what stops those few records
+             * drops its runs below, so this only fires in the gap that write cannot close, a run recorded
+             * against an id in the instant it was being removed, and it is what stops those few records
              * surfacing as the new automation's past. Unchanged by reference when there is nothing to clear,
              * so the ordinary edit and the ordinary first-time add both write nothing here. */
             if (!existed) {
@@ -146,7 +146,7 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
             return removed;
         },
         recordRun: async (id, run) => {
-            // A run for a just-removed automation is dropped — and writes nothing. Checked against the manifest
+            // A run for a just-removed automation is dropped, and writes nothing. Checked against the manifest
             // because that is what decides an automation exists; the ledger cannot answer it.
             if (!(await file.read()).some((automation) => automation.id === id)) {
                 return;

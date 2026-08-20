@@ -21,8 +21,8 @@ import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
 import { containedIn, scopedTarget, workspaceRootFor } from "./workspace-scope.js";
 
 /* What one page of /workspace/search costs, in the unit the caller actually pays: rows in a scrollable list.
- * The engine's other page shape sizes itself by what rendering the results as TEXT would spend — an agent's
- * context window — which here bought nothing (the browser reads the JSON and throws the text away) and made the
+ * The engine's other page shape sizes itself by what rendering the results as TEXT would spend, an agent's
+ * context window, which here bought nothing (the browser reads the JSON and throws the text away) and made the
  * number of files that came back depend on how long the matched lines happened to be.
  *
  * Sized against the panel's virtualized list, which renders only what is on screen: a thousand rows is a fast
@@ -40,7 +40,7 @@ export const createWorkspaceRoutes = (services: Services) => {
     // A write's target: always the shared tree, guarded (see workspace-scope for why no write route can name a
     // conversation's checkout in the first place).
     const contained = async (relPath: string): Promise<string> => containedIn(services.workspace.root, relPath);
-    // Whose copy a READ means — composed once (see Services.workspaceScope), because the byte routes in app.ts
+    // Whose copy a READ means, composed once (see Services.workspaceScope), because the byte routes in app.ts
     // answer the same question and two resolvers that disagreed would make a file's contents depend on which
     // route the browser happened to use for it.
     const scope = services.workspaceScope;
@@ -60,7 +60,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         return repo;
     };
     return {
-        // `input.agent` names whose copy to walk — the tree is the one read with no fallback, because a tree is
+        // `input.agent` names whose copy to walk, the tree is the one read with no fallback, because a tree is
         // a place rather than a lookup: half of it silently coming from the other checkout is not a view of
         // anything. A file the walk therefore misses still opens, through `file` below.
         tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
@@ -68,7 +68,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         children: i.children.handler(async ({ input }) => services.workspaceChildren(await workspaceRootFor(scope, input.agent), input.path)),
         /* A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
          * the viewer decides how to render from the daemon's number rather than from a tree entry it may not
-         * have — the gate can't be skipped by opening a file the tree never listed.
+         * have, the gate can't be skipped by opening a file the tree never listed.
          *
          * NOTHING THERE IS A 200 that says `present: false`, not a 404 (WorkspaceFileAbsentSchema explains why).
          * The guards above this line still refuse: an escape and the control plane throw from scopedTarget, so
@@ -80,8 +80,8 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ? { present: false as const, path: input.path }
                 : { present: true as const, path: input.path, shared, ...window };
         }),
-        /* Mint the ticket a media element will present to GET /workspace/media. Guarded exactly like a read —
-         * escape, control plane, existence — so a ticket can only ever name a file this caller could already
+        /* Mint the ticket a media element will present to GET /workspace/media. Guarded exactly like a read,
+         * escape, control plane, existence, so a ticket can only ever name a file this caller could already
          * have read, and a mint for a missing file fails HERE rather than as an opaque playback error later.
          * The ticket binds the RESOLVED file, so one minted against a conversation's checkout buys that file
          * and not its shared-tree namesake. */
@@ -92,13 +92,13 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
             return services.mediaTickets.mint(target);
         }),
-        /* Which workspace file a NAMED reference means — the lookup behind every clickable path in the UI (chat
+        /* Which workspace file a NAMED reference means, the lookup behind every clickable path in the UI (chat
          * prose, terminal output, a tool card's chip). The search itself is resolveReference; this wires it to
          * the workspace (through the same escape + control-plane guards as every other read) and to the iq
          * engine's path glob, an in-memory regex pass over the sweep it already holds, which is why trying a
          * handful of tails costs nothing worth optimizing. */
         resolve: i.resolve.handler(async ({ input, signal }) => {
-            // Existence is asked of the conversation's checkout FIRST — a file it created and has not landed
+            // Existence is asked of the conversation's checkout FIRST, a file it created and has not landed
             // exists nowhere else, and answering "no such reference" for the very file the agent just wrote
             // about is the failure this scope exists to end. The glob below stays shared: the iq index is built
             // over /work, and a path it returns is root-relative, so it means the same file in either tree.
@@ -127,12 +127,12 @@ export const createWorkspaceRoutes = (services: Services) => {
                 },
             );
         }),
-        /* Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
+        /* Runs the resident iq engine in-process (services.iq), same engine the agent's Bash `iq` calls use,
          * minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
          * abort signal kills the engine's rg child when the browser supersedes a search mid-flight.
          *
          * A GUI caller, not a reading agent, so it asks for a `list` page: rows rather than tokens, and with
-         * that the engine skips everything only the text capsule needed — the capsule itself, the packed bodies
+         * that the engine skips everything only the text capsule needed, the capsule itself, the packed bodies
          * that would fill a match list with lines nothing matched, the per-hit symbol lookup across every
          * matched file, and the continuation spool. See RenderOptions.list. */
         search: i.search.handler(async ({ input, signal }) => {
@@ -161,7 +161,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                         ...(input.after !== undefined ? { after: input.after } : {}),
                     },
                     options,
-                    // Echo mirrors the CLI form — it seeds the pagination cursor id, so it must be stable for
+                    // Echo mirrors the CLI form, it seeds the pagination cursor id, so it must be stable for
                     // the same query+mode+scope across requests, and the glob filter is part of that scope.
                     echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}${input.literal === true ? " --literal" : ""}${input.word === true ? " --word" : ""}${input.caseSensitive === true ? " --case" : ""}${globs.map((glob) => ` --glob '${glob}'`).join("")}${notGlobs.map((glob) => ` --not-glob '${glob}'`).join("")}`,
                 },
@@ -171,7 +171,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         /* One repository's codebase health, off the same resident engine: churn × complexity per file, what the
          * index holds, and the import graph's top modules. The repo-level companion to the management panel and
-         * the git-history graph, so it takes the same {repo} ids those do — "root" is the /work repo, which the
+         * the git-history graph, so it takes the same {repo} ids those do, "root" is the /work repo, which the
          * iq scope calls "" (the sweep tags a file with its enclosing repo's root-relative dir, and the root's
          * is the empty path). Anything that is not a DISCOVERED repo is NOT_FOUND rather than an empty report:
          * every figure here is scoped by the sweep's repo tag, so a plain directory would report zeros, and
@@ -192,7 +192,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // Read-only, no-LLM classification of the dropped workspace into coarse buckets. Runs over the same
         // filtered tree the file view uses, so it never sees .git/secrets/node_modules. The browser turns the
-        // proposal into accepted moves via the move route below — nothing here mutates /work.
+        // proposal into accepted moves via the move route below, nothing here mutates /work.
         classify: i.classify.handler(async () => classifyWorkspace(services.workspace.root, await services.workspaceTree(services.workspace.root))),
         // Direct file management over /work (byte writes go through POST /workspace/upload). Both endpoints of a
         // move/copy run through `contained`, so neither source nor target can escape /work or reach the daemon's
@@ -218,7 +218,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
-        // Dependency readiness per project. The wire shape flattens the recipe and drops its `marker` — the
+        // Dependency readiness per project. The wire shape flattens the recipe and drops its `marker`, the
         // browser renders manager/command/evidence and never needs to know which directory proves an install.
         // A stale project carries HOW MANY names cannot resolve rather than which: the panel's sentence needs a
         // number, and the list is long exactly when it is least worth sending.
@@ -246,7 +246,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { queued: [...result.queued] };
         }),
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
-        // Every repo's modules, in one read — "root" (the /work repo, whose dir IS the workspace root) plus each
+        // Every repo's modules, in one read, "root" (the /work repo, whose dir IS the workspace root) plus each
         // discovered repo, exactly the candidate set the Changes review scans.
         modules: i.modules.handler(async () => {
             const repoIds = await discoverRepos(services.workspace.root);
@@ -268,7 +268,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ...(input.branch !== undefined ? { branch: input.branch } : {}),
                 separateGitDir: repoGitDir(services.config.historyRoot, input.name),
             });
-            // Mint the preview route at clone time — hostnames must predate the first browser lookup (an early
+            // Mint the preview route at clone time, hostnames must predate the first browser lookup (an early
             // NXDOMAIN gets negative-cached for the zone's SOA TTL).
             void services.ensurePreviewRoutes([previewLabel(input.name)]);
             services.history.notifyUserWrite();
@@ -281,7 +281,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { repos };
         }),
-        // The addable app types the configured source repo offers — drives the apps extension's Add-app picker.
+        // The addable app types the configured source repo offers, drives the apps extension's Add-app picker.
         templates: i.templates.handler(async () => ({ templates: await listTemplates(services) })),
         // Add one or more named app instances into an EXISTING monorepo, from the web app's apps extension.
         // Each entry is a { template, name } object; each instance previews at preview-<repo>--<name>-<id>.<zone>.
@@ -298,13 +298,13 @@ export const createWorkspaceRoutes = (services: Services) => {
             const { source, ref } = await readTemplatesConfig(services);
             const apps = input.apps.map((app) => (app.name === app.template ? app.template : `${app.template}:${app.name}`)).join(",");
             const command = `intentic scaffold add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote(apps)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`;
-            // Mint every app's preview route up front in one batch — idempotent, and hostnames must predate the
+            // Mint every app's preview route up front in one batch, idempotent, and hostnames must predate the
             // first browser lookup (an early NXDOMAIN gets negative-cached for the zone's SOA TTL).
             void services.ensurePreviewRoutes(input.apps.map((app) => previewLabel(appPanelKey(repo, app.name))));
             await services.processes.start(`${repo}--add_apps`, { command, cwd: repoDir, oneShot: true });
             return { ok: true } as const;
         }),
-        // The app instances present in this monorepo, each with its own preview URL + live status — drives
+        // The app instances present in this monorepo, each with its own preview URL + live status, drives
         // the apps extension's list. Scans `_apps/` for scaffolded instances and dev-server packages alike.
         appsList: i.appsList.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
@@ -314,11 +314,11 @@ export const createWorkspaceRoutes = (services: Services) => {
                 discoverApps(repoDir, manifest).map(async ({ app, kind }) => {
                     const port = services.processes.portOf(appPanelKey(repo, app));
                     // An app preview's port IS the one the daemon assigned (buildAppSpec mirrors it into the
-                    // app's own var), so the probe only has to settle which scheme answers on it — a Vite
+                    // app's own var), so the probe only has to settle which scheme answers on it, a Vite
                     // serving https on a dev cert is up, and used to read as down.
                     const healthy = port !== undefined && (await detectScheme(port)) !== undefined;
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
-                    // `kind` and `previewUrl` are both optional on the wire — an app whose type nothing
+                    // `kind` and `previewUrl` are both optional on the wire, an app whose type nothing
                     // identified, and a loopback sandbox with no preview host, each just omit theirs.
                     const summary = { app, running: port !== undefined, healthy };
                     return Object.assign(summary, kind !== undefined ? { kind } : {}, url !== undefined ? { previewUrl: url } : {});
@@ -326,7 +326,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             );
             return { apps };
         }),
-        // The monorepo's workspace package dependency graph — drives the apps extension's Dependencies view.
+        // The monorepo's workspace package dependency graph, drives the apps extension's Dependencies view.
         packageGraph: i.packageGraph.handler(({ input }) => readPackageGraph(join(services.workspace.root, monorepoOf(input.repo)))),
         // Start one app instance's preview dev server (its own process + port + preview-<repo>--<app>-<id>.<zone> host).
         startApp: i.startApp.handler(async ({ input }) => {

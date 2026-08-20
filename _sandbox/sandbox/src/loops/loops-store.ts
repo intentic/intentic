@@ -13,18 +13,18 @@ import { jsonFile } from "../store/json-file.js";
 /* The loop manifest (<workspace>/.intentic/records/loops.json): every loop this workspace has run, with its iteration
  * history. Mirrors the automations store, down to the read-modify-write-through-jsonFile shape.
  *
- * KEYED BY CONVERSATION, because that is what a loop is — one conversation, driven repeatedly. A conversation
+ * KEYED BY CONVERSATION, because that is what a loop is, one conversation, driven repeatedly. A conversation
  * that is looped twice keeps ONE record and the second run replaces the first: the alternative is a growing list
  * of near-identical rows whose only distinguishing feature is a start time nobody reads, and the history a user
  * actually wants ("what did the loop on this agent do") is the current one.
  *
- * KEPT AFTER THE LOOP ENDS, unlike the turn journal beside it. A finished loop is not debris — it is the answer
+ * KEPT AFTER THE LOOP ENDS, unlike the turn journal beside it. A finished loop is not debris, it is the answer
  * to "why did this stop at iteration 4", and that answer is its iteration list. Bounded by RECORDS_KEPT rather
  * than by a lifetime, because a loop is a deliberate act (a person, or a workflow, started it) and there are
  * never many.
  */
 
-// How many loops the manifest remembers, newest first. Generous — a loop is rare compared to a turn, each
+// How many loops the manifest remembers, newest first. Generous, a loop is rare compared to a turn, each
 // record is a few hundred bytes, and the whole value of the file is being able to look back at one.
 const RECORDS_KEPT = 100;
 
@@ -33,13 +33,13 @@ const RECORDS_KEPT = 100;
 const ITERATIONS_KEPT = 50;
 
 export interface LoopsStore {
-    // Newest-started first — the order the list route serves and the UI renders.
+    // Newest-started first, the order the list route serves and the UI renders.
     readonly list: () => Promise<LoopRecord[]>;
     readonly get: (conversationId: string) => Promise<LoopRecord | undefined>;
     // Open a loop: replaces any previous record for that conversation and starts its history empty.
     readonly start: (loop: Loop, now: number) => Promise<LoopRecord>;
     // Append one iteration's outcome. A record that vanished underneath (the manifest was hand-edited, the
-    // conversation was discarded) drops the write rather than resurrecting it — the same rule recordRun follows.
+    // conversation was discarded) drops the write rather than resurrecting it, the same rule recordRun follows.
     readonly recordIteration: (conversationId: string, iteration: LoopIteration) => Promise<void>;
     // Close a loop. `detail` is why, for the states whose reason is not in their name.
     readonly settle: (conversationId: string, state: LoopState, now: number, detail?: string) => Promise<void>;
@@ -53,7 +53,7 @@ export const fileLoopsStore = (path: string): LoopsStore => {
         parse: (raw) => z.array(LoopRecordSchema).safeParse(raw).data,
         fallback: () => [],
     });
-    // Every mutation below is "find this conversation's record, replace it" — the find is by conversationId
+    // Every mutation below is "find this conversation's record, replace it", the find is by conversationId
     // because that is the key, and a record that isn't there is a no-op rather than an error.
     const amend = async (conversationId: string, change: (record: LoopRecord) => LoopRecord): Promise<void> => {
         await file.update((records) => {
@@ -83,7 +83,7 @@ export const fileLoopsStore = (path: string): LoopsStore => {
 };
 
 /* THE SECOND FILE (<workspace>/.intentic/config/loop-designs.json): the loops a user has SAVED, which is a manifest and
- * not a ledger. It shares this module with the record store above and nothing else — the split is the one
+ * not a ledger. It shares this module with the record store above and nothing else, the split is the one
  * workflows-store.ts draws for the same reason. A manifest is a handful of entries authored by a person and
  * changing at human speed; a ledger is written several times per iteration by a pump. Keeping them apart is
  * what stops a loop's fourth iteration write from rewriting the designs the user is editing in another tab.
@@ -94,7 +94,7 @@ export const fileLoopsStore = (path: string): LoopsStore => {
 export interface LoopDesignsStore {
     readonly list: () => Promise<LoopDesign[]>;
     readonly get: (id: string) => Promise<LoopDesign | undefined>;
-    // Atomic create-or-update with the caller's intent explicit — a create never overwrites, an update never
+    // Atomic create-or-update with the caller's intent explicit, a create never overwrites, an update never
     // invents. The same collision guard a workflow save keeps, and for the same reason: these ids are minted
     // from names, so two loops called "until tests pass" would collide in the ordinary course of use.
     readonly save: (design: LoopDesign, create: boolean) => Promise<"saved" | "conflict" | "missing">;

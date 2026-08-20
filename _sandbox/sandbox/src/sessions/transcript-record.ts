@@ -2,24 +2,24 @@ import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/pr
 import { join } from "node:path";
 import { type RestoredMessage, RestoredMessageSchema } from "@intentic/sandbox-contract";
 
-/* THE TRANSCRIPT RECORD — what each conversation actually said, written down by the daemon that streamed it.
+/* THE TRANSCRIPT RECORD, what each conversation actually said, written down by the daemon that streamed it.
  *
  * A turn's frames live in memory (turn-runs.ts) and are dropped minutes after it settles, so until now the only
  * durable copy of a conversation was the PROVIDER's session store. That premise is what made "the chat opens
  * empty" a recurring bug rather than an incident: the store is foreign, so reading it back needs the right key
- * into it, and every time that key moved — an archived agent's retired worktree path, an isolated turn filed
- * under the root project key, a runtime session swapped mid-conversation, the CLI's own 30-day sweep — some set
+ * into it, and every time that key moved, an archived agent's retired worktree path, an isolated turn filed
+ * under the root project key, a runtime session swapped mid-conversation, the CLI's own 30-day sweep, some set
  * of conversations went blank. A provider with no such store at all (codex/grok native, ACP) had no key to get
  * wrong: those chats could never open.
  *
  * One file per conversation, appended once per settled turn, on the HISTORY volume beside the journal and the
- * activity ledger — daemon-private, outside the agent's reach, and surviving the container rebuilds that recreate
+ * activity ledger, daemon-private, outside the agent's reach, and surviving the container rebuilds that recreate
  * everything under ~/. JSONL because the write is an append: a turn's messages are added without reading,
  * re-serializing and re-writing every turn before them.
  *
  * NOT the live path. A running turn is served from its frame log (clients attach and replay from a cursor); this
  * is what the conversation reads back as once nothing is running. A turn the daemon dies under is therefore
- * absent here — turn-resume re-runs it, and its replacement records normally. */
+ * absent here, turn-resume re-runs it, and its replacement records normally. */
 
 // Ids are filename-safe by construction (conversation ids are UUIDs); a name that isn't is ignored rather than
 // trusted into a path, the same rule turn-journal and the approvals queue apply.
@@ -27,23 +27,23 @@ const FILE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 export interface TranscriptRecord {
     /* Open the record BEFORE its next turn starts. `adopt` supplies history from before this record existed.
-     * This boundary is load-bearing: opening at settlement re-reads the provider store AFTER it has recorded
-     * the new turn, then appends the live frames for that same turn — duplicating every first turn and doing a
+     * This boundary matters: opening at settlement re-reads the provider store AFTER it has recorded
+     * the new turn, then appends the live frames for that same turn, duplicating every first turn and doing a
      * provider-store parse on the daemon's hottest completion path.
      *
      * AN EMPTY ADOPTION LEAVES THE RECORD UNOPENED, rather than writing the empty file that would say "this
      * conversation had no history". The two are indistinguishable on disk and only one of them is usually true:
      * adoption comes back empty for a conversation that genuinely has nothing behind it AND for one whose
      * provider store simply could not be read (an id the registry never learned, a session file swept, a
-     * runtime with no store to read at all). Writing the file made the second case permanent — every later open
-     * saw a file and returned early — and a conversation frozen that way carries nothing across a runtime
+     * runtime with no store to read at all). Writing the file made the second case permanent, every later open
+     * saw a file and returned early, and a conversation frozen that way carries nothing across a runtime
      * handoff for the rest of its life, because the record is what seeds the replacement session
      * (turn-transcript.ts → handoffHistory).
      *
      * The retry this buys is bounded: the first settled turn appends and creates the file, so a conversation
      * re-adopts at most once more, and only while it has produced nothing recordable at all. */
     readonly open: (conversationId: string, adopt: () => Promise<readonly RestoredMessage[]>) => Promise<void>;
-    /* Open a record as a COPY of another's first `keep` rows — how a branch begins. It is `open` with a
+    /* Open a record as a COPY of another's first `keep` rows, how a branch begins. It is `open` with a
      * different source of opening history: a branch is a new conversation, so nothing it should start with is
      * anywhere in its own namespace, and the turns it inherits are sitting in the record it was cut from.
      *
@@ -53,13 +53,13 @@ export interface TranscriptRecord {
     // Add one settled turn. Callers open first; append never consults a provider store.
     readonly append: (conversationId: string, messages: readonly RestoredMessage[]) => Promise<void>;
     // The whole conversation, oldest first. Empty ⇒ this conversation has no record (never written, or written
-    // under a daemon whose history volume is gone) — the caller decides what that means.
+    // under a daemon whose history volume is gone), the caller decides what that means.
     readonly read: (conversationId: string) => Promise<RestoredMessage[]>;
     // The record's byte size, undefined when no record exists. Append-only plus rewind's truncate, so this is a
     // version key in both directions: any change moves it, which is what lets the search fan-out cache what it
     // extracted instead of re-reading the whole store per keystroke (see agent-transcript.ts).
     readonly size: (conversationId: string) => Promise<number | undefined>;
-    /* How many messages the record holds — the position the NEXT turn will start at, which is the index its
+    /* How many messages the record holds, the position the NEXT turn will start at, which is the index its
      * checkpoint is filed under and the count a rewind to it keeps.
      *
      * Counts stored ROWS, not parsed messages, for the same reason truncate slices raw lines: `read` drops a
@@ -67,12 +67,12 @@ export interface TranscriptRecord {
      * next append actually lands. Reading without parsing is also what keeps this affordable on the turn-start
      * path, which is the only place it is called. */
     readonly count: (conversationId: string) => Promise<number>;
-    /* THE ONE OPERATION THAT SHORTENS A RECORD — a rewind, dropping every message after the one the user went
+    /* THE ONE OPERATION THAT SHORTENS A RECORD, a rewind, dropping every message after the one the user went
      * back to. Everything else here only ever appends, and this is deliberately the single exception rather
      * than a general edit: the file's whole value is being the daemon's own account of what it streamed.
      *
      * Rewritten whole through a temp file and a rename, for the reason store/json-file.ts spells out at
-     * length — a bare truncate-and-fill leaves a reader in that window holding half a transcript, and every
+     * length, a bare truncate-and-fill leaves a reader in that window holding half a transcript, and every
      * reader here treats an unparseable tail as "the record ends there". A rename is atomic within the
      * directory, so a concurrent read sees the whole old record or the whole new one.
      *
@@ -84,7 +84,7 @@ export interface TranscriptRecord {
 const lines = (messages: readonly RestoredMessage[]): string => messages.map((message) => `${JSON.stringify(message)}\n`).join("");
 
 // One stored line. An append killed mid-write leaves a torn final line, and a schema the contract has since
-// moved on from leaves an unparseable row: either must cost that row and not the conversation it sits in — the
+// moved on from leaves an unparseable row: either must cost that row and not the conversation it sits in, the
 // same argument agents-store.ts makes for the roster.
 const row = (line: string): RestoredMessage[] => {
     let parsed: unknown;
@@ -97,7 +97,7 @@ const row = (line: string): RestoredMessage[] => {
     return message.success ? [message.data] : [];
 };
 
-/* THE STORED ROWS, unparsed — the one notion of "position in this record" that read, count and truncate all
+/* THE STORED ROWS, unparsed, the one notion of "position in this record" that read, count and truncate all
  * share. They must agree: `read` drops a row it cannot parse, so counting or slicing parsed messages instead
  * would renumber everything after the first bad row, and the index a checkpoint was filed under would address
  * a different message than the one the user clicked. */
@@ -123,7 +123,7 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         // provider store still contains only older turns. `wx` makes two accidental openers converge without
         // either overwriting the other; the conversation mutex normally means there is only one.
         const opening = await adopt();
-        // Nothing to open WITH is not the same as nothing to open — see the interface. Left unopened so the
+        // Nothing to open WITH is not the same as nothing to open, see the interface. Left unopened so the
         // next turn asks again; the first settled turn's append is what finally creates the file.
         if (opening.length === 0) {
             return;
@@ -147,7 +147,7 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         if (opened) {
             return;
         }
-        // Raw rows, so this slices exactly where `count` and `truncate` do — a branch cut before row N keeps
+        // Raw rows, so this slices exactly where `count` and `truncate` do, a branch cut before row N keeps
         // the same N rows a rewind to that point would have kept, torn or schema-stale lines included.
         const rows = (await rawRows(join(dir, `${source}.jsonl`))).slice(0, keep);
         if (rows.length === 0) {

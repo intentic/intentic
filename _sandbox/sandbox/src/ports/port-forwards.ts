@@ -3,7 +3,7 @@ import { detectScheme, type PortScheme } from "./port-probe.js";
 import type { LoopbackHost } from "./port-scan.js";
 
 // The forward table behind the port-<slot>-<sandboxId>.<zone> hostnames: a fixed pool of slots mapped to
-// whatever ports the owner currently forwards. Slots — not port numbers — appear in hostnames so the
+// whatever ports the owner currently forwards. Slots, not port numbers, appear in hostnames so the
 // intentic-provided path mints at most one route per slot per sandbox lifetime while dev servers churn
 // ephemeral ports; own-Cloudflare rides its wildcard either way. In-memory only: forwards are user gestures,
 // and after a daemon restart a click simply re-forwards (usually landing the same, already-minted slot).
@@ -13,7 +13,7 @@ import type { LoopbackHost } from "./port-scan.js";
 
 export interface PortTarget {
     readonly port: number;
-    // The loopback address the listener is actually dialable at (a `localhost` bind can be ::1-only — Vite).
+    // The loopback address the listener is actually dialable at (a `localhost` bind can be ::1-only. Vite).
     readonly host: LoopbackHost;
     readonly scheme: PortScheme;
 }
@@ -24,7 +24,7 @@ export interface PortForwards {
     readonly forward: (port: number, host: LoopbackHost) => Promise<string>;
     readonly unforward: (port: number) => void;
     readonly slotOf: (port: number) => string | undefined;
-    // The proxy's resolver — also the LRU touch, so live preview traffic keeps its forward warm.
+    // The proxy's resolver, also the LRU touch, so live preview traffic keeps its forward warm.
     readonly targetOf: (slot: string) => PortTarget | undefined;
 }
 
@@ -60,15 +60,15 @@ export const createPortForwards = (
             });
             /* A forwarded port is reachable by anyone with the hostname until it is stopped, which is why the
              * shell rail shows it from every view. The forwarder's own tab learns this from the response; every
-             * OTHER tab — and every other member — used to wait out a 15s poll for a fact about who can reach
+             * OTHER tab, and every other member, used to wait out a 15s poll for a fact about who can reach
              * this sandbox. Published here, at the table, so an eviction (the slot pool is fixed, so forwarding
              * can un-forward someone else's port) is announced by the same line that causes it. */
             publishRuntimeChange("ports");
-            // Nothing answering — a server still booting, or WebSocket-only — forwards as http; the proxy 502s
+            // Nothing answering, a server still booting, or WebSocket-only, forwards as http; the proxy 502s
             // until the server responds anyway, and the next forward re-probes.
             const scheme = (await probe(port, host)) ?? "http";
             const entry = assigned.get(slot);
-            // Only apply if the slot still maps this port — an eviction/re-forward may have won meanwhile.
+            // Only apply if the slot still maps this port, an eviction/re-forward may have won meanwhile.
             if (entry?.port === port) {
                 assigned.set(slot, { ...entry, scheme });
             }

@@ -4,12 +4,12 @@ import { jsonDir } from "../store/json-dir.js";
 
 // The automation approvals queue (<workspace>/.intentic/records/approvals/<id>.json, one file per held wake): a
 // `requireApproval` automation enqueues here instead of waking; the owner approves/rejects via the /automations
-// routes. Per-file — never a shared manifest — because concurrent fires from different automations would race a
+// routes. Per-file, never a shared manifest, because concurrent fires from different automations would race a
 // read-modify-write (see json-dir.ts, which owns that cycle). The item snapshots the trigger payload so an
 // approved run replays exactly what fired, even across a daemon restart. The daemon mints the id; no secrets
 // live here.
 
-// The id is the FILENAME, so it is not in the body — the store grafts it back on read.
+// The id is the FILENAME, so it is not in the body, the store grafts it back on read.
 const ApprovalBodySchema = AutomationApprovalSchema.omit({ id: true });
 
 export interface ApprovalsStore {

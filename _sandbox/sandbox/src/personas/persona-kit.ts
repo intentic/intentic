@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { parseSkillFile, skillDocument } from "../settings/skill-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
-/* A PERSONA'S OWN KIT — the prompt it runs on, the skills it can reach, the tools that are its and nobody
+/* A PERSONA'S OWN KIT, the prompt it runs on, the skills it can reach, the tools that are its and nobody
  * else's. One folder per card, beside the card itself.
  *
  * IT IS A CLAUDE CODE PLUGIN, and that is the whole design rather than a convenient shape. The runtime already
@@ -18,7 +18,7 @@ import { statePath } from "../workspace/state-paths.js";
  * as the plugin capability's checkouts do. The two exceptions are PROMPT.md, which is ours because the card
  * points at it, and the skills listing, which the settings surface needs to show what a persona carries.
  *
- * SEPARATE FROM `.intentic/config/skills/`, deliberately. Those are the sandbox's skills — one list, one switch each,
+ * SEPARATE FROM `.intentic/config/skills/`, deliberately. Those are the sandbox's skills, one list, one switch each,
  * every session gets them. These belong to one card: a persona that reviews contracts should not put its
  * checklist in front of a turn that is fixing a build, and the way to say that is for the skill to live where
  * only that persona's turns look. The two do not share the enabled list for the same reason; a kit skill is on
@@ -36,8 +36,8 @@ export const personaSkillsRoot = (root: string, id: string): string => join(pers
 export const personaSkillFile = (root: string, id: string, name: string): string => join(personaSkillsRoot(root, id), name, "SKILL.md");
 
 /* The manifest the plugin loader requires before it will read anything else in the folder. Written by the
- * daemon rather than asked of the owner: it carries no decision — the name is the card's id and the
- * description is what the card is already called — and a folder that silently loads nothing because a JSON file
+ * daemon rather than asked of the owner: it carries no decision, the name is the card's id and the
+ * description is what the card is already called, and a folder that silently loads nothing because a JSON file
  * is missing is the worst possible failure for a feature whose whole promise is "put a skill here".
  *
  * Rewritten whenever the kit is touched, so renaming a persona's label does not leave the loader announcing the
@@ -62,7 +62,7 @@ export const ensurePersonaKit = async (root: string, id: string, label: string |
     await writeFile(path, next);
 };
 
-// The whole folder, when its card is deleted. A kit with no persona is unreachable — nothing can wear it — so
+// The whole folder, when its card is deleted. A kit with no persona is unreachable, nothing can wear it, so
 // leaving it would be leaving the owner's skills somewhere no list shows them.
 export const removePersonaKit = async (root: string, id: string): Promise<void> => {
     await rm(personaKitDir(root, id), { recursive: true, force: true });
@@ -75,7 +75,7 @@ export const removePersonaKit = async (root: string, id: string): Promise<void> 
 export const personaKitPlugin = async (root: string, id: string): Promise<string | undefined> =>
     (await readFile(manifestPath(root, id), "utf8").catch(() => undefined)) === undefined ? undefined : personaKitDir(root, id);
 
-/* The persona's system prompt, when it has written one. Undefined for a card that has not — which is every card
+/* The persona's system prompt, when it has written one. Undefined for a card that has not, which is every card
  * until somebody types into it, and the state the resolver reads as "follow the sandbox" whatever the card's
  * mode says. Trailing whitespace goes: the file is edited through a textarea and a stored prompt that differs
  * from the typed one only by a newline would read as a permanently unsaved change. */
@@ -95,7 +95,7 @@ export const removePersonaPrompt = async (root: string, id: string): Promise<voi
     await rm(personaPromptPath(root, id), { force: true });
 };
 
-/* One kit skill, as stored — the DIRECTORY name over any frontmatter `name:` that disagrees, because the
+/* One kit skill, as stored, the DIRECTORY name over any frontmatter `name:` that disagrees, because the
  * directory is what the loader keys the skill by and a row named something the agent never sees is a row that
  * lies. Undefined when there is no such skill, which the route turns into a 404 rather than an empty skill. */
 export const readPersonaSkill = async (root: string, id: string, name: string): Promise<PersonaSkill | undefined> => {
@@ -128,7 +128,7 @@ export const listPersonaSkills = async (root: string, id: string): Promise<Perso
 };
 
 // Written through the same composer the sandbox's own skills use, so a kit skill's frontmatter is one the
-// loader can always read — the failure this prevents is a saved skill that silently never loads.
+// loader can always read, the failure this prevents is a saved skill that silently never loads.
 export const writePersonaSkill = async (root: string, id: string, label: string | undefined, skill: PersonaSkill): Promise<void> => {
     await ensurePersonaKit(root, id, label);
     await mkdir(join(personaSkillsRoot(root, id), skill.name), { recursive: true });

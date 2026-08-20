@@ -20,15 +20,15 @@ import { detectHermes, planHermes } from "./hermes.js";
 import { probeHost, scanHost } from "./host-scan.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
-/* THE MIGRATION SURFACE'S COMPOSITION — the held upload, the plan/apply pair the routes call, and the six-
+/* THE MIGRATION SURFACE'S COMPOSITION, the held upload, the plan/apply pair the routes call, and the six-
  * function deps object that is everything a migration may write through.
  *
  * ONE PENDING MIGRATION AT A TIME, HELD IN MEMORY. The upload is a credential store (an .env, an auth.json),
- * so it never touches /work or /history — it lives in this object until the apply consumes it, the DELETE
+ * so it never touches /work or /history, it lives in this object until the apply consumes it, the DELETE
  * abandons it, or the daemon restarts (in which case the owner re-uploads; a plan costs seconds). A second
  * upload replaces the first: the owner changing their mind is the ordinary case, not a conflict.
  *
- * THE APPLY RE-DERIVES THE PLAN from the held files and honors the ticked ids against THAT — the wire plan the
+ * THE APPLY RE-DERIVES THE PLAN from the held files and honors the ticked ids against THAT, the wire plan the
  * browser rendered is never the input a write trusts (portability/restore.ts's rule, kept). Deterministic item
  * ids are what make the two derivations name the same things. */
 
@@ -40,7 +40,7 @@ interface PendingMigration {
 }
 
 /* The source registry: an anchor file that proves where the home directory starts, a detect that says "this is
- * mine", and the pure planner. Order matters only in that the first recognizing adapter wins — the anchors are
+ * mine", and the pure planner. Order matters only in that the first recognizing adapter wins, the anchors are
  * disjoint today, and a future archive that somehow carries both is answered by whichever is listed first. */
 const ADAPTERS = [
     { source: "hermes", anchor: "config.yaml", detect: detectHermes, plan: planHermes },
@@ -56,7 +56,7 @@ export interface Migrations {
     readonly plan: (body: ReadableStream<Uint8Array>, limit: number) => Promise<MigrationPlan>;
     // Every enrolled machine, and whether a setup is sitting on it. Probed on card render.
     readonly hosts: () => Promise<MigrationHost[]>;
-    // Read one machine's setup directly — the same plan, without the packing.
+    // Read one machine's setup directly, the same plan, without the packing.
     readonly scan: (hostId: string) => Promise<MigrationPlan>;
     readonly apply: (input: MigrationApply) => Promise<MigrationReport>;
     readonly abandon: () => boolean;
@@ -77,7 +77,7 @@ const migrationDeps = (services: Services): MigrationDeps => {
     return {
         readWorkspaceFile: (relPath) => services.files.read(workspacePath(relPath)),
         writeWorkspaceFile: (relPath, content) => services.files.write(workspacePath(relPath), content),
-        // The same trio the skills route performs, in the same order — text, enabled list, reconcile — so a
+        // The same trio the skills route performs, in the same order, text, enabled list, reconcile, so a
         // migrated skill is indistinguishable from one saved on the Skills page. The adapter already renamed
         // around baked names; an existing OWN skill of the same name is overwritten, which is the upsert the
         // route itself performs and is idempotent across a re-run.
@@ -90,7 +90,7 @@ const migrationDeps = (services: Services): MigrationDeps => {
         },
         upsertAutomation: (automation) => services.automations.upsert(automation),
         // The capability route's core sequence (handler apply, then the manifest entry), minus its streaming
-        // frames. Existing ids are refused — a migration lands beside nothing, never over something.
+        // frames. Existing ids are refused, a migration lands beside nothing, never over something.
         addCapability: async (capability) => {
             if ((await services.capabilities.get(capability.id)) !== undefined) {
                 throw new Error(`a "${capability.id}" connection already exists — rename or remove it first`);
@@ -101,7 +101,7 @@ const migrationDeps = (services: Services): MigrationDeps => {
             await services.capabilities.upsert(capability);
         },
         // The secrets route's own write, byte for byte: parse/re-serialize round-trip into desired-state/.env,
-        // mode 0600. Gated the same way too — no DevOps checkout, no env store.
+        // mode 0600. Gated the same way too, no DevOps checkout, no env store.
         setSecret: async (key, value) => {
             const desiredState = services.workspace.repos["desired-state"];
             if (!existsSync(desiredState)) {
@@ -154,12 +154,12 @@ export const createMigrations = (services: Services): Migrations => {
             const archive = await readForeignArchive(body, limit);
             const recognized = recognize(archive.files);
             if (recognized === undefined) {
-                // The archive's own contents, not the instruction they already followed — see diagnose.ts.
+                // The archive's own contents, not the instruction they already followed, see diagnose.ts.
                 throw new MigrationFormatError(diagnoseArchive(archive.files));
             }
             return hold(recognized.source, recognized.files, archive.skipped);
         },
-        /* Every enrolled machine with a one-call probe each, run concurrently — the card renders this before the
+        /* Every enrolled machine with a one-call probe each, run concurrently, the card renders this before the
          * owner has read anything, so a sleeping laptop must cost the render nothing but a row that says so. */
         hosts: async () =>
             await Promise.all(
@@ -208,7 +208,7 @@ export const createMigrations = (services: Services): Migrations => {
             pending = undefined;
             /* The same convergence the capability add route runs, once, after the loop: fold any fragments into
              * the composed overlay and teach the translator about new endpoints. Imported env secrets mirror to
-             * CI the way the secrets route mirrors them — fire and forget, warn on failure. */
+             * CI the way the secrets route mirrors them, fire and forget, warn on failure. */
             if (report.applied.some((entry) => entry.target === "capability")) {
                 await composeEnvironment(services);
                 await syncEndpointCompat(services);

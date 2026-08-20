@@ -1,7 +1,7 @@
 import type { Config } from "../env.config.js";
 import { postToPlatform } from "./platform-client.js";
 
-/* THE INSTALL DONATION, from the daemon's side — the one moment a non-service premium extension earns, and
+/* THE INSTALL DONATION, from the daemon's side, the one moment a non-service premium extension earns, and
  * the whole replacement for usage telemetry: nothing about what runs on this machine is ever reported, the
  * platform only sees the deliberate act of installing (or, at most monthly, updating) something worth paying
  * for. The platform owns the rules (membership, the credit spend, the monthly dedupe); what the daemon owes
@@ -9,7 +9,7 @@ import { postToPlatform } from "./platform-client.js";
  * refused and why. */
 
 export interface DonationOutcome {
-    // Whether the install may proceed — donated, or already supported this month.
+    // Whether the install may proceed, donated, or already supported this month.
     readonly ok: boolean;
     // Credits this call actually moved (0 on the already-supported path).
     readonly donated: number;

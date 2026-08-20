@@ -5,7 +5,7 @@
 // SOURCE IS GITHUB, ONE LANE. A release ships the moment its pipeline goes green: release-images.sh moves the
 // `stable` image tags and ship-stable.sh flips the Release's "latest" flag, both inside the same publish. That
 // leaves exactly ONE authoritative pointer — /releases/latest IS what ghcr.io/intentic/sandbox:stable resolves
-// to — so the check needs no channel to decide where to look. This used to be two lanes, `beta` reading the
+// to, so the check needs no channel to decide where to look. This used to be two lanes, `beta` reading the
 // newest release and `stable` reading the promoted one; the soak between them is gone and so is the split.
 // A pinned custom channel reads the same pointer, which is still the honest answer to what it would be offered.
 //
@@ -36,7 +36,7 @@ const tagOf = (release: unknown): string | undefined => {
     return typeof tag === "string" ? tag.replace(/^v/, "") : undefined;
 };
 
-// Fetch the latest released version once and update the cache. Never throws — any failure (offline, GitHub
+// Fetch the latest released version once and update the cache. Never throws, any failure (offline, GitHub
 // down, shape change) keeps the previous value so /info degrades to "no update known".
 export const refreshLatestVersion = async (): Promise<void> => {
     try {
@@ -53,10 +53,10 @@ export const refreshLatestVersion = async (): Promise<void> => {
 };
 
 // Boot-time background refresh (main.ts): warm the cache now, then hourly. The interval is unref'd so it never
-// holds the event loop open. Started only at boot — tests that build the app directly never trigger a fetch.
+// holds the event loop open. Started only at boot, tests that build the app directly never trigger a fetch.
 //
 // A dev build never checks. Its baked version is the unstamped 0.0.0 sentinel, which every published release
-// outranks, so the comparison below would report "0.0.0 → x.y.z available" forever — a permanent, unfixable
+// outranks, so the comparison below would report "0.0.0 → x.y.z available" forever, a permanent, unfixable
 // update prompt on a sandbox freshly built from the newest source, whose fix (recreate on :stable) would
 // actually move it BACKWARDS. Leaving the cache cold is what makes /info omit latest/updateAvailable entirely,
 // so both the hub card and the global banner stay hidden; it also spares GitHub an hourly request per dev

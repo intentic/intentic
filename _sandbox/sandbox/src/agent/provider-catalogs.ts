@@ -5,25 +5,25 @@ import type { GeminiCatalog } from "../gemini/gemini-catalog.js";
 import type { OpenCodeService } from "../grok/opencode.js";
 import type { KimiCatalog } from "../kimi/kimi-catalog.js";
 
-/* PROVIDER → CATALOG. The whole set of "what can this provider run", in one table — the same discipline
+/* PROVIDER → CATALOG. The whole set of "what can this provider run", in one table, the same discipline
  * adapter-registry.ts applies to serving a turn, applied to the other question every provider answers.
  *
  * It exists because three separate call sites had to fan back out over the providers to ask them all the
  * identical question, and each wrote its own chain to do it: the picker's route (five route factories, three of
  * them the same fifteen lines with a name swapped), the quick model's comparison (a five-arm ternary), and the
  * routed-turn model resolution (a four-arm if). Every one of them was a `switch` standing in for a lookup, and
- * each had to be edited to add a provider — so a sixth would have been a sixth vertical slice through the
+ * each had to be edited to add a provider, so a sixth would have been a sixth vertical slice through the
  * contract, the router, the service container and every test double.
  *
  * WHAT A CATALOG OWES is deliberately one method. The per-provider implementations behind it are genuinely
- * different — Claude probes the Agent SDK, Codex and Gemini walk a discovery ladder down to a persisted floor,
- * Kimi reads the translator's provider definitions, Grok goes through OpenCode — and they keep their own
+ * different. Claude probes the Agent SDK, Codex and Gemini walk a discovery ladder down to a persisted floor,
+ * Kimi reads the translator's provider definitions, Grok goes through OpenCode, and they keep their own
  * modules and their own extras (Codex's `record`, Claude's per-account probe). This is the seam they meet at,
  * not a replacement for any of them.
  *
  * NOT a fixed five. Endpoint capabilities also publish catalogs, and deliberately do NOT appear here: they are
  * user-created and unbounded, keyed by capability id, with no seed floor and a NOT_FOUND when the id names
- * nothing. Same shape, different question — see endpoints.routes.ts. */
+ * nothing. Same shape, different question, see endpoints.routes.ts. */
 export interface ProviderCatalog {
     // This provider's models (+ its default id), never empty. Order is the provider's own preference order.
     readonly models: () => Promise<{ models: Model[]; default: string }>;

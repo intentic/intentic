@@ -3,14 +3,14 @@ import webpush from "web-push";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 
-/* Persisted push state: this sandbox's VAPID keypair plus one entry per registered device — a browser's
+/* Persisted push state: this sandbox's VAPID keypair plus one entry per registered device, a browser's
  * web-push subscription or a native install's relay channel (see PushChannelSchema for the split).
  *
  * It lives on the HISTORY volume, not under /work/.intentic like the other manifests, for one reason: the
- * VAPID private key is a signing credential, and a relay channel's secret is a send capability — both are
+ * VAPID private key is a signing credential, and a relay channel's secret is a send capability, both are
  * inside the agent's reach anywhere under /work. A credential an agent could read is a credential that can
  * forge notifications to the owner's devices, so it sits where `rm -rf` and a stray Read both fail to find
- * it — the same argument that puts the snapshot history there.
+ * it, the same argument that puts the snapshot history there.
  *
  * The keypair is generated ONCE, lazily, on first use and never rotated: every live web-push channel is bound
  * to the public key it was created with, so rotating would silently orphan every browser until each
@@ -27,7 +27,7 @@ export interface PushStore {
     // to subscribe; the private half never leaves the daemon. Native channels never touch it.
     readonly keys: () => Promise<{ publicKey: string; privateKey: string }>;
     readonly list: () => Promise<readonly PushChannel[]>;
-    // Upsert by channelId — a device re-registering (a new permission grant, a rotated endpoint, a
+    // Upsert by channelId, a device re-registering (a new permission grant, a rotated endpoint, a
     // reinstalled app) replaces its row rather than accumulating duplicates that would each fire.
     readonly add: (channel: PushChannel) => Promise<void>;
     readonly remove: (id: string) => Promise<void>;
@@ -39,10 +39,10 @@ const StoredStateSchema = z.object({
     channels: z.array(PushChannelSchema).default([]),
 });
 
-/* Generate the VAPID pair on first use, and only ever inside `update` — which is the whole correctness of first
+/* Generate the VAPID pair on first use, and only ever inside `update`, which is the whole correctness of first
  * use. `/push/config` reads keys() and list() with Promise.all, so on a fresh sandbox two callers arrive
  * together; unserialized, both see "nothing generated yet" and each mints its own pair. The browser then
- * subscribes with whichever keys() returned while the daemon keeps whichever write landed last — so every send
+ * subscribes with whichever keys() returned while the daemon keeps whichever write landed last, so every send
  * to that browser is refused 403, the row is pruned as dead, and notifications silently never arrive on a
  * toggle that enabled cleanly. Serializing is what makes the pair generate exactly once.
  *
@@ -55,7 +55,7 @@ export const filePushStore = (path: string): PushStore => {
         // Absent or corrupt reads as unkeyed, and `keyed` mints a fresh pair. Losing channels is recoverable
         // (each device re-registers on next load); refusing to boot over it would not be.
         parse: (raw) => StoredStateSchema.safeParse(raw).data,
-        // Empty keys are the in-memory "not generated yet" marker — the schema requires non-empty ones, so
+        // Empty keys are the in-memory "not generated yet" marker, the schema requires non-empty ones, so
         // this shape never reaches disk.
         fallback: () => ({ publicKey: "", privateKey: "", channels: [] }),
         mode: 0o600,
@@ -77,7 +77,7 @@ export const filePushStore = (path: string): PushStore => {
             await file.update((state) => {
                 const channels = state.channels.filter((entry) => channelId(entry) !== id);
                 // Unchanged by reference when the id wasn't registered, so a stale unsubscribe writes
-                // nothing — and, in particular, does not mint a keypair for a sandbox that has none.
+                // nothing, and, in particular, does not mint a keypair for a sandbox that has none.
                 return channels.length === state.channels.length ? state : { ...state, channels };
             });
         },

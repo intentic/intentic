@@ -1,7 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { cardProjection } from "../agents/card-projection.js";
 
-/* WHAT THE FLEET CARD SAYS ABOUT A LOOP — the live half of a loop, kept here and nowhere else.
+/* WHAT THE FLEET CARD SAYS ABOUT A LOOP, the live half of a loop, kept here and nowhere else.
  *
  * The mechanism (an import-light map the registry reads by call, with a change notification) is
  * card-projection.ts; this is only the loop's use of it. The pump publishes at each iteration boundary and once

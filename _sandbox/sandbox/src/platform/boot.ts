@@ -9,7 +9,7 @@ import type { Logger } from "pino";
  * step` log line nobody outside the container reads. The browser, seeing a live /events stream, painted an
  * operable workspace from its persisted cache and parked every request the user then made against the gate.
  *
- * So the boot names itself. Steps are DECLARED up front — the whole list, pending entries included — and each
+ * So the boot names itself. Steps are DECLARED up front, the whole list, pending entries included, and each
  * transition is broadcast, which is what lets the browser show "4 of 11, loading the conversation registry"
  * and hold its reads until the gate opens. A boot that takes minutes has one slow step; the point of this
  * module is that the step gets named while it is still running, not after.
@@ -18,7 +18,7 @@ import type { Logger } from "pino";
  * one subsystem, it must not hold the origin down), so `failed` is recorded and the chain moves on.
  *
  * Declaring is what CLOSES the gate. A tracker nobody declared a chain on is converged from birth and every
- * route answers at once — the shape tests and the host-internal preview want, where there is no chain to wait
+ * route answers at once, the shape tests and the host-internal preview want, where there is no chain to wait
  * for. That also makes the gate independent of construction order: `converged` is read per request, so it
  * cannot matter whether the app was built before or after main() declared the chain. */
 
@@ -28,7 +28,7 @@ export interface BootStepDeclaration<Key extends string = string> {
 }
 
 // `Key` is how a caller that knows its whole chain up front (main.ts) gets the declaration checked by tsc
-// instead of by the throw below. Nothing forces it — a tracker with no chain (tests, the preview) stays on the
+// instead of by the throw below. Nothing forces it, a tracker with no chain (tests, the preview) stays on the
 // `string` default.
 export interface BootTracker<Key extends string = string> {
     // Resolves when the chain has converged. The data routes await this; /health and /events never do.
@@ -45,7 +45,7 @@ export interface BootTracker<Key extends string = string> {
     subscribe(listener: (progress: BootProgress) => void): () => void;
 }
 
-// Past this, a step is worth a log line of its own — a healthy boot stays quiet, and anything slower than this
+// Past this, a step is worth a log line of its own, a healthy boot stays quiet, and anything slower than this
 // is what someone reading the log is looking for.
 const SLOW_STEP_MS = 1_000;
 

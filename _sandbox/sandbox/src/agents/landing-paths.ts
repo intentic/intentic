@@ -2,7 +2,7 @@ import type { Services } from "../composition.js";
 import { agentRepoChanges } from "./agent-changes.js";
 import type { IsolatedAgent } from "./agents-store.js";
 
-/* WHAT A FINISHED AGENT CHANGED, as workspace-relative paths — the fact a landing rule narrows on when it says
+/* WHAT A FINISHED AGENT CHANGED, as workspace-relative paths, the fact a landing rule narrows on when it says
  * "hold anything that touches the database".
  *
  * WORKSPACE-RELATIVE, not repo-relative, and that is the whole reason this is a function rather than a `.map`

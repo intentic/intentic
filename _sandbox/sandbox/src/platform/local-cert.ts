@@ -8,7 +8,7 @@ import type { Config } from "../env.config.js";
 import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "./acme.js";
 import { postToPlatform } from "./platform-client.js";
 
-/* THE LOOPBACK CERTIFICATE — what lets a browser on this machine reach the daemon without Cloudflare.
+/* THE LOOPBACK CERTIFICATE, what lets a browser on this machine reach the daemon without Cloudflare.
  *
  * The shortcut needs HTTPS (Safari refuses http loopback from an HTTPS page as mixed content), HTTPS needs a
  * certificate, and a certificate needs a name a public CA will sign. `local-<id>.<zone>` is that name: a real
@@ -16,7 +16,7 @@ import { postToPlatform } from "./platform-client.js";
  * the platform is asked only to write two DNS records it alone has the token for (POST /sandbox/local-dns).
  *
  * FAILURE IS ORDINARY AND MUST BE QUIET. No zone, no platform, an own-Cloudflare sandbox, a CA that is down, a
- * rate limit — in every case the daemon serves the loopback listener in plain HTTP instead, the browser's
+ * rate limit, in every case the daemon serves the loopback listener in plain HTTP instead, the browser's
  * probe notices, and Chrome and Firefox still take the shortcut while Safari uses the tunnel. Nothing here is
  * allowed to delay boot or fail a sandbox, which is why it runs detached and logs rather than throws.
  *
@@ -29,7 +29,7 @@ const RENEW_BEFORE_MS = 30 * 24 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /* How soon to try again after a FAILED issuance, as opposed to the daily check that follows a good one. A
- * sandbox that has no certificate at all is serving its shortcut over plain http — which Safari refuses — so a
+ * sandbox that has no certificate at all is serving its shortcut over plain http, which Safari refuses, so a
  * day is far too long to sit on a failure that is usually transient.
  *
  * The floor on this interval is the CA's memory rather than politeness: a validation that missed leaves the
@@ -50,7 +50,7 @@ const pathsFor = (config: Config): { dir: string; cert: string; key: string; acc
     return { dir, cert: join(dir, "fullchain.pem"), key: join(dir, "key.pem"), account: join(dir, "account-key.pem") };
 };
 
-// The name this sandbox's loopback listener is certified for, or undefined when it cannot have one — no
+// The name this sandbox's loopback listener is certified for, or undefined when it cannot have one, no
 // connect token (nothing to derive an id from) or no public URL to read a zone off (a loopback/dev daemon).
 const localCertHostname = (config: Config): string | undefined => {
     const id = sandboxIdFromToken(config.connectToken);
@@ -58,8 +58,8 @@ const localCertHostname = (config: Config): string | undefined => {
     return id === undefined || zone === undefined ? undefined : localHostname(id, zone);
 };
 
-// The certificate on disk, if it is for the name we currently want and still has life in it. Anything else —
-// missing, unreadable, a different hostname (the sandbox moved zones), expiring — reads as "no certificate",
+// The certificate on disk, if it is for the name we currently want and still has life in it. Anything else,
+// missing, unreadable, a different hostname (the sandbox moved zones), expiring, reads as "no certificate",
 // which is the signal to issue.
 const readUsable = (config: Config, hostname: string, now: number): LocalCertificate | undefined => {
     const paths = pathsFor(config);
@@ -70,7 +70,7 @@ const readUsable = (config: Config, hostname: string, now: number): LocalCertifi
         if (Date.parse(parsed.validTo) - now < RENEW_BEFORE_MS) {
             return undefined;
         }
-        // checkHost covers the SAN properly — a substring match on the PEM would not.
+        // checkHost covers the SAN properly, a substring match on the PEM would not.
         return parsed.checkHost(hostname) === undefined ? undefined : { hostname, certificate, privateKey };
     } catch {
         return undefined;
@@ -92,7 +92,7 @@ const accountKeyOf = (config: Config): KeyObject => {
 };
 
 // Ask the platform to write (or withdraw) the DNS-01 record. The hostname is derived platform-side from our
-// connect token, so this carries only the value — a sandbox cannot ask for records outside its own name.
+// connect token, so this carries only the value, a sandbox cannot ask for records outside its own name.
 const relayChallenge = async (config: Config, value: string | undefined): Promise<void> => {
     const { status, json } = await postToPlatform(config, "/sandbox/local-dns", value === undefined ? {} : { challenge: value });
     if (status < 200 || status >= 300) {
@@ -101,7 +101,7 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
     }
 };
 
-/* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one —
+/* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one,
  * every branch is a normal state, never an error the caller has to handle. */
 const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
     const hostname = localCertHostname(config);
@@ -139,14 +139,14 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
 /* The certificate to serve the loopback listener with RIGHT NOW: whatever is already on disk, without waiting
  * on the network. Issuance is slow (a CA validating DNS takes tens of seconds) and the listener must be up
  * long before that, so boot reads, `startLocalCertificateRenewal` issues, and a newly-issued certificate is
- * picked up at the next restart — the sandbox is serving plain HTTP in the meantime, not nothing. */
+ * picked up at the next restart, the sandbox is serving plain HTTP in the meantime, not nothing. */
 export const readLocalCertificate = (config: Config): LocalCertificate | undefined => {
     const hostname = localCertHostname(config);
     return hostname === undefined ? undefined : readUsable(config, hostname, Date.now());
 };
 
 /* Keep the certificate fresh in the background: once at boot (which is what issues the first one), then on a
- * cadence that depends on how the last attempt went — daily when there is a certificate to renew, far sooner
+ * cadence that depends on how the last attempt went, daily when there is a certificate to renew, far sooner
  * when there is none to serve. Never rejects: a sandbox whose certificate cannot be obtained is a working
  * sandbox on plain HTTP. */
 export const startLocalCertificateRenewal = (config: Config, logger: Logger): { stop: () => void } => {

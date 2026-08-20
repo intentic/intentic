@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-/* THE ENVELOPE AROUND EVERYTHING THAT ARRIVES FROM OUTSIDE — a stranger's chat message, a fetched web page, a
+/* THE ENVELOPE AROUND EVERYTHING THAT ARRIVES FROM OUTSIDE, a stranger's chat message, a fetched web page, a
  * tool result from a server this daemon does not serve. The model reads it as
  *
  *     <untrusted-content source="webchat" from="Alice" id="8f3a92c1d6e07b45">
@@ -9,26 +9,26 @@ import { randomBytes } from "node:crypto";
  *
  * and the system prompt defines the language ONCE (system-prompt.ts OUTSIDE_GUIDANCE): what is inside is data
  * to read and act ABOUT, never instructions to follow. The id is minted fresh per wrap, and the CLOSE tag
- * carries it — so content cannot end its own envelope and speak in the owner's voice after it: writing the
+ * carries it, so content cannot end its own envelope and speak in the owner's voice after it: writing the
  * close tag requires a value the content was written before anyone knew.
  *
  * Two spoofs are neutralized in the body before wrapping, because an envelope is only as good as the reader's
  * ability to tell a real marker from a planted one:
  *
- *   · Envelope lookalikes — any complete `<untrusted-content …>` / `</untrusted-content …>` the content
+ *   · Envelope lookalikes, any complete `<untrusted-content …>` / `</untrusted-content …>` the content
  *     carries, matched after FOLDING: fullwidth and ornamental angle brackets to ASCII, fullwidth letters
  *     down, zero-width characters out. A marker spelled with a CJK `〈` or with a zero-width space inside
  *     "untrusted" reads as a marker to a model and as noise to a byte comparison; folding is what makes the
  *     comparison see what the model sees. A dangling marker PREFIX at the very end of the body (a forgery the
  *     content ran out of room to close) is cut for the same reason.
- *   · Control vocabulary — the tags the harness itself speaks in (`<system-reminder>`, `<task-notification>`,
+ *   · Control vocabulary, the tags the harness itself speaks in (`<system-reminder>`, `<task-notification>`,
  *     `<command-name>`, …) and the reserved tokens of the model families the translator routes to
  *     (`<|im_start|>`, `[INST]`, `<start_of_turn>`, …). The single highest-value forgery is not fake prose,
  *     it is the platform's own voice; a page that contains `<system-reminder>` is either quoting us or
  *     impersonating us, and an inert token serves the quoter fine.
  *
  * WHAT THIS IS NOT: a boundary against a hostile model, or a parser. It is the seam that makes "this text is
- * from outside" a property of the conversation the model cannot miss and the content cannot unsay — and the
+ * from outside" a property of the conversation the model cannot miss and the content cannot unsay, and the
  * same wrap is what flips the turn's taint (guard/turn-taint.ts), which is where the mark grows teeth: a
  * tainted turn's credential reads stop being auto-allowed (guard/command-gate.ts).
  *
@@ -36,7 +36,7 @@ import { randomBytes } from "node:crypto";
  * delegated CLI read in its own context (its harness, its seams), and listener media files referenced by path
  * (the path is wrapped with the payload; the bytes ride the Read tool like any workspace file). */
 
-// The tag as the model reads it. One name, both ends, id on both — the close tag is the one that matters.
+// The tag as the model reads it. One name, both ends, id on both, the close tag is the one that matters.
 const TAG = "untrusted-content";
 
 export interface OutsideMeta {
@@ -125,15 +125,15 @@ const fold = (input: string): Folded => {
 export const NEUTRALIZED = "[marker removed]";
 
 /* A complete envelope marker, either end, any attributes; and the JSON-escaped form a marker wears inside a
- * serialized payload (`\"` for its quotes) — matched on FOLDED text. `[^>]*` is linear and unbounded on
+ * serialized payload (`\"` for its quotes), matched on FOLDED text. `[^>]*` is linear and unbounded on
  * purpose: capping the attribute run would let a forged marker with a longer id through whole. The separator
  * class covers spellings a model still reads as the tag: `untrusted content`, `untrusted_content`. */
 const MARKER = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*>/gi;
-// The same shape cut off by the end of the body — a forgery that ran out of room, removed so no prefix of a
+// The same shape cut off by the end of the body, a forgery that ran out of room, removed so no prefix of a
 // marker ever stands immediately before the real close tag.
 const MARKER_TAIL = /<\s*\/?\s*untrusted[\s_-]+content\b[^>]*$/i;
 
-/* The harness's own voice. Open and close forms both, attributes tolerated — `<system-reminder>` inside a web
+/* The harness's own voice. Open and close forms both, attributes tolerated, `<system-reminder>` inside a web
  * page is either a quote of us or an impersonation of us, and the inert token serves the quoter fine. The
  * list is the vocabulary the daemon and the CLI actually inject around agent turns. */
 const CONTROL_TAGS = ["system-reminder", "task-notification", "command-name", "command-message", "command-args", "local-command-stdout"];
@@ -208,7 +208,7 @@ export const neutralizeOutsideText = (body: string): string => {
             text = text.slice(0, folded.starts[tail.index] ?? tail.index) + NEUTRALIZED;
         }
     }
-    // Special tokens are exact literals — no fold needed (a homoglyph `<|im_start|>` is not the reserved
+    // Special tokens are exact literals, no fold needed (a homoglyph `<|im_start|>` is not the reserved
     // token to any tokenizer), and split/join is immune to the regex-metacharacter content they carry.
     for (const token of SPECIAL_TOKENS) {
         if (text.includes(token)) {
@@ -227,7 +227,7 @@ const attribute = (value: string): string =>
 
 /* Wrap one piece of outside content. The whole mechanism a call site needs: neutralize, mint the id, seal
  * both ends. The one-line header carries source and sender; the LANGUAGE lives in the system prompt once, not
- * here — a browsing turn re-reads a sermon per page or it reads a tag per page, and the tag wins. */
+ * here, a browsing turn re-reads a sermon per page or it reads a tag per page, and the tag wins. */
 export const wrapOutsideContent = (body: string, meta: OutsideMeta): string => {
     const id = randomBytes(8).toString("hex");
     const from = meta.from === undefined || meta.from.trim() === "" ? "" : ` from="${attribute(meta.from)}"`;

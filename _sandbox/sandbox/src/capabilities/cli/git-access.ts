@@ -10,17 +10,17 @@ import type { ConnectorHook } from "./connector-hooks.js";
 // the owner can `git pull`/`git push` in the interactive terminal (Ctrl+`) and the agent can clone/push too. Two
 // INDEPENDENT transports, both landing under the shared root HOME (terminal + agent + daemon):
 //   - HTTPS (always): a `~/.git-credentials` line so repos cloned over https (what the app clones) pull/push with
-//     no extra scope — this alone makes git work, so it's set up FIRST and never blocks on ssh.
+//     no extra scope, this alone makes git work, so it's set up FIRST and never blocks on ssh.
 //   - SSH (best-effort): an ed25519 key generated in the sandbox and registered to the account via the token. Only
 //     once the key is known to be ON the account do we write the ssh-config alias (`IdentitiesOnly yes` forces that
 //     key), so `git clone ssh://git@<host>/owner/repo` authenticates. Registration needs a key-write permission
 //     (github: classic PAT `write:public_key` OR a fine-grained token with "Git SSH keys: write"; gitlab: the api
-//     scope) — and when it's refused we ask ssh whether the key is there anyway, because the warning's own remedy
+//     scope), and when it's refused we ask ssh whether the key is there anyway, because the warning's own remedy
 //     is for the owner to add it by hand, and only ssh can see that they did.
 //   - Key genuinely absent → we DON'T leave a config forcing an unregistered key (that's the
 //     `Permission denied (publickey)` trap). Instead a git `insteadOf` rewrite maps `ssh://git@<host>/` and
 //     `git@<host>:` onto https, so ssh-form remotes keep working over the https credential, and a warning names how
-//     to enable native ssh. The two paths clear each other's artifacts, so a fixed token — or a hand-added key —
+//     to enable native ssh. The two paths clear each other's artifacts, so a fixed token, or a hand-added key,
 //     flips back to native ssh on the next re-add.
 // Keyed by host, so github.com and a self-hosted gitlab coexist. The key title is fixed so re-apply is idempotent.
 //
@@ -59,7 +59,7 @@ export const gitHostOf = (config: CliConfig): GitHost => {
 export interface GitAccessDeps {
     readonly uploadKey: (host: GitHost, publicKey: string, title: string) => Promise<void>;
     readonly deleteKey: (host: GitHost, title: string) => Promise<void>;
-    // Whether the host already accepts this key — asked of ssh itself, not of the account API, so a token that
+    // Whether the host already accepts this key, asked of ssh itself, not of the account API, so a token that
     // may not even READ the key list still gets a truthful answer.
     readonly keyAuthenticates: (host: GitHost, keyPath: string) => Promise<boolean>;
 }
@@ -73,7 +73,7 @@ const fileExists = (path: string): Promise<boolean> =>
 const credentialsPath = (): string => join(homedir(), ".git-credentials");
 
 // Upsert the https credential line for this host (rewrites any prior line for the host, e.g. a rotated token) and
-// make sure the `store` helper reads it. mode 0600 — it holds the token in cleartext, so the line itself is a
+// make sure the `store` helper reads it. mode 0600, it holds the token in cleartext, so the line itself is a
 // plain fs write, never a visible command; only the secret-free `git config` runs in the terminal.
 const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
     await exec("git", ["config", "--global", "credential.helper", "store"]);
@@ -92,7 +92,7 @@ const removeHttpsCredential = async (host: GitHost): Promise<void> => {
     await writeFile(credentialsPath(), kept.length > 0 ? `${kept.join("\n")}\n` : "", { mode: 0o600 });
 };
 
-// Generate the key pair once (stable identity across retries — regenerating would orphan an already-registered
+// Generate the key pair once (stable identity across retries, regenerating would orphan an already-registered
 // key) and return its public half. Registration is NOT done here: it's attempted every apply so a scope-fixed
 // re-add actually registers instead of the local key's presence masking that it never landed on the account.
 const ensureKeyPair = async (host: GitHost, exec: ExecInTerminal): Promise<string> => {
@@ -126,7 +126,7 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
             headers: { ...githubHeaders(host.token), "Content-Type": "application/json" },
             body: JSON.stringify({ title, key: publicKey }),
         });
-        // 422 = "key is already in use" — the same public key was registered before; treat as success (idempotent).
+        // 422 = "key is already in use", the same public key was registered before; treat as success (idempotent).
         if (!response.ok && response.status !== 422) {
             throw new Error(`GitHub SSH key upload failed (${response.status}): ${await response.text().catch(() => "")}`);
         }
@@ -137,14 +137,14 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
         headers: { "PRIVATE-TOKEN": host.token, "Content-Type": "application/json" },
         body: JSON.stringify({ title, key: publicKey }),
     });
-    // 400 = "fingerprint has already been taken" — GitLab's idempotent-success equivalent.
+    // 400 = "fingerprint has already been taken". GitLab's idempotent-success equivalent.
     if (!response.ok && response.status !== 400) {
         throw new Error(`GitLab SSH key upload failed (${response.status}): ${await response.text().catch(() => "")}`);
     }
 };
 
 // Best-effort: a stale token or an offline host must not block local teardown, so every failure is swallowed.
-// ponytail: matches keys by our fixed title; a user who renamed the key on the account keeps it — acceptable.
+// ponytail: matches keys by our fixed title; a user who renamed the key on the account keeps it, acceptable.
 const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
     try {
         const listHeaders = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
@@ -157,14 +157,14 @@ const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
             await fetch(`${host.apiBase}/user/keys/${key.id}`, { method: "DELETE", headers: listHeaders });
         }
     } catch {
-        // swallow — see comment above.
+        // swallow, see comment above.
     }
 };
 
 // Does the host let this key in? `-T` asks for no command, `IdentitiesOnly` + `-i` offer exactly the key we
 // care about (never an agent's), `BatchMode` keeps a passphrase or a host-key question from hanging a boot.
 // Read out of the OUTPUT rather than the exit code: both providers refuse a shell, so github answers its
-// "Hi <user>!" greeting with exit 1 — indistinguishable from a genuine refusal by code alone.
+// "Hi <user>!" greeting with exit 1, indistinguishable from a genuine refusal by code alone.
 const keyAuthenticatesReal = async (host: GitHost, keyPath: string): Promise<boolean> => {
     const args = [
         "-o",
@@ -192,7 +192,7 @@ const realDeps: GitAccessDeps = { uploadKey: uploadKeyReal, deleteKey: deleteKey
 // `https://<host>/owner/repo`, which the ~/.git-credentials line then authenticates.
 const rewriteKey = (host: GitHost): string => `url.https://${host.host}/.insteadOf`;
 
-// Whether the rewrite is in place, asked of git itself rather than read out of ~/.gitconfig — the value can
+// Whether the rewrite is in place, asked of git itself rather than read out of ~/.gitconfig, the value can
 // arrive through an include, and this is the same resolution the remote will get. An absent key exits 1, which
 // execFile rejects on, so "no rewrite" arrives as a rejection rather than as empty output.
 const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
@@ -201,7 +201,7 @@ const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
         () => false,
     );
 
-// Route ssh-form remotes over https — the fallback when a native ssh key can't be registered. Two url forms need
+// Route ssh-form remotes over https, the fallback when a native ssh key can't be registered. Two url forms need
 // covering; --replace-all seeds a single value (creating the key if absent), --add appends the second, so a
 // re-apply stays at exactly two entries (idempotent).
 const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
@@ -210,7 +210,7 @@ const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<
 };
 
 // Drop the rewrite (native ssh got registered, or teardown). Asked first, because `git config --unset-all`
-// exits 5 when the option isn't there — and this is the LAST thing a successful add runs, so swallowing that
+// exits 5 when the option isn't there, and this is the LAST thing a successful add runs, so swallowing that
 // code still left the user's terminal ending on a red "✗ exit 5" epitaph for an install that worked. The probe
 // is a read (directExec, invisible); only a removal that has something to remove shows up as a command.
 const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
@@ -224,7 +224,7 @@ const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise
 // registered and ssh-form remotes were routed onto https instead. HTTPS is configured first and unconditionally
 // so git works regardless of the ssh outcome; the ssh-config alias is written ONLY once the key is known to be on
 // the account, so we never force one that isn't (the `Permission denied (publickey)` trap). `exec` is the caller's
-// visible terminal runner — every git config / ssh-keygen shows in the capability's job session (all argv here is
+// visible terminal runner, every git config / ssh-keygen shows in the capability's job session (all argv here is
 // secret-free).
 export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
     await ensureHttpsCredential(host, exec);
@@ -234,12 +234,12 @@ export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: 
         (err: unknown) => err,
     );
     // A refused upload does NOT settle it. sshRegistrationWarning's second line asks the owner to add the key to
-    // their account by hand, and for a token that can't manage keys that is the whole remaining path — but the
+    // their account by hand, and for a token that can't manage keys that is the whole remaining path, but the
     // upload is the only thing this used to ask, so an owner who did exactly as told still got https, on that
     // apply and on every rebuild after it (restore reads the alias, which never got written). So ask ssh instead
     // of assuming: whoever put the key on the account, it is on the account.
     if (refusal !== undefined && !(await deps.keyAuthenticates(host, hostKeyPath(host.host)))) {
-        // Genuinely not there: don't leave a config forcing the unregistered key — drop any stale alias (keeping
+        // Genuinely not there: don't leave a config forcing the unregistered key, drop any stale alias (keeping
         // the keypair for a later scope-fixed re-add) and route ssh-form remotes over the working https credential.
         await rm(hostConfPath(host.host), { force: true });
         await enableHttpsRewrite(host, exec);
@@ -251,12 +251,12 @@ export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: 
     return undefined;
 };
 
-// The boot half of setupGitAccess: re-derive only what the container's ephemeral HOME lost — the credential
+// The boot half of setupGitAccess: re-derive only what the container's ephemeral HOME lost, the credential
 // helper + the https line, and either the ssh alias (whose ~/.ssh/config Include died with HOME) or the https
 // rewrite. Deliberately WITHOUT an account call: a persisted keypair is already registered, so re-uploading it
 // on every boot would only pile up dead "intentic-sandbox" keys on the user's account, and a boot that happens
 // to have no network yet would misread the failure as "registration refused" and silently drop to https. A
-// MISSING keypair is the one case that needs the full apply, upload included — a sandbox that never wired this
+// MISSING keypair is the one case that needs the full apply, upload included, a sandbox that never wired this
 // connector up, or whose managed dir wasn't on the volume yet.
 export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
     if (!(await fileExists(hostKeyPath(host.host)))) {
@@ -274,9 +274,9 @@ export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps
     return undefined;
 };
 
-// Whether this connection's container-local git access is actually in place — BOTH halves of it. The https
+// Whether this connection's container-local git access is actually in place. BOTH halves of it. The https
 // credential line alone is not working git access: the remotes in this workspace are ssh-form
-// (`git@<host>:owner/repo`), and those reach the account over one of the two transports setupGitAccess wires —
+// (`git@<host>:owner/repo`), and those reach the account over one of the two transports setupGitAccess wires,
 // the registered key behind its ssh alias, or the insteadOf rewrite that routes them onto the https credential.
 // With the credential written and NEITHER route present, `git push` answers `Permission denied (publickey)`
 // under a card reading active; that is precisely the state another daemon repointing ~/.ssh/intentic-hosts
@@ -287,7 +287,7 @@ export const gitAccessWired = async (host: GitHost): Promise<boolean> => {
     if (!current.split("\n").some((entry) => entry.endsWith(`@${host.host}`))) {
         return false;
     }
-    // The alias is written only after a successful registration, so its presence claims native ssh — which is
+    // The alias is written only after a successful registration, so its presence claims native ssh, which is
     // only true while the key it names is still there to be offered.
     if (await fileExists(hostConfPath(host.host))) {
         return fileExists(hostKeyPath(host.host));
@@ -320,6 +320,6 @@ export const gitAccessHook: ConnectorHook = {
         return undefined;
     },
     remove: (config, exec) => teardownGitAccess(gitHostOf(config), exec),
-    // Nothing to restore with git access off — the connector is then env + skill, both already on /work.
+    // Nothing to restore with git access off, the connector is then env + skill, both already on /work.
     restore: async (config, exec) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec) : undefined),
 };

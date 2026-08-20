@@ -16,14 +16,14 @@ import { listenerState } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 
 // The control surface for an extension's realtime-listener gateway process (e.g. ext-discord). The daemon holds
-// no provider connection itself — the gateway does — so these four routes are the seam: the gateway reconciles
+// no provider connection itself, the gateway does, so these four routes are the seam: the gateway reconciles
 // via /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),
 // and reports fatal failures + live status. All are reached with the per-boot panel token (app.ts's
 // x-intentic-panel branch), server-side only, so /state returning connector secrets is not a new exposure.
 
 export const createListenerRoutes = (services: Services, wake: WakeFn = streamAgent) => ({
     // The reconcile feed: the enabled listener automations for this provider + its connector capabilities WITH
-    // full config (secret bot tokens included — the gateway needs them to connect). The gateway polls this on
+    // full config (secret bot tokens included, the gateway needs them to connect). The gateway polls this on
     // its interval and connects/disconnects to match.
     state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => c.json(await listenerState(services, c.req.param("provider"))),
 

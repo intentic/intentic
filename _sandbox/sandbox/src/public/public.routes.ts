@@ -12,12 +12,12 @@ import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public
 
 /* The /public routes: the owner's side of the outbox, and the only authenticated view of it.
  *
- * `list` is the honest inventory — every file with its URL, and for the ones a guard refuses, the reason. That
+ * `list` is the honest inventory, every file with its URL, and for the ones a guard refuses, the reason. That
  * pairing is the whole point: the serve path tells a stranger nothing (every refusal is the same 404, so the
  * outbox can't be probed), which only works because the publisher has a screen that tells them everything.
  *
  * `publish` COPIES. Moving would mean sharing a build output silently removed it from the repo that built it,
- * and the one gesture users repeat most is republishing the same path after a rebuild — which overwrites, by
+ * and the one gesture users repeat most is republishing the same path after a rebuild, which overwrites, by
  * design, so a link that was handed out keeps pointing at the current version. */
 
 export type PublicRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "workspace">;
@@ -39,7 +39,7 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             ...(base === undefined ? {} : { url: base }),
             /* Shared conversations are in the outbox but not in this list. They are published by a different
              * gesture, listed with their own titles and dates by the /share routes, and withdrawn by their own
-             * action — so a row here would be a second, worse handle on the same thing. And there would be
+             * action, so a row here would be a second, worse handle on the same thing. And there would be
              * hundreds: the page's assets are one syntax grammar per file, and a file list that is nine parts
              * machinery is a file list nobody reads. */
             files: (await listPublicFiles(root))
@@ -76,12 +76,12 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             }
             const name = basename(source);
             // The outbox's one reserved name. A file published here would land among the shared conversations
-            // (or, publishing a directory, on top of them) and be invisible in the list above — and the /share
+            // (or, publishing a directory, on top of them) and be invisible in the list above, and the /share
             // routes would then be maintaining a tree somebody else is writing into.
             if (name === SHARE_DIR) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${SHARE_DIR}" is where shared conversations are published — rename it first` });
             }
-            // Refuse the shapes the serve path would refuse anyway — at the gesture, where there is someone to
+            // Refuse the shapes the serve path would refuse anyway, at the gesture, where there is someone to
             // read the reason, instead of silently later when a recipient reports a dead link.
             const blocked = blockByName(name);
             if (blocked !== undefined) {
@@ -89,7 +89,7 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             }
             await mkdir(root, { recursive: true });
             await cp(source, join(root, name), { recursive: true, force: true });
-            // Almost always a memoized no-op — the boot sweep pre-mints the outbox label. It pays a platform
+            // Almost always a memoized no-op, the boot sweep pre-mints the outbox label. It pays a platform
             // call only when boot ran with the platform unreachable, which is exactly when the first publish
             // would otherwise hand out a hostname that does not resolve.
             await services.ensurePreviewRoutes([publicLabel(slot)]);

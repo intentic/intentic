@@ -1,5 +1,5 @@
-/* READING AN OVERLAY FRAGMENT THE WAY A PERSON WOULD — its name, what it is for, and which commands it puts on
- * PATH — so the Environment tab can show contents instead of a build recipe.
+/* READING AN OVERLAY FRAGMENT THE WAY A PERSON WOULD, its name, what it is for, and which commands it puts on
+ * PATH, so the Environment tab can show contents instead of a build recipe.
  *
  * Everything here is TEXT IN, FACTS OUT: no filesystem, no probing, no services. That is deliberate. Which
  * binaries a block installs and which sentence explains it are exactly the judgements that rot silently, so they
@@ -7,13 +7,13 @@
  * where nothing would ever notice them going stale. It is the same reasoning packs.ts states for its own two
  * inferred properties.
  *
- * The one thing NOT inferred here is a version. A block's install line is a bad source for one — half of them
+ * The one thing NOT inferred here is a version. A block's install line is a bad source for one, half of them
  * pin nothing at all (`bun`, `rustup --default-toolchain stable`), and a number that IS pinned still describes
  * what a rebuild would install rather than what the container currently has. So this module's job ends at
  * naming CANDIDATE commands; asking them their version is version-probe.ts's, and what comes back is the only
  * version anybody is shown. */
 
-// How the daemon delimits the named blocks inside the custom section — one per thing the agent asked for, named
+// How the daemon delimits the named blocks inside the custom section, one per thing the agent asked for, named
 // after the draft file it came from (see environment.ts readDrafts).
 const BLOCK_MARKER = /^#\s*----\s*(.+?)\s*----\s*$/;
 
@@ -24,7 +24,7 @@ export interface OverlayBlock {
     readonly body: string;
 }
 
-/* Split the custom section into the blocks the agent wrote. Text before the first marker is a block too — an
+/* Split the custom section into the blocks the agent wrote. Text before the first marker is a block too, an
  * older custom section is one unnamed run of instructions, and dropping it would under-report the environment
  * rather than merely render it plainly. */
 export const splitBlocks = (content: string): OverlayBlock[] => {
@@ -65,7 +65,7 @@ const isDirective = (text: string): boolean => text.startsWith("intentic:");
 
 /* THE FRAGMENT NAMING ITS OWN SOURCE, which earns its place in the file and not in this view. A capability
  * writes "docker capability: this directive grants dockerd the privileges it needs", because in a composed
- * Dockerfile nothing else says where a block came from — but the row is already titled `docker`, already
+ * Dockerfile nothing else says where a block came from, but the row is already titled `docker`, already
  * grouped under "From your capabilities", and already attributed, so the prefix is the same word a fourth
  * time. Anchored on the label the daemon knows, so prose that merely happens to start with a colon is left
  * alone. */
@@ -90,7 +90,7 @@ const isBullet = (text: string): boolean => /^[•*-]\s/.test(text) || /^\s+/.te
  * edits the recipe, not an explanation of what the thing is for.
  *
  * `source` is whatever the daemon already knows pulled the block in ("docker capability"), so an opening line
- * that names it can come off — see withoutSource. */
+ * that names it can come off, see withoutSource. */
 export const blockProse = (body: string, source?: string): string => {
     const paragraphs: string[] = [];
     let current: string[] = [];
@@ -124,7 +124,7 @@ export const blockProse = (body: string, source?: string): string => {
 };
 
 /* Abbreviations whose full stop does not end a sentence. Without these the one-line purpose truncates mid-clause
- * at the first "e.g." — which is where these fragments reach for an example most often. */
+ * at the first "e.g.", which is where these fragments reach for an example most often. */
 const ABBREVIATIONS = ["e.g", "i.e", "etc", "vs", "cf", "no", "approx"];
 
 /* WHERE THE FIRST SENTENCE ENDS. A full stop counts only when what follows looks like a new sentence, which
@@ -142,16 +142,16 @@ const firstSentenceEnd = (text: string): number => {
     return -1;
 };
 
-/* THE ONE LINE THAT GOES ON THE ROW — the opening sentence, with a trailing parenthetical dropped.
+/* THE ONE LINE THAT GOES ON THE ROW, the opening sentence, with a trailing parenthetical dropped.
  *
- * These explanations open with the point and then qualify it at length ("ffmpeg — encoding screen recordings
+ * These explanations open with the point and then qualify it at length ("ffmpeg, encoding screen recordings
  * (Playwright records VP8/WebM; its bundled ffmpeg cannot encode H.264, so …)"). The qualification is worth
  * keeping and worth not leading with, so it stays in the prose behind the disclosure and the row gets the part
  * somebody reads. Same trade the Computers rows make with a machine's OS string. */
 /* Beyond this, a "one-line purpose" is two or three lines of the row and stops being one. Not every opening
- * sentence is short — "The desktop app is a Tauri 2 shell, so its whole native half is Rust that nothing in this
+ * sentence is short, "The desktop app is a Tauri 2 shell, so its whole native half is Rust that nothing in this
  * image can compile: there is no cargo, no pkg-config, and no webview headers." is one sentence and three
- * clauses — so an over-long one is cut back to its first clause, which is the claim, and the clauses that
+ * clauses, so an over-long one is cut back to its first clause, which is the claim, and the clauses that
  * qualify it stay in the prose behind the disclosure with everything else. */
 const PURPOSE_LIMIT = 130;
 
@@ -162,7 +162,7 @@ export const purposeOf = (prose: string): string | undefined => {
     }
     const end = firstSentenceEnd(paragraph);
     const sentence = end === -1 ? paragraph : paragraph.slice(0, end);
-    // A trailing qualification is the commonest shape of all ("ffmpeg — encoding screen recordings (Playwright
+    // A trailing qualification is the commonest shape of all ("ffmpeg, encoding screen recordings (Playwright
     // records VP8/WebM …)"), and the row wants the part before it. Kept when dropping it leaves too little to
     // read, since a bare "Bun." is worse than a long line.
     const trimmed = sentence.replace(/\s*\([^()]*\)\s*\.?$/, ".").trim();
@@ -176,11 +176,11 @@ export const purposeOf = (prose: string): string | undefined => {
 
 /* WHAT THE DISCLOSURE SHOWS: the whole explanation, once, from the top.
  *
- * It used to be the REMAINDER — the prose with the row's line sliced off the front — which only works while the
+ * It used to be the REMAINDER, the prose with the row's line sliced off the front, which only works while the
  * two are cut from the same place. They are not: `purposeOf` drops a trailing parenthetical and cuts an
  * over-long sentence back to its first clause, so the remainder still began with the sentence the row was
  * showing, and the view (which stacks the row's line above the disclosure) printed the opening twice, once
- * trimmed and once whole. Slicing was the wrong half of the problem to solve — the reader who opens a row wants
+ * trimmed and once whole. Slicing was the wrong half of the problem to solve, the reader who opens a row wants
  * the paragraph as it was written, and the row's line is a summary OF it rather than a first instalment of it.
  * So the disclosure is now the prose verbatim, and the view stops stacking. Nothing more than the row already
  * says ⇒ nothing to disclose. */
@@ -189,7 +189,7 @@ export const detailOf = (prose: string, purpose: string | undefined): string | u
     return whole === "" || whole === purpose ? undefined : whole;
 };
 
-// Everything below the leading comment — the commands themselves, for the reader who wants to see exactly what
+// Everything below the leading comment, the commands themselves, for the reader who wants to see exactly what
 // runs. Comments interleaved with the instructions stay: there they explain a specific line.
 export const blockCommands = (body: string): string => {
     const lines = body.split("\n");
@@ -208,7 +208,7 @@ export interface BlockTools {
     // Commands worth asking for a version, best evidence first.
     readonly candidates: string[];
     // Every package the block installs. Whatever is left after the probing stage names the real commands is
-    // plumbing — libraries, headers, meta-packages — and gets counted rather than listed.
+    // plumbing, libraries, headers, meta-packages, and gets counted rather than listed.
     readonly packages: string[];
 }
 
@@ -233,7 +233,7 @@ export const blockTools = (block: OverlayBlock): BlockTools => {
     for (const match of body.matchAll(/(?:^|&&|\|\||;)\s*([a-z][a-z0-9+._-]*)\s+(?:--version|-version|version)\b/gm)) {
         add(match[1]);
     }
-    // 2. A file installed into a bin directory — `install …/whisper-cli /usr/local/bin/whisper-cli`, `mv … /usr/local/bin/bun`.
+    // 2. A file installed into a bin directory, `install …/whisper-cli /usr/local/bin/whisper-cli`, `mv … /usr/local/bin/bun`.
     for (const match of body.matchAll(/(?:\/usr\/local\/bin|\/usr\/bin)\/([a-z][a-z0-9+._-]*)/g)) {
         add(match[1]);
     }
@@ -241,7 +241,7 @@ export const blockTools = (block: OverlayBlock): BlockTools => {
     for (const match of body.matchAll(/npm\s+(?:install|i)\s+-g\s+((?:@[^\s@]+\/)?[^\s@]+)/g)) {
         add(match[1]?.split("/").at(-1));
     }
-    // 4. The apt package list — a weak signal on its own, but it catches the single-package blocks
+    // 4. The apt package list, a weak signal on its own, but it catches the single-package blocks
     //    (`apt-get install ffmpeg`) that are the most common shape there is. Stops at the next `&&` so the
     //    cleanup half of the same RUN contributes nothing.
     for (const match of body.matchAll(/apt-get\s+install\s+([^&\n]*)/g)) {

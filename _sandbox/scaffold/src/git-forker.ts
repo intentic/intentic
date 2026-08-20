@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 
-/* THE RESIDENT FORKER'S CHILD HALF — exec.ts holds the argument for why it exists. This process does exactly
+/* THE RESIDENT FORKER'S CHILD HALF, exec.ts holds the argument for why it exists. This process does exactly
  * one thing: exec what the parent asks for and send back what came out.
  *
  * Nothing may ever be added to it, and that is the whole design. Its only job is to STAY SMALL: every git the
@@ -45,7 +45,7 @@ process.on("message", (request: ForkRequest) => {
                 id: request.id,
                 stdout,
                 stderr,
-                // A `null` code (killed by a signal) carries nothing the far side can branch on — absent is the
+                // A `null` code (killed by a signal) carries nothing the far side can branch on, absent is the
                 // honest spelling, and the message still says what happened.
                 ...(error === null
                     ? {}
@@ -61,5 +61,5 @@ process.on("message", (request: ForkRequest) => {
     );
 });
 
-// The parent going away leaves nothing to serve — exit rather than linger as an orphan holding a dead pipe.
+// The parent going away leaves nothing to serve, exit rather than linger as an orphan holding a dead pipe.
 process.on("disconnect", () => process.exit(0));

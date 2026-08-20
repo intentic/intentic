@@ -3,8 +3,8 @@ import type { Config } from "../env.config.js";
 import { isLocalHost } from "./local-tls.js";
 
 /* THE DAEMON'S ONE OUTBOUND CHANNEL TO THE PLATFORM, shared by everything that speaks on it: the boot
- * registration (announce.ts) and the reachability report (reach-report.ts). Both authenticate the same way —
- * possession of the connect token, the same secret the daemon's own first-bind gate uses — and both must work
+ * registration (announce.ts) and the reachability report (reach-report.ts). Both authenticate the same way,
+ * possession of the connect token, the same secret the daemon's own first-bind gate uses, and both must work
  * when the sandbox's TUNNEL does not, which is the entire reason they go out from in here rather than being
  * asked for from outside.
  *
@@ -13,7 +13,7 @@ import { isLocalHost } from "./local-tls.js";
 
 // What the platform said, or why nothing was said at all. Kept apart because the two mean opposite things to
 // every caller: a status is the platform ANSWERING (and possibly refusing), while an error is the platform
-// being out of reach from inside this container — one is a verdict, the other is a broken link.
+// being out of reach from inside this container, one is a verdict, the other is a broken link.
 export type PlatformPost = { readonly status: number } | { readonly error: string };
 
 export const postToPlatform = async (config: Config, path: string, body: unknown): Promise<PlatformPost> => {

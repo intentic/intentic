@@ -8,16 +8,16 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { sharePage } from "./share-page.js";
 import type { SharePicture } from "./share-payload.js";
 
-/* WRITING A SHARE INTO THE OUTBOX — the only part of sharing that touches the disk.
+/* WRITING A SHARE INTO THE OUTBOX, the only part of sharing that touches the disk.
  *
  * The tree it maintains is described in the contract's share-paths.ts. Two halves: one copy of the page's
  * built assets that every share loads, and a directory per share holding its own page and its own pictures.
  *
  * The assets are resolved through the package's own export, so this works identically from a checkout in dev
- * and from the pruned production tree in the image — the same resolution the Front Desk widget's route uses,
+ * and from the pruned production tree in the image, the same resolution the Front Desk widget's route uses,
  * for the same reason. */
 
-/* Where the built page lives, resolved through the package's own export rather than by walking node_modules —
+/* Where the built page lives, resolved through the package's own export rather than by walking node_modules,
  * so it works identically from a checkout in dev and from the pruned production tree in the image, the same
  * resolution the Front Desk widget's route uses.
  *
@@ -33,7 +33,7 @@ const MAX_PICTURE_BYTES = 25 * 1024 * 1024;
 export const shareRoot = (workspaceRoot: string): string => join(publicRoot(workspaceRoot), SHARE_DIR);
 const shareDir = (workspaceRoot: string, id: string): string => join(shareRoot(workspaceRoot), id);
 
-/* The page's assets, copied in once and refreshed when the daemon carries newer ones — which happens exactly
+/* The page's assets, copied in once and refreshed when the daemon carries newer ones, which happens exactly
  * when the sandbox image is upgraded, since the two ship together. Compared by modification time rather than
  * copied every share: the built tree is a hundred-odd files (one per syntax grammar), and re-copying them on
  * every Update would be the most expensive part of an operation that is otherwise writing one page. */
@@ -53,12 +53,12 @@ const ensureViewer = async (workspaceRoot: string, source: string): Promise<void
  * rule 1), and a page that addressed `/work/...` would be asking a recipient's browser for a file no one outside
  * this machine can fetch. After this, nothing on the published side names a workspace path.
  *
- * Anything that cannot be copied is skipped rather than failing the share — the payload's own picture entries
+ * Anything that cannot be copied is skipped rather than failing the share, the payload's own picture entries
  * are what the page draws, and a missing file there degrades to the card showing its path as text, which is
  * what an un-shareable picture honestly is. */
 const copyPictures = async (workspaceRoot: string, dir: string, pictures: readonly SharePicture[]): Promise<void> => {
     for (const picture of pictures) {
-        // The path came out of a transcript, which means an agent chose it — so it is resolved against the
+        // The path came out of a transcript, which means an agent chose it, so it is resolved against the
         // workspace root and refused if it lands outside, exactly like any other path the daemon is handed.
         const source = resolveWithin(workspaceRoot, picture.source);
         if (source === undefined) {
@@ -74,12 +74,12 @@ const copyPictures = async (workspaceRoot: string, dir: string, pictures: readon
     }
 };
 
-/* One share, written whole. Used by both the first share and Update — an Update is the same write over the
+/* One share, written whole. Used by both the first share and Update, an Update is the same write over the
  * same id, with the share's directory cleared first so a picture that has since left the conversation does not
  * linger next to a page that no longer shows it. */
 export const publishShare = async (
     workspaceRoot: string,
-    // The built page's directory — `viewerDist()` in the daemon. A parameter rather than a lookup inside,
+    // The built page's directory, `viewerDist()` in the daemon. A parameter rather than a lookup inside,
     // because "where is the bundle" is the caller's question and this way the write is testable against a
     // fixture instead of against whatever the image happens to carry.
     viewer: string,
@@ -99,12 +99,12 @@ export const publishShare = async (
     await writeFile(join(dir, "index.html"), page);
 };
 
-/* Stop sharing: the page and every picture beside it, gone in one removal — which is why a share is a
+/* Stop sharing: the page and every picture beside it, gone in one removal, which is why a share is a
  * directory (share-paths.ts).
  *
  * Then the two levels of emptiness above it, on the outbox's own rule that publishing is OFF when there is
  * nothing published: withdrawing the last share takes the assets with it (they exist only to serve shares),
- * and an outbox left with nothing at all stops existing. Failures here are not raised — the share itself is
+ * and an outbox left with nothing at all stops existing. Failures here are not raised, the share itself is
  * gone either way, and an empty directory is corrected by the next removal. */
 export const unpublishShare = async (workspaceRoot: string, id: string): Promise<void> => {
     await rm(shareDir(workspaceRoot, id), { recursive: true, force: true });

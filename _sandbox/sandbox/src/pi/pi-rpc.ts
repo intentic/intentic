@@ -9,13 +9,13 @@ import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 /* The Pi RPC transport: spawn `<command> --mode rpc` and speak its strict-LF JSONL protocol over stdio.
  * Commands go down stdin one JSON object per line; every one carries a minted `id`, and the matching
  * `{type:"response", id}` line resolves it. Everything else on stdout is an EVENT, handed to the turn loop
- * unparsed beyond JSON — the mapping onto AgentEvent frames lives in pi-events.ts, not here.
+ * unparsed beyond JSON, the mapping onto AgentEvent frames lives in pi-events.ts, not here.
  *
  * Framing is deliberately hand-rolled on `indexOf("\n")`: Pi's own protocol doc rules out generic line
  * readers (Node readline also splits on U+2028/U+2029, which are valid inside JSON strings), and the
  * StringDecoder keeps a multi-byte character split across chunks from corrupting a record. */
 
-// One process serves one turn (sessions persist as files, so there is nothing to keep warm between turns —
+// One process serves one turn (sessions persist as files, so there is nothing to keep warm between turns,
 // unlike ACP, whose sessions live inside the process). The stderr tail is folded into surfaced errors, the
 // acp-spawn precedent: a bare "exited" without the reason is undebuggable.
 const STDERR_TAIL = 2000;
@@ -31,12 +31,12 @@ export type PiEvent = { readonly type: string } & Record<string, unknown>;
 
 export interface PiProcessHandlers {
     readonly onEvent: (event: PiEvent) => void;
-    // The process died — with the tail of what it said on the way down. Fired once.
+    // The process died, with the tail of what it said on the way down. Fired once.
     readonly onExit: (code: number | null) => void;
 }
 
 export interface PiProcess {
-    // Send a correlated command and await its response line. Rejects only when the process is gone —
+    // Send a correlated command and await its response line. Rejects only when the process is gone,
     // a refused command is an ordinary `{success: false}` response, never a throw.
     readonly request: (command: Record<string, unknown>) => Promise<PiResponse>;
     // Fire-and-forget write (extension_ui_response has no response line of its own).
@@ -73,7 +73,7 @@ const attachJsonlReader = (stream: Readable, onLine: (line: string) => void): vo
     });
 };
 
-// Build the production spawner for one sessions directory (created eagerly — Pi writes session files there,
+// Build the production spawner for one sessions directory (created eagerly. Pi writes session files there,
 // and a missing dir should fail here, at composition, not inside a turn).
 export const piSpawner = (sessionDir: string): PiSpawn => {
     mkdirSync(sessionDir, { recursive: true });
@@ -102,7 +102,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
         const pending = new Map<string, (response: PiResponse) => void>();
 
         proc.on("error", (error) => {
-            // A command that isn't on PATH surfaces as a spawn error, not an exit — same terminal state.
+            // A command that isn't on PATH surfaces as a spawn error, not an exit, same terminal state.
             stderr = (stderr + String(error.message)).slice(-STDERR_TAIL);
             settleExit(null);
         });

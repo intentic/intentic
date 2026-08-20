@@ -5,7 +5,7 @@ import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // The `vpn` capability: STORE a connection (credentials + whether it dials itself on boot). Everything about
-// dialling lives in the vpn/ subsystem behind a per-protocol driver, and the live surface is the /vpn routes —
+// dialling lives in the vpn/ subsystem behind a per-protocol driver, and the live surface is the /vpn routes,
 // so this handler is only the manifest's half of the story, and the same connect path serves the operator's
 // Status card, the agent's `vpn` CLI, this apply, and the boot restore.
 //
@@ -13,9 +13,9 @@ import type { CapabilityHandler } from "../capability.js";
 // environment-overlay fragment + runtime directives, applied by an owner-run rebuild; until then a link reads
 // "unavailable". The daemon runs as root, so no sudo is involved.
 
-// ONE fragment for every provider rather than one per protocol. Two reasons, both load-bearing: adding a second
+// ONE fragment for every provider rather than one per protocol. Two reasons, both important: adding a second
 // kind of VPN later must not cost a second container rebuild, and the runtime directives must appear exactly
-// once in the composed overlay — recreate.sh appends each directive token it reads without deduplicating, and a
+// once in the composed overlay, recreate.sh appends each directive token it reads without deduplicating, and a
 // doubled --device would fail the run. Composition dedupes fragments by exact content, so N vpn capabilities
 // still contribute this one block.
 const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols, plus the container privileges they share.
@@ -109,12 +109,12 @@ export const vpnHandler: CapabilityHandler = {
         }
         return "presharedKey";
     },
-    /* An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor either
+    /* An explicit allowlist per provider, never a spread of config, so neither the wireguard conf nor either
      * ipsec credential can reach the browser by being forgotten in a new field.
      *
      * The allowlist must therefore be COMPLETE over the non-credential fields, which is the other half of the
      * same bargain: secret-fields.ts vaults the complement of this echo, so a tunnel parameter left out here is
-     * replaced in the manifest by the vault marker — and `pfs`, `dhGroup` and `routedNetworks` are an enum, an
+     * replaced in the manifest by the vault marker, and `pfs`, `dhGroup` and `routedNetworks` are an enum, an
      * enum and a CIDR list, none of which the marker satisfies. The entry then fails CapabilitySchema on the
      * next read and the whole tunnel disappears from the manifest rather than one label going missing. Every
      * dial parameter is echoed for that reason, and because the card should show what it will dial with. */
@@ -147,7 +147,7 @@ export const vpnHandler: CapabilityHandler = {
         };
     },
     fragment: () => VPN_FRAGMENT,
-    // A tunnel's conf files are written per name by its driver, and the re-apply writes them under the new one —
+    // A tunnel's conf files are written per name by its driver, and the re-apply writes them under the new one,
     // so this only has to take the old tunnel down and erase what it left. A tunnel that was up comes back up
     // where the config says it should (autoConnect), under the name it now has.
     rename: {
@@ -166,7 +166,7 @@ export const vpnHandler: CapabilityHandler = {
         await driver.write(id, vpn);
         await writeLoadedSkill(ctx.files, ctx.workspace.root, "vpn", VPN_SKILL);
         // Re-applying (an edited credential, an auto-connect flip) must never leave a tunnel running the old
-        // config — drop it, then re-dial below if it should be up.
+        // config, drop it, then re-dial below if it should be up.
         await disconnectVpn(entry).catch(() => undefined);
         if (vpn.autoConnect !== "on") {
             yield { kind: "log", message: `Stored ${id}. Connect it from the Sandbox ▸ Status card, or ask the agent to.` };
@@ -174,7 +174,7 @@ export const vpnHandler: CapabilityHandler = {
         }
         const missing = await driver.missingTool();
         if (missing !== undefined) {
-            // Pre-rebuild bootstrap: a missing client is a soft outcome, not a failed add — the overlay this
+            // Pre-rebuild bootstrap: a missing client is a soft outcome, not a failed add, the overlay this
             // very add composes is what installs it.
             yield {
                 kind: "log",
@@ -192,7 +192,7 @@ export const vpnHandler: CapabilityHandler = {
         const vpn = config as VpnConfig;
         await disconnectVpn({ id, config: vpn }).catch(() => undefined);
         await vpnDrivers[vpn.provider].erase(id, vpn);
-        // The skill is shared by every vpn — drop it only when this was the last one. The route removes the
+        // The skill is shared by every vpn, drop it only when this was the last one. The route removes the
         // manifest entry AFTER this handler, so `id` is still counted here.
         const vpnCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "vpn").length;
         if (vpnCount <= 1) {

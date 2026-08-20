@@ -7,17 +7,17 @@ import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { canPublishDirectly, postToDiscord } from "./discord-post.js";
 
-/* THE PUBLISHER — what sends an approved post, and when.
+/* THE PUBLISHER, what sends an approved post, and when.
  *
  * IT SLEEPS UNTIL THE EXACT MOMENT, which is the whole difference from what it replaces. Publishing was a cron
  * automation: a wake every few minutes that ran a shell guard over the drafts directory and, essentially
- * always, found nothing to do. That is a poll asking a question only this process could already answer — the
+ * always, found nothing to do. That is a poll asking a question only this process could already answer, the
  * daemon writes the drafts, so it knows the earliest due time down to the millisecond. So it arms ONE timer for
  * that instant and holds nothing else: no drafts approved means no timer at all, and a queue of ten due at
  * different times is still one timer, re-armed as each passes.
  *
  * RE-ARMED FROM DISK, NEVER FROM MEMORY. `arm()` re-reads the queue every time rather than tracking a due time
- * alongside it, because the drafts directory has two writers — this daemon, and the agent's own file tools —
+ * alongside it, because the drafts directory has two writers, this daemon, and the agent's own file tools,
  * and a cached deadline is exactly the thing that goes stale when the other one writes. Reading a directory of
  * kilobyte files to answer "what is next" costs nothing next to being wrong about it. The same call re-arms
  * after every publish and at boot, which is what makes a hold survive a restart: the deadline lives in the
@@ -27,7 +27,7 @@ import { canPublishDirectly, postToDiscord } from "./discord-post.js";
  * TWO WAYS TO SEND, PICKED BY WHAT THE PLATFORM OFFERS (publish-drafts.ts). Discord takes an authenticated
  * POST, so the daemon makes it: milliseconds, no model, and a failure that is an HTTP status rather than a
  * transcript. Reddit and X are a logged-in browser session with no API behind them, so they need an agent turn
- * — and they get ONE turn for the whole batch, named drafts and all, because the expensive thing about a turn
+ *, and they get ONE turn for the whole batch, named drafts and all, because the expensive thing about a turn
  * is that it exists, not how many posts it carries.
  *
  * POSTING IS MARKED BEFORE IT HAPPENS. `posting` is written to the file before either path acts, so a daemon
@@ -40,7 +40,7 @@ const POSTING_STALE_MS = 30 * 60_000;
 
 const isDue = (draft: DraftSummary, now: number): boolean => draft.status === `approved` && (draft.scheduledAt ?? 0) <= now;
 
-/* WHEN THIS PROCESS NEXT HAS SOMETHING TO DO — the soonest approved draft's due time, or undefined when the
+/* WHEN THIS PROCESS NEXT HAS SOMETHING TO DO, the soonest approved draft's due time, or undefined when the
  * queue holds nothing approved. Drafts that are already due answer `now`, so a queue that came due while the
  * daemon was down fires immediately on the next arm rather than waiting for a future one. */
 export const nextDueAt = (drafts: readonly DraftSummary[], now: number): number | undefined => {
@@ -59,14 +59,14 @@ export interface DraftsPublisher {
 export const createDraftsPublisher = (services: Services, wake: WakeFn = streamAgent): DraftsPublisher => {
     let timer: NodeJS.Timeout | undefined;
     // One pass at a time. Two overlapping sweeps would both read the same `approved` draft before either wrote
-    // `posting` — the read-modify-write race that ends in the same post going out twice.
+    // `posting`, the read-modify-write race that ends in the same post going out twice.
     let running = false;
 
     const mark = async (draft: DraftSummary, changes: Partial<DraftSummary>): Promise<void> => {
         await services.drafts.upsert({ ...draft, ...changes });
     };
 
-    /* Send one draft through the API its platform actually offers. Returns whether the draft is now settled —
+    /* Send one draft through the API its platform actually offers. Returns whether the draft is now settled,
      * false hands it to the turn instead, which is the answer for a Discord post carrying an attachment or
      * addressed to a channel by name rather than by id (discord-post.ts). */
     const sendDirect = async (draft: DraftSummary): Promise<boolean> => {
@@ -79,7 +79,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
             await mark(draft, { status: `posted`, postedAt: Date.now(), postedUrl: url });
         } catch (error: unknown) {
             // The message is written for the owner to read in the queue's failed row, so it is kept whole
-            // rather than reduced to a code — this is the only account of the failure anyone will get.
+            // rather than reduced to a code, this is the only account of the failure anyone will get.
             await mark(draft, { status: `failed`, error: error instanceof Error ? error.message : `The post did not go through.` });
             services.logger.error({ err: error, draft: draft.id }, `direct publish failed`);
         }
@@ -109,7 +109,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
              * unattended, and an unattended turn with no persona is denied every logged-in account (personas.ts
              * spells out why: at 3am the prompt's wording is the only thing standing between a stranger and a
              * public post). So the turn would open the platform in a browser signed into nothing, meet the wall
-             * a cold profile always meets, and report the account as disconnected — which is what happened
+             * a cold profile always meets, and report the account as disconnected, which is what happened
              * before this check existed, and it cost two approved posts and an afternoon to trace.
              *
              * Failing here says the true thing in the one place the owner reads. Guessing the persona instead is
@@ -119,8 +119,8 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
             for (const draft of forTurn.filter((entry) => entry.actsAs === undefined || !cast.has(entry.actsAs))) {
                 /* A NAME THAT RESOLVES TO NOBODY IS THE SAME FAILURE AS NO NAME, and deliberately not a softer
                  * one: turnPersona answers an unknown card by denying everything, so the turn arrives with no
-                 * account exactly as the unpinned one does. A card can go missing for ordinary reasons — renamed
-                 * on one side only, a workspace cloned before its personas were committed — which is why this is
+                 * account exactly as the unpinned one does. A card can go missing for ordinary reasons, renamed
+                 * on one side only, a workspace cloned before its personas were committed, which is why this is
                  * worth saying in the queue rather than leaving to be rediscovered from inside a turn. */
                 await mark(draft, {
                     status: `failed`,
@@ -132,12 +132,12 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
             }
 
             /* ONE TURN PER PERSONA, not one per batch. A turn wears exactly one face, so two drafts going out
-             * under different names are two turns however close together they came due — batching them would
+             * under different names are two turns however close together they came due, batching them would
              * hand the second draft to an account that cannot post it. Within one face the batch still holds,
              * because the expensive thing about a turn is that it exists. */
             const byPersona = new Map<string, DraftSummary[]>();
             for (const draft of forTurn) {
-                // Same condition as the failures above, read the other way round — a draft is either sendable or
+                // Same condition as the failures above, read the other way round, a draft is either sendable or
                 // already written off, never both and never neither.
                 if (draft.actsAs !== undefined && cast.has(draft.actsAs)) {
                     byPersona.set(draft.actsAs, [...(byPersona.get(draft.actsAs) ?? []), draft]);
@@ -160,7 +160,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
                     actsAs,
                     title: wearing.length === 1 ? `Publish 1 post` : `Publish ${wearing.length} posts`,
                 };
-                /* The same detached boundary POST /agent uses — it registers the run, journals it so a daemon
+                /* The same detached boundary POST /agent uses, it registers the run, journals it so a daemon
                  * death resumes it, and gives the publish an ordinary card in the fleet instead of work that
                  * happens invisibly. Detached on purpose: this is a timer callback with no request waiting. */
                 void startConversationTurn(services, wake, turn).catch((error: unknown) =>
@@ -172,7 +172,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
             publishRuntimeChange(`drafts`);
         } finally {
             running = false;
-            // Whatever just happened, the next deadline is a fresh question — a failed draft is no longer
+            // Whatever just happened, the next deadline is a fresh question, a failed draft is no longer
             // approved, and a `posting` one is nobody's deadline until it goes stale.
             void arm();
         }
@@ -188,7 +188,7 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
 
         /* A draft left `posting` by a turn that died is unreachable: it is not approved, so no sweep will take
          * it, and nothing will ever write its outcome. After long enough that no live turn could still be
-         * working it, it is put back to failed with a sentence saying so — visible, retryable, and never
+         * working it, it is put back to failed with a sentence saying so, visible, retryable, and never
          * silently re-sent. */
         for (const draft of drafts) {
             if (draft.status === `posting` && now - (draft.postingAt ?? now) > POSTING_STALE_MS) {
@@ -223,8 +223,8 @@ export const createDraftsPublisher = (services: Services, wake: WakeFn = streamA
 
 /* ONE PUBLISHER PER SANDBOX, reached from the two places that need the same one: the drafts routes, which
  * re-arm it on every write, and boot, which arms it once so a hold that expired while the daemon was down goes
- * out. Two instances would each hold a timer for the same deadline and both wake for it — the double-post this
- * whole module is arranged to prevent — so the instance is keyed to the services object that owns the queue
+ * out. Two instances would each hold a timer for the same deadline and both wake for it, the double-post this
+ * whole module is arranged to prevent, so the instance is keyed to the services object that owns the queue
  * rather than constructed at each call site. Held weakly: a torn-down sandbox's publisher goes with it. */
 const publishers = new WeakMap<Services, DraftsPublisher>();
 

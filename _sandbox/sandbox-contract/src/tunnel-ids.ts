@@ -22,33 +22,33 @@ export const hostSshIdFromToken = (connectToken: string, hostName: string): stri
  * and it is the hard cap on preview DNS records a sandbox can ever cost the shared intentic zone. */
 export const PORT_SLOT_COUNT = 8;
 
-/* THE PORT-FORWARD SLOT LABELS — the `port-<slot>` half of `port-<slot>-<sandboxId>.<zone>`.
+/* THE PORT-FORWARD SLOT LABELS, the `port-<slot>` half of `port-<slot>-<sandboxId>.<zone>`.
  *
  * These were the letters a…h, and that was the hole: a forwarded port's hostname was then a pure function of the
- * sandbox id, and the sandbox id is not a secret — it is the leading label of the URL the owner uses daily and
+ * sandbox id, and the sandbox id is not a secret, it is the leading label of the URL the owner uses daily and
  * of every preview link they have ever shared. So anyone who had seen ONE preview link could poll eight fixed
  * names forever and catch whatever the owner forwarded, at any point in the future. The Ports view says a
  * forwarded port is public, and it is; what it could not say was that "public" meant eight guessable URLs.
  *
  * Salting with the connect token fixes that without costing anything the letters bought. Still exactly eight
- * records (the reason slots exist at all — the intentic-provided zone mints per label, and dev servers churn
+ * records (the reason slots exist at all, the intentic-provided zone mints per label, and dev servers churn
  * ephemeral ports far faster than DNS should), still stable across restarts so a slot's record stays warm, and
  * still derivable with no coordination by every party that already holds the token: the daemon that forwards,
  * and the platform that mints the DNS. A party without the token has no business predicting these names.
  *
- * The browser is deliberately NOT one of those parties — it never derives a port hostname, it reads `previewUrl`
- * off the daemon's response — which is why this can live here, in the node-only half of the contract, next to
+ * The browser is deliberately NOT one of those parties, it never derives a port hostname, it reads `previewUrl`
+ * off the daemon's response, which is why this can live here, in the node-only half of the contract, next to
  * the digest it shares with sandboxIdFromToken. */
 export const portSlotsFromToken = (connectToken: string): readonly string[] =>
     Array.from({ length: PORT_SLOT_COUNT }, (_, index) => sha256Hex(`${connectToken}:port:${index}`).slice(0, 12));
 
-/* THE OUTBOX SLOT — the `public-<slot>` half of `public-<slot>-<sandboxId>.<zone>`, where the daemon serves the
+/* THE OUTBOX SLOT, the `public-<slot>` half of `public-<slot>-<sandboxId>.<zone>`, where the daemon serves the
  * workspace's `public/` directory (PUBLIC_DIR in @intentic/workspace-ignore).
  *
  * Salted for the reason above, and it matters more here than it does for ports: a forwarded port is a live
  * server the owner started minutes ago, whereas a published file sits there. One record per sandbox, stable
  * across restarts so a link stays good for as long as the file does, and derivable only by parties holding the
- * token — the daemon that serves and the platform that mints. Not the browser: it reads the URL off the /public
+ * token, the daemon that serves and the platform that mints. Not the browser: it reads the URL off the /public
  * response, exactly as it reads previewUrl off /ports.
  *
  * The unguessable hostname is also what carries the security story, because the files under it have no auth in

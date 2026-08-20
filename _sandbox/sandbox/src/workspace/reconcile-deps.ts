@@ -14,8 +14,8 @@ import { INSTALLABLE, installPanelKey, missingCount, type ProjectSetupStatus, st
  * BESIDE the agents: an install never holds a turn out, so a message sent into a repair starts immediately and
  * the install proceeds in its own terminal where anyone can watch it.
  *
- * Explicit setup requests are durable until the project is ready. Drift needs no durable queue — it is a fact
- * on disk and the startup scan rediscovers it — but its in-memory origin is retained so a land remains the
+ * Explicit setup requests are durable until the project is ready. Drift needs no durable queue, it is a fact
+ * on disk and the startup scan rediscovers it, but its in-memory origin is retained so a land remains the
  * cause even when the filesystem watcher observes the same manifest a moment later. */
 
 const DEFAULT_SETTLE_MS = 2_000;
@@ -234,7 +234,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             return;
         }
         scheduled = true;
-        // One pass at a time, so two observations of the same drift cannot start the same install twice — but
+        // One pass at a time, so two observations of the same drift cannot start the same install twice, but
         // nothing outside this loop waits on it.
         void (async () => {
             while (dirty) {

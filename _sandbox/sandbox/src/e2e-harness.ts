@@ -6,18 +6,18 @@ import { repoRoot } from "@intentic/constants/node";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 
 // Shared harness for the gated *.e2e.test.ts suites (sandbox + discord): boot the REAL sandbox image in
-// loopback mode and play the outside-executor role for overlay builds. Test-only — excluded from the package
+// loopback mode and play the outside-executor role for overlay builds. Test-only, excluded from the package
 // build (tsconfig `exclude`), like the test files that import it.
 
 const root = repoRoot(import.meta.url);
 
-// The from-source image tag — a stable name so docker's layer cache carries across runs (the tag is the
+// The from-source image tag, a stable name so docker's layer cache carries across runs (the tag is the
 // cache; it is deliberately NOT removed on teardown).
 const SOURCE_IMAGE_TAG = "intentic-sandbox-e2e:local";
 
 // Build via the docker CLI, not testcontainers' fromDockerfile: the sandbox Dockerfile needs BuildKit
 // (COPY --chmod), which the CLI uses by default, and the CLI shares the layer cache with CI's images job.
-// The STANDARD profile — the artifact CI publishes under the plain tags — composed fresh from the checked-in
+// The STANDARD profile, the artifact CI publishes under the plain tags, composed fresh from the checked-in
 // packs into .image-out beside the `trees` payload, whose preparation the caller owns exactly as every other
 // from-source build does (prepare-image-trees.sh must have run).
 const buildSourceImage = async (): Promise<void> => {
@@ -44,13 +44,13 @@ export const startSandboxContainer = async (environment: Record<string, string>)
         image = SOURCE_IMAGE_TAG;
     }
     // Unprivileged like every production runner's default: the image bakes a Docker Engine but it stays
-    // dormant (dockerd starts only when a docker capability is enabled AND the container runs privileged —
+    // dormant (dockerd starts only when a docker capability is enabled AND the container runs privileged,
     // the overlay-rebuild grant the suites don't exercise).
     //
     // SANDBOX_ALLOW_UNAUTHENTICATED is what lets the suites pass a CONNECT_TOKEN (the only source of a sync ssh
     // hostname) to a daemon they then drive with no credential: main.ts's auth floor kills exactly that pair on
     // sight, and this is the acknowledgement it accepts instead. Set HERE, once, rather than in each suite's
-    // environment map — a suite that forgot it would fail as an opaque 180s /health timeout.
+    // environment map, a suite that forgot it would fail as an opaque 180s /health timeout.
     return new GenericContainer(image)
         .withEnvironment({ SANDBOX_ALLOW_UNAUTHENTICATED: "1", ...environment })
         .withExposedPorts(8787, 22)
@@ -61,7 +61,7 @@ export const startSandboxContainer = async (environment: Record<string, string>)
 
 export const daemonUrl = (container: StartedTestContainer): string => `http://${container.getHost()}:${container.getMappedPort(8787)}`;
 
-// Poll until `read` returns a defined value — daemon-side effects (automation fires, approval holds, gateway
+// Poll until `read` returns a defined value, daemon-side effects (automation fires, approval holds, gateway
 // dispatches) run detached from their HTTP responses.
 export const until = async <T>(read: () => Promise<T | undefined>, what: string, timeoutMs = 30_000): Promise<T> => {
     const deadline = Date.now() + timeoutMs;
@@ -77,7 +77,7 @@ export const until = async <T>(read: () => Promise<T | undefined>, what: string,
     }
 };
 
-// `docker build` the composed overlay from stdin — the exact command recreate.sh runs (`docker build - <overlay`).
+// `docker build` the composed overlay from stdin, the exact command recreate.sh runs (`docker build - <overlay`).
 export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
     new Promise((resolve, reject) => {
         const build = spawn("docker", ["build", "-t", tag, "-"]);
@@ -89,7 +89,7 @@ export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
         build.stdin.end(dockerfile);
     });
 
-// `docker run --rm <tag> <command…>` with bind mounts, returning combined output — how the whisper overlay is
+// `docker run --rm <tag> <command…>` with bind mounts, returning combined output, how the whisper overlay is
 // exercised without the daemon (the binary lives in the rebuilt image, not the running container).
 export const dockerRun = (tag: string, mounts: { host: string; container: string }[], command: string[]): Promise<string> =>
     new Promise((resolve, reject) => {

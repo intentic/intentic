@@ -37,7 +37,7 @@ export const sshHandler: CapabilityHandler = {
         const ssh = config as SshConfig;
         return { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth };
     },
-    // The id IS the ssh-config alias, so the re-apply writes the new machine block and this drops the old one —
+    // The id IS the ssh-config alias, so the re-apply writes the new machine block and this drops the old one,
     // otherwise `ssh <old-name>` would go on working, which is a second machine as far as anyone reading the
     // config is concerned. The skill is shared by every alias and says nothing about any one of them.
     rename: { carry: async (_ctx, from) => removeSshHost(from) },
@@ -56,7 +56,7 @@ export const sshHandler: CapabilityHandler = {
         (await readFile(hostConfPath(id), "utf8").catch(() => undefined)) !== undefined ? { state: "active" } : { state: "inactive" },
     remove: async (ctx, id) => {
         await removeSshHost(id);
-        // The skill is shared by every ssh machine — drop it only when this was the last one. The route removes
+        // The skill is shared by every ssh machine, drop it only when this was the last one. The route removes
         // the manifest entry AFTER this handler, so `id` is still counted here.
         const sshCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "ssh").length;
         if (sshCount <= 1) {

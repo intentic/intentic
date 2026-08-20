@@ -5,7 +5,7 @@ import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Per-repository operator panels. Every discovered git repo under /work is one sidebar entry; a repo exposes
-// a panel by convention — a runnable dev server (a package.json with a `dev` script) at either its `operator/`
+// a panel by convention, a runnable dev server (a package.json with a `dev` script) at either its `operator/`
 // dir (a purpose-built panel, e.g. the ported infra UI) OR the repo root (a scaffolded app IS its own panel).
 // Discovery is pure (no manifest): the daemon runs that dev server, the preview proxy fronts it at
 // preview-<panelKey>-<sandboxId>.<zone> (see sandbox-contract's hostnames.ts).
@@ -20,7 +20,7 @@ export interface DiscoveredPanel {
 // A repo id as the DNS-label/tmux-safe key the preview hostname and the process manager use: slashes in
 // nested ids become `--` (the same separator as app previews' `<repo>--<app>`, whose repo names forbid `--`
 // so the grammars can't collide). undefined when the id carries characters a one-label subdomain can't
-// (dots/underscores) — such repos list and review fine, they just expose no preview/panel process.
+// (dots/underscores), such repos list and review fine, they just expose no preview/panel process.
 export const panelKey = (id: string): string | undefined => {
     const key = id.replaceAll("/", "--");
     return /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(key) ? key : undefined;
@@ -60,7 +60,7 @@ export const discoverPanels = async (workspace: WorkspacePaths): Promise<Discove
 /* WHAT A REPO IS ACTUALLY SERVING, as opposed to what the daemon told it to serve.
  *
  * The panel manager assigns a free port, injects it as PORT, and used to health-check exactly that port. That
- * holds for a scaffolded app, whose dev server reads PORT — and is fiction for a repo whose `dev` script fans a
+ * holds for a scaffolded app, whose dev server reads PORT, and is fiction for a repo whose `dev` script fans a
  * turbo run out across several packages that each pin their own port for reasons the daemon can't know (a
  * committed dev cert's origin, a CORS allowlist, an OAuth client's authorized redirect). Such a repo bound three
  * real ports, the daemon probed a fourth that nothing was listening on, and its panel reported "starting" for as
@@ -69,7 +69,7 @@ export const discoverPanels = async (workspace: WorkspacePaths): Promise<Discove
  * So the listening sockets are the evidence, and a repo's own directory is what claims them: a dev server's
  * process sits in the package it serves. The longest matching repo dir wins, so a repo cloned inside another
  * keeps its own listeners; a socket with no readable cwd, or a cwd outside the workspace, belongs to nobody.
- * Not-forwardable binds (a loopback alias that only answers at its own address) are dropped — nothing in the
+ * Not-forwardable binds (a loopback alias that only answers at its own address) are dropped, nothing in the
  * sandbox could point a browser at them. */
 export const listenersByRepo = (
     listeners: readonly ListeningPort[],
@@ -93,7 +93,7 @@ export const listenersByRepo = (
     return byRepo;
 };
 
-// Which package inside the repo bound a listener — `_editor/web` for the app, `_site/site` for the marketing site.
+// Which package inside the repo bound a listener, `_editor/web` for the app, `_site/site` for the marketing site.
 // The one thing that tells a monorepo's three dev servers apart at a glance, so it rides to the browser beside
 // the URL. Undefined when the process sits at the repo root (it IS the repo's server) or has no readable cwd.
 export const listenerDir = (listener: ListeningPort, workspaceRoot: string, repo: string): string | undefined => {
@@ -103,7 +103,7 @@ export const listenerDir = (listener: ListeningPort, workspaceRoot: string, repo
 
 /* ONE SERVER PER PACKAGE, because a dev server is not one socket. Vite's HMR channel and its dependency
  * optimizer bind ports of their own from the very same directory, and a framework that embeds another app's dev
- * server adds more still — the intentic repo running two apps answers on five ports. Listing all five turns a
+ * server adds more still, the intentic repo running two apps answers on five ports. Listing all five turns a
  * question with three answers into a menu of five, three-fifths of which are plumbing nobody can walk a user
  * story through.
  *

@@ -14,11 +14,11 @@ import type { Services } from "../composition.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
 
-/* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider — the one question every caller of that harness
+/* WHAT AUTHENTICATES A CLAUDE CODE HARNESS TURN, per provider, the one question every caller of that harness
  * has to answer before it can spawn anything, and there is now more than one caller: the chat's own turn route
  * and the quick-model one-shot behind the messages written at land time. It lives here rather than inline in
  * agent.routes.ts because the alternative is two places deciding which providers ride the translator, and they
- * would drift silently — a helper that resolves credentials a different
+ * would drift silently, a helper that resolves credentials a different
  * way than the chat does is a helper that fails only for the users whose setup differs from the developer's.
  *
  * Two shapes come out, and they are mutually exclusive by construction:
@@ -29,8 +29,8 @@ import type { TurnLimit } from "../usage/translator-usage.js";
  * present, so a subscription token can never leave for a foreign endpoint. That is why this returns the two as
  * one value rather than letting a caller assemble them.
  *
- * A refusal is a VALUE, not a throw. Every one of these is an ordinary state of a sandbox — no translator in
- * the image, a subscription the user hasn't connected — and each caller renders it its
+ * A refusal is a VALUE, not a throw. Every one of these is an ordinary state of a sandbox, no translator in
+ * the image, a subscription the user hasn't connected, and each caller renders it its
  * own way: the turn route yields an error frame the composer's connect gate reads, the one-shot turns it into a
  * disabled button. `code` carries the machine-readable discriminator the UI keys off (AgentEvent's `error`). */
 
@@ -42,7 +42,7 @@ export interface HarnessEndpoint {
     readonly model: string;
 }
 
-/* WHOSE ALLOWANCE THIS TURN SPENDS, and what is left of it — the two things the harness cannot tell us about
+/* WHOSE ALLOWANCE THIS TURN SPENDS, and what is left of it, the two things the harness cannot tell us about
  * its own 429, and the reason they are attached to the CREDENTIAL rather than derived downstream.
  *
  * A routed turn runs the Claude Code harness against the translator but spends a Google (or ChatGPT, or Kimi)
@@ -53,7 +53,7 @@ export interface HarnessEndpoint {
  *
  * `limit` is bound to the turn's RESOLVED MODEL, not just its provider, because on Google those are different
  * allowances: one sign-in meters Gemini separately from the Claude and GPT models, and the pool a refusal names
- * has to be the pool the turn was spending. It also answers whether any connected account still has room —
+ * has to be the pool the turn was spending. It also answers whether any connected account still has room,
  * CLIProxyAPI balances across the whole auth-file set, so a refusal with headroom left on file is a cooldown
  * rather than a spent plan, and those two want opposite things from the reader.
  *
@@ -66,13 +66,13 @@ export interface TurnAllowance {
 
 export interface HarnessCredentials {
     readonly oauthToken?: string;
-    // Re-mints `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given — expired
-    // under a long turn, or revoked account-wide — and carries on with what comes back, so a credential that
+    // Re-mints `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given, expired
+    // under a long turn, or revoked account-wide, and carries on with what comes back, so a credential that
     // dies while the agent is working costs a pause rather than the turn. Present only alongside a stored
     // account's token: the container-env fallback and the routed endpoints have nothing to rotate.
     readonly refreshOauthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
     readonly endpoint?: HarnessEndpoint;
-    // Which stored account answered — the attribution key stamped onto usage/rate-limit frames. Undefined when
+    // Which stored account answered, the attribution key stamped onto usage/rate-limit frames. Undefined when
     // the credential came from the container env or from the translator's own subscription rather than an
     // account this sandbox stores.
     readonly account?: string;
@@ -84,19 +84,19 @@ export interface HarnessCredentials {
     readonly trial?: boolean;
 }
 
-/* ONE ENDPOINT, ONE MODEL — the rule that makes everything a harness turn can spawn reachable.
+/* ONE ENDPOINT, ONE MODEL, the rule that makes everything a harness turn can spawn reachable.
  *
  * The harness resolves model names in more places than the turn's own `--model`: a subagent definition asks for
  * "sonnet", the Agent tool takes a per-call model override, background summarization and title generation reach
  * for the cheap tier. Each of those resolves through Claude Code's own alias table, which answers with an
- * Anthropic model id — and on a routed turn the endpoint those ids are sent to is the sandbox's translator,
+ * Anthropic model id, and on a routed turn the endpoint those ids are sent to is the sandbox's translator,
  * which serves the user's ChatGPT/xAI/Google subscription and has never heard of `claude-opus-5`. It answers
  * 502 "unknown provider for model", which is how a Sol session's every Explore subagent died while the main
  * loop worked fine: the turn's own model came from `--model`, the subagent's came from the alias table.
  *
  * A custom endpoint serves exactly ONE model (harness-credentials resolves it against that provider's live
  * catalog), so every alias must resolve to that one. Setting the tier defaults is the harness's own supported
- * way to say that, and it covers the resolvers we do not call ourselves — including the ones inside the CLI.
+ * way to say that, and it covers the resolvers we do not call ourselves, including the ones inside the CLI.
  * CLAUDE_CODE_SUBAGENT_MODEL pins the Task tool's default on top, so a subagent spawned with no model named
  * lands on the routed model rather than on whatever the CLI's built-in default for that agent type is. */
 const routedModelEnv = (model: string): Record<string, string> => ({
@@ -115,7 +115,7 @@ const routedModelEnv = (model: string): Record<string, string> => ({
  * twice. `IS_SANDBOX` rides along for the same reason both need it: Claude Code refuses to run under root
  * unless the environment is marked already-sandboxed, which this container is.
  *
- * `model` is the turn's resolved id. It only takes effect alongside a custom endpoint — a native Claude turn must
+ * `model` is the turn's resolved id. It only takes effect alongside a custom endpoint, a native Claude turn must
  * keep the real alias table, where "sonnet" and "opus" are different models and a subagent asking for the cheap
  * tier should get it. */
 export const harnessEnv = (credentials: {
@@ -123,11 +123,11 @@ export const harnessEnv = (credentials: {
     readonly authToken?: string;
     readonly oauthToken?: string;
     readonly model?: string;
-    /* WHO IS WAITING FOR THIS — the one thing about a harness spawn that changes what a retry is worth, and
+    /* WHO IS WAITING FOR THIS, the one thing about a harness spawn that changes what a retry is worth, and
      * therefore the only setting below that is not the same for both callers.
      *
      * A TURN is watched, holds work, and can be resumed only by re-reading everything: waiting is cheaper than
-     * dying, so it rides out almost any outage (the watchdog below). A HELPER is none of those — nobody is
+     * dying, so it rides out almost any outage (the watchdog below). A HELPER is none of those, nobody is
      * watching, nothing is lost by failing, and there is a whole chain of other models behind it that would
      * have answered in two seconds. For a helper, waiting IS the failure.
      *
@@ -140,7 +140,7 @@ export const harnessEnv = (credentials: {
      *
      * The harness retries 5xx/529/dropped-socket failures by itself, but its default budget is tuned for a human
      * sitting at a terminal who can just press up-enter: ten attempts, and it gives up outright the moment the
-     * provider asks for a wait longer than a minute — which is exactly what a provider in real trouble asks for.
+     * provider asks for a wait longer than a minute, which is exactly what a provider in real trouble asks for.
      * This flag is the harness's own switch for the other case, an unattended agent that should keep trying:
      * three hundred attempts, no ceiling on the requested wait, and capacity refusals stop counting against the
      * budget at all.
@@ -148,14 +148,14 @@ export const harnessEnv = (credentials: {
      * Worth far more than the resume it prevents. A retry inside the live turn keeps the session, the prompt
      * cache and whatever the agent had already done; a resume re-reads all of it and starts the turn again. So
      * this is the layer that should absorb almost every outage, with turn-resume.ts as the net under it for the
-     * turns that die anyway — and the `provider_retry` frame (agent.ts) as the thing that makes the resulting
+     * turns that die anyway, and the `provider_retry` frame (agent.ts) as the thing that makes the resulting
      * long silence legible instead of looking like a hang.
      *
      * Cost: the harness stops falling back to a cheaper model on server errors. We never set a fallback model,
      * so there is nothing to lose here.
      *
      * WITHHELD FROM HELPERS, and that withholding is a fix rather than a tidy-up. A one-shot inherited this and
-     * therefore inherited three hundred attempts at a rung that was refusing — so instead of failing over to the
+     * therefore inherited three hundred attempts at a rung that was refusing, so instead of failing over to the
      * next model in the chain, the commit-message draft ground through the harness's own backoff for the better
      * part of a minute (measured at 35–73s per landing, against ~2s for the same prompt answered directly). The
      * chain behind it exists precisely so a bad rung costs nothing; the watchdog is what stopped it working. */
@@ -175,7 +175,7 @@ export type HarnessCredentialsResult =
     | { readonly ok: true; readonly credentials: HarnessCredentials }
     | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth" | "trial-unavailable"; readonly message: string };
 
-// The label a routed provider's missing subscription is named by — the vendor's own noun, matching the connect
+// The label a routed provider's missing subscription is named by, the vendor's own noun, matching the connect
 // prompts (PROVIDER_ACCESS.requirement).
 const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
     codex: "ChatGPT subscription",
@@ -188,7 +188,7 @@ const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
 // (which uses the ChatGPT account default and omits the model), the router requires an explicit id, and the only
 // source that stays correct is the provider's own live catalog (discovery → persisted → seed floor, never
 // empty): keep the pinned pick while the catalog still offers it, else take the catalog's default. Validating
-// membership rather than naming a fallback id is what survives a retirement — a pick the provider has dropped
+// membership rather than naming a fallback id is what survives a retirement, a pick the provider has dropped
 // simply fails the test and falls to the live default. That covers Codex's own `gpt-5-codex`, which the
 // translator's ChatGPT subscription does not serve (it re-serves the account's real ids) and rejects with a
 // non-SSE error body that breaks the harness stream; it needs no special case, and neither does Grok, whose
@@ -196,7 +196,7 @@ const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
 const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
     model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
-/* WHICH PROVIDERS THIS HARNESS COULD ACTUALLY RUN RIGHT NOW — the cheap predicate mirroring the resolution
+/* WHICH PROVIDERS THIS HARNESS COULD ACTUALLY RUN RIGHT NOW, the cheap predicate mirroring the resolution
  * below, one entry per native provider in a single pass. It exists because a caller choosing BETWEEN providers
  * (the quick model) has to know all five before it picks one, and resolving credentials five times to find out
  * would refresh five tokens and fetch five catalogs to use one.
@@ -209,7 +209,7 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
     const translator = services.config.translator.url === "" ? undefined : await services.cliProxy.accounts();
     const routed = (provider: KeyedProvider): boolean => (translator?.[provider].length ?? 0) > 0;
     const ready: Record<NativeProvider, boolean> = {
-        // A stored account, else the container's own credential — the same two rungs the claude branch takes.
+        // A stored account, else the container's own credential, the same two rungs the claude branch takes.
         claude:
             (await services.claudeStore.list()).length > 0 || services.config.claudeCodeOauthToken !== "" || services.config.anthropicApiKey !== "",
         codex: routed("codex"),
@@ -222,21 +222,21 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
     return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready[provider]])) as Record<NativeProvider, boolean>;
 };
 
-/* AN `endpoint` CAPABILITY'S TURN — a model API the user configured, which is the same problem as a routed
+/* AN `endpoint` CAPABILITY'S TURN, a model API the user configured, which is the same problem as a routed
  * subscription with one fork in it, and the fork is about the WIRE rather than about where the server runs.
  *
- * openai    — re-served through the translator, exactly as the four subscriptions are. The harness is handed the
+ * openai   , re-served through the translator, exactly as the four subscriptions are. The harness is handed the
  *             loopback bearer and a `<id>/<model>` id (endpointModelId, matching the entry's `prefix`), so the
  *             user's own key never enters the harness environment at all: it stays in the translator's config on
  *             /history, which is outside the agent's reach.
- * anthropic — the endpoint already speaks the harness's own wire, so the translator would be a hop that
+ * anthropic, the endpoint already speaks the harness's own wire, so the translator would be a hop that
  *             translates Anthropic to Anthropic. The harness goes straight at it with the user's key, and the
  *             base URL drops its version segment because the harness appends `/v1/messages` itself.
  *
  * The model is validated against the endpoint's live catalog exactly as a routed provider's is (routedModel): a
  * pick the server no longer offers falls to the catalog default rather than being sent and refused. An endpoint
  * that has published nothing has no default to fall back to, and that is a refusal rather than a turn sent with
- * an empty model — which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
+ * an empty model, which the harness would answer by resolving its own Anthropic alias, at an endpoint that has
  * never heard of it. */
 const resolveEndpointCredentials = async (services: Services, id: string, model: string | undefined): Promise<HarnessCredentialsResult> => {
     const trial = id === TRIAL_ENDPOINT_ID;
@@ -303,7 +303,7 @@ export const resolveHarnessCredentials = async (
     /* GEMINI HAS NO CREDENTIAL HERE, and refusing is the point rather than an omission. This function exists to
      * authenticate a CLAUDE CODE turn, and Google will not serve one: that loop announces itself in every
      * request and Google's channel refuses on the announcement, whatever account pays. The contract already
-     * routes every Gemini turn to its own runtime (capabilitiesOf), so nothing should reach this — and if
+     * routes every Gemini turn to its own runtime (capabilitiesOf), so nothing should reach this, and if
      * something ever does, a named refusal is what makes that visible, where falling through to the Anthropic
      * branch below would quietly spend a Claude subscription on a turn the user asked Google for. */
     if (input.agent === "gemini") {
@@ -315,7 +315,7 @@ export const resolveHarnessCredentials = async (
     if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
         if (services.config.translator.url === "") {
             // Codex/Grok can fall back to their own runtime; Kimi has none, so for it this can only be an image
-            // problem. (Gemini never reaches here — it is refused above, having no Claude Code road at all.)
+            // problem. (Gemini never reaches here, it is refused above, having no Claude Code road at all.)
             const fallback =
                 input.agent === "kimi"
                     ? "Run a sandbox built from the published image."
@@ -332,7 +332,7 @@ export const resolveHarnessCredentials = async (
                 message: `Connect your ${ROUTED_REQUIREMENT[input.agent]} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
             };
         }
-        // The routed pick is validated against the provider's OWN live catalog — the same table the native paths
+        // The routed pick is validated against the provider's OWN live catalog, the same table the native paths
         // and the picker read, so a pick is validated identically whichever harness runs it.
         const catalog = await services.providerCatalogs[input.agent].models();
         // Narrowed here rather than read off `input` inside the closure: the limit lookup outlives this call by
@@ -350,23 +350,23 @@ export const resolveHarnessCredentials = async (
             },
         };
     }
-    /* An unnamed account is chosen by HEADROOM, and by what the provider has already refused — see
+    /* An unnamed account is chosen by HEADROOM, and by what the provider has already refused, see
      * accountWithHeadroom. The order handed over is the store's own (connectedAt), which stays the tiebreak
      * between equals, so a sandbox whose accounts all read the same still behaves exactly as it did.
      *
      * The refusal is read here rather than inside the picker because this is the layer that knows which PROVIDER
      * the turn is for; a claude turn must not be steered by the last thing Kimi said. Only a native Claude turn
-     * consults it at all — a routed turn spends the translator's own subscriptions, which it balances itself.
+     * consults it at all, a routed turn spends the translator's own subscriptions, which it balances itself.
      *
      * AND OUT OF ACCOUNTS THAT CAN SERVE A TURN AT ALL, which is the harder half of the same question. The last
-     * refusal is one account and one moment — it ranks that account last and lets it back the next time nothing
+     * refusal is one account and one moment, it ranks that account last and lets it back the next time nothing
      * else is free. An account whose ORGANIZATION has Claude Code switched off is not a moment: it
      * authenticates, publishes full headroom, refuses everything, and is therefore ALWAYS the freest account on
      * the list. Ranking it last is not enough, because "last" is still chosen on a sandbox where the others are
-     * spent — so a refused seat (claude-seats.ts) comes out of the running entirely until a turn on it answers.
+     * spent, so a refused seat (claude-seats.ts) comes out of the running entirely until a turn on it answers.
      * Only if that empties the list does the whole of it stand again: a refusal naming the reason beats "no
      * Claude account connected", which would be a lie about a sandbox that has three. A NAMED account is never
-     * filtered — the user pointing at one is entitled to its own error. */
+     * filtered, the user pointing at one is entitled to its own error. */
     const refusal = (await services.providerRefusals.read())["claude"];
     const [connected, seats] = await Promise.all([services.claudeStore.list(), services.claudeSeats.read()]);
     const usable = connected.flatMap((account) => (account.needsReauth === true || seats[account.id] !== undefined ? [] : [account.id]));
@@ -401,7 +401,7 @@ export const resolveHarnessCredentials = async (
     }
     // Hand the CLI a way to re-mint the token it was given. It calls this on a 401 and carries on with the
     // result, so a credential that expires or is revoked mid-turn costs a pause instead of the turn's work.
-    // `current` tracks what the CLI holds so the rotation supersedes exactly that one — and so a token another
+    // `current` tracks what the CLI holds so the rotation supersedes exactly that one, and so a token another
     // turn already rotated is adopted, never re-refreshed.
     let current: string | undefined = oauthToken;
     const refreshOauthToken = async (): Promise<string | undefined> => {

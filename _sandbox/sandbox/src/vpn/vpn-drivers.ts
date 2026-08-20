@@ -5,7 +5,7 @@ import type { VpnDriver } from "./vpn-driver.js";
 import { wireguardDriver } from "./wireguard.js";
 
 // Every VPN protocol's driver. Total over VpnProvider, so a new arm on the contract's discriminated union is a
-// compile error here until it has an implementation — the capability registry's bet, one level down.
+// compile error here until it has an implementation, the capability registry's bet, one level down.
 export const vpnDrivers: Record<VpnProvider, VpnDriver> = {
     wireguard: wireguardDriver,
     fortinet: fortinetDriver,

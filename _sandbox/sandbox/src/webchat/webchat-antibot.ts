@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import type { WebchatChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
 
-/* The bot ceiling for a public endpoint, in the two flavours webchat-config offers — and the reason it is a
+/* The bot ceiling for a public endpoint, in the two flavours webchat-config offers, and the reason it is a
  * ceiling rather than a wall: neither of these stops a determined human, and the automation's tool allowlist
  * and budget caps are what bound the damage if one gets through. What these buy is that a scraper pointed at
  * a Front Desk does not get to spend an agent turn per request. */
@@ -15,7 +15,7 @@ const CHALLENGE_TTL_MS = 15 * 60 * 1000;
 const POW_DIFFICULTY = 16;
 
 /* The salt is SELF-VERIFYING: `<issuedAt>.<nonce>.<hmac>` over the daemon's per-boot secret and the
- * conversation it was minted for. That binding is the whole design — it means the daemon stores nothing
+ * conversation it was minted for. That binding is the whole design, it means the daemon stores nothing
  * per outstanding challenge (no table to grow, no cleanup to get wrong), a solution can't be moved to another
  * visitor's thread, and a restart simply invalidates every challenge in flight rather than admitting them all.
  * Per-boot, because a challenge outliving a restart buys nothing: the visitor just solves another. */
@@ -55,7 +55,7 @@ const leadingZeroBits = (digest: Buffer): number => {
     return bits;
 };
 
-/* The widget sends back `<salt>:<nonce>` — the salt so the daemon can re-derive what it issued without having
+/* The widget sends back `<salt>:<nonce>`, the salt so the daemon can re-derive what it issued without having
  * kept it, the nonce as the answer. Verifying is one HMAC and one hash. */
 const verifyProofOfWork = (answer: string, conversationId: string, now: number): boolean => {
     const separator = answer.lastIndexOf(":");
@@ -72,7 +72,7 @@ const verifyProofOfWork = (answer: string, conversationId: string, now: number):
 
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-// Cloudflare's server-side half. The secret never leaves the daemon — the widget only ever holds the site key.
+// Cloudflare's server-side half. The secret never leaves the daemon, the widget only ever holds the site key.
 const verifyTurnstile = async (secretKey: string, token: string, remoteIp: string | undefined): Promise<boolean> => {
     const body = new URLSearchParams({ secret: secretKey, response: token, ...(remoteIp !== undefined ? { remoteip: remoteIp } : {}) });
     const response = await fetch(TURNSTILE_VERIFY_URL, { method: "POST", body });
@@ -83,11 +83,11 @@ const verifyTurnstile = async (secretKey: string, token: string, remoteIp: strin
     return result.success === true;
 };
 
-// Whichever answer the widget sent — the contract's own fields, so the two can't drift apart.
+// Whichever answer the widget sent, the contract's own fields, so the two can't drift apart.
 export type AntiBotAnswer = Pick<WebchatMessage, "turnstileToken" | "powNonce">;
 
 /* Whether this message clears the configured gate. `kind` is the ENFORCED mechanism (webchat-config's
- * usableAntiBot), never the raw stored setting — so a half-configured check can't become a gate nobody can
+ * usableAntiBot), never the raw stored setting, so a half-configured check can't become a gate nobody can
  * pass, and can't become a gate that silently isn't there either. */
 export const antiBotAccepted = async (
     kind: "turnstile" | "pow" | "off",

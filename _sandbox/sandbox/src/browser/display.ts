@@ -36,7 +36,7 @@ export const ensureXvfb = (): Promise<string> => {
             // -nolisten tcp: local socket only. -ac: no X access control (single-tenant sandbox). Detached +
             // unref so it outlives the spawning request and the daemon never waits on it.
             const child = spawn("Xvfb", [DISPLAY, "-screen", "0", "1280x800x24", "-nolisten", "tcp", "-ac"], { detached: true, stdio: "ignore" });
-            // Swallow ENOENT (Xvfb not installed until the owner rebuilds) — it surfaces via the socket-wait timeout.
+            // Swallow ENOENT (Xvfb not installed until the owner rebuilds), it surfaces via the socket-wait timeout.
             child.on("error", () => {});
             child.unref();
             await waitForSocket();

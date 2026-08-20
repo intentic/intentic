@@ -7,25 +7,25 @@ import type { Logger } from "pino";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR, toRelPath } from "@intentic/workspace-ignore";
 import { stateRelPath } from "./state-paths.js";
 
-// Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools — never the daemon's
+// Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools, never the daemon's
 // HTTP routes), so nothing else can tell the browser its view went stale. A single filesystem watcher on the
 // workspace root fills that gap: it batches the paths that changed and hands them to whoever is holding the
 // /events SSE stream open, which forwards them so the browser refreshes the tree + any open file with no manual
 // Refresh. The batch is debounced so a burst of agent edits is one frame, not hundreds.
 
-// The daemon's OWN machine state under .intentic/ — watching it is a feedback loop, not a change feed:
+// The daemon's OWN machine state under .intentic/, watching it is a feedback loop, not a change feed:
 // - cache/ holds SQLite dbs whose WALs rewrite continuously for MINUTES whenever a rebuilt daemon re-parses
 //   (PARSER_VERSION) or re-embeds (MODEL_ID) the workspace, plus the 466 MB whisper model streaming down in
-//   chunks. Every iq write used to come back as a change batch, which re-marked the engine dirty (main.ts) —
-//   a full /work sweep every couple of seconds — and cost every connected browser a tree refetch plus a
+//   chunks. Every iq write used to come back as a change batch, which re-marked the engine dirty (main.ts),
+//   a full /work sweep every couple of seconds, and cost every connected browser a tree refetch plus a
 //   manifest invalidation, four times a second, for as long as the rebuild took. The engine already excludes
 //   its own dir from search views (isIqDenied); excluding cache/ WHOLE is what also covers the vector
 //   sidecar's WAL, which sat outside the old cache/iq spelling and pinged the watcher on every embed.
-// - agent sessions, provider homes, connector runtime, agent scratch (tmp — a build an agent runs there logs
+// - agent sessions, provider homes, connector runtime, agent scratch (tmp, a build an agent runs there logs
 //   at write speed) and pnpm's store are all machine-written and can rewrite at token or request cadence, so
 //   they are classified as roots rather than enumerated one store at a time.
 // None of it is source and nothing derives from watching it. The .intentic/ MANIFESTS (capabilities,
-// automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
+// automations, settings, the environment Dockerfiles, approvals, drafts) stay watched, those changes are
 // exactly how another member's write reaches this browser. Spelled through stateRelPath so each exclusion is
 // a path the state table declares, and a renamed store breaks this list at compile time.
 const DAEMON_STATE_PATHS = [
@@ -43,12 +43,12 @@ const isDaemonStatePath = (relPath: string): boolean => {
     return index !== -1 && DAEMON_STATE_PATHS.some((root) => path === root || path.startsWith(`${root}/`));
 };
 
-/* WHAT THE WATCHER SKIPS — ONE RULE, TWO CONSUMERS, so the two can never disagree.
+/* WHAT THE WATCHER SKIPS. ONE RULE, TWO CONSUMERS, so the two can never disagree.
  *
  * Skipping happens twice, for different reasons. `globs` prune the watcher's DESCENT: the native backend never
  * walks into a dir a glob covers, which is what keeps node_modules / .git / browser-profile churn from costing
  * handles at all. `matches` then vets every path that DOES arrive. Both halves of a rule sit on one line here
- * because the alternative — a glob list kept by hand next to a predicate — rots the first time someone adds a
+ * because the alternative, a glob list kept by hand next to a predicate, rots the first time someone adds a
  * junk dir to one and not the other, and the symptom (the watcher quietly walking node_modules again) is
  * invisible until a machine runs out of handles.
  *
@@ -56,13 +56,13 @@ const isDaemonStatePath = (relPath: string): boolean => {
  * descent, never a wrong answer, because nothing reaches a browser without passing `matches`. The junk-dir and
  * daemon-state rules generate their globs straight off the shared constant lists, so those cannot drift at all.
  *
- * Root-anchored vs any-depth is part of each rule. The reference shelf is the ROOT-level refs/ only — a repo's
- * own refs/ is ordinary source — while junk dirs, browser profiles, agent worktrees and the daemon's state
+ * Root-anchored vs any-depth is part of each rule. The reference shelf is the ROOT-level refs/ only, a repo's
+ * own refs/ is ordinary source, while junk dirs, browser profiles, agent worktrees and the daemon's state
  * match at any depth. Paths given to `matches` are root-relative, the same space the globs match in.
  *
  * ponytail: descent-ignore only (junk dirs incl. .git + browser profiles); a .gitignore'd file outside those
  *           still emits and just triggers a harmless tree refetch. A change inside a lazy-loaded ignored dir
- *           won't push live — re-expanding that dir re-fetches it. Upgrade only if that ever matters. */
+ *           won't push live, re-expanding that dir re-fetches it. Upgrade only if that ever matters. */
 interface WatchIgnoreRule {
     readonly globs: readonly string[];
     readonly matches: (relPath: string) => boolean;
@@ -95,7 +95,7 @@ export const watchIgnoreGlobs = (): string[] => WATCH_IGNORE_RULES.flatMap((rule
 // ~250ms even while the agent edits continuously, and everything inside the window coalesces into one frame.
 export const DEBOUNCE_MS = 250;
 // A change touching more than this many visible files (branch switch, codegen, mass rename) sends an empty batch
-// — "just refetch the tree" — instead of a giant path list. The tree refetch covers it; per-file re-read/highlight
+//, "just refetch the tree", instead of a giant path list. The tree refetch covers it; per-file re-read/highlight
 // isn't worth the frame size at that scale.
 export const MAX_PATHS = 200;
 
@@ -106,12 +106,12 @@ export type PathBatcher = Coalescer<string>;
 //
 // It is a separate factory because it is the only part of this file a test can pin down. Asserting the batch
 // count against a real filesystem measures how fast a loaded machine delivers inotify events, not what this
-// code does — the same "green on a box, red on a busy runner" trap _tools/testing/src/vitest.ts describes.
+// code does, the same "green on a box, red on a busy runner" trap _tools/testing/src/vitest.ts describes.
 // Reached without a watcher in front of it, the rule answers to timers the test owns.
 export const createPathBatcher = (emit: (paths: string[]) => void): PathBatcher =>
     /* A Coalescer, not a Delayer, and that is the whole design decision: its window opens on the FIRST path of
      * a burst and later ones join it rather than pushing the deadline out. An agent editing continuously never
-     * goes quiet, so a trailing debounce here would either never fire or fire only once the agent stopped —
+     * goes quiet, so a trailing debounce here would either never fire or fire only once the agent stopped,
      * which is exactly when the browser no longer needs telling. */
     new Coalescer<string>(DEBOUNCE_MS, (batch) => {
         // A file touched twice inside one window is announced once.
@@ -141,7 +141,7 @@ interface WorkerMessage {
  * coalescing (createWorkspaceWatch below) happen off the control plane, and a watcher crash lands here rather
  * than on the daemon.
  *
- * Deliberately kept anyway — retiring it moves the batching timers back onto the daemon's loop, which is a
+ * Deliberately kept anyway, retiring it moves the batching timers back onto the daemon's loop, which is a
  * behaviour change worth making on its own rather than smuggling into a watcher swap. Whoever picks that up:
  * this comment is the argument that it is now safe to. */
 const createIsolatedWorkspaceWatch = (root: string, logger: Logger): WorkspaceWatch => {
@@ -184,7 +184,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
 
     /* ONE native subscription for the whole tree, rather than one handle per directory. `ignore` keeps the
      * descent filter that made a recursive watcher viable here in the first place (node's recursive fs.watch
-     * still cannot skip node_modules), and isWatchIgnoredRel vets whatever does arrive — pre-existing files are
+     * still cannot skip node_modules), and isWatchIgnoredRel vets whatever does arrive, pre-existing files are
      * never reported, so there is no initial-scan burst to suppress.
      *
      * Subscribing is async while this factory is not, deliberately: every caller wants a handle it can register
@@ -196,7 +196,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
     const started = subscribe(
         watchedRoot,
         (err, events) => {
-            // A watch hiccup (inotify limit, transient EACCES) must not take the daemon down — the manual
+            // A watch hiccup (inotify limit, transient EACCES) must not take the daemon down, the manual
             // Refresh still works, so degrade rather than throw. Logged, not swallowed: a dead watcher means
             // live refresh silently stops, and the log line is the only trace of why.
             if (err) {
@@ -214,7 +214,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
     )
         .then(async (sub) => {
             // close() can win the race while the backend is still arming. Whoever gets there tears the
-            // subscription down and leaves `subscription` unset, so exactly one unsubscribe ever runs — calling
+            // subscription down and leaves `subscription` unset, so exactly one unsubscribe ever runs, calling
             // it twice is not something the backend promises to tolerate.
             if (closed) {
                 await sub.unsubscribe();
@@ -236,7 +236,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
             subscription = undefined;
             await sub?.unsubscribe();
             // Drop whatever the last window accumulated. A closed watcher announcing a batch 250ms later would
-            // reach listeners that have already let go of it — and in a test, after the temp root is gone.
+            // reach listeners that have already let go of it, and in a test, after the temp root is gone.
             batcher.dispose();
         },
     };
@@ -247,7 +247,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
 //
 // Subscribers register into a module-level set that outlives the start: the daemon listens (and /events
 // streams open) BEFORE the watcher spins up its /work scan, and a subscription taken in that window used to
-// be silently dropped — a whole browser session with no live tree refresh. The watcher, whenever it starts,
+// be silently dropped, a whole browser session with no live tree refresh. The watcher, whenever it starts,
 // fans out to whatever the set holds by then.
 const subscribers = new Set<(paths: string[]) => void>();
 let instance: WorkspaceWatch | undefined;

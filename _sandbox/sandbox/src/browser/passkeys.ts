@@ -6,11 +6,11 @@ import type { BrowserContext, Page } from "playwright";
  *
  * The sites the sandbox signs into are moving their second factor from TOTP codes to WebAuthn (npm has already
  * arrived), and a hardware key on the owner's desk can never reach a Chromium running in this container. So the
- * sandbox holds its own: every page of a connected account's logged-in browser gets a CDP virtual authenticator —
- * a software security key Chromium itself provides — restored from that ACCOUNT's credential store. When the
+ * sandbox holds its own: every page of a connected account's logged-in browser gets a CDP virtual authenticator,
+ * a software security key Chromium itself provides, restored from that ACCOUNT's credential store. When the
  * owner clicks "Add security key" on a site's 2FA page (in the guided login window), the enrollment lands on
  * the virtual authenticator, the credentialAdded event hands us the credential, and it is persisted; every
- * later ceremony — the owner approving a publish, the agent answering a CLI's web-auth prompt — finds the key
+ * later ceremony, the owner approving a publish, the agent answering a CLI's web-auth prompt, finds the key
  * already plugged in and answers without any dialog (presence and user-verification are simulated).
  *
  * The store sits beside that account's Chromium profile and is exactly as sensitive as it: the profile's
@@ -19,14 +19,14 @@ import type { BrowserContext, Page } from "playwright";
  * volume (survives rebuilds), deleted with the session (session-store.clearSession).
  *
  * Two honest limits. The authenticator is per-PAGE (the CDP WebAuthn domain is target-scoped), so arming rides
- * the two places every page already passes through — the guided login's context and browser-sessions' observer
+ * the two places every page already passes through, the guided login's context and browser-sessions' observer
  * attach. And on the agent path that observer attaches moments after Chromium comes up, so a ceremony in the
  * first instants of a turn could miss the authenticator; in practice a WebAuthn prompt is pages deep into any
  * flow, far behind the attach. */
 
 // The CDP WebAuthn.Credential shape, held verbatim (plus nothing): what credentialAdded/credentialAsserted
 // deliver is exactly what addCredential takes back, so storing anything else would be a translation layer with
-// no second reader. Fields are base64 (`privateKey` is the PKCS#8 EC key — see the module comment on secrecy).
+// no second reader. Fields are base64 (`privateKey` is the PKCS#8 EC key, see the module comment on secrecy).
 export interface PasskeyCredential {
     readonly credentialId: string;
     readonly isResidentCredential: boolean;
@@ -59,7 +59,7 @@ export const listPasskeys = async (storePath: string): Promise<PasskeyCredential
         const parsed = JSON.parse(raw) as { credentials?: PasskeyCredential[] };
         return parsed.credentials ?? [];
     } catch {
-        // An unreadable store must not take the browser down — the cost is re-enrolling, which the site's own
+        // An unreadable store must not take the browser down, the cost is re-enrolling, which the site's own
         // 2FA page makes visible, versus a platform whose every page fails to arm.
         return [];
     }
@@ -83,7 +83,7 @@ const upsertPasskey = async (storePath: string, credential: PasskeyCredential): 
 };
 
 /* Plug the platform's software key into one page: virtual authenticator up, stored credentials restored onto
- * it, and both ceremony events wired back into the store — an enrollment persists the new credential, an
+ * it, and both ceremony events wired back into the store, an enrollment persists the new credential, an
  * assertion persists its bumped signature counter (some relying parties treat a counter that went backwards as
  * a cloned key). Resolves once armed; callers fire-and-forget it per page and a page that closed mid-arm simply
  * rejects into their catch. */

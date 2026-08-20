@@ -1,6 +1,6 @@
 import type { GitRunner } from "@intentic/scaffold";
 
-/* WHERE A REPO'S CODE ACTUALLY LIVES — the remote urls it carries, and the host + project each one names.
+/* WHERE A REPO'S CODE ACTUALLY LIVES, the remote urls it carries, and the host + project each one names.
  *
  * Two callers need this and they need it for opposite reasons: CI maps a repo onto a connected account, and the
  * capability scan reads the same remotes to notice that nothing is connected yet. Neither owns the other, so it
@@ -9,7 +9,7 @@ import type { GitRunner } from "@intentic/scaffold";
 
 // hostname + project out of the three remote forms git writes: https://host/owner/repo(.git),
 // ssh://git@host[:port]/owner/repo, and the scp form git@host:owner/repo. Anything else (a local path,
-// file://) returns undefined — not a remote anything can stand behind.
+// file://) returns undefined, not a remote anything can stand behind.
 export const parseRemote = (url: string): { host: string; project: string } | undefined => {
     const trimmed = url.trim();
     const schemed = /^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(trimmed);
@@ -26,7 +26,7 @@ export const parseRemote = (url: string): { host: string; project: string } | un
 };
 
 /* EVERY remote the repo has, ordered the way a mapping should consider them: `origin` first, then the rest as
- * git lists them. A repo is not limited to one remote and the extra ones are not noise — a host migration leaves
+ * git lists them. A repo is not limited to one remote and the extra ones are not noise, a host migration leaves
  * the abandoned remote configured for months, and a fork carries `origin` next to `upstream`.
  *
  * Reading only the first remote is what broke this: `git remote` sorts ALPHABETICALLY, so a repo that moved
@@ -56,7 +56,7 @@ export const remoteUrlsOf = async (dir: string, git: GitRunner): Promise<string[
 
 // WHERE THIS REPO IS, as one answer: the first remote that names a host and a project, in the order above (so
 // `origin` wins, and a fork answers with its own fork rather than upstream). Undefined ⇒ no remote, or only
-// remotes nothing can stand behind — a repo that exists nowhere anyone else can read.
+// remotes nothing can stand behind, a repo that exists nowhere anyone else can read.
 export const remoteProjectOf = async (dir: string, git: GitRunner): Promise<{ host: string; project: string } | undefined> => {
     for (const url of await remoteUrlsOf(dir, git)) {
         const parsed = parseRemote(url);

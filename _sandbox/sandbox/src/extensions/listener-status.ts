@@ -1,7 +1,7 @@
 import type { ListenerStatus } from "@intentic/sandbox-contract";
 
 // Push-based listener status: an extension's gateway process POSTs its live connection/voice snapshot to
-// /listeners/<provider>/status, and the activity route reads it here — the daemon holds no provider connection
+// /listeners/<provider>/status, and the activity route reads it here, the daemon holds no provider connection
 // of its own to probe. The schema lives in the contract (listener-protocol.ts) so the gateways type the
 // snapshot they POST against the declaration this module parses with.
 

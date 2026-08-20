@@ -2,8 +2,8 @@ import { createHmac } from "node:crypto";
 
 /* RFC 6238 TOTP, minted daemon-side so a stored seed never has to leave the manifest: the agent (and the owner's
  * terminal) get one six-digit code at a time over GET /capabilities/<id>/otp, each dead within its period. The
- * seed is whatever the enrolling service showed — the bare base32 key, or the full otpauth:// URI behind its QR
- * code — because users paste whichever of the two they can reach, and telling them apart is our job, not theirs. */
+ * seed is whatever the enrolling service showed, the bare base32 key, or the full otpauth:// URI behind its QR
+ * code, because users paste whichever of the two they can reach, and telling them apart is our job, not theirs. */
 
 interface TotpParams {
     readonly key: Buffer;
@@ -14,7 +14,7 @@ interface TotpParams {
 
 export interface TotpCode {
     readonly code: string;
-    // How long this code is still valid — the caller's cue to re-mint rather than submit a dying code.
+    // How long this code is still valid, the caller's cue to re-mint rather than submit a dying code.
     readonly secondsRemaining: number;
 }
 
@@ -46,7 +46,7 @@ const base32Decode = (encoded: string): Buffer => {
 };
 
 // The seed as pasted → the parameters to mint with. A bare key gets the universal defaults (SHA-1, 6 digits,
-// 30s — what every mainstream enrollment uses); an otpauth:// URI carries its own overrides and we honour them.
+// 30s, what every mainstream enrollment uses); an otpauth:// URI carries its own overrides and we honour them.
 const parseSeed = (seed: string): TotpParams => {
     const trimmed = seed.trim();
     if (!trimmed.toLowerCase().startsWith("otpauth://")) {
@@ -69,7 +69,7 @@ const parseSeed = (seed: string): TotpParams => {
     return { key: base32Decode(secret), algorithm, digits, period };
 };
 
-// One code for one moment. Throws on an unparseable seed — the caller turns that into "re-add the capability
+// One code for one moment. Throws on an unparseable seed, the caller turns that into "re-add the capability
 // with a valid secret" rather than ever answering with a code that cannot be right.
 export const totpCode = (seed: string, nowMs: number): TotpCode => {
     const { key, algorithm, digits, period } = parseSeed(seed);

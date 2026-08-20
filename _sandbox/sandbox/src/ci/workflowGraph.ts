@@ -2,7 +2,7 @@ import { parse } from "yaml";
 
 /* THE DEPENDENCY GRAPH GITHUB'S API WILL NOT TELL YOU, read out of the workflow file instead.
  *
- * `GET /actions/runs/:id/jobs` returns what ran and when, and nothing about what gated what — no `stage`, no
+ * `GET /actions/runs/:id/jobs` returns what ran and when, and nothing about what gated what, no `stage`, no
  * `needs`. A view given only that can say "these overlapped in time" and no more, which is why the expanded
  * job graph used to draw a thirteen-job run as a flat line: every job looked like its own sequential step.
  * Actions' own graph does not have a better API; it reads `jobs.<id>.needs` out of the workflow definition,
@@ -10,15 +10,15 @@ import { parse } from "yaml";
  *
  * THE HARD PART IS NOT THE YAML, IT IS THE NAMES. `needs` refers to workflow job IDs; the jobs API reports
  * DISPLAY names, which the two features people actually use rewrite beyond recognition:
- *   - a matrix leg is `<name> (chromium, 20)` — one declared job, N reported ones
- *   - a reusable workflow call is `<caller> / <job inside the called file>` — again one declared job, N
+ *   - a matrix leg is `<name> (chromium, 20)`, one declared job, N reported ones
+ *   - a reusable workflow call is `<caller> / <job inside the called file>`, again one declared job, N
  *     reported ones, and the called file is not in front of us (it can live in another repository entirely)
  * Both are handled the same way, and it is the only honest one available: a reported name is matched to the
  * declared job whose ID or `name` it BEGINS with, at a separator those two features are the reason for. The
  * longest such label wins, so `verify` never steals a name that `verify-core` explains.
  *
  * WHAT IS DELIBERATELY NOT GUESSED. A name nothing matches resolves to no edges at all rather than to a
- * plausible one — the caller then knows this job's place is unknown instead of being told a lie in the shape
+ * plausible one, the caller then knows this job's place is unknown instead of being told a lie in the shape
  * of a graph. Jobs inside a called workflow are siblings here, because their real order lives in a file we
  * cannot see; that is a coarser truth, not a false one. */
 
@@ -70,10 +70,10 @@ const declaredJobs = (workflowYaml: string): DeclaredJob[] => {
 };
 
 // Every string a reported name could match a declared job by. The `name:` is what Actions shows when it is
-// set, but the ID keeps matching whenever it is not — or cannot be, because it was written as an expression.
+// set, but the ID keeps matching whenever it is not, or cannot be, because it was written as an expression.
 const labelsOf = (job: DeclaredJob): string[] => (job.name === undefined ? [job.id] : [job.name, job.id]);
 
-/* Which declared job a reported name came from. Exact first — the overwhelming majority of jobs are neither
+/* Which declared job a reported name came from. Exact first, the overwhelming majority of jobs are neither
  * matrixed nor reusable and report exactly their ID or `name`. Only then the prefix rule, and only at ` (` or
  * ` / `, the two separators GitHub itself introduces; a bare `startsWith` would let `verify` claim
  * `verify-core / verify`, which is how a graph ends up quietly wired to the wrong node. */
@@ -97,8 +97,8 @@ const matchDeclared = (reported: string, jobs: readonly DeclaredJob[]): Declared
 
 /* A workflow file plus the names a run reported → what each reported job waited on, in reported names.
  *
- * Only jobs that matched a declared one appear, and a matched job always appears — with an EMPTY array when
- * it declares nothing, which is the load-bearing statement that it is a root and not that we failed to look.
+ * Only jobs that matched a declared one appear, and a matched job always appears, with an EMPTY array when
+ * it declares nothing, which is the meaningful statement that it is a root and not that we failed to look.
  * `needs` pointing at a job that did not run (an `if:` that never fired, a leg of a matrix that was excluded)
  * drops out here rather than becoming an edge to a node the graph does not contain. */
 export const resolveNeeds = (workflowYaml: string, reportedNames: readonly string[]): Map<string, string[]> => {
@@ -106,7 +106,7 @@ export const resolveNeeds = (workflowYaml: string, reportedNames: readonly strin
     if (declared.length === 0) {
         return new Map();
     }
-    // One declared job can own several reported ones — every matrix leg, every job of a called workflow — and
+    // One declared job can own several reported ones, every matrix leg, every job of a called workflow, and
     // a dependency on it is a dependency on all of them.
     const reportedByDeclared = new Map<string, string[]>();
     const declaredOfReported = new Map<string, DeclaredJob>();

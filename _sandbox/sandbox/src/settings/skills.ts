@@ -5,18 +5,18 @@ import type { Services } from "../composition.js";
 import { removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
-/* THE SKILLS THIS DAEMON OWNS — the baked tools it ships and the ones the owner wrote — and the one pass that
+/* THE SKILLS THIS DAEMON OWNS, the baked tools it ships and the ones the owner wrote, and the one pass that
  * converges both into the directory the agents read.
  *
  * Baked-tool skills exist because the tool binaries are always on PATH (baked by the Dockerfile) while the
  * SKILL.md is what actually surfaces one to the agent: writing it gates the feature and keeps it out of the
- * prompt otherwise. Which are present is driven by the settings `skills` array (SandboxSettings) — adding a new
+ * prompt otherwise. Which are present is driven by the settings `skills` array (SandboxSettings), adding a new
  * baked tool is one registry entry here plus its name in that array, with no settings-contract change.
  *
  * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/config/skills/<name>/`
  * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder and its per-runtime
  * projections), for one reason: switching a skill off must not delete what you wrote. The loaded folder holds
- * only what is currently on, so the durable copy has to sit beside the daemon's other state — and then "off" is
+ * only what is currently on, so the durable copy has to sit beside the daemon's other state, and then "off" is
  * simply "not copied", with the text intact.
  *
  * The two share the `skills` array as their enabled set rather than having one each: from the owner's side there
@@ -53,13 +53,13 @@ const SKILLS: Record<string, string> = {
     lsp: LSP_SKILL,
 };
 
-// The baked tools this image can teach the agent about, whether or not they are currently on — what the Skills
+// The baked tools this image can teach the agent about, whether or not they are currently on, what the Skills
 // list draws its `builtin` rows from, so a switched-off one is visible as available rather than missing.
 export const bakedSkillNames = (): readonly string[] => Object.keys(SKILLS);
 
 export const isBakedSkill = (name: string): boolean => name in SKILLS;
 
-// A baked tool's skill file as this image ships it — the text the reconciler writes, so the Skills list can read a
+// A baked tool's skill file as this image ships it, the text the reconciler writes, so the Skills list can read a
 // switched-off tool's description out of the same string rather than out of a second copy of it.
 export const bakedSkillText = (name: string): string | undefined => SKILLS[name];
 
@@ -74,7 +74,7 @@ export interface OwnSkill {
     readonly body: string;
 }
 
-// One of the owner's skills, as stored. Undefined when there is no such directory or its file is unreadable —
+// One of the owner's skills, as stored. Undefined when there is no such directory or its file is unreadable,
 // callers turn that into a 404 rather than an empty skill, which would read as "this does nothing".
 export const readOwnSkill = async (services: Services, name: string): Promise<OwnSkill | undefined> => {
     const text = await services.files.read(ownSkillFile(services.workspace.root, name));
@@ -88,7 +88,7 @@ export const readOwnSkill = async (services: Services, name: string): Promise<Ow
 };
 
 // Every skill the owner has written, by name. A directory with no readable SKILL.md is skipped rather than
-// listed empty — it is a half-written skill, not one that does nothing.
+// listed empty, it is a half-written skill, not one that does nothing.
 export const listOwnSkills = async (services: Services): Promise<OwnSkill[]> => {
     const entries = await readdir(ownSkillsRoot(services.workspace.root), { withFileTypes: true }).catch(() => []);
     const skills: OwnSkill[] = [];
@@ -114,7 +114,7 @@ export const removeOwnSkill = async (services: Services, name: string): Promise<
 
 /* Converge every skill this daemon owns against the enabled list: written when its name is present (so the agent
  * learns it), removed otherwise. Called at boot and after every settings save, so a change takes effect on the
- * next turn without a restart. An enabled name that names neither a baked tool nor a stored skill is ignored —
+ * next turn without a restart. An enabled name that names neither a baked tool nor a stored skill is ignored,
  * there is nothing to write, and the name may belong to a skill an extension ships.
  *
  * The owner's own skills are read from disk on each pass rather than being handed in: the list this converges

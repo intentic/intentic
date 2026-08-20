@@ -5,10 +5,10 @@ import { dirname } from "node:path";
 // in a file rather than an environment variable so EVERY in-container caller can find it the same way: an agent
 // turn's Bash, one of the owner's terminal tabs, and a tmux session that outlived the turn that spawned it.
 //
-// The file is 0600 under /run, which in this container means "root only" — and everything here runs as root, so
+// The file is 0600 under /run, which in this container means "root only", and everything here runs as root, so
 // that is a tidiness guarantee, not an isolation one. The isolation that matters is the SCOPE: auth/grants.ts
 // admits this token to the /vpn routes and the one-time-code mint and nothing else, so possessing it buys the
-// ability to dial and drop the tunnels the owner already configured and to mint codes that die within seconds —
+// ability to dial and drop the tunnels the owner already configured and to mint codes that die within seconds,
 // never to read the credentials behind either, and never any other route.
 // It is regenerated every boot, so a leaked copy dies with the container.
 const AGENT_TOKEN_PATH = "/run/intentic/agent.token";

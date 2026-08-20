@@ -2,16 +2,16 @@ import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@
 import { z } from "zod";
 import { waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
 
-/* "WAIT UNTIL THAT AGENT NEEDS ME" — the tool a supervising turn parks on instead of polling.
+/* "WAIT UNTIL THAT AGENT NEEDS ME", the tool a supervising turn parks on instead of polling.
  *
- * A parent that starts other agents — a backgrounded `codex exec`, an Agent-tool child — used to have two ways
+ * A parent that starts other agents, a backgrounded `codex exec`, an Agent-tool child, used to have two ways
  * to follow them: burn turns re-reading a tmux tail on a timer, or walk away and be told only by the exit. Both
  * miss the one state that matters most, a child sitting on a question, and the polling version spends tokens to
  * miss it. This tool is the third way: one call that returns when the child needs input or finishes, fed by the
  * same signals the roster reads (the delegation hooks, the warm OpenCode server's events, the SDK's task
- * stream) — so the parent sleeps for free and wakes exactly once, with the child's own report in hand.
+ * stream), so the parent sleeps for free and wakes exactly once, with the child's own report in hand.
  *
- * ONLY THIS TURN'S OWN CHILDREN, named by the spawning tool call's id — the id on the Bash/Agent card, and the
+ * ONLY THIS TURN'S OWN CHILDREN, named by the spawning tool call's id, the id on the Bash/Agent card, and the
  * same key the Subagents area uses. It once also took a sibling fleet agent's conversation id, which cost a
  * second waiting engine with its own idea of what "blocked" means and bought a supervision pattern nobody was
  * asking for. Waiting on your own children is the whole of the problem this solves.
@@ -21,13 +21,13 @@ import { waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
  * server-side exactly like a permission hold (guard/command-gate.ts) and settles with the turn's own abort. */
 
 // The ceiling and default for one wait. The default is long enough for a real delegated run and short enough
-// that a forgotten wait returns within the turn; the cap exists because a tool call is turn time — a parent
+// that a forgotten wait returns within the turn; the cap exists because a tool call is turn time, a parent
 // that wants to wait longer calls again, which also gives steering a seam to land in.
 const DEFAULT_TIMEOUT_S = 600;
 const MAX_TIMEOUT_S = 1800;
 
 export interface SubagentWaitDeps {
-    // The conversation whose children this turn may wait on — a parent only ever supervises its own.
+    // The conversation whose children this turn may wait on, a parent only ever supervises its own.
     readonly conversationId: string | undefined;
     // The turn's own abort, so a parked wait settles when the turn is stopped under it.
     readonly signal: AbortSignal;
@@ -35,7 +35,7 @@ export interface SubagentWaitDeps {
 
 const UNTIL = z.enum(["blocked", "finished"]);
 
-// The tool's whole answer as one JSON text block — structured enough for the model to branch on `outcome`
+// The tool's whole answer as one JSON text block, structured enough for the model to branch on `outcome`
 // without prose parsing.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
     content: [{ type: "text", text: JSON.stringify(payload) }],

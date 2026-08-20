@@ -19,6 +19,6 @@ export const removeManagedEntry = async (config: ConfigStore, name: string, mess
     }
 };
 
-// Whether an entry of that name is declared — the "is it active" signal for a service/integration capability.
+// Whether an entry of that name is declared, the "is it active" signal for a service/integration capability.
 export const hasManagedEntry = async (config: ConfigStore, name: string): Promise<boolean> =>
     readManagedRegion(await config.read()).some((entry) => entry.name === name);

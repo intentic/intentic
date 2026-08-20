@@ -31,7 +31,7 @@ import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 
 // Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
 // per-extension settings values. The web extension host boots from `list`; the bundle bytes ride the plain
-// /extensions/:id/bundle route in app.ts. A checkout whose manifest no longer parses is skipped from the list —
+// /extensions/:id/bundle route in app.ts. A checkout whose manifest no longer parses is skipped from the list,
 // its capability row still shows status, and re-adding repairs it.
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
@@ -51,7 +51,7 @@ export const createExtensionsRoutes = (services: Services) => {
             throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can do this" });
         }
     };
-    // Every id-addressed route resolves through here, against the FULL list — a disabled extension still
+    // Every id-addressed route resolves through here, against the FULL list, a disabled extension still
     // answers for its settings and its process state, which is what lets the tab render its row.
     const find = async (id: string): Promise<InstalledExtension> => {
         const extension = (await installedExtensions(services)).find((e) => e.id === id);
@@ -60,7 +60,7 @@ export const createExtensionsRoutes = (services: Services) => {
         }
         return extension;
     };
-    /* One row's `backend` field — only for a manifest that ships a server bundle. The per-extension answer
+    /* One row's `backend` field, only for a manifest that ships a server bundle. The per-extension answer
      * (running / activation error / absent / incompatible) comes from the supervisor when it has one; while
      * the host itself is between states (starting, restarting after an edit, stopped) the host's own state IS
      * the row's answer, because "your backend is restarting" is the sentence the author needs. A disabled
@@ -101,11 +101,11 @@ export const createExtensionsRoutes = (services: Services) => {
             const policies = await readUpdatePolicies(root);
             const extensions: ExtensionSummary[] = [];
             for (const extension of inventory.extensions) {
-                // Only a git-installed extension has a code identity to report — its pinned HEAD. A baked one's
+                // Only a git-installed extension has a code identity to report, its pinned HEAD. A baked one's
                 // identity is the shipped image, and a workspace one's dir is live-edited (the bundle route
                 // hashes the bytes it serves), so both get their source as a sentinel.
                 const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
-                // Keyed by publisher.name like the settings and the switch, not by the routing id — the ledger
+                // Keyed by publisher.name like the settings and the switch, not by the routing id, the ledger
                 // has to survive a remove/re-add, which is what an update to a git-installed extension IS.
                 const identity = extensionIdOf(extension.manifest);
                 const observed = usage[identity];
@@ -140,7 +140,7 @@ export const createExtensionsRoutes = (services: Services) => {
         create: i.create.handler(async ({ input }) => {
             const id = `${input.publisher}.${input.name}`;
             /* Both halves of "already taken", because they fail differently. An id collision would make the new
-             * extension unenumerable — workspace extensions never shadow a baked or installed one, so it would be
+             * extension unenumerable, workspace extensions never shadow a baked or installed one, so it would be
              * written, listed as invalid, and never run. A directory collision is somebody's existing work, which
              * may be sitting in `invalid` precisely because they are mid-edit on it. */
             const inventory = await extensionInventory(services);
@@ -156,7 +156,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 }
                 throw new ORPCError("CONFLICT", { message: `.intentic/config/workspace-extensions/${input.name} already exists` });
             }
-            // The same ping a file the owner wrote through the workspace routes sends — this is their edit, made
+            // The same ping a file the owner wrote through the workspace routes sends, this is their edit, made
             // on their behalf, and the history/commit machinery should see it as one.
             services.history.notifyUserWrite();
             return { id, dir: `.intentic/config/workspace-extensions/${input.name}` };
@@ -182,7 +182,7 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         setSettings: i.setSettings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);
-            // Only declared keys persist — the manifest is the settings schema, the same honesty rule the host
+            // Only declared keys persist, the manifest is the settings schema, the same honesty rule the host
             // applies to runtime view/command registrations.
             const declared = manifest.contributes?.settings ?? [];
             const secretKeys = new Set(declared.filter((setting) => setting.secret === true).map((setting) => setting.key));
@@ -213,8 +213,8 @@ export const createExtensionsRoutes = (services: Services) => {
         recordUsage: i.recordUsage.handler(async ({ input }) => {
             const extension = await find(input.id);
             /* The manifest filters the batch, the same honesty rule settings follow. A report naming a route the
-             * manifest does not declare is not an error anyone can act on — it means the manifest changed while a
-             * browser was still running the previous one — so it is dropped rather than refused, and the sweep in
+             * manifest does not declare is not an error anyone can act on, it means the manifest changed while a
+             * browser was still running the previous one, so it is dropped rather than refused, and the sweep in
              * the store drops what that browser had already recorded. */
             await recordExtensionUsage(
                 root,
@@ -228,7 +228,7 @@ export const createExtensionsRoutes = (services: Services) => {
         readiness: i.readiness.handler(async ({ input }) => {
             const extension = await find(input.id);
             const usage = (await readExtensionUsage(root))[extensionIdOf(extension.manifest)];
-            // The extension's own directory — for a workspace or baked one that is where it sits, and for a
+            // The extension's own directory, for a workspace or baked one that is where it sits, and for a
             // git-installed one it is the checkout, which is what a publisher would push.
             const checks = await extensionReadiness(extension, satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion), usage);
             return { checks };
@@ -265,7 +265,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
             }
         }),
-        // The policy decides what may happen UNATTENDED — owner-gated for the same reason the verbs above are.
+        // The policy decides what may happen UNATTENDED, owner-gated for the same reason the verbs above are.
         setUpdatePolicy: i.setUpdatePolicy.handler(async ({ input, context }) => {
             await authorizeOwner(context);
             const extension = await find(input.id);
@@ -290,7 +290,7 @@ export const createExtensionsRoutes = (services: Services) => {
             }
             /* The premium gate's second door: an installed premium extension that was later disabled (or
              * whose owner's membership lapsed) re-checks at the flip, the same fresh probe the install made.
-             * Baked and workspace extensions have no capability entry and no tier — never gated. */
+             * Baked and workspace extensions have no capability entry and no tier, never gated. */
             if (input.enabled) {
                 const capability = await services.capabilities.get(input.id);
                 if (capability?.kind === "extension" && capability.config.tier === "premium") {
@@ -304,7 +304,7 @@ export const createExtensionsRoutes = (services: Services) => {
             }
             await writeExtensionEnablement(root, extensionIdOf(extension.manifest), input.enabled);
             /* The half of a flip that lands NOW: declared processes. Everything else the switch reaches is
-             * rebuilt on its own cadence and needs nothing here — the agent's plugin dirs and PATH are composed
+             * rebuilt on its own cadence and needs nothing here, the agent's plugin dirs and PATH are composed
              * per turn (turn-plan.ts), connectors/env/listener providers are read per request, and an
              * `environment` fragment is only in the image. The tab tells the owner which of those an extension
              * actually has, so the delay is stated rather than discovered. */

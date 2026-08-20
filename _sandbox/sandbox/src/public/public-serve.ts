@@ -3,14 +3,14 @@ import type http from "node:http";
 import { interstitial } from "../panels/interstitial.js";
 import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 
-/* THE OUTBOX'S HTTP SURFACE — how a published file answers, once public-files.ts has decided it may.
+/* THE OUTBOX'S HTTP SURFACE, how a published file answers, once public-files.ts has decided it may.
  *
  * Mounted on the preview proxy, so it inherits that proxy's one property: no auth in front of it. Everything
  * about the response is therefore written for a stranger holding a link, not for the owner:
  *
- *   • GET and HEAD only. There is no write path to the outbox from the internet — files get there through the
+ *   • GET and HEAD only. There is no write path to the outbox from the internet, files get there through the
  *     workspace, which is authenticated.
- *   • `X-Robots-Tag: noindex`. The hostname is unguessable, so crawlers cannot find the outbox on their own —
+ *   • `X-Robots-Tag: noindex`. The hostname is unguessable, so crawlers cannot find the outbox on their own,
  *     but a link pasted into a public issue can be followed, and "I sent this to one person" should not become
  *     a search result. A user publishing a real site rather than an artifact is the case this costs, and the
  *     link-sharing case is overwhelmingly the common one.
@@ -19,7 +19,7 @@ import { type PublicResolution, resolvePublicFile } from "./public-files.js";
  *   • Range requests, because publishing a screen recording is a normal thing to do and a video element that
  *     cannot seek reads as broken.
  *
- * Every refusal — missing, blocked, or simply not published — renders the same branded 404 page the proxy uses,
+ * Every refusal, missing, blocked, or simply not published, renders the same branded 404 page the proxy uses,
  * for the same reason it says so little: a stranger is not owed the difference, and the publisher reads the
  * real reason off the Public view. */
 
@@ -27,7 +27,7 @@ import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 // validator makes the repeat visit cheap without ever letting a viewer hold a stale copy.
 const etagOf = (resolution: Extract<PublicResolution, { kind: "file" }>): string => `W/"${resolution.size}-${Math.floor(resolution.mtimeMs)}"`;
 
-// A single `bytes=` range against a known length — undefined when absent, malformed, or multi-range (all of
+// A single `bytes=` range against a known length, undefined when absent, malformed, or multi-range (all of
 // which are answered with the whole file, which is always a valid response to a Range request).
 const parseRange = (header: string | undefined, size: number): { readonly start: number; readonly end: number } | undefined => {
     const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
@@ -35,7 +35,7 @@ const parseRange = (header: string | undefined, size: number): { readonly start:
         return undefined;
     }
     const [, rawStart, rawEnd] = match;
-    // "bytes=-500" is the LAST 500 bytes, not a range starting at 0 — the one part of the grammar that reads
+    // "bytes=-500" is the LAST 500 bytes, not a range starting at 0, the one part of the grammar that reads
     // backwards.
     const start = rawStart === "" ? size - Number(rawEnd) : Number(rawStart);
     const end = rawStart === "" || rawEnd === "" ? size - 1 : Number(rawEnd);
@@ -43,7 +43,7 @@ const parseRange = (header: string | undefined, size: number): { readonly start:
 };
 
 // The Content-Security-Policy an SVG document is served under: presentation intact, scripting gone. Applied to
-// SVG alone — an HTML page in the outbox is a site the user published and needs its own scripts, whereas an SVG
+// SVG alone, an HTML page in the outbox is a site the user published and needs its own scripts, whereas an SVG
 // is a diagram whose ability to execute is never the reason it was shared.
 const SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
@@ -101,7 +101,7 @@ export const createPublicHandler =
                       createReadStream(resolution.absPath, { start: range.start, end: range.end }),
                   ];
         // A read that fails after the head is written (the file was deleted mid-stream) has no way left to say
-        // so — dropping the socket is the only honest signal, and the viewer's client reports a truncated
+        // so, dropping the socket is the only honest signal, and the viewer's client reports a truncated
         // transfer rather than a silently short file.
         stream.on("error", () => res.destroy());
         res.writeHead(status, { ...headers, ...extra });

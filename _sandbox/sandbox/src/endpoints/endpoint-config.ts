@@ -1,6 +1,6 @@
 import type { EndpointConfig } from "@intentic/sandbox-contract";
 
-/* READING AN ENDPOINT'S CONFIG — the pure half, shared by the three things that consume one: the model catalog
+/* READING AN ENDPOINT'S CONFIG, the pure half, shared by the three things that consume one: the model catalog
  * (which asks the server what it serves), the translator reconciler (which hands it to CLIProxyAPI), and the
  * turn's credential resolution (which points the harness at it). One module because a URL that means one thing
  * to the catalog and another to the turn is a bug that only shows up as a 404 mid-conversation. */
@@ -8,7 +8,7 @@ import type { EndpointConfig } from "@intentic/sandbox-contract";
 /* THE VERSION SEGMENT, which the two ecosystems put on opposite sides of the line the user is asked to write.
  *
  * OpenAI-compatible servers document their base WITH it (`http://localhost:11434/v1`, `https://openrouter.ai/api/v1`)
- * and append `/chat/completions`. Anthropic's own clients — Claude Code included — document ANTHROPIC_BASE_URL
+ * and append `/chat/completions`. Anthropic's own clients. Claude Code included, document ANTHROPIC_BASE_URL
  * WITHOUT it and append `/v1/messages` themselves. Both conventions are correct in their own world, and a user
  * pasting the URL their server's README gave them is right either way.
  *
@@ -18,13 +18,13 @@ import type { EndpointConfig } from "@intentic/sandbox-contract";
 const VERSION_SUFFIX = /\/v\d+$/;
 const trimmed = (baseUrl: string): string => baseUrl.trim().replace(/\/+$/, "");
 
-// The API root WITH its version segment — what an OpenAI-compatible client (and CLIProxyAPI's `base-url`) wants.
+// The API root WITH its version segment, what an OpenAI-compatible client (and CLIProxyAPI's `base-url`) wants.
 export const versionedBase = (baseUrl: string): string => {
     const base = trimmed(baseUrl);
     return VERSION_SUFFIX.test(base) ? base : `${base}/v1`;
 };
 
-// The API root WITHOUT it — what ANTHROPIC_BASE_URL wants, since the harness appends `/v1/messages` itself.
+// The API root WITHOUT it, what ANTHROPIC_BASE_URL wants, since the harness appends `/v1/messages` itself.
 export const unversionedBase = (baseUrl: string): string => trimmed(baseUrl).replace(VERSION_SUFFIX, "");
 
 /* The pasted `Name: value` block, one per line. Blank lines and `#` comments are skipped so a user can annotate
@@ -47,7 +47,7 @@ export const parseHeaders = (headers: string | undefined): Record<string, string
     return parsed;
 };
 
-/* What authenticates a direct call to the endpoint — the catalog read, and (for an anthropic-protocol endpoint)
+/* What authenticates a direct call to the endpoint, the catalog read, and (for an anthropic-protocol endpoint)
  * every turn. Each protocol's own scheme, because a server that speaks one and is handed the other's header
  * answers 401 with nothing to point at: OpenAI-compatible servers read `Authorization: Bearer`, Anthropic ones
  * read `x-api-key` alongside a required `anthropic-version`.
@@ -63,7 +63,7 @@ const endpointAuthHeaders = (config: EndpointConfig): Record<string, string> => 
     return key === "" ? {} : { authorization: `Bearer ${key}` };
 };
 
-// Everything a direct request to this endpoint carries: its protocol's auth, then the user's own header block —
+// Everything a direct request to this endpoint carries: its protocol's auth, then the user's own header block,
 // last so a gateway that wants a non-standard auth header can override ours rather than fight it.
 export const endpointHeaders = (config: EndpointConfig): Record<string, string> => ({
     ...endpointAuthHeaders(config),

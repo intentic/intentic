@@ -4,7 +4,7 @@ import { DELEGATION_SESSION_TITLE } from "../grok/opencode.js";
  * accounts through their CLIs (`codex exec`, `opencode run`) from its ordinary Bash tool. The note below is
  * appended to the system prompt only for providers with a usable credential this turn, so a disconnected
  * provider is never offered. Shell-based on purpose: children run inside the agent's tmux session (watchable
- * live in the terminal panel) and compose with everything Bash can do — the container is the isolation
+ * live in the terminal panel) and compose with everything Bash can do, the container is the isolation
  * boundary, same as every other agent command.
  *
  * The command templates carry the flags that make a delegation OBSERVABLE, and the note says why in one clause
@@ -16,10 +16,10 @@ import { DELEGATION_SESSION_TITLE } from "../grok/opencode.js";
  * Both feed the `wait` tool (subagent-wait.ts), which is what replaces "tail the log and check back later". */
 
 export interface DelegationTargets {
-    // The sandbox-wide CODEX_HOME — streamAgent also injects it (with the translator bearer) into the shell env,
+    // The sandbox-wide CODEX_HOME, streamAgent also injects it (with the translator bearer) into the shell env,
     // so the codex CLI is pre-authenticated on the ChatGPT subscription without the note naming any path.
     readonly codexHome?: string;
-    // The warm OpenCode server's URL when xAI/Grok is connected — the `--attach` target. Credentials live on
+    // The warm OpenCode server's URL when xAI/Grok is connected, the `--attach` target. Credentials live on
     // the server, so the command needs no XDG_DATA_HOME prefix (what this note used to inline per command).
     readonly openCodeUrl?: string;
     // The bare xAI model id the note names (`--model xai/<grokModel>`), resolved live from OpenCode's catalog
@@ -27,7 +27,7 @@ export interface DelegationTargets {
     readonly grokModel?: string;
 }
 
-// The note's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
+// The note's fixed opening, what stripTurnPreamble anchors on to recognize an injected note in a stored
 // user message (turn-preamble.ts).
 export const DELEGATION_NOTE_HEADER = "## Delegating to other coding agents";
 

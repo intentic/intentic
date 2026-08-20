@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import type { MachineReport } from "@intentic/sandbox-contract";
 
 // Desktop enrollment for Mutagen: a machine lands its ed25519 public key here (redeeming a browser-minted
-// pairing token), then Mutagen rides SSH with that key for two things — bidirectional FILE sync of /work, and
+// pairing token), then Mutagen rides SSH with that key for two things, bidirectional FILE sync of /work, and
 // TCP PORT mirroring of the sandbox's dev-server ports onto the machine's localhost. Trust roots in the Google
 // identity that minted the pairing; the agent itself needs no OAuth, just the one-time token.
 //
@@ -14,13 +14,13 @@ import type { MachineReport } from "@intentic/sandbox-contract";
 //                one sync enrollment exists at a time (a second needs an explicit takeover).
 //   - "mirror" → port mirroring only. UNLIMITED: forwards are read-only and per-machine, so every collaborator
 //                can mirror the sandbox's ports to their own localhost simultaneously.
-// The owner can enroll either mode; a member (collaborator) can only ever get "mirror" — enforced at pairing
+// The owner can enroll either mode; a member (collaborator) can only ever get "mirror", enforced at pairing
 // mint, so the file-sync lock is owner-territory while live previews are everyone's.
 
 export type SyncMode = "sync" | "mirror";
 
 // One-time pairing tokens, in memory (ephemeral: a daemon restart just means the user clicks Enable again). Each
-// carries the mode it may enroll — the browser card mints it per the requester's role, and the enroll trusts the
+// carries the mode it may enroll, the browser card mints it per the requester's role, and the enroll trusts the
 // pairing's mode, not anything the agent claims.
 const PAIR_TTL_MS = 10 * 60 * 1000;
 const pairings = new Map<string, { expiresAt: number; mode: SyncMode }>();
@@ -38,14 +38,14 @@ export const mintPairing = (mode: SyncMode): { token: string; expiresIn: number 
  * SPENT ONCE, SPENT FOR GOOD. A browser-minted pairing dies with the daemon, but this one lives in the
  * container's environment, which is immortal by comparison: it is in the compose file, in `docker inspect`, in
  * whatever shell history ran the installer, and it is replayed verbatim into every rebuilt container. Re-arming
- * it on each boot therefore turned a setup-time token into a permanent key for /system/authorized-key — a route
+ * it on each boot therefore turned a setup-time token into a permanent key for /system/authorized-key, a route
  * exempt from the bearer middleware, whose reward is an SSH key in the container. One leak of the env, and
  * every future restart reopened the same ten-minute window.
  *
  * So the redemption is recorded on /history (which outlives the container, like the enrollments themselves) and
  * a consumed token never arms again. Re-running setup is unaffected: /setup/claim mints a FRESH token per
  * claim, so the ordinary "run the installer again" path seeds a digest nobody has burned. What no longer works
- * is replaying an already-redeemed token — which is exactly the capability that was worth removing. */
+ * is replaying an already-redeemed token, which is exactly the capability that was worth removing. */
 export const seedPairing = async (historyRoot: string, token: string): Promise<void> => {
     if (await isSeedConsumed(historyRoot, token)) {
         return;
@@ -54,7 +54,7 @@ export const seedPairing = async (historyRoot: string, token: string): Promise<v
     seeded.add(token);
 };
 
-// The setup-time tokens armed this boot — so consumePairing knows which redemptions are worth persisting. A
+// The setup-time tokens armed this boot, so consumePairing knows which redemptions are worth persisting. A
 // browser-minted pairing is not in here: it is already unreplayable, because nothing outside memory holds it.
 const seeded = new Set<string>();
 
@@ -83,7 +83,7 @@ const recordSeedConsumed = async (historyRoot: string, token: string): Promise<v
     await writeFile(seedConsumedPath(historyRoot), JSON.stringify({ digests: [...digests, digest] }), { mode: 0o600 });
 };
 
-// Valid = known + unexpired (prunes on expiry). Peek only — the caller consumes it after a successful enroll,
+// Valid = known + unexpired (prunes on expiry). Peek only, the caller consumes it after a successful enroll,
 // so a failed enroll leaves the token usable for a retry.
 export const isValidPairing = (token: string): boolean => pairingMode(token) !== undefined;
 
@@ -109,10 +109,10 @@ export const consumePairing = async (historyRoot: string, token: string): Promis
     }
 };
 
-// The enrollment store — source of truth for every desktop machine's key + sync token + mode. It lives on the
+// The enrollment store, source of truth for every desktop machine's key + sync token + mode. It lives on the
 // /history volume: outside /work (so the agent can never read the tokens) AND outside the container's own
 // filesystem, so it survives the `docker rm -f` + `docker run` that every rebuild path performs. It used to sit
-// in homedir (/root), which a recreate wipes — taking every enrollment with it, so the laptop's key was no
+// in homedir (/root), which a recreate wipes, taking every enrollment with it, so the laptop's key was no
 // longer authorized and its sync token no longer verified, while its Mutagen session retried forever against a
 // door that would never open again.
 //
@@ -120,15 +120,15 @@ export const consumePairing = async (historyRoot: string, token: string): Promis
 // ~/.ssh, which is container-local and ephemeral. Every mutation rewrites it, and restoreAuthorizedKeys()
 // re-derives it at boot, so sshd's view and this store never drift.
 interface SyncEnrollment {
-    // The authorized_keys line — the machine's identity (dedup key for re-enroll).
+    // The authorized_keys line, the machine's identity (dedup key for re-enroll).
     readonly key: string;
     // sha256 of the machine's sync token (the raw token never touches disk).
     readonly tokenDigest: string;
     readonly mode: SyncMode;
-    // The key line's comment field — the machine label for the UI.
+    // The key line's comment field, the machine label for the UI.
     readonly machine: string;
     readonly enrolledAt: number;
-    // When this machine last USED its enrollment (see verifySyncToken). Absent until the first poll — an
+    // When this machine last USED its enrollment (see verifySyncToken). Absent until the first poll, an
     // enrollment that has never been used is exactly what a machine that never finished setup leaves behind.
     readonly seenAt?: number;
 }
@@ -147,14 +147,14 @@ const readEnrollments = async (historyRoot: string): Promise<SyncEnrollment[]> =
 };
 
 // Write authorized_keys from the store (one key line per enrollment), so sshd authorizes exactly the enrolled
-// machines. An empty store writes an empty file rather than removing it — "nobody is enrolled" must be a state
+// machines. An empty store writes an empty file rather than removing it, "nobody is enrolled" must be a state
 // sshd can read, not an absence that a leftover file could contradict.
 const writeAuthorizedKeys = async (enrollments: readonly SyncEnrollment[]): Promise<void> => {
     await mkdir(dirname(authorizedKeysPath()), { recursive: true, mode: 0o700 });
     await writeFile(authorizedKeysPath(), enrollments.map((entry) => entry.key).join("\n") + (enrollments.length > 0 ? "\n" : ""), { mode: 0o600 });
 };
 
-// Persist the store AND rewrite authorized_keys from it — the two always move together.
+// Persist the store AND rewrite authorized_keys from it, the two always move together.
 const persist = async (historyRoot: string, enrollments: SyncEnrollment[]): Promise<void> => {
     await mkdir(historyRoot, { recursive: true });
     await writeFile(enrollmentsPath(historyRoot), JSON.stringify(enrollments), { mode: 0o600 });
@@ -203,16 +203,16 @@ export const enrollSyncKey = async (args: {
 
 /* How stale a seenAt may get before a verification refreshes it. The desktop agent's mirror watcher polls /ports
  * every 5 seconds per pairing and every poll lands here, so stamping each one would be a disk write every 5
- * seconds per machine, forever — to answer a question ("is that machine still syncing?") whose useful resolution
+ * seconds per machine, forever, to answer a question ("is that machine still syncing?") whose useful resolution
  * is minutes. Throttled, a live holder's seenAt is never more than this far behind. */
 const SEEN_THROTTLE_MS = 60_000;
 
-/* Whether a presented sync token matches ANY enrollment — the /ports read credential + the self-revoke identity.
+/* Whether a presented sync token matches ANY enrollment, the /ports read credential + the self-revoke identity.
  *
  * AND the heartbeat. The agent's ports poll is the one thing a live desktop sync does on its own, every few
  * seconds, so verification is where "this machine is still there" is knowable; nothing else on either end ever
  * asked. Without it an enrollment reads as active from the moment it is made until someone revokes it, so the
- * Desktop-sync card kept claiming "Syncing from <machine>" long after that machine had stopped — which is what a
+ * Desktop-sync card kept claiming "Syncing from <machine>" long after that machine had stopped, which is what a
  * folder silently losing its pairing looks like from the sandbox side, and why it took days to notice.
  *
  * The write goes through persist(), which also rewrites authorized_keys: the key set is unchanged by construction
@@ -227,14 +227,14 @@ const matchEnrollment = (enrollments: readonly SyncEnrollment[], presented: stri
 };
 
 /* `checkedIn` is what separates the agent DOING ITS JOB from its bytes merely flowing, and the card's whole
- * meaning rests on it. Every route the sync token opens used to stamp seenAt, including the SSH transport — a
+ * meaning rests on it. Every route the sync token opens used to stamp seenAt, including the SSH transport, a
  * stream Mutagen's daemon opens and reopens on its own, entirely independently of the watcher that is supposed to
  * be polling. So a watcher whose loop had died left the pill green and the card reading "Syncing from <machine>,
  * just now" while port mirroring, the git bridge and every not-yet-created file sync were stopped: the heartbeat
  * was being taken from a machine that was no longer doing the work.
  *
  * Only the watcher's OWN periodic calls (the ports poll and the machine report) mean "still on the job", so only
- * those stamp. The transport still authorizes exactly as before — it just no longer speaks for the agent. */
+ * those stamp. The transport still authorizes exactly as before, it just no longer speaks for the agent. */
 export const verifySyncToken = async (historyRoot: string, presented: string, checkedIn: boolean): Promise<boolean> => {
     const enrollments = await readEnrollments(historyRoot);
     const matched = matchEnrollment(enrollments, presented);
@@ -252,11 +252,11 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
     return true;
 };
 
-// Whether ANY machine is enrolled — the UI's "desktop sync/mirror active" signal.
+// Whether ANY machine is enrolled, the UI's "desktop sync/mirror active" signal.
 export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;
 
 // The machine holding file sync, as the card needs it: its label plus when it was last heard from. A projection
-// rather than the enrollment itself — the record next to these two fields is a key and a token digest, which have
+// rather than the enrollment itself, the record next to these two fields is a key and a token digest, which have
 // no business reaching a browser.
 export interface SyncHolder {
     readonly machine: string;
@@ -273,16 +273,16 @@ export const syncHolder = async (historyRoot: string): Promise<SyncHolder | unde
     return { machine: holder.machine, ...(holder.seenAt === undefined ? {} : { seenAt: holder.seenAt }) };
 };
 
-// The machines currently mirroring ports (any number) — for the UI to show who has live previews.
+// The machines currently mirroring ports (any number), for the UI to show who has live previews.
 export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>
     (await readEnrollments(historyRoot)).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
 
-// Every enrolled machine's label, whichever mode it holds — the Computers view's row list. A machine belongs on
+// Every enrolled machine's label, whichever mode it holds, the Computers view's row list. A machine belongs on
 // it because it is ENROLLED, not because it has managed to report: one that never posts is exactly the case
 // worth showing (an agent too old to report, or a setup that never finished).
 export const enrolledMachines = async (historyRoot: string): Promise<string[]> => (await readEnrollments(historyRoot)).map((entry) => entry.machine);
 
-/* WHAT THE MACHINE SAYS ABOUT ITSELF. Everything above is what the SANDBOX knows about an enrollment — that it
+/* WHAT THE MACHINE SAYS ABOUT ITSELF. Everything above is what the SANDBOX knows about an enrollment, that it
  * exists, and roughly when it was last used. None of it can answer the questions the Desktop sync card was
  * actually asked: which folder is this syncing into, which ports did it get onto localhost, is the watcher behind
  * it even alive. Those are facts only the machine holds (SYNC_DIR never reaches the daemon), so the machine
@@ -290,7 +290,7 @@ export const enrolledMachines = async (historyRoot: string): Promise<string[]> =
  *
  * IN MEMORY, deliberately, unlike the enrollments beside it. A report is a snapshot of a computer that may since
  * have closed its lid, and a daemon restart re-learns it within one poll of every machine still there. Persisting
- * it would mean serving a laptop's folder list back for as long as the record survived — the exact "green over a
+ * it would mean serving a laptop's folder list back for as long as the record survived, the exact "green over a
  * machine that stopped hours ago" lie the seenAt heartbeat exists to prevent. */
 const reports = new Map<string, { readonly report: MachineReport; readonly receivedAt: number }>();
 
@@ -308,7 +308,7 @@ export const recordMachineReport = async (historyRoot: string, presented: string
 
 /* The reports of the machines still enrolled, newest first, each beside the enrollment LABEL it was filed under.
  * The label travels with it because it is the only name the sandbox has ever known this machine by (the ssh key's
- * comment — what "Syncing from X" says), while the report carries the machine's own hostname; reconciling a
+ * comment, what "Syncing from X" says), while the report carries the machine's own hostname; reconciling a
  * sync-enrolled machine with the same box reached through a host capability needs both.
  *
  * Filtered against the live enrollments rather than returned wholesale: revoking a machine's access has to stop
@@ -334,7 +334,7 @@ export const revokeEnrollmentByToken = async (historyRoot: string, token: string
     return true;
 };
 
-// Owner "Disable desktop sync": drop EVERY enrollment (all keys + tokens) — the admin kill switch.
+// Owner "Disable desktop sync": drop EVERY enrollment (all keys + tokens), the admin kill switch.
 export const clearAllEnrollments = async (historyRoot: string): Promise<void> => {
     await persist(historyRoot, []);
 };
@@ -343,12 +343,12 @@ export const clearAllEnrollments = async (historyRoot: string): Promise<void> =>
  *
  * Mutagen reached this container by resolving `ssh-<id>.<zone>` and dialling it through the reachability
  * fabric, because a Cloudflare tunnel routes arbitrary TCP. When the fabric moved to a hub that shares HTTP and
- * nothing else, that name became a hostname pointing at nothing — so this derivation started answering
+ * nothing else, that name became a hostname pointing at nothing, so this derivation started answering
  * `undefined`, the enroll route turned that into a 409, and desktop sync was dead on the ONE path the setup
  * wizard offers by default. It was offered anyway, on by default, failing every time.
  *
  * A second kind of route through the fabric would have fixed the symptom and left the shape: a transport that
  * works or not depending on how a given sandbox happens to be reachable, with a matrix to keep straight. The
- * transport is now this daemon's own HTTPS surface instead (platform/sync-ssh.ts) — the one way in that every
+ * transport is now this daemon's own HTTPS surface instead (platform/sync-ssh.ts), the one way in that every
  * sandbox has by definition, since it is how the workspace itself is served. Nothing to derive, nothing to
  * provision, and no sandbox that can answer this request but cannot carry sync. */

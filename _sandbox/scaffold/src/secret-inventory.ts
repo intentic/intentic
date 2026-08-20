@@ -33,12 +33,12 @@ export const writeSyncState = async (dir: string, state: SyncState): Promise<voi
 
 // The env|generated slice of the secrets inventory, aggregated from one desired-state checkout: the artifact's
 // {$secret} refs (what the intent REQUIRES and which resources consume each key), .env / .secrets.json keys
-// (what is SET — values are read only to digest-compare against the CI sync record, never returned), and the
+// (what is SET, values are read only to digest-compare against the CI sync record, never returned), and the
 // sync record (CI staleness). Keys set in .env but not referenced by the artifact still appear (requiredBy [])
-// — the user put them there, so they must be visible and removable. Capability/provider entries are the
-// daemon's to add — they live in its stores, not in this repo.
+//, the user put them there, so they must be visible and removable. Capability/provider entries are the
+// daemon's to add, they live in its stores, not in this repo.
 export const collectSecretInventory = async (dir: string): Promise<SecretInventoryEntry[]> => {
-    // Four independent reads (each already degrades to a default on absence) — resolve them concurrently.
+    // Four independent reads (each already degrades to a default on absence), resolve them concurrently.
     const [graph, envRaw, generated, sync] = await Promise.all([
         readJson<DesiredStateGraph>(join(dir, ARTIFACT_FILE)),
         readFile(join(dir, ENV_FILE), "utf8").catch(() => ""),

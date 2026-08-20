@@ -3,11 +3,11 @@ import { discoverRepos } from "./repo-discovery.js";
 import { subscribeWorkspaceChanges } from "./workspace-watch.js";
 
 // Repo-set change push. The file watcher descent-ignores .git (workspace-watch.ts), so the browser can never
-// see a .git path — and with repos allowed anywhere under /work, no path pattern can tell "a repo appeared"
+// see a .git path, and with repos allowed anywhere under /work, no path pattern can tell "a repo appeared"
 // from an ordinary dir write. The daemon detects it instead: every workspace-change batch schedules a
 // throttled re-discovery, and a changed repo set is pushed to the /events stream as a reposChanged frame.
 
-// Discovery is a filesystem walk — cap it to one scan per window even while the agent writes continuously.
+// Discovery is a filesystem walk, cap it to one scan per window even while the agent writes continuously.
 const RESCAN_THROTTLE_MS = 2_000;
 
 export interface RepoWatch {

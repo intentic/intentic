@@ -4,12 +4,12 @@ import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
 import { parseSkillFile } from "../settings/skill-file.js";
 
-/* WHAT EVERY SOURCE ADAPTER SHARES — the tolerant readers, the name shaping, and the one translation both
+/* WHAT EVERY SOURCE ADAPTER SHARES, the tolerant readers, the name shaping, and the one translation both
  * ecosystems spell identically (a folder of SKILL.md skills). An adapter's job is the judgment particular to
  * its source; everything here is the part that must NOT vary between them, because two adapters disagreeing on
  * what a valid id or a credential-shaped key is would make the same archive import differently by source. */
 
-// What one planned item DOES at apply — held beside the wire item, never serialized to the browser. Secret
+// What one planned item DOES at apply, held beside the wire item, never serialized to the browser. Secret
 // values ride here (they are already in the held archive's memory); `secretFields` names the config keys to
 // strip when the owner withheld secrets, so a capability still lands, keyless, rather than not at all.
 export type ItemApply =
@@ -18,7 +18,7 @@ export type ItemApply =
     | { readonly target: "automation"; readonly automation: Automation }
     | { readonly target: "capability"; readonly capability: Capability; readonly secretFields: readonly string[] }
     | { readonly target: "secret"; readonly key: string; readonly value: string }
-    // One ticked row may land several files (a folder of daily notes) — the checklist stays readable while the
+    // One ticked row may land several files (a folder of daily notes), the checklist stays readable while the
     // bytes stay complete.
     | { readonly target: "file"; readonly files: readonly { readonly relPath: string; readonly content: Buffer }[] };
 
@@ -81,12 +81,12 @@ export const idPool = (): ((raw: string) => string) => {
 
 export const localhost = (url: string): boolean => /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/]|$)/.test(url);
 
-// Whether an env key reads as a credential rather than tuning — the default-tick heuristic, never a gate.
+// Whether an env key reads as a credential rather than tuning, the default-tick heuristic, never a gate.
 // `noise` names the source tool's own variable prefixes (timeouts, plumbing), whatever their suffix says.
 export const credential = (key: string, noise: readonly string[]): boolean =>
     /(_API_KEY|_TOKEN|_SECRET|_SID|_PASSWORD)$/.test(key) && !noise.some((prefix) => key.startsWith(prefix));
 
-// Bootstrap files this size are a mistake at the source too (both tools cap injected context far lower) —
+// Bootstrap files this size are a mistake at the source too (both tools cap injected context far lower),
 // truncating keeps one runaway export from swamping the memory files every turn reads.
 export const MEMORY_FILE_CHAR_LIMIT = 20000;
 export const clipped = (body: string): string =>
@@ -94,7 +94,7 @@ export const clipped = (body: string): string =>
         ? body
         : `${body.slice(0, MEMORY_FILE_CHAR_LIMIT)}\n\n*(truncated on import — the rest was ${body.length - MEMORY_FILE_CHAR_LIMIT} characters)*`;
 
-/* Every SKILL.md under a prefix, flattened into skill items — the one mapping both ecosystems share verbatim,
+/* Every SKILL.md under a prefix, flattened into skill items, the one mapping both ecosystems share verbatim,
  * agent-skills format on both sides. Baked-tool collisions are renamed rather than shadowed (a skill called
  * `lsp` would claim the built-in's switch), and the taken-set is the CALLER's so two scanned locations (a
  * workspace skills folder and a managed one) resolve their collisions in the caller's precedence order. */
@@ -147,7 +147,7 @@ export const planSkillFiles = (files: Files, prefix: string, sourceLabel: string
 };
 
 /* One secret item per env-shaped key, deduped across a plan's several sources (.env, an auth file, inline
- * channel tokens) — first origin wins, which is why callers feed the most authoritative store first. The
+ * channel tokens), first origin wins, which is why callers feed the most authoritative store first. The
  * checklist line and the default tick are decided here so every source's secrets read identically. */
 export const secretPlanner = (
     planned: PlannedItem[],
@@ -161,7 +161,7 @@ export const secretPlanner = (
             if (taken.has(key) || value === "") {
                 return;
             }
-            // A `${VAR}` value is a POINTER at an env store, not a credential — the real value arrives via the
+            // A `${VAR}` value is a POINTER at an env store, not a credential, the real value arrives via the
             // store it points at, and importing the pointer would store a literal dollar-string as a secret.
             if (/^\$\{[^}]+\}$/.test(value)) {
                 return;
@@ -190,7 +190,7 @@ export const secretPlanner = (
 
 /* One source cron job into one held-for-approval automation. `requireApproval` on every imported job,
  * deliberately: these prompts were written for a different agent on a different machine, and the first few
- * fires should be read, not discovered. `enabled` follows the source — a job they switched off stays off. */
+ * fires should be read, not discovered. `enabled` follows the source, a job they switched off stays off. */
 export const automationPlanner = (
     sourcePrefix: string,
     planned: PlannedItem[],
@@ -204,7 +204,7 @@ export const automationPlanner = (
         if (cron === undefined || prompt === undefined) {
             return;
         }
-        // The job's OWN name wherever it declared one — a refusal that says "cron-2" makes the owner count
+        // The job's OWN name wherever it declared one, a refusal that says "cron-2" makes the owner count
         // list entries to learn which job it meant.
         const name = asString(entry["name"]) ?? asString(entry["id"]) ?? rawName;
         try {
@@ -239,7 +239,7 @@ export const automationPlanner = (
     };
 };
 
-/* One MCP server entry into an mcp capability when it is URL-served, a needs-action when it is command-run —
+/* One MCP server entry into an mcp capability when it is URL-served, a needs-action when it is command-run,
  * both ecosystems declare them the same way, down to the `sse+` transport prefix some spell into the scheme. */
 export const planMcpEntry = (
     name: string,

@@ -5,8 +5,8 @@ import type { CiProject } from "./projects.js";
 import { resolveNeeds } from "./workflowGraph.js";
 
 /* The two vendors' pipeline APIs behind one client shape, keyed off the account a project mapped to
- * (projects.ts). Everything the CI surface does — the view's run list, rerun/cancel, the fix context's log
- * tails, and the webhook reconciler's hook CRUD — goes through here, so the vendor branch exists exactly once.
+ * (projects.ts). Everything the CI surface does, the view's run list, rerun/cancel, the fix context's log
+ * tails, and the webhook reconciler's hook CRUD, goes through here, so the vendor branch exists exactly once.
  * `fetch` is injectable for tests (the git-access GitAccessDeps precedent); failures throw with the vendor's
  * status + body tail and the caller decides what a failure means. */
 
@@ -20,13 +20,13 @@ export interface HookSpec {
 }
 
 export interface CiClient {
-    // Newest-first recent runs, normalized. `failedJobs` is NOT filled here — list calls are the hot path.
+    // Newest-first recent runs, normalized. `failedJobs` is NOT filled here, list calls are the hot path.
     readonly listRuns: (project: CiProject, limit: number) => Promise<PipelineRun[]>;
-    // Names of the run's failed jobs — the one-extra-call enrichment for failed runs.
+    // Names of the run's failed jobs, the one-extra-call enrichment for failed runs.
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
-    // All jobs in a run with their individual statuses — the expanded-row enrichment for the view.
+    // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
-    // The failed jobs' log tails, concatenated and capped — the fix conversation's context. A runner prints for
+    // The failed jobs' log tails, concatenated and capped, the fix conversation's context. A runner prints for
     // a terminal, so each log is reduced to plain text (plain-text.ts) before it is capped: the cap then buys
     // failure rather than colour codes, and the prompt is readable to the human editing it.
     readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
@@ -59,8 +59,8 @@ const epoch = (iso: string | undefined | null): number => {
 // ---- github: Actions workflow runs ----
 
 // status ≠ "completed" is every in-flight shape (queued, in_progress, waiting, pending, requested); a completed
-// run's conclusion fans out into the three terminal buckets, with everything that means "did not pass" —
-// failure, timed_out, startup_failure, action_required — reading as failed.
+// run's conclusion fans out into the three terminal buckets, with everything that means "did not pass",
+// failure, timed_out, startup_failure, action_required, reading as failed.
 export const githubStatus = (status: string, conclusion: string | null | undefined): PipelineStatus => {
     if (status !== "completed") {
         return "running";
@@ -97,7 +97,7 @@ export interface GithubRun {
     readonly event?: string;
 }
 
-// One workflow_run object → the normalized run — shared verbatim by the list call and the webhook receiver
+// One workflow_run object → the normalized run, shared verbatim by the list call and the webhook receiver
 // (github's webhook carries the same object under `workflow_run`).
 export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: GithubRun): PipelineRun => {
     const status = githubStatus(run.status, run.conclusion);
@@ -124,10 +124,10 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
 const githubApi = (project: CiProject, path: string): string => `${project.account.apiBase}/repos/${project.project}${path}`;
 
 const githubClient = (fetchFn: FetchFn): CiClient => {
-    /* THE RUN'S OWN WORKFLOW FILE, at the commit it ran on — the only place the dependency graph exists (see
+    /* THE RUN'S OWN WORKFLOW FILE, at the commit it ran on, the only place the dependency graph exists (see
      * workflowGraph.ts). Two hops, because the jobs endpoint knows neither which file it came from nor which
      * revision of it: the run object carries `path` + `head_sha`, and contents serves that exact revision.
-     * Pinning to the sha matters more than it looks — reading HEAD instead would draw last week's run with
+     * Pinning to the sha matters more than it looks, reading HEAD instead would draw last week's run with
      * this morning's graph, and be most wrong precisely when someone is looking at an old failure to see what
      * changed.
      *
@@ -177,7 +177,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
         /* No `stage` is emitted: Actions has no stage concept. `needs` is, when the run's own workflow file can
-         * be read — see workflowGraph.ts for why the graph has to come from there, and note that the file is
+         * be read, see workflowGraph.ts for why the graph has to come from there, and note that the file is
          * fetched ALONGSIDE the job list rather than after it, since only the name-matching needs both. When it
          * cannot be read the jobs go out exactly as they always did and the view layers them off timestamps. */
         allJobs: async (project, runId) => {
@@ -238,7 +238,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                     break;
                 }
                 // The logs endpoint 302-redirects to a short-lived blob url; fetch follows it. A job whose log
-                // is already expired shouldn't sink the whole context — skip it and say so.
+                // is already expired shouldn't sink the whole context, skip it and say so.
                 const response = await fetchFn(githubApi(project, `/actions/jobs/${job.id}/logs`), { headers: githubHeaders(project.account.token) });
                 const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
                 const tail = text.slice(-budget);
@@ -313,7 +313,7 @@ interface GitlabPipeline {
 }
 
 // A pipelines-list row names neither its commit nor its author, so listRuns joins both in. Everything here
-// rides on responses the vendor already hands us whole — see gitlabMeta below for where it comes from.
+// rides on responses the vendor already hands us whole, see gitlabMeta below for where it comes from.
 export interface GitlabRunMeta {
     readonly title?: string;
     readonly authorName?: string;
@@ -322,8 +322,8 @@ export interface GitlabRunMeta {
 }
 
 // One pipelines-list row → the normalized run. The list carries no duration; a terminal pipeline's
-// created→updated span stands in, which measured within 7% of the vendor's own figure across a live sample —
-// the gap is queue time — so it isn't worth a per-run detail call. Webhook events carry the true one and
+// created→updated span stands in, which measured within 7% of the vendor's own figure across a live sample,
+// the gap is queue time, so it isn't worth a per-run detail call. Webhook events carry the true one and
 // overwrite this in the cache. `meta` is the listRuns enrichment; absent still yields a valid run.
 export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline: GitlabPipeline, meta: GitlabRunMeta = {}): PipelineRun => {
     const status = gitlabStatus(pipeline.status);
@@ -351,7 +351,7 @@ export const gitlabRun = (project: Pick<CiProject, "repo" | "project">, pipeline
 };
 
 // The Pipeline Hook payload's shape differs from the list row's (attributes nested, the true duration and
-// finished_at present, no web_url on older instances) — its own normalizer, sharing the status mapping.
+// finished_at present, no web_url on older instances), its own normalizer, sharing the status mapping.
 export interface GitlabPipelineHook {
     readonly object_attributes: {
         readonly id: number;
@@ -365,7 +365,7 @@ export interface GitlabPipelineHook {
     };
     readonly project: { readonly path_with_namespace: string; readonly web_url: string };
     readonly commit?: { readonly title?: string };
-    // The hook is the one gitlab path that hands us an avatar outright — no /avatar lookup needed.
+    // The hook is the one gitlab path that hands us an avatar outright, no /avatar lookup needed.
     readonly user?: { readonly name?: string; readonly username?: string; readonly avatar_url?: string };
 }
 
@@ -395,7 +395,7 @@ const gitlabHeaders = (project: CiProject): Record<string, string> => ({ "PRIVAT
 
 // The project-wide jobs feed is the cheap way to learn what a page of pipelines was about: every job carries
 // its pipeline's whole commit AND the user who triggered it. 100 jobs reached 28 distinct pipelines on a live
-// repo — every one of the 15 the view asks for. A job-dense repo will reach fewer, which is what the commits
+// repo, every one of the 15 the view asks for. A job-dense repo will reach fewer, which is what the commits
 // fallback below is for.
 const GITLAB_JOB_SCAN = 100;
 // How far back the fallback commit join reaches when the jobs feed didn't cover everything.
@@ -415,7 +415,7 @@ interface GitlabCommit {
 }
 
 const gitlabClient = (fetchFn: FetchFn): CiClient => {
-    // Enrichment never fails a listing: every catch here is a deliberate swallow, not a rethrow — a token
+    // Enrichment never fails a listing: every catch here is a deliberate swallow, not a rethrow, a token
     // scoped too narrowly to read jobs or commits still deserves its run list.
     const metaFromJobs = async (project: CiProject): Promise<Map<number, GitlabRunMeta>> => {
         const byPipeline = new Map<number, GitlabRunMeta>();
@@ -430,7 +430,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 if (id === undefined || byPipeline.has(id)) {
                     continue;
                 }
-                // The triggering user, not the commit author — it's who both vendors' own UIs credit, and the
+                // The triggering user, not the commit author, it's who both vendors' own UIs credit, and the
                 // one that arrives with a real avatar rather than an email to guess a gravatar from.
                 const author = job.user?.name ?? job.user?.username;
                 byPipeline.set(id, {
@@ -446,8 +446,8 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
         return byPipeline;
     };
 
-    // Fallback for pipelines the jobs feed didn't reach. Cheaper data — a subject and an author name, no
-    // avatar — but one call, and only issued when something actually came back bare. `all` sweeps every ref,
+    // Fallback for pipelines the jobs feed didn't reach. Cheaper data, a subject and an author name, no
+    // avatar, but one call, and only issued when something actually came back bare. `all` sweeps every ref,
     // so a pipeline on a side branch resolves too.
     const commitsBySha = async (project: CiProject): Promise<Map<string, GitlabCommit>> => {
         try {

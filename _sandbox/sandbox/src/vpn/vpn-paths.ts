@@ -8,8 +8,8 @@ import { join } from "node:path";
 
 export const vpnDir = (): string => join(homedir(), ".intentic-vpn");
 
-// Linux caps an interface name at IFNAMSIZ-1 = 15 bytes. An id short enough to be legal IS the interface name —
-// the readable, overwhelmingly common case — and a longer one falls back to a deterministic hash so two long
+// Linux caps an interface name at IFNAMSIZ-1 = 15 bytes. An id short enough to be legal IS the interface name,
+// the readable, overwhelmingly common case, and a longer one falls back to a deterministic hash so two long
 // ids that share a prefix can never collide on one interface.
 const INTERFACE_MAX = 15;
 export const interfaceName = (id: string): string =>
@@ -21,15 +21,15 @@ export const interfaceName = (id: string): string =>
               .slice(0, INTERFACE_MAX - 4)}`;
 
 // wg-quick derives the interface from the config's FILE NAME, so the wireguard conf is named for the interface
-// rather than the id — they differ only for an id too long to be an interface name.
+// rather than the id, they differ only for an id too long to be an interface name.
 export const wireguardConfPath = (id: string): string => join(vpnDir(), `${interfaceName(id)}.conf`);
 // openconnect writes its own pid here once it forks into the background; its presence + a live process is what
 // "connected" means for a fortinet tunnel.
 export const pidPath = (id: string): string => join(vpnDir(), `${interfaceName(id)}.pid`);
 // The client's own output for one dial, kept so a failed connect has a diagnosable tail and a backgrounded
-// client has somewhere to write. Truncated per dial — this is a post-mortem, not a log history.
+// client has somewhere to write. Truncated per dial, this is a post-mortem, not a log history.
 export const logPath = (id: string): string => join(vpnDir(), `${interfaceName(id)}.log`);
-// Touched when a dial succeeds, removed on disconnect: its mtime is the tunnel's "up since". ADVISORY ONLY —
+// Touched when a dial succeeds, removed on disconnect: its mtime is the tunnel's "up since". ADVISORY ONLY,
 // liveness is always read from the OS, so a missing marker costs an uptime label, never a wrong state.
 export const upMarkerPath = (id: string): string => join(vpnDir(), `${interfaceName(id)}.up`);
 

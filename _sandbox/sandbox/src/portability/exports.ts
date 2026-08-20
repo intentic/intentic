@@ -11,7 +11,7 @@ import { packBundle } from "./bundle.js";
  *
  * The first cut streamed the bundle straight down the response of the click that asked for it. That made the
  * export a property of one browser tab: navigate away or refresh and the fetch is abandoned mid-pack, the work
- * is thrown away, and — because nothing was ever written down — there is no artifact to come back to. The user
+ * is thrown away, and, because nothing was ever written down, there is no artifact to come back to. The user
  * is left with a button that has forgotten what it was doing and no way to find what it produced.
  *
  * So packing moves into the daemon and its result becomes a file on the daemon's own volume. Everything the UI
@@ -20,7 +20,7 @@ import { packBundle } from "./bundle.js";
  *
  * STATUS IS THE FILENAME. `<name>.tar.gz.part` is being written, `<name>.tar.gz` is finished, and
  * `<name>.tar.gz.failed` holds the reason it stopped. No job registry, nothing to keep in sync with the bytes,
- * and no way for the two to disagree — a packer that dies leaves exactly the state its file already describes.
+ * and no way for the two to disagree, a packer that dies leaves exactly the state its file already describes.
  * Progress is the `.part` file's own size, so "240 MB so far" costs a stat rather than a progress channel.
  *
  * WHY /history AND NOT /work: an export written into the workspace would be swept into the NEXT export (and
@@ -40,7 +40,7 @@ export class ExportBusyError extends Error {}
 
 /* The file's stem, which is also what the owner ends up with in their downloads folder. Two things are
  * deliberately IN the name rather than in metadata beside it: the timestamp, so bundles sort and never collide,
- * and whether it carries secrets — a file called `…-with-secrets.tar.gz` says what it is months later, on a
+ * and whether it carries secrets, a file called `…-with-secrets.tar.gz` says what it is months later, on a
  * machine that has no idea what intentic is. */
 const exportName = (sandbox: string, secrets: boolean, now: number): string => {
     const slug = sandbox === "" ? "sandbox" : sandbox.replace(/^intentic-sandbox-/, "");
@@ -65,7 +65,7 @@ const statusOf = (file: string): { readonly name: string; readonly status: Bundl
  *
  * `createdAt` is the file's mtime, which means different things per status and each is the one worth showing:
  * for a finished bundle it is when packing ENDED (what the owner thinks of as "when I exported"), and for a
- * `.part` it is when it last made progress — a stalled pack is visible as a timestamp that stops moving.
+ * `.part` it is when it last made progress, a stalled pack is visible as a timestamp that stops moving.
  */
 export const listExports = async (historyRoot: string): Promise<BundleExport[]> => {
     const dir = exportsDir(historyRoot);
@@ -101,7 +101,7 @@ export const listExports = async (historyRoot: string): Promise<BundleExport[]> 
 export const isReadyExport = async (historyRoot: string, name: string): Promise<boolean> =>
     (await listExports(historyRoot)).some((entry) => entry.name === name && entry.status === "ready");
 
-/* A finished bundle as a body plus its real length — the shape the download route hands back.
+/* A finished bundle as a body plus its real length, the shape the download route hands back.
  *
  * The length matters: the first cut packed as it responded, so the size was unknowable until the stream ended
  * and the browser could show neither a progress bar nor a time estimate for a download that might run for
@@ -118,7 +118,7 @@ export const openExport = async (historyRoot: string, name: string): Promise<{ b
 };
 
 // Drop one export whatever state it is in (a failed marker is as deletable as a finished bundle). True when
-// something was there — the route turns a false into a 404 rather than pretending.
+// something was there, the route turns a false into a 404 rather than pretending.
 export const removeExport = async (historyRoot: string, name: string): Promise<boolean> => {
     const found = (await listExports(historyRoot)).find((entry) => entry.name === name);
     if (found === undefined) {
@@ -133,7 +133,7 @@ export const removeExport = async (historyRoot: string, name: string): Promise<b
 
 /* Boot convergence: a `.part` can only be live while the process writing it is, so any that survives a restart
  * is an export the daemon died in the middle of. Turning it into a `.failed` at boot is what keeps "status is
- * the filename" true across a crash — otherwise the card would show a pack that is making no progress and
+ * the filename" true across a crash, otherwise the card would show a pack that is making no progress and
  * never will, with nothing to distinguish it from one that is.
  */
 export const sweepStaleExports = async (historyRoot: string): Promise<void> => {
@@ -148,7 +148,7 @@ export const sweepStaleExports = async (historyRoot: string): Promise<void> => {
     }
 };
 
-/* Start an export and return its name IMMEDIATELY — the pack runs detached, so the request that started it is
+/* Start an export and return its name IMMEDIATELY, the pack runs detached, so the request that started it is
  * free to end and the browser that sent it is free to navigate away.
  *
  * Failure is written down rather than thrown into a void: nobody is awaiting this, so a `.failed` file carrying
@@ -166,7 +166,7 @@ export const startExport = async (services: Services, options: { readonly secret
 
     /* The marker is created BEFORE this returns, so the export exists in the listing the instant the route
      * answers. Leaving it to the write stream opened below meant the file appeared only once the first bytes
-     * arrived — and building the manifest and walking a large workspace happens first, so the owner clicked
+     * arrived, and building the manifest and walking a large workspace happens first, so the owner clicked
      * Export and watched an empty list for the one moment they were most likely to click again. Zero bytes is
      * a truthful "packing, nothing yet"; the size the card shows starts moving on its own. */
     await writeFile(part, "");

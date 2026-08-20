@@ -3,12 +3,12 @@ import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // DevOps: scaffold the intent + desired-state repos and make them provisionable. This is the capability that
-// turns an empty sandbox into an infra-capable one — the Infra UI plus the service/integration capabilities all
+// turns an empty sandbox into an infra-capable one, the Infra UI plus the service/integration capabilities all
 // depend on it. No `remove`: deleting the repos would destroy the user's declared infrastructure. The git
 // bookkeeping and the pnpm install run in the visible job session the first frame surfaces.
 export const devopsHandler: CapabilityHandler = {
     echo: () => ({}),
-    // One per sandbox, and never named by anybody — like `remove`, a rename is not a thing this capability has.
+    // One per sandbox, and never named by anybody, like `remove`, a rename is not a thing this capability has.
     rename: { refuse: "DevOps is one per sandbox and has no name of its own to change." },
     apply: async function* (ctx, id) {
         const session = capabilityJobSession(id);

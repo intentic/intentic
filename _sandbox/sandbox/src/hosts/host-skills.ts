@@ -1,11 +1,11 @@
 /* Substituted for the `${tools}` slot in a host pack's SKILL.md: what a connected computer's tools ARE, and the
- * rules for working on somebody else's machine. Core, not per-OS data — the tool surface, the scope refusals and
+ * rules for working on somebody else's machine. Core, not per-OS data, the tool surface, the scope refusals and
  * the browser/pointer loops are identical on every platform. `${id}` is the instance name (renderSkill).
  *
  * The OS-SPECIFIC half is one pack per platform, contributed by an extension, and it is separate because context
  * is not free: teaching an agent PowerShell quoting on a turn where the only connected machine runs Ubuntu costs
  * tokens and invites `osascript`-shaped nonsense. That is also why this capability is one PER MACHINE rather
- * than one "computers" capability with a list — each machine installs exactly its own pack, with the tool names
+ * than one "computers" capability with a list, each machine installs exactly its own pack, with the tool names
  * already namespaced to its id, so the examples are copy-pasteable rather than illustrative.
  *
  * What goes in a pack is chosen by what the model gets WRONG unaided, not by what is documentable:

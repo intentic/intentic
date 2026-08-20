@@ -2,16 +2,16 @@ import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* Branch management over a real repo: the list the switcher renders, plus create and delete. Reading is one
- * `for-each-ref` — it reports each branch's upstream and its ahead/behind counts in the same pass, and (unlike
+ * `for-each-ref`, it reports each branch's upstream and its ahead/behind counts in the same pass, and (unlike
  * `rev-list @{upstream}...`) it simply leaves them empty for a branch with no upstream instead of failing.
  * Checkout lives in changes.ts with the other HEAD-movers, because it is auto-checkpointed like they are. */
 
 // Field separator for the for-each-ref format. A branch name can't contain US, and neither can any of the
-// other fields, so a plain split is exact — the same trick commitLog uses for its log records.
+// other fields, so a plain split is exact, the same trick commitLog uses for its log records.
 const US = "\x1f";
 
 // `%(upstream:track)` renders as "[ahead 2, behind 1]", "[ahead 3]", "[behind 1]", "[gone]" or "" (in sync, or
-// no upstream at all — `upstream` distinguishes those two). Anything unparsed reads as zero, never as a throw.
+// no upstream at all, `upstream` distinguishes those two). Anything unparsed reads as zero, never as a throw.
 const parseTrack = (track: string): { ahead: number; behind: number; gone: boolean } => {
     if (track.includes("gone")) {
         return { ahead: 0, behind: 0, gone: true };
@@ -23,7 +23,7 @@ const parseTrack = (track: string): { ahead: number; behind: number; gone: boole
 
 // One branch's upstream facts in a single `for-each-ref`: its tracking ref, the REMOTE that ref lives on, and
 // how far each side has moved. `%(upstream:remotename)` is the branch's own remote, which is not necessarily
-// the first one `git remote` lists — a fork has both `origin` and `upstream` — so it is the only correct
+// the first one `git remote` lists, a fork has both `origin` and `upstream`, so it is the only correct
 // target for a push. An unknown branch, or one with no upstream, reads as all-absent rather than throwing.
 export const upstreamOf = async (
     dir: string,
@@ -42,10 +42,10 @@ export const upstreamOf = async (
     };
 };
 
-// Every local branch, newest commit first — the order a switcher wants (what you were just on is near the top).
+// Every local branch, newest commit first, the order a switcher wants (what you were just on is near the top).
 export const listBranches = async (dir: string, git: GitRunner = defaultGit): Promise<GitBranch[]> => {
     const format = ["%(refname:short)", "%(upstream:short)", "%(upstream:track)", "%(committerdate:unix)", "%(HEAD)"].join(US);
-    // A repo with no commits has no refs/heads at all — an empty list, not an error.
+    // A repo with no commits has no refs/heads at all, an empty list, not an error.
     const { stdout } = await git(dir, ["for-each-ref", "--sort=-committerdate", `--format=${format}`, "refs/heads"]);
     const branches: GitBranch[] = [];
     for (const line of stdout.split("\n")) {
@@ -72,7 +72,7 @@ export const listBranches = async (dir: string, git: GitRunner = defaultGit): Pr
     return branches;
 };
 
-/* Every REMOTE-TRACKING branch, newest commit first — `origin/main`, `upstream/main`, and so on.
+/* Every REMOTE-TRACKING branch, newest commit first, `origin/main`, `upstream/main`, and so on.
  *
  * Read separately from the local list rather than in one `refs/` sweep, because the two answer different
  * questions and carry different fields: a local branch has an upstream and an ahead/behind, a remote-tracking
@@ -80,7 +80,7 @@ export const listBranches = async (dir: string, git: GitRunner = defaultGit): Pr
  * are meaningless for them.
  *
  * `origin/HEAD` is skipped: it is a symbolic pointer at whichever branch the remote calls default, so listing it
- * would show the same tip twice under two names — once truthfully and once as a branch nobody has.
+ * would show the same tip twice under two names, once truthfully and once as a branch nobody has.
  */
 export const listRemoteBranches = async (dir: string, git: GitRunner = defaultGit): Promise<GitRemoteBranch[]> => {
     const format = ["%(refname:short)", "%(committerdate:unix)", "%(symref)"].join(US);
@@ -108,7 +108,7 @@ export const listRemoteBranches = async (dir: string, git: GitRunner = defaultGi
 
 // Create a branch at a ref and leave HEAD where it is (`git branch <name> <start>`), or check it out
 // immediately (`git switch -c`), which is what "new branch from here" in a switcher means. Non-destructive
-// either way — git refuses a duplicate name and refuses a checkout that would lose changes; both propagate.
+// either way, git refuses a duplicate name and refuses a checkout that would lose changes; both propagate.
 export const createBranch = async (
     dir: string,
     name: string,
@@ -121,7 +121,7 @@ export const createBranch = async (
 };
 
 // Delete a local branch. Without `force` git refuses to drop a branch whose commits aren't merged anywhere
-// (and always refuses the checked-out one) — that refusal propagates as the error it is, so the UI can offer
+// (and always refuses the checked-out one), that refusal propagates as the error it is, so the UI can offer
 // the force retry rather than the daemon guessing on the user's behalf.
 export const deleteBranch = async (dir: string, name: string, force: boolean, git: GitRunner = defaultGit): Promise<void> => {
     await git(dir, ["branch", force ? "-D" : "-d", name]);

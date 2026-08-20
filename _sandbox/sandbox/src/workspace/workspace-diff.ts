@@ -9,12 +9,12 @@ export interface UploadManifestEntry {
 }
 
 // A written file's mtime is stored at second granularity (the tar carries whole seconds; setWorkspaceMtime stamps
-// the source mtime), so compare seconds — never raw ms — or every entry looks changed.
+// the source mtime), so compare seconds, never raw ms, or every entry looks changed.
 const sameSecond = (a: number, b: number): boolean => Math.floor(a / 1000) === Math.floor(b / 1000);
 
-// Of the manifest, the paths already identical on disk (same size AND same whole-second mtime) — the client drops
+// Of the manifest, the paths already identical on disk (same size AND same whole-second mtime), the client drops
 // these so their bytes never re-upload. Escaping paths are never "skippable" (resolveWithin rejects them), so they
-// fall through and re-upload as before. Stats run concurrently — a re-drop is thousands of cheap stats.
+// fall through and re-upload as before. Stats run concurrently, a re-drop is thousands of cheap stats.
 export const computeUploadSkip = async (root: string, files: readonly UploadManifestEntry[]): Promise<string[]> => {
     const results = await Promise.all(
         files.map(async (file): Promise<string | undefined> => {

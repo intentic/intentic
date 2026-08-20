@@ -18,7 +18,7 @@ export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => 
         // Applied when the file is absent or unreadable. The defaults live on the schema (every flag is opt-in,
         // so all default off), so parsing an empty object is the schema's OWN answer for "nothing was written
         // yet" rather than a second copy of the shape that could drift from it. A manifest that predates a flag
-        // keeps every pick it DOES carry — the missing key reads as that flag's default.
+        // keeps every pick it DOES carry, the missing key reads as that flag's default.
         fallback: () => SandboxSettingsSchema.parse({}),
     });
     return {

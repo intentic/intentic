@@ -2,12 +2,12 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* THE WIRE-CONTRACT SHRINK, DETECTED WHERE THE MESSAGE IS WRITTEN — not where the push is refused.
+/* THE WIRE-CONTRACT SHRINK, DETECTED WHERE THE MESSAGE IS WRITTEN, not where the push is refused.
  *
  * This repo's own gate (_tools/scripts/prepass.mjs, invariant 6) blocks a push whose contract lock lost a
  * surface with no `!` commit or `Breaking-Note:` trailer anywhere in the range. Five times running, the gate
  * fired AFTER the shrinking commit had already landed on the main line, and five times a session wrote the
- * missing declaration on its own branch — where it can never matter, because landing applies PATCHES to the
+ * missing declaration on its own branch, where it can never matter, because landing applies PATCHES to the
  * main working tree and an empty declaring commit contributes no patch. The one place a declaration can enter
  * the range is the commit the user files, and the one thing that writes that commit's draft is the landing
  * describer (agents/landed-subject.ts). So the detection runs here, mechanically, and the draft it feeds is
@@ -17,31 +17,31 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  * The algorithm is the same one the gate runs, deliberately duplicated: prepass must run with no node_modules
  * installed (it fronts `pnpm install` itself), so it cannot import this file, and this file keeping prepass's
  * exact semantics is what makes "the draft declared it" and "the gate wanted it declared" the same judgment.
- * A change to either copy owes the other a look — the comment above prepass's `shrunk` points back here. */
+ * A change to either copy owes the other a look, the comment above prepass's `shrunk` points back here. */
 
 // Any file with this basename is read as a wire-contract lock: one JSON document whose top-level keys are
 // exported schema names (see _sandbox/sandbox-contract/src/contract-lock.ts for the format and why it exists).
 const CONTRACT_LOCK_NAME = `contract.lock.json`;
 
 /* The JSON Schema keywords whose value is a map of NAME to schema. Inside one, a key is a field the wire
- * actually carries; everywhere else a key is a keyword. The lock's own root is such a map too — its keys are
- * the exported schema names — which is why the walk starts `named`. The distinction exists for exactly one
+ * actually carries; everywhere else a key is a keyword. The lock's own root is such a map too, its keys are
+ * the exported schema names, which is why the walk starts `named`. The distinction exists for exactly one
  * reason: see `description` below. */
 const NAME_MAPS = new Set([`properties`, `patternProperties`, `$defs`, `definitions`]);
 
 /* Every surface `base` offers that `head` no longer does, as dotted paths. Arrays are the schema's COLLECTIONS
  * (`oneOf` alternatives, `enum` values, `required` names) and are kept unsorted by the lock writer, so a
  * position means nothing: every base element must be matched by SOME head element, and extras pass in silence
- * exactly like a new property does. An element that merely changed reads as removed — same verdict either way.
+ * exactly like a new property does. An element that merely changed reads as removed, same verdict either way.
  * Additions never appear in the result at all: every reader of the wire parses loosely, so growth breaks
  * nobody, and a detector that flagged growth would put a false `!` on ordinary work.
  *
  * `description` AS A KEYWORD IS PROSE, AND PROSE IS NOT A PROMISE. zod's `.describe()` rides into the lock
- * beside the shape, so re-wording a help sentence — or merely refreshing the example paths inside one — used
+ * beside the shape, so re-wording a help sentence, or merely refreshing the example paths inside one, used
  * to read as "a surface changed" and demand a `!` commit with a Breaking-Note. Nothing on the wire moves when
  * it does: a client validating against the schema behaves identically before and after, and the release note
  * it forced would warn users about a typo fix. That is the failure this detector's own rule against flagging
- * growth exists to avoid — a gate that fires on nothing teaches everyone to satisfy it with nothing.
+ * growth exists to avoid, a gate that fires on nothing teaches everyone to satisfy it with nothing.
  *
  * It is skipped ONLY as a keyword. 78 schemas in this lock carry a real field NAMED `description`, and losing
  * one of those is a genuine break, so the walk tracks whether the object it is reading is a name map (keys are
@@ -100,7 +100,7 @@ export const lockShrinkage = (baseText: string, headText: string): string[] => {
 };
 
 /* What a commit recording `paths` in `dir` would remove from the wire contract: the working tree's lock against
- * HEAD's, for every claimed path that IS a lock. HEAD rather than any merge-base on purpose — this describes
+ * HEAD's, for every claimed path that IS a lock. HEAD rather than any merge-base on purpose, this describes
  * THE COMMIT ABOUT TO BE FILED, and a shrink already committed undeclared is the gate's to name, not this
  * draft's to confess. A lock that is new at HEAD removes nothing; a lock unreadable in the tree is left to the
  * contract-lock test. Never throws: every caller is a draft that must not fail a land. */

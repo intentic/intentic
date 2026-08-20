@@ -4,7 +4,7 @@ import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 
-/* What a finished pipeline SAYS to the automations layer — the one place a PipelineRun becomes `ci` listener
+/* What a finished pipeline SAYS to the automations layer, the one place a PipelineRun becomes `ci` listener
  * messages, shared by the two things that can learn a run finished: the provider webhook (ci/webhook.routes.ts)
  * and the REST poller that stands in for it when hooks could not be registered (ci/poller.ts).
  *
@@ -16,7 +16,7 @@ import type { Services } from "../composition.js";
  * Canceled and skipped runs produce nothing: they are outcomes, not results, and an automation woken by a
  * cancelled pipeline has nothing to do about it. */
 
-// `ci` — the core listener provider automations name, alongside `webchat` the other source with no gateway
+// `ci`, the core listener provider automations name, alongside `webchat` the other source with no gateway
 // extension behind it. One provider for both vendors: a trigger narrows by repo, branch and result, not by who
 // hosts the pipeline.
 export const CI_PROVIDER = "ci";
@@ -26,12 +26,12 @@ export const CI_EVENT_TYPES = new Set(["pipeline_failed", "pipeline_broken", "pi
  *
  * `pipeline_failed` fires on every red run, which is the honest reading of "CI failed" and also, on a branch
  * that has been red for a day, a wake every push about a thing already known. `pipeline_broken` is the moment
- * it WENT red — red after a known green — and is what a "tell me when main breaks" automation actually means.
+ * it WENT red, red after a known green, and is what a "tell me when main breaks" automation actually means.
  * `pipeline_fixed` is its mirror and predates it; the pair is now symmetric.
  *
  * Both edges require a KNOWN previous conclusion rather than treating an unknown one as the opposite colour.
  * A daemon that has never seen a branch knows nothing about an edge, and guessing would make the first pass
- * after a restart — or after connecting a capability — announce that every red branch in the workspace just
+ * after a restart, or after connecting a capability, announce that every red branch in the workspace just
  * broke. */
 const typesFor = (status: "failed" | "success", previous: "failed" | "success" | undefined): string[] =>
     status === "failed"
@@ -51,7 +51,7 @@ const contentOf = (run: PipelineRun, type: string): string => {
     return `${headline(type, run)}: ${run.repo} ${run.branch} @ ${sha7(run.sha)}${jobs} — ${run.url}`;
 };
 
-// `channelId` is the workspace repo and `branch` the ref — the two axes a `ci` trigger narrows on, so both are
+// `channelId` is the workspace repo and `branch` the ref, the two axes a `ci` trigger narrows on, so both are
 // message fields rather than keys in `extra`, which carries only what the woken agent reads.
 const ciMessageOf = (run: PipelineRun, type: string, author: { id: string; name: string }): ListenerMessage => ({
     provider: CI_PROVIDER,
@@ -75,7 +75,7 @@ const ciMessageOf = (run: PipelineRun, type: string, author: { id: string; name:
     },
 });
 
-// Whether this run is a RESULT — something an automation could act on. Canceled and skipped are outcomes, not
+// Whether this run is a RESULT, something an automation could act on. Canceled and skipped are outcomes, not
 // results, and produce nothing on either path.
 export const ciResultOf = (run: PipelineRun): "failed" | "success" | undefined =>
     run.status === "failed" || run.status === "success" ? run.status : undefined;
@@ -97,7 +97,7 @@ export const rememberCiRun = async (services: Services, run: PipelineRun): Promi
 };
 
 /* Record what this run means for its branch and wake whatever is listening. Returns the event types it
- * dispatched — empty for a run that is not a result, which is how a caller tells "nothing to say" from "said
+ * dispatched, empty for a run that is not a result, which is how a caller tells "nothing to say" from "said
  * something nobody was listening to" (dispatchListenerMessage's own return is the matched automations).
  *
  * The conclusion is recorded BEFORE the wakes so a fire that outlives this call cannot be re-read as the

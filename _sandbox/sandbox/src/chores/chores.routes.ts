@@ -17,10 +17,10 @@ import { choreSignals } from "./chore-signals.js";
  *
  * And no verdicts. The daemon serves measurements; @intentic/sandbox-contract/chores decides what is due, in the browser,
  * where both the panel and the badge run it. A daemon one image behind would otherwise be quietly arguing with
- * the browser about what needs doing — and this daemon is baked into an image the user updates when they feel
+ * the browser about what needs doing, and this daemon is baked into an image the user updates when they feel
  * like it, so that is not a hypothetical. */
 
-// "root" is the wire id for the workspace's own repository — the same spelling the git and health routes take —
+// "root" is the wire id for the workspace's own repository, the same spelling the git and health routes take,
 // and the empty string is what the iq scope and the filesystem join call it. One translation, at the boundary.
 const REPO_ROOT = "root";
 const repoDir = (repo: string): string => (repo === REPO_ROOT ? "" : repo);
@@ -46,9 +46,9 @@ export const createChoresRoutes = (services: Services) => {
                 ledger: await services.chores.ledger(),
                 // Read here rather than served from its own route: "what does this repo say" and "what is being
                 // measured about it" are two halves of one answer, and a panel that had to ask twice would show
-                // them disagreeing — a probe finishing between the two reads reads as both done and running.
+                // them disagreeing, a probe finishing between the two reads reads as both done and running.
                 running: services.probeRunner.running().map(({ repo, id, askedAt, startedAt }) => ({ repo: repoId(repo), id, askedAt, startedAt })),
-                // What is RUNNING, not what a manifest wishes for — an `engines` range is a wish, and the chore
+                // What is RUNNING, not what a manifest wishes for, an `engines` range is a wish, and the chore
                 // that asks whether this sandbox is on a supported runtime has to read the answer off the process.
                 node: process.version,
             };
@@ -61,7 +61,7 @@ export const createChoresRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `no probe named "${input.id}"` });
             }
             // Deliberately not awaited: a jscpd sweep runs for minutes and the caller is a button, not a batch
-            // job. The runner queues it, so this ack means "it will run", not "it might have" — and the next
+            // job. The runner queues it, so this ack means "it will run", not "it might have", and the next
             // `list` carries it as running, which is what the panel draws its progress on.
             void services.probeRunner.refresh(repoDir(input.repo), input.id).catch((error: unknown) => {
                 services.logger.warn({ err: error, repo: input.repo, probe: input.id }, "chores: on-demand probe failed");
@@ -72,7 +72,7 @@ export const createChoresRoutes = (services: Services) => {
             if (!(await knownRepo(services, input.repo))) {
                 throw new ORPCError("NOT_FOUND", { message: `no repo named "${input.repo}"` });
             }
-            // A ledger row for a chore this build has never heard of is not a compatibility case worth carrying —
+            // A ledger row for a chore this build has never heard of is not a compatibility case worth carrying,
             // it would render as a run against a row the panel cannot show, which reads as data loss.
             if (choreById(input.chore) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `no chore named "${input.chore}"` });

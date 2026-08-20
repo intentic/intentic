@@ -7,9 +7,9 @@ import { applyEventsPath, resetEventsFile } from "./apply-events.js";
 // same terminal, serialize on the same job, and feed the same ApplyProgress tail.
 export const INFRA_APPLY_KEY = "infra-apply";
 
-// Launch the apply → adopt job (the service capability prefixes `resolve` — its declared entry must be
+// Launch the apply → adopt job (the service capability prefixes `resolve`, its declared entry must be
 // resolved into the artifact first). False when a job is already running: the live run (and its events file)
-// is left untouched — resetting would truncate a file being tailed.
+// is left untouched, resetting would truncate a file being tailed.
 export const startInfraApplyJob = async (
     services: Pick<Services, "processes" | "config" | "workspace">,
     options?: { readonly resolveFirst?: true },
@@ -27,7 +27,7 @@ export const startInfraApplyJob = async (
                 ? "intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt"
                 : "intentic deploy apply && intentic deploy adopt",
         cwd: services.workspace.root,
-        // Every command in the chain mirrors its events (and its {kind:"exit"}) to the same durable file —
+        // Every command in the chain mirrors its events (and its {kind:"exit"}) to the same durable file,
         // adopt's exit (or a failed earlier command's) is the whole-job completion signal.
         env: { INTENTIC_EVENTS_FILE: eventsPath },
         // The shell returning to its prompt flips `running` → false, which is how InfraDeclare's poll

@@ -11,7 +11,7 @@ import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { fireAutomation, runHeldWake } from "./scheduler.js";
 
-// An invalid cron can only come from a hand-edited manifest (upsert rejects it) — surface "no next run"
+// An invalid cron can only come from a hand-edited manifest (upsert rejects it), surface "no next run"
 // rather than failing the whole list. Event automations have no next run; they fire on their webhook.
 const nextRunOf = (automation: AutomationRecord): number | undefined => {
     if (!automation.enabled || automation.trigger.kind !== "schedule") {
@@ -45,7 +45,7 @@ export const createAutomationsRoutes = (services: Services) => {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
                 }
             }
-            /* A listener trigger's provider/eventType are open strings in the schema — validated here against the
+            /* A listener trigger's provider/eventType are open strings in the schema, validated here against the
              * SAME catalogue the composer draws from, so what the editor can offer and what this will accept
              * cannot disagree. They used to be two hand-written lists in two packages, which is a disagreement
              * waiting for whichever one was edited second.
@@ -73,10 +73,10 @@ export const createAutomationsRoutes = (services: Services) => {
                     : input;
             await services.automations.upsert(automation);
             /* A FRONT DESK PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
-             * the card this wake names may not exist yet — and turnPersona answers a named-but-missing card by
+             * the card this wake names may not exist yet, and turnPersona answers a named-but-missing card by
              * denying everything, which would make a freshly installed public chat one that cannot even read.
              * Written here rather than by the surface that installed it, so a Front Desk arriving through any
-             * route — the composer, a hand-edited manifest, an extension — lands with its bound present and
+             * route, the composer, a hand-edited manifest, an extension, lands with its bound present and
              * visible on the Personas page. Awaited: the wake it bounds can fire the moment this returns. */
             if (automation.actsAs === FRONT_DESK_PERSONA) {
                 await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
@@ -87,7 +87,7 @@ export const createAutomationsRoutes = (services: Services) => {
                 );
             }
             // The first enabled listener automation is what materializes its provider's gateway process (and the
-            // last one's removal below stops it) — detached, the gateway's own poll handles the rest.
+            // last one's removal below stops it), detached, the gateway's own poll handles the rest.
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
@@ -105,7 +105,7 @@ export const createAutomationsRoutes = (services: Services) => {
             void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
-        // Run now — see the contract for why this fires the real path, runs the guard, skips only the approval
+        // Run now, see the contract for why this fires the real path, runs the guard, skips only the approval
         // gate, and fires even when the automation is switched off.
         run: i.run.handler(async ({ input }) => {
             const automation = await services.automations.get(input.id);
@@ -123,9 +123,9 @@ export const createAutomationsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         pendingList: i.pendingList.handler(async () => ({ approvals: await services.approvals.list() })),
-        // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"` — its guard ran when the
+        // Approve a held wake: run it now with its snapshotted payload (`cleared: "both"`, its guard ran when the
         // wake was held and the owner has now approved it), then drop the queue entry. Detached like the /fire
-        // webhook — the turn outlives this request.
+        // webhook, the turn outlives this request.
         approve: i.approve.handler(async ({ input }) => {
             const pending = await services.approvals.get(input.id);
             if (pending === undefined) {
@@ -136,7 +136,7 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
-            // Everything the hold snapshotted — payload, provenance, thread — rides runHeldWake, the same
+            // Everything the hold snapshotted, payload, provenance, thread, rides runHeldWake, the same
             // release the scheduler's countdown scan uses, so the two ways out of the queue cannot drift.
             void runHeldWake(services, automation, pending, streamAgent).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"),

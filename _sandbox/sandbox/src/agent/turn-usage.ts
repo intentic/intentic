@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 
-// The turn's accounting frame. A turn can emit several — one per steered follow-up turn — and every consumer
+// The turn's accounting frame. A turn can emit several, one per steered follow-up turn, and every consumer
 // that answers "what did this turn cost" (the spend ledger, the activity log) wants their SUM, not the last.
 export type UsageFrame = Extract<AgentEvent, { kind: "usage" }>;
 

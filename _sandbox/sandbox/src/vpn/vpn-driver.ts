@@ -1,10 +1,10 @@
 import type { IntenticLine, VpnConfig, VpnState } from "@intentic/sandbox-contract";
 
-// The per-protocol SPI behind the `vpn` capability. A driver owns exactly one question — "how does THIS kind of
-// tunnel get written down, dialled, dropped and observed" — and nothing about the manifest, the routes or the
+// The per-protocol SPI behind the `vpn` capability. A driver owns exactly one question, "how does THIS kind of
+// tunnel get written down, dialled, dropped and observed", and nothing about the manifest, the routes or the
 // UI, which is why adding a protocol is a new file plus one line in vpn-drivers.ts.
 //
-// The load-bearing rule is that `probe` reads the OS, never daemon memory: a tunnel the agent dropped from a
+// The key rule is that `probe` reads the OS, never daemon memory: a tunnel the agent dropped from a
 // shell, one the UI dropped, and one that died with its gateway all have to read identically, and a daemon
 // restart has to observe the truth rather than a remembered guess.
 
@@ -31,10 +31,10 @@ export interface VpnDriver {
     readonly write: (id: string, config: VpnConfig) => Promise<void>;
     // Undo `write`. Called after the tunnel is already down.
     readonly erase: (id: string, config: VpnConfig) => Promise<void>;
-    // The executable this driver needs, when it is NOT on PATH — the pre-rebuild state, which reads as
+    // The executable this driver needs, when it is NOT on PATH, the pre-rebuild state, which reads as
     // "unavailable" rather than an error because the capability's image fragment has not been applied yet.
     readonly missingTool: () => Promise<string | undefined>;
-    // Dial the tunnel, streaming the client's progress. Throws with the client's own message on failure —
+    // Dial the tunnel, streaming the client's progress. Throws with the client's own message on failure,
     // a wrong password and an untrusted gateway certificate are things the user has to read.
     readonly connect: (id: string, config: VpnConfig, options: VpnDialOptions) => AsyncGenerator<IntenticLine>;
     // Drop the tunnel. Must tolerate an already-down one: the contract is "make it not be up".

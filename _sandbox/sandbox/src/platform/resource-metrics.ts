@@ -55,7 +55,7 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
     threads: statusNumber(text, "Threads"),
 });
 
-/* Only the aggregate is persisted — never argv. Provider prompts, paths and tokens can ride in a command
+/* Only the aggregate is persisted, never argv. Provider prompts, paths and tokens can ride in a command
  * line, and none of them are needed to answer which class of workload owns the memory. Ordering matters where
  * names overlap: Playwright's node MCP belongs with its browser, and the git fork broker belongs with git. */
 export const classifyProcess = (command: string): ProcessRole => {

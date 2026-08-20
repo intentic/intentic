@@ -34,7 +34,7 @@ export const codexThreadExists = async (home: string, threadId: string): Promise
 
 /* One rollout line. Two channels are interleaved in the file and they say different things:
  *
- * `event_msg` is the stream Codex hands its embedders — the user's message and the agent's replies, already
+ * `event_msg` is the stream Codex hands its embedders, the user's message and the agent's replies, already
  * assembled. `response_item` is the raw model protocol underneath it: reasoning items, and the tool calls with
  * their outputs. So the conversation is read from the first and the tool cards from the second; taking messages
  * from both would double every reply, since `response_item.message` carries the same text (alongside the
@@ -45,7 +45,7 @@ interface RolloutLine {
         type?: string;
         // event_msg/user_message and event_msg/agent_message
         message?: string;
-        // response_item/reasoning — present only when reasoning summaries are on; the item's real content is
+        // response_item/reasoning, present only when reasoning summaries are on; the item's real content is
         // encrypted, so a thread without summaries restores with no thinking rather than with ciphertext.
         summary?: { type?: string; text?: string }[];
         // response_item/custom_tool_call and /function_call, and their *_output counterparts
@@ -82,7 +82,7 @@ const outputText = (output: string | { type?: string; text?: string }[] | undefi
 /* A finished Codex thread, in the shape a reopened chat redraws.
  *
  * This is the BACKFILL path, not the live one: a thread that ran under the transcript record reads back from
- * there, exactly as it streamed. What is here is the thread that ran before it — the rollout is a lower-level
+ * there, exactly as it streamed. What is here is the thread that ran before it, the rollout is a lower-level
  * format than the frames the client saw (the tool vocabulary is the model's, not the daemon's normalized one),
  * so the cards it yields are coarser than they were live. Coarse and present beats a blank conversation, which
  * is what every native Codex agent showed before this existed. */
@@ -117,7 +117,7 @@ export const readCodexSession = async (home: string, threadId: string, root: str
         try {
             entry = JSON.parse(line) as RolloutLine;
         } catch {
-            // A rollout the CLI was still writing when the daemon read it — a torn tail costs its own line.
+            // A rollout the CLI was still writing when the daemon read it, a torn tail costs its own line.
             continue;
         }
         const payload = entry.payload;
@@ -127,7 +127,7 @@ export const readCodexSession = async (home: string, threadId: string, root: str
 
         if (entry.type === "event_msg" && payload.type === "user_message" && payload.message !== undefined) {
             // The daemon folds its own notes into a Codex prompt exactly as it does a Claude one, and the
-            // rollout stores the combined text — so the same unwrapping applies (see turn-transcript.ts),
+            // rollout stores the combined text, so the same unwrapping applies (see turn-transcript.ts),
             // including a re-run's note: a Codex thread is resumed by the same daemon on the same terms, so the
             // interruption reads here as the muted line it reads everywhere else rather than as the user's words.
             const unwrapped = unwrapStoredPrompt(payload.message);
@@ -139,7 +139,7 @@ export const readCodexSession = async (home: string, threadId: string, root: str
             }
             const stripped = stripAttachmentNote(unwrapped.text);
             const attachments = stripped.attachments.map((file) => (file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file));
-            // And what was folded in, disclosed rather than merely removed — carried on the message exactly as
+            // And what was folded in, disclosed rather than merely removed, carried on the message exactly as
             // the other two readers carry it, because a Codex turn is told the same things a Claude one is.
             const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
             if (stripped.text.length > 0 || attachments.length > 0) {

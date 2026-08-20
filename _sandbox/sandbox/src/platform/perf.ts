@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 
-/* WHERE THE DAEMON'S TIME GOES — the attribution layer the stall detector next door cannot provide.
+/* WHERE THE DAEMON'S TIME GOES, the attribution layer the stall detector next door cannot provide.
  *
  * loop-watchdog.ts answers "was the loop away, and was it this process's fault"; it cannot answer "away doing
  * WHAT", because by the time a stall is measurable the work that caused it has already returned. Every
@@ -29,7 +29,7 @@ const DEFAULT_SLOW_MS = 300;
 
 /* Per-op floors, for the ops whose honest cost is not the default. An op missing from here takes DEFAULT_SLOW_MS.
  *
- * These are the "this is normal, don't cry wolf" numbers — set them from what the op legitimately costs, never
+ * These are the "this is normal, don't cry wolf" numbers, set them from what the op legitimately costs, never
  * from what you wish it cost. A floor set too high is how a real regression stays invisible; a floor set too
  * low is how the log becomes noise nobody reads, which is the same thing one step later. */
 const SLOW_MS: Readonly<Record<string, number>> = {
@@ -41,7 +41,7 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "git.scan": 1_000,
     // One repo's slice of that scan.
     "git.scan.repo": 500,
-    // Waiting for a repo's op chain. This is NOT work — it is the queue behind an agent's land — so any
+    // Waiting for a repo's op chain. This is NOT work, it is the queue behind an agent's land, so any
     // measurable wait is worth a line: it is the difference between "git is slow" and "git was busy".
     "git.lock.wait": 150,
     // Holding it. A land checks out a monorepo, so seconds here are expected; only a stall is not.
@@ -75,11 +75,11 @@ export interface PerfStat {
 }
 
 export interface PerfTracker {
-    /** Measure `run`, attributing it to `op`. Returns exactly what `run` returns and rethrows what it throws —
+    /** Measure `run`, attributing it to `op`. Returns exactly what `run` returns and rethrows what it throws,
      *  a failed span is still a span, and a slow failure is the most interesting kind. `fields` is evaluated
      *  once, up front, so a caller can name the instance (repo, path, argv) without building it twice. */
     readonly track: <T>(op: string, fields: PerfFields, run: () => Promise<T>) => Promise<T>;
-    /** File a span someone else timed — the git runner measures inside the retry loop, where only it can see
+    /** File a span someone else timed, the git runner measures inside the retry loop, where only it can see
      *  how much of the elapsed time was contention. */
     readonly record: (op: string, ms: number, fields: PerfFields, failed?: boolean) => void;
     /** Every op's rolling account, ranked by total time spent. The summary line's content, exposed so a route
@@ -97,7 +97,7 @@ const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Ma
 export const createPerfTracker = (logger: Logger): PerfTracker => {
     const stats = new Map<string, PerfStat>();
     // Anything measured since the last summary. A daemon nobody is using must not print a table of zeroes
-    // every minute — an idle sandbox's log is where a real incident has to stay visible.
+    // every minute, an idle sandbox's log is where a real incident has to stay visible.
     let dirty = false;
 
     const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
@@ -117,7 +117,7 @@ export const createPerfTracker = (logger: Logger): PerfTracker => {
         dirty = true;
         if (slow) {
             // The op's own running count rides along so one line answers "is this the first time or the
-            // four-hundredth" — the question that decides whether to look at this instance or at the pattern.
+            // four-hundredth", the question that decides whether to look at this instance or at the pattern.
             logger.warn({ perf: op, ms: round(ms), ...fields, seen: stat.count, slowSeen: stat.slowCount }, `slow ${op}`);
             return;
         }
@@ -135,7 +135,7 @@ export const createPerfTracker = (logger: Logger): PerfTracker => {
             record(op, elapsedMs(from), fields);
             return result;
         } catch (error) {
-            // Recorded, then rethrown untouched — the caller's error handling is none of this module's business.
+            // Recorded, then rethrown untouched, the caller's error handling is none of this module's business.
             record(op, elapsedMs(from), fields, true);
             throw error;
         }

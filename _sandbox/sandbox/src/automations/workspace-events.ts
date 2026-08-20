@@ -2,7 +2,7 @@ import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { fireAutomation, type WakeFn } from "./scheduler.js";
 
-// Workspace-triggered wakes — the CHORES. The daemon emits a WorkspaceEvent as the fleet works (an isolated
+// Workspace-triggered wakes, the CHORES. The daemon emits a WorkspaceEvent as the fleet works (an isolated
 // turn settled, an agent's work landed) and every enabled automation naming that event wakes with the event as
 // its payload. Producer and consumer are both the daemon, so unlike an `event` automation there is no webhook,
 // no token, and nothing outside the sandbox that can fire one.
@@ -10,13 +10,13 @@ import { fireAutomation, type WakeFn } from "./scheduler.js";
 // SERIAL, not fan-out, on two levels.
 //
 // Per chore, a FIFO queue: fireAutomation's own overlap guard DROPS concurrent fires, which is exactly wrong
-// here — five agents settling in a burst would silently lose four reviews. Waiting events COALESCE by agent
+// here, five agents settling in a burst would silently lose four reviews. Waiting events COALESCE by agent
 // (a newer event for an agent already queued REPLACES it, because reviewing the same agent twice in a row pays
 // twice to be told the later answer), and past QUEUE_MAX distinct agents the oldest is dropped and LOGGED: a
 // chore this far behind will not catch up, and a silent cap would read as "everything got reviewed".
 //
 // Across chores, one shared chain: a chore's turn runs on /work (only fleet agents get their own worktree), so
-// two at once would be two agents editing and testing the same tree — the constraint webchat's queue exists
+// two at once would be two agents editing and testing the same tree, the constraint webchat's queue exists
 // for. Background work has no reason to race the user for the tree or the CPU, so it waits its turn.
 
 // Distinct agents that may wait on one chore. Small on purpose: each entry is a whole agent turn's worth of
@@ -37,14 +37,14 @@ interface Queue {
     running: boolean;
 }
 
-// Per-automation queues, a module singleton like the scheduler's inFlight — every emitter shares one.
+// Per-automation queues, a module singleton like the scheduler's inFlight, every emitter shares one.
 const queues = new Map<string, Queue>();
 
 const matches = (trigger: Extract<Trigger, { kind: "workspace" }>, event: WorkspaceEvent): boolean =>
     trigger.event === event.event && (trigger.repo === undefined || event.repos.some(({ repo }) => repo === trigger.repo));
 
 // Drain one automation's queue. Re-reads the manifest per event so an edit, a disable or a delete while the
-// backlog waits is honored — the same freshness rule listeners' batcher follows.
+// backlog waits is honored, the same freshness rule listeners' batcher follows.
 const pump = async (services: Services, id: string, wake: WakeFn): Promise<void> => {
     const queue = queues.get(id);
     if (queue === undefined || queue.running) {
@@ -93,7 +93,7 @@ const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: Wa
 
 // Route one workspace event to every matching enabled chore. Returns the ids that matched (tests assert on it;
 // callers fire and forget). `wake` is INJECTED rather than imported: every emit site lives downstream of
-// agent.routes, and importing streamAgent here would close a cycle — the same reason turn-runs takes its TurnFn.
+// agent.routes, and importing streamAgent here would close a cycle, the same reason turn-runs takes its TurnFn.
 export const dispatchWorkspaceEvent = async (services: Services, event: WorkspaceEvent, wake: WakeFn): Promise<string[]> => {
     const matched: string[] = [];
     for (const automation of await services.automations.list()) {
@@ -103,7 +103,7 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
         matched.push(automation.id);
         enqueue(services, automation.id, event, wake);
     }
-    /* `deps.broken` exists to offer a fix, so a breakage nothing is armed for is said rather than swallowed —
+    /* `deps.broken` exists to offer a fix, so a breakage nothing is armed for is said rather than swallowed,
      * informed, never silently unprotected. Only this event: the turn-borne kinds fire on every turn and are
      * routinely unclaimed, and an entry per unclaimed one would be the feed teaching the eye to skip it. */
     if (event.event === "deps.broken" && matched.length === 0) {

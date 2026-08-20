@@ -21,14 +21,14 @@ import { redeemTicket } from "../auth/ws-tickets.js";
  * different browser: there, the platform's own profile with the owner at the wheel; here, the Chromium the
  * agent is driving through its tools.
  *
- * The stream is READ-ONLY BY DEFAULT — not by refusing input, but because the client sends none until the user
+ * The stream is READ-ONLY BY DEFAULT, not by refusing input, but because the client sends none until the user
  * asks. That distinction matters: this is the owner's own browser inside the owner's own sandbox, so there is
  * nothing to forbid; what there is, is a default that keeps a click meant for the transcript from landing on the
  * page the agent is mid-way through filling in. When the user does take over (the view's Take control), the
  * frames start flowing and land here unremarked.
  *
  * Closing this socket stops the screencast and nothing else. The browser belongs to the turn, not to the
- * viewer — walking away from the window must not end the work being watched, which is the same contract the
+ * viewer, walking away from the window must not end the work being watched, which is the same contract the
  * terminal panel's attach has with tmux. */
 export const createBrowserViewRoute = (services: Services) =>
     upgradeWebSocket((c) => {
@@ -53,7 +53,7 @@ export const createBrowserViewRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    // The agent's browser may sit signed in as the owner — taking its wheel is operating,
+                    // The agent's browser may sit signed in as the owner, taking its wheel is operating,
                     // not watching (a collaborator still sees the agent's own screenshots in the chat).
                     const caller = redeemTicket(services, url, "maintainer");
                     if (caller !== undefined) {
@@ -66,7 +66,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 }
                 session = url.searchParams.get("session") ?? "";
                 // Awaited, not polled: the user clicks Watch the instant the first tool card appears, which can
-                // be ahead of Chromium's first paint — browserSessionContext resolves when the attach lands.
+                // be ahead of Chromium's first paint, browserSessionContext resolves when the attach lands.
                 const context = await browserSessionContext(session);
                 if (closed) {
                     return;
@@ -115,7 +115,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 if (message.type === "bind") {
                     // The tab strip: stream the page the user clicked, and PIN it so the agent opening another
                     // tab no longer moves the picture. A page id the session doesn't know is a tab that closed
-                    // between the relist and the click — say so rather than leaving the strip lying about it.
+                    // between the relist and the click, say so rather than leaving the strip lying about it.
                     const page = browserSessionPage(session, message.pageId);
                     if (page === undefined) {
                         ws.send(JSON.stringify({ type: "gone", pageId: message.pageId }));
@@ -133,7 +133,7 @@ export const createBrowserViewRoute = (services: Services) =>
                     return;
                 }
                 if (message.type === "selectOption") {
-                    // The owner picked from the menu the client drew for them — see readSelect in screencast.ts.
+                    // The owner picked from the menu the client drew for them, see readSelect in screencast.ts.
                     const page = screencast?.page();
                     if (page !== undefined) {
                         await applySelect(page, message.index);
@@ -148,13 +148,13 @@ export const createBrowserViewRoute = (services: Services) =>
                 try {
                     await dispatchInput(attached, message);
                 } catch (err) {
-                    // A page that navigated out from under the click — the rebind follows it; the input is lost.
+                    // A page that navigated out from under the click, the rebind follows it; the input is lost.
                     services.logger.warn({ err }, "browser-view input dispatch failed");
                 }
                 /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE. Chromium draws that list outside the page,
                  * so the frames will never show it; asking after every release is how the client learns to draw
                  * one itself. Release rather than press, because that is when the page has settled on what is
-                 * focused, and the answer is sent either way — an empty one closes a menu the owner clicked off. */
+                 * focused, and the answer is sent either way, an empty one closes a menu the owner clicked off. */
                 if (message.type === "mouse" && message.action === "up") {
                     const page = screencast?.page();
                     const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);

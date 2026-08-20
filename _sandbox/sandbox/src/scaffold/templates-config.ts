@@ -20,7 +20,7 @@ export const readTemplatesConfig = async (services: Services): Promise<Templates
     return { source: parsed.source ?? DEFAULT_TEMPLATE_SOURCE, ref: parsed.ref ?? DEFAULT_TEMPLATE_REF };
 };
 
-// Listing means cloning the source to read its manifest, so memoize per source#ref — the "New app" picker hits
+// Listing means cloning the source to read its manifest, so memoize per source#ref, the "New app" picker hits
 // this each open. In-flight promises are shared; a failed clone is evicted so a later retry re-fetches. Cache
 // lives for the daemon's lifetime (a restart re-reads); changing the source key naturally fetches fresh.
 const manifestCache = new Map<string, Promise<TemplateManifest>>();

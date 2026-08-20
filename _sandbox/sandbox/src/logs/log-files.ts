@@ -7,11 +7,11 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal pipe-pane captures (terminals/), intentic CLI run
 // logs (intentic-runs/), the daemon's own pino file (daemon.log), and its resource time series
-// (resource-metrics.jsonl). Living under historyRoot keeps them outside the agent's /work mount — the same
+// (resource-metrics.jsonl). Living under historyRoot keeps them outside the agent's /work mount, the same
 // placement rationale as activity.jsonl.
 
 // Prune policy: copy-truncate any file past MAX_FILE_BYTES to its newest TAIL_BYTES (safe under the writers'
-// O_APPEND fds — later appends land after the rewritten tail), drop files idle past MAX_AGE_MS, and cap the
+// O_APPEND fds, later appends land after the rewritten tail), drop files idle past MAX_AGE_MS, and cap the
 // tree at MAX_FILES newest-first.
 const MAX_FILE_BYTES = 5_000_000;
 const TAIL_BYTES = 1_000_000;
@@ -23,7 +23,7 @@ export const logsRoot = (historyRoot: string): string => join(historyRoot, "logs
 const walkFiles = async (root: string): Promise<string[]> => {
     try {
         const entries = await readdir(root, { recursive: true, withFileTypes: true });
-        // Skip pane-log-clean's atomic-rename scratch files (terminals/*.log.tmp) — not real log files.
+        // Skip pane-log-clean's atomic-rename scratch files (terminals/*.log.tmp), not real log files.
         return entries.filter((entry) => entry.isFile() && !entry.name.endsWith(".tmp")).map((entry) => join(entry.parentPath, entry.name));
     } catch {
         return [];
@@ -38,7 +38,7 @@ export const listLogFiles = async (root: string): Promise<LogFileEntry[]> => {
                 const info = await stat(path);
                 return { name: relative(root, path).split(sep).join("/"), sizeBytes: info.size, modifiedAt: Math.round(info.mtimeMs) };
             } catch {
-                // Raced a prune delete — the file is simply gone.
+                // Raced a prune delete, the file is simply gone.
                 return undefined;
             }
         }),
@@ -86,17 +86,17 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
         live
             .filter((file) => file.size > MAX_FILE_BYTES)
             .map(async (file) => {
-                // ponytail: read-then-rewrite drops appends racing the rewrite — fine for debug logs at a 5MB cap.
+                // ponytail: read-then-rewrite drops appends racing the rewrite, fine for debug logs at a 5MB cap.
                 const tail = (await readFile(file.path)).subarray(-TAIL_BYTES);
                 await writeFile(file.path, tail);
             }),
     );
 };
 
-// Every tmux pane's output piped to its own file, via global hooks — per-spawn pipe-pane would miss
+// Every tmux pane's output piped to its own file, via global hooks, per-spawn pipe-pane would miss
 // agent-created sessions, extra windows, and splits. The stream is replayed through pane-log-clean (a
 // headless VT emulator, on PATH in the image) which owns the file and rewrites the rendered screen, so
-// the persisted log is what the terminal actually showed — not raw escape/redraw noise. Pane width and
+// the persisted log is what the terminal actually showed, not raw escape/redraw noise. Pane width and
 // height are passed so wrapping and cursor math match the pane. The session name is format-sanitized (it
 // is interpolated into a shell command); the pane id keeps names unique.
 const pipeHook = (dir: string): string =>
@@ -111,7 +111,7 @@ const tmuxLogHooks = (historyRoot: string): string[][] => {
     return ["session-created", "after-new-window", "after-split-window"].map((hook) => ["set-hook", "-g", hook, pipeHook(dir)]);
 };
 
-// Re-arm the hooks on a tmux server that outlived a daemon restart — best-effort; the image's tmux.conf
+// Re-arm the hooks on a tmux server that outlived a daemon restart, best-effort; the image's tmux.conf
 // (Dockerfile) covers server start, and this is a no-op failure without tmux (local dev, tests).
 export const applyTmuxLogHooks = async (historyRoot: string): Promise<void> => {
     for (const args of tmuxLogHooks(historyRoot)) {

@@ -10,7 +10,7 @@ import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 
-/* PACKING A SANDBOX'S ENVIRONMENT — a gzipped tar of the two volumes that hold it, driven entirely by the
+/* PACKING A SANDBOX'S ENVIRONMENT, a gzipped tar of the two volumes that hold it, driven entirely by the
  * state manifests so that adding a store is what adds it to the bundle.
  *
  * Layout, and why it is three prefixes rather than a mirror of the filesystem:
@@ -18,23 +18,23 @@ import { carries, historyMayContain, historyPortability, workspaceMayContain, wo
  *   intentic-bundle.json   the manifest, written FIRST so a reader knows the shape before the bytes
  *   workspace/…           `/work`, minus junk (the tree view's own ignore scope) and minus what the
  *                         manifests class as identity/derived/secret-the-owner-withheld
- *   history/…             the portable slice of `/history` — critically `history/gits/…`, every repo's REAL
+ *   history/…             the portable slice of `/history`, in particular `history/gits/…`, every repo's REAL
  *                         git dir, without which the restored tree is a pile of files whose `.git` pointers
  *                         name a path that does not exist on the target
  *
  * Nothing is buffered. Entries stream file-by-file through the packer into gzip, so a workspace of any size
- * costs the daemon one file handle at a time — the same discipline the upload route holds on the way in.
+ * costs the daemon one file handle at a time, the same discipline the upload route holds on the way in.
  *
  * MODES AND SYMLINKS ARE PRESERVED, which the existing /workspace/upload-archive path does not do (it writes
  * every entry with the default mode and drops symlinks entirely). For a folder drop that is survivable; for a
- * bundle whose whole promise is "the same environment" it is not — a restored tree whose scripts lost +x is a
+ * bundle whose whole promise is "the same environment" it is not, a restored tree whose scripts lost +x is a
  * different environment, and silently so.
  */
 
 export const BUNDLE_MANIFEST_ENTRY = "intentic-bundle.json";
 
 // Pack one regular file, streaming its bytes. `size` must be exact or tar-stream throws, so it comes from the
-// same lstat that decided this was a file — a file the agent rewrites mid-walk is the one race here, and it
+// same lstat that decided this was a file, a file the agent rewrites mid-walk is the one race here, and it
 // fails the export loudly rather than producing a corrupt member.
 const packFile = (packer: Pack, name: string, absPath: string, size: number, mode: number, mtime: Date): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ const packTree = async (
     root: string,
     prefix: string,
     // Two questions, not one: `carry` decides a FILE, `enter` decides whether to look inside a directory. See
-    // mayContainCarried — a directory that does not itself travel can hold one that does.
+    // mayContainCarried, a directory that does not itself travel can hold one that does.
     decide: { readonly carry: (relPath: string) => boolean; readonly enter: (relPath: string) => boolean },
     scope?: IgnoreScope,
 ): Promise<{ files: number; bytes: number }> => {
@@ -152,7 +152,7 @@ const sweptOut = async (run: () => Promise<readonly string[]>): Promise<void> =>
 };
 
 /* Stream a bundle of this sandbox's environment. `secrets` is the owner's choice at the export dialog and the
- * ONLY thing that varies what is packed — everything else is the manifests.
+ * ONLY thing that varies what is packed, everything else is the manifests.
  *
  * `now` is injected rather than read here so the manifest is deterministic under test; production passes
  * Date.now() at the route.
@@ -165,8 +165,8 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
     void (async () => {
         try {
             /* SWEEP BEFORE PACKING, and this is the step the two credential splits made necessary rather than
-             * merely tidy. The capability manifest and the extension settings file both `carry` now — they hold
-             * the shape of a connection and no longer its credential — which is only true of the bytes on disk
+             * merely tidy. The capability manifest and the extension settings file both `carry` now, they hold
+             * the shape of a connection and no longer its credential, which is only true of the bytes on disk
              * while nothing has hand-written a real token back into them. The boot sweep is what normally keeps
              * that so, and between a boot and an export there is a whole session in which the agent (for whom
              * both files are deliberately readable and writable) can put one back.
@@ -200,7 +200,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                 },
                 createIgnoreScope(),
             );
-            // The daemon volume, filtered by its manifest alone — nothing here is .gitignore'd or junk-named,
+            // The daemon volume, filtered by its manifest alone, nothing here is .gitignore'd or junk-named,
             // and `gits/` deliberately contains the very `.git` dirs the workspace scope would have skipped.
             await packTree(packer, services.config.historyRoot, "history/", {
                 carry: (relPath) => carries(historyPortability(relPath), options.secrets),

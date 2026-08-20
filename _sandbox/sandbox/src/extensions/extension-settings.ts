@@ -4,7 +4,7 @@ import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/state-paths.js";
 
 /* Per-extension settings values (<workspace>/.intentic/config/extension-settings.json), keyed by the manifest-derived
- * extension id (publisher.name) — NOT the capability entry id — so values survive a remove/re-add and the
+ * extension id (publisher.name). NOT the capability entry id, so values survive a remove/re-add and the
  * re-clone that is an update; the checkout dir itself stays pristine. Values are the primitive union the
  * contributes.settings descriptors declare.
  *
@@ -16,7 +16,7 @@ import { statePath } from "../workspace/state-paths.js";
  *
  * So declared-secret values live in the vault (off /work, mode 0600) and this file keeps everything else. The
  * consequences are the two the capability split had:
- *   - READS REHYDRATE, so every caller — the settings route, the agent's env, an extension's own api.settings —
+ *   - READS REHYDRATE, so every caller, the settings route, the agent's env, an extension's own api.settings,
  *     keeps receiving a whole settings object and none of them had to learn about the vault.
  *   - the file becomes credential-free BY CONSTRUCTION, which is what lets the state table classify it as
  *     ordinary config: tracked in the root repo, so turning on an extension's behaviour is reviewable, and
@@ -31,9 +31,9 @@ type SettingsFile = z.infer<typeof FileSchema>;
 export type ExtensionSettings = SettingsFile[string];
 
 /* These two are free functions taking a root rather than a store built at composition, so the file object is
- * memoized per root instead. That memo is load-bearing, not a cache: `update`'s write queue lives on the
+ * memoized per root instead. That memo is required, not a cache: `update`'s write queue lives on the
  * object, so building a fresh one per call would leave two extensions saving at once each reading the old map
- * and the second erasing the first's key — the very lost update the queue exists to stop. One root per process
+ * and the second erasing the first's key, the very lost update the queue exists to stop. One root per process
  * in practice, so this map holds exactly one entry. */
 const files = new Map<string, JsonFile<SettingsFile>>();
 
@@ -50,13 +50,13 @@ const settingsFile = (root: string): JsonFile<SettingsFile> => {
 
 /* Which keys of one extension hold a credential, from its own manifest. Passed in rather than resolved here for
  * the reason the capability store takes a connector registry: enumerating extensions is a layer above this file,
- * and reaching up for it would invert the dependency. A resolver that knows nothing about an id — an extension
- * removed while a value survives it — answers with an empty set, which leaves that id's values in the tracked
+ * and reaching up for it would invert the dependency. A resolver that knows nothing about an id, an extension
+ * removed while a value survives it, answers with an empty set, which leaves that id's values in the tracked
  * file. That is the safe direction only because it is also the honest one: nothing declares those keys secret
  * any more, so nothing can say they are. */
 export type SecretKeyResolver = (extensionId: string) => ReadonlySet<string>;
 
-/* The vault takes strings, because a credential is text — a token, a key, a password. A setting declared
+/* The vault takes strings, because a credential is text, a token, a key, a password. A setting declared
  * `secret` with a number or boolean value is therefore a shape nobody has introduced yet, and it must not fail
  * QUIETLY: left in the tracked file it would be exactly the leak this split closes, so the caller is handed the
  * names and says so in the log rather than writing it and moving on. Mirrors partitionSecretValues. */
@@ -80,11 +80,11 @@ export const partitionSettingValues = (
     return { values, open, unvaultable };
 };
 
-// The whole map, vault values merged over the tracked file — what every existing reader expects to receive.
+// The whole map, vault values merged over the tracked file, what every existing reader expects to receive.
 export const readAllExtensionSettings = async (root: string, vault: SecretVault): Promise<SettingsFile> => {
     const [stored, vaulted] = await Promise.all([settingsFile(root).read(), vault.all()]);
     const ids = new Set([...Object.keys(stored), ...Object.keys(vaulted)]);
-    // Vault last, so a value that is in both wins from the vault — which is what the settings route already
+    // Vault last, so a value that is in both wins from the vault, which is what the settings route already
     // wrote and what every reader is therefore already using. Spreading an absent id is a no-op, no fallback.
     return Object.fromEntries([...ids].map((id) => [id, { ...stored[id], ...vaulted[id] }]));
 };
@@ -105,7 +105,7 @@ export const writeExtensionSettings = async (
     await settingsFile(root).update((all) => ({ ...all, [extensionId]: open }));
 };
 
-/* THE SPLIT AS AN INVARIANT RATHER THAN A WRITE-TIME HABIT — the twin of vaultManifestSecrets, and needed for
+/* THE SPLIT AS AN INVARIANT RATHER THAN A WRITE-TIME HABIT, the twin of vaultManifestSecrets, and needed for
  * the same reason: `writeExtensionSettings` is the only thing that vaults, so the tracked file is clean only for
  * the extensions saved since it did. A value written by the agent's own file tools, restored from an export, or
  * stored before a descriptor gained `secret: true` sits there in the clear, and nothing rewrites it because
@@ -139,7 +139,7 @@ export const vaultExtensionSettingSecrets = async (
         }
         /* The VAULT wins where both hold a key, because the vault is what readers already see (rehydration
          * merges it over the file). Moving the file's copy in would quietly swap the credential a working
-         * extension authenticates with — the same trap vaultManifestSecrets documents. */
+         * extension authenticates with, the same trap vaultManifestSecrets documents. */
         const merged = { ...settings, ...(await vault.get(extensionId)) };
         await writeExtensionSettings(root, vault, extensionId, merged, secretKeys);
         moved.push(extensionId);

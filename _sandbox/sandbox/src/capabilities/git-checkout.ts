@@ -11,7 +11,7 @@ export const gitAuthHeader = (token: string): string => `Authorization: Basic ${
 // with a dot. Cloning lands here first so a reader never sees a half-cloned checkout at the live dir.
 const stagingName = (id: string): string => `.${id}.cloning`;
 
-// Where `keepPrevious` sets the outgoing checkout aside — the one-version-back that makes an update revertible
+// Where `keepPrevious` sets the outgoing checkout aside, the one-version-back that makes an update revertible
 // after validation stops being able to help (validation catches broken; it can't catch wrong). Dot-prefixed
 // for the same collision-proofing as the staging name.
 export const previousDir = (root: string, id: string): string => join(root, `.${id}.previous`);
@@ -31,7 +31,7 @@ export const checkoutInto = async (
         readonly token?: string | undefined;
         // Inspect the staged checkout before it replaces the live dir; throw to abort the swap.
         readonly validate?: ((staging: string) => Promise<void>) | undefined;
-        /* Runs after validation succeeds and before the live dir is touched — the update transaction's quiesce
+        /* Runs after validation succeeds and before the live dir is touched, the update transaction's quiesce
          * step. This is where the extension handler stops the outgoing checkout's declared processes: stopping
          * them earlier would punish a failed validation (the old version stays live but its processes are
          * down), and not stopping them at all leaves them executing code whose directory is about to vanish. */
@@ -66,7 +66,7 @@ export const checkoutInto = async (
     if (options.keepPrevious === true) {
         const previous = previousDir(root, id);
         await ctx.files.remove(previous);
-        // ENOENT means a first install — there is no outgoing checkout to keep. Anything else is a real
+        // ENOENT means a first install, there is no outgoing checkout to keep. Anything else is a real
         // filesystem failure and must abort rather than quietly discard the one copy a revert would need.
         try {
             await ctx.files.move(live, previous);

@@ -1,7 +1,7 @@
 /* READING `openclaw.json` WITHOUT A JSON5 DEPENDENCY. The file is machine-written plain JSON until a person
  * edits it, and what people actually add is what JSON5 invites: comments, trailing commas, the odd single-
- * quoted string. This walk removes exactly those — character by character, tracking strings, so a `//` inside
- * a URL value or a `,]` inside a quoted string is never touched — and hands the rest to JSON.parse.
+ * quoted string. This walk removes exactly those, character by character, tracking strings, so a `//` inside
+ * a URL value or a `,]` inside a quoted string is never touched, and hands the rest to JSON.parse.
  *
  * Deliberately NOT a JSON5 parser: hex numbers, `+`/leading-dot numbers and line continuations fail here, and
  * that is a degradation the migration already knows how to word (the config is refused BY NAME and the file
@@ -26,7 +26,7 @@ export const parseJson5ish = (raw: string): unknown | undefined => {
             while (index < raw.length && raw[index] !== quote) {
                 if (raw[index] === "\\") {
                     const next = raw[index + 1] ?? "";
-                    // A JSON5 `\'` has no meaning in JSON — unescape it; everything else passes through.
+                    // A JSON5 `\'` has no meaning in JSON, unescape it; everything else passes through.
                     body += next === "'" ? "'" : `\\${next}`;
                     index += 2;
                     continue;
@@ -53,7 +53,7 @@ export const parseJson5ish = (raw: string): unknown | undefined => {
             continue;
         }
         /* A bare identifier: quoted when a colon follows (an unquoted KEY, the JSON5 idiom people reach for
-         * first), passed through otherwise (true/false/null in value position — the only bare words JSON5
+         * first), passed through otherwise (true/false/null in value position, the only bare words JSON5
          * itself allows there). */
         if (/[A-Za-z_$]/.test(char)) {
             let ident = "";
@@ -78,7 +78,7 @@ export const parseJson5ish = (raw: string): unknown | undefined => {
     }
 };
 
-/* Trailing commas, dropped in a SECOND pass over the comment-free text — in the first pass the lookahead from
+/* Trailing commas, dropped in a SECOND pass over the comment-free text, in the first pass the lookahead from
  * a comma could land on a comment that hides the closing bracket, and the comma survived. Here every string is
  * already double-quoted, so a comma inside one is skipped by the same string-tracking the first pass does. */
 const dropTrailingCommas = (cleaned: string): string => {

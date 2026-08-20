@@ -5,23 +5,23 @@ import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/events.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
 
-/* THE TRIGGER CATALOGUE — everything that can wake an agent in this sandbox, and everything worth starting from.
+/* THE TRIGGER CATALOGUE, everything that can wake an agent in this sandbox, and everything worth starting from.
  *
  * This file exists because the same list used to be written down twice, in two packages, by two different
  * people's hands: the composer carried a source picker and a gallery of templates naming CI, Komodo, Sentry,
  * Stripe, email, the website widget and every chore in the book, while `upsert` down the hall carried its own
  * list of the providers it would accept. Nothing kept them in step, and worse, an area that gained something
- * worth reacting to had to edit the automations surface to say so — a dependency pointing from the hub to every
+ * worth reacting to had to edit the automations surface to say so, a dependency pointing from the hub to every
  * spoke, which is the shape that guarantees the hub is edited for reasons that have nothing to do with it.
  *
  * WHAT IS DECLARED HERE IS ONLY WHAT THE DAEMON ITSELF EMITS. `webchat` (it holds the widget endpoint) and `ci`
- * (it holds the pipeline webhook receiver and the poller standing in for it) — plus the workspace events it
+ * (it holds the pipeline webhook receiver and the poller standing in for it), plus the workspace events it
  * raises as the fleet works. Everything else arrives from an extension manifest and leaves with it.
  *
  * A TEMPLATE SITS BESIDE THE SOURCE IT FIRES ON, which is why the front desk and the CI fix are here rather than
  * in the packs that draw those surfaces: a source's starter and a template's prompt describe the same payload,
  * and one payload described in two packages is two descriptions to keep in step. A template on the generic
- * `event` webhook has no source to sit beside, so it goes with the pack carrying the capability card it names —
+ * `event` webhook has no source to sit beside, so it goes with the pack carrying the capability card it names,
  * the connector pack for a Sentry or Komodo hook, which is the same pack the user connected to make it work.
  */
 
@@ -31,7 +31,7 @@ const WEBCHAT_SOURCE: TriggerSource = {
     provider: WEBCHAT_PROVIDER,
     label: "Front Desk",
     icon: "globe",
-    // The widget IS the connection — a website's own <script> tag, nothing to connect here first.
+    // The widget IS the connection, a website's own <script> tag, nothing to connect here first.
     requires: [],
     enabled: true,
     events: [{ value: "message", label: "Messages" }],
@@ -75,19 +75,19 @@ export const CORE_TRIGGER_SOURCES: readonly TriggerSource[] = [WEBCHAT_SOURCE, C
 
 /* A change-triggered chore diffs the same way, and getting it wrong is the difference between reviewing the
  * change and reviewing the whole repo: the payload's span is OPEN (`git diff <from>`, no upper bound) precisely
- * so a turn that errored — leaving its work uncommitted in the worktree — still reads as the change it made. */
+ * so a turn that errored, leaving its work uncommitted in the worktree, still reads as the change it made. */
 const SPAN_NOTE =
     "$AUTOMATION_PAYLOAD is a JSON object describing what changed. For each entry in its `repos`, " +
     "`git -C <dir> diff <from>` is exactly that repo's change — committed and uncommitted both. Look at nothing else: " +
     "the rest of the workspace is not what this run is about.";
 
-/* The chore book's scheduled forms. One entry per chore that carries an `automation` — the book decides WHICH
+/* The chore book's scheduled forms. One entry per chore that carries an `automation`, the book decides WHICH
  * chores are worth running unattended (a survey has nothing for a guard to test, and a runtime reaching
  * end-of-life is not something a nightly sweep can fix), and this only reshapes them.
  *
  * GENERATED, NEVER WRITTEN TWICE. A chore exists in two modes and both are wanted: the maintenance panel offers
  * a turn against a specific finding you can read first, an automation wakes on a clock at 3am with nobody
- * watching. Hand-written in both places they would drift — the panel recommending one thing and the nightly
+ * watching. Hand-written in both places they would drift, the panel recommending one thing and the nightly
  * sweep doing another, in slightly different words, with only one of them fixed when we learn something about
  * how to phrase it. So the book owns the chore and this owns the trigger. */
 const CHORE_TEMPLATES: readonly AutomationTemplate[] = CHORES.flatMap((chore) => {
@@ -159,7 +159,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         trigger: { kind: "workspace", event: "turn.settled" },
         description: "After every isolated agent turn, read its diff and report what it got wrong — before you decide to land it.",
         // Sub-20-line changes are not worth a turn's spend; the sum is over added + deleted across every repo in
-        // the span. Binary files contribute "-" columns, which awk reads as 0 — a binary-only change skips, which
+        // the span. Binary files contribute "-" columns, which awk reads as 0, a binary-only change skips, which
         // is the right answer anyway.
         guard:
             `printf '%s' "$AUTOMATION_PAYLOAD" | jq -r '.repos[] | "\\(.dir) \\(.from)"' | ` +
@@ -193,7 +193,7 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
 ];
 
 /* An extension's declared template, met by the real trigger schema. A declaration is loose by construction (the
- * manifest package cannot see the trigger union — the dependency runs the other way), so this is where it stops
+ * manifest package cannot see the trigger union, the dependency runs the other way), so this is where it stops
  * being loose: whatever does not parse is DROPPED rather than offered, because a gallery entry that `upsert`
  * would refuse is a template that exists only to fail on save. */
 const templateOf = (contribution: AutomationTemplateContribution): AutomationTemplate | undefined => {
@@ -208,7 +208,7 @@ const templateOf = (contribution: AutomationTemplateContribution): AutomationTem
     };
 };
 
-// One source per provider, first declaration winning — the daemon's own can never be shadowed by an extension
+// One source per provider, first declaration winning, the daemon's own can never be shadowed by an extension
 // claiming `ci`, and two packs claiming one slug is the earlier-listed one, exactly as the listener routes
 // resolve it.
 export const automationCatalog = async (services: ExtensionHost): Promise<AutomationCatalog> => {
@@ -217,7 +217,7 @@ export const automationCatalog = async (services: ExtensionHost): Promise<Automa
     const providers = new Set(sources.map((source) => source.provider));
     const ids = new Set(templates.map((template) => template.id));
 
-    /* INSTALLED, not enabled — a disabled pack keeps its row here on purpose. A stored automation outlives the
+    /* INSTALLED, not enabled, a disabled pack keeps its row here on purpose. A stored automation outlives the
      * pack that supplied its provider, and it must stay readable and editable while that pack is off: with the
      * source listed and `enabled: false` the editor shows the real label and declines to offer it as a new
      * choice, where dropping it would degrade the row to a bare slug. */

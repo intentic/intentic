@@ -1,4 +1,4 @@
-/* COMPARING THE VERSIONS THIS SYSTEM STAMPS ON WHAT IT SHIPS — the daemon, the sandbox image, and the two agents
+/* COMPARING THE VERSIONS THIS SYSTEM STAMPS ON WHAT IT SHIPS, the daemon, the sandbox image, and the two agents
  * that run on a user's own computer. One release stamps all of them to the SAME version, so "is this one behind
  * that one" is one question with one answer, and it lives here because both ends ask it: the daemon compares its
  * own build against the latest published release, and the browser compares a computer's agent against the same.
@@ -33,14 +33,14 @@ export const DEV_VERSION = `0.0.0`;
 /* WHETHER TO TELL SOMEBODY THEIR BUILD IS OLD. Deliberately false in every uncertain case, and each one is a
  * different kind of not-knowing:
  *
- *   • no installed version — the thing does not report one, so there is nothing to be behind.
- *   • no latest version — this sandbox has not reached the registry (or is a dev build and never will).
- *   • installed is the dev sentinel — see above; a nag that cannot be satisfied is worse than silence.
+ *   • no installed version, the thing does not report one, so there is nothing to be behind.
+ *   • no latest version, this sandbox has not reached the registry (or is a dev build and never will).
+ *   • installed is the dev sentinel, see above; a nag that cannot be satisfied is worse than silence.
  *
  * A version that is not dotted-numeric is compared by its numeric prefix, which is both useful and safe in the
  * only direction that matters: a segment that will not parse compares as neither greater nor less, so it stops
  * the comparison at "not newer". A malformed INSTALLED version can therefore only ever withhold a nag, never
- * invent one — and `latest` comes from the registry, so it is well-formed by construction.
+ * invent one, and `latest` comes from the registry, so it is well-formed by construction.
  *
  * The asymmetry is the point. Saying "you are out of date" wrongly sends someone to reinstall a working agent;
  * saying nothing wrongly leaves them where they already were. */

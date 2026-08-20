@@ -3,7 +3,7 @@ import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secr
 
 /* MASKING WHAT THE AGENT READS, not only what it runs.
  *
- * bin/agent-output-filter masks the output of a Bash command, and for a long time that was the whole of it — so
+ * bin/agent-output-filter masks the output of a Bash command, and for a long time that was the whole of it, so
  * whether a stored credential reached the model depended on HOW it was fetched. `cat` of a config file came
  * back masked; opening the same file with Read, matching it with Grep, or pulling it through an MCP tool did
  * not. The rule anyone would state out loud ("the model is never shown a credential this sandbox stores") was
@@ -13,18 +13,18 @@ import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secr
  * `updatedToolOutput` replaces the result before it is sent, so masking becomes a property of the
  * CONVERSATION rather than of the terminal.
  *
- * A value is masked TO ITS REFERENCE — `{{secret:name}}`, the same token the write path resolves back
- * (agent-secrets.ts) — not to an anonymous blank. The blank destroyed information twice: the model could not
+ * A value is masked TO ITS REFERENCE, `{{secret:name}}`, the same token the write path resolves back
+ * (agent-secrets.ts), not to an anonymous blank. The blank destroyed information twice: the model could not
  * say WHICH credential it was looking at, and a config it read and faithfully rewrote came back with `***`
- * pasted over the real value — a silent credential loss. With the reference, a read and a rewrite round-trip:
+ * pasted over the real value, a silent credential loss. With the reference, a read and a rewrite round-trip:
  * what the model copies is a token the exits reconstitute.
  *
- * ONLY THE VALUES THIS SANDBOX HOLDS, deliberately — not the name heuristics that also run in the terminal
+ * ONLY THE VALUES THIS SANDBOX HOLDS, deliberately, not the name heuristics that also run in the terminal
  * lane. Those infer a credential from the identifier beside it, and their whole failure history is on source
  * code: `oauthToken === undefined` rewritten mid-comparison, a JSON body broken at `"cacheReadTokens":26170149`.
  * A Read of a source file is exactly the input they get wrong, and unlike a shell dump it is text the model has
- * to reason about precisely. Value masking cannot make that mistake — it replaces strings this sandbox actually
- * stores and nothing else — and it is the half that is COMPLETE for what is stored, under any field name a
+ * to reason about precisely. Value masking cannot make that mistake, it replaces strings this sandbox actually
+ * stores and nothing else, and it is the half that is COMPLETE for what is stored, under any field name a
  * connector invents. The name patterns stay where they were measured.
  *
  * Bash is covered here too, though its own filter already masks it: with cleaning switched off (the raw
@@ -33,7 +33,7 @@ import { type NamedSecret, secretReference, surfaceForms } from "../secrets/secr
  */
 
 // Same floor as the terminal filter's value masking. A shorter string is not distinctive enough to blank on
-// sight — masking an 8-character value would black out ordinary output that merely coincides with it.
+// sight, masking an 8-character value would black out ordinary output that merely coincides with it.
 const MIN_LENGTH = 12;
 const LINE_MASK = "***";
 
@@ -42,13 +42,13 @@ export interface MaskTarget {
     readonly replacement: string;
 }
 
-/* Each whole value is masked to its `{{secret:name}}` reference — in every SURFACE FORM it can arrive in
+/* Each whole value is masked to its `{{secret:name}}` reference, in every SURFACE FORM it can arrive in
  * (secret-registry.ts surfaceForms), not only the raw one. A value that reached the reader JSON-escaped or
  * percent-encoded shares no run of text with the string this sandbox stores, so a raw-only comparison hands
  * it over intact; that is the ordinary shape of a credential inside a serialized payload or a URL.
  *
  * A credential that SPANS lines (an ssh private key, a WireGuard conf) may also arrive re-wrapped, with no
- * form of the whole surviving as one run — so its lines are registered as their own targets too, but to the
+ * form of the whole surviving as one run, so its lines are registered as their own targets too, but to the
  * anonymous mask, not the reference: a reference stands for the WHOLE value, and stamping it on every line
  * would make the masked block resolve to N copies of the key.
  *
@@ -79,12 +79,12 @@ export const maskTargets = (secrets: readonly NamedSecret[]): readonly MaskTarge
 const maskString = (text: string, targets: readonly MaskTarget[]): string =>
     targets.reduce((masked, { target, replacement }) => (masked.includes(target) ? masked.split(target).join(replacement) : masked), text);
 
-/* A tool result is JSON of a shape that belongs to the tool — a string for Bash, `{ file: { content } }` for
- * Read, a content array for an MCP server — so this walks it rather than knowing any of them. Keys are left
+/* A tool result is JSON of a shape that belongs to the tool, a string for Bash, `{ file: { content } }` for
+ * Read, a content array for an MCP server, so this walks it rather than knowing any of them. Keys are left
  * alone: a key is a field NAME, and blanking those would corrupt the structure without hiding a secret.
  *
  * Returns the SAME reference when nothing matched, which is how the hook tells "unchanged" from "rewritten"
- * without re-comparing a large result — and what keeps the overwhelmingly common case (no credential anywhere
+ * without re-comparing a large result, and what keeps the overwhelmingly common case (no credential anywhere
  * in the output) from allocating a copy of it.
  */
 export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => {
@@ -105,7 +105,7 @@ export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknow
 };
 
 export const redactionHooks = (secrets: () => Promise<readonly NamedSecret[]>): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
-    /* No matcher, so every tool — including the ones nobody has written yet. A tool list here would be a list
+    /* No matcher, so every tool, including the ones nobody has written yet. A tool list here would be a list
      * of the tools somebody remembered, which is the exact shape of the gap this exists to close. */
     PostToolUse: [
         {

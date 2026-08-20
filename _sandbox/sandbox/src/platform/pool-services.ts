@@ -3,18 +3,18 @@ import { ServiceRunReceiptSchema, type ServiceRunReceipt } from "@intentic/sandb
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./local-tls.js";
 
-/* THE SERVICES RELAY — the daemon's door onto the platform's metered service runs.
+/* THE SERVICES RELAY, the daemon's door onto the platform's metered service runs.
  *
  * The daemon adds exactly one thing here: the connect token, which is the credential that names whose
- * membership pays and which the platform refuses everything without. Everything else — the member gate, the
- * credit meter, the spend-then-refund, the signed forward to the provider — is the platform's job, and the
+ * membership pays and which the platform refuses everything without. Everything else, the member gate, the
+ * credit meter, the spend-then-refund, the signed forward to the provider, is the platform's job, and the
  * relay carries its answers through untouched, because a refusal like `insufficient_credits` is ALREADY
  * written for the person who will read it, and a daemon that rewrote it would only blur who said what. The
  * one thing the relay reads rather than carries is a run's NDJSON stream, which it forks: progress to the
  * transcript, the answer to the agent (relayServiceRun below).
  *
- * This is the route surface an extension backend declares in `permissions.daemon` — a glob like
- * "POST /pool/services/<one segment>/run" — so which services an extension may spend the owner's credits on
+ * This is the route surface an extension backend declares in `permissions.daemon`, a glob like
+ * "POST /pool/services/<one segment>/run", so which services an extension may spend the owner's credits on
  * is in its manifest, diffable, and approved at install like every other reach it has.
  *
  * node:https for the platform-client.ts reason: a dev platform is a self-signed cert on
@@ -24,14 +24,14 @@ export interface RelayedAnswer {
     readonly status: number;
     readonly body: string;
     readonly contentType: string;
-    // The platform's advisory credits header on a served run (x-intentic-credits-remaining) — what the CLI's
+    // The platform's advisory credits header on a served run (x-intentic-credits-remaining), what the CLI's
     // receipt line and the offer card's receipt render. Absent when the platform sent none (a refusal, the
     // catalog). Its presence is also the one honest "this run was CHARGED" signal: the platform sets it
     // exactly when a forward served, so the receipt reads it rather than re-deriving spend from status codes.
     readonly remaining?: string;
 }
 
-// The daemon's own sentence for a sandbox with no platform — the one answer that can't be relayed.
+// The daemon's own sentence for a sandbox with no platform, the one answer that can't be relayed.
 const UNRELAYABLE: RelayedAnswer = {
     status: 502,
     body: JSON.stringify({ error: "this sandbox is not connected to a platform, and premium services need one" }),
@@ -89,19 +89,19 @@ export const relayPlatform = (config: Config, method: "GET" | "POST", path: stri
 export const relayServiceCatalog = (config: Config): Promise<RelayedAnswer> => relayPlatform(config, "GET", "/pool/services");
 
 // One "the catalog had nothing for this", filed onto the platform's wanted list. Spends nothing, parks on no
-// card — it is a note to providers, not a run — so it relays as plainly as the catalog read above.
+// card, it is a note to providers, not a run, so it relays as plainly as the catalog read above.
 export const relayServiceWant = (config: Config, body: string): Promise<RelayedAnswer> => relayPlatform(config, "POST", "/pool/wanted", body);
 
 export interface RelayedRunAnswer extends RelayedAnswer {
-    // The run reached the platform's stream — set even when the stream then broke, so a consumer can tell "a
+    // The run reached the platform's stream, set even when the stream then broke, so a consumer can tell "a
     // stream without a receipt" (charge unknowable here) from a plain buffered refusal (charge as stated).
     readonly streamed?: true;
-    // The platform's receipt trailer — the ledger's own last word on how a streamed run settled, carried
+    // The platform's receipt trailer, the ledger's own last word on how a streamed run settled, carried
     // whole so the transcript receipt states what the platform did, never a guess.
     readonly receipt?: ServiceRunReceipt;
 }
 
-// The daemon's sentence for a stream that broke before its result — the one outcome where the charge is the
+// The daemon's sentence for a stream that broke before its result, the one outcome where the charge is the
 // platform's to know and this side honestly cannot say.
 const BROKEN_STREAM: RelayedRunAnswer = {
     status: 502,
@@ -114,8 +114,8 @@ const BROKEN_STREAM: RelayedRunAnswer = {
 
 /* ONE METERED RUN, RELAYED LIVE. The slug rides the path; the body is the service's own JSON, untouched.
  *
- * The platform answers a run that reached a provider as an NDJSON stream — validated ServiceStreamEvents,
- * then its own `receipt` trailer — and this relay is where the stream FORKS: `status` lines surface through
+ * The platform answers a run that reached a provider as an NDJSON stream, validated ServiceStreamEvents,
+ * then its own `receipt` trailer, and this relay is where the stream FORKS: `status` lines surface through
  * `onStatus` the moment they arrive (the gate turns them into transcript frames under the offer card), while
  * the `result` is buffered into one JSON answer for the calling agent, because a model acts on the answer,
  * not the progress. Everything that is not a stream (the platform's refusals, a provider's paid 4xx) buffers
@@ -158,7 +158,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
                 let result: string | undefined;
                 let receipt: ServiceRunReceipt | undefined;
                 // One platform-validated line. Anything that still fails to parse is a truncated tail from a
-                // dying connection — skipped, and the missing receipt then says how the run settles.
+                // dying connection, skipped, and the missing receipt then says how the run settles.
                 const line = (text: string): void => {
                     const trimmed = text.trim();
                     if (trimmed === "") {
@@ -175,7 +175,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
                             receipt = parsed.success ? parsed.data : undefined;
                         }
                     } catch {
-                        /* skipped — see above */
+                        /* skipped, see above */
                     }
                 };
                 response.on("data", (chunk: Buffer) => {
@@ -217,7 +217,7 @@ export const relayServiceRun = (config: Config, slug: string, body: string, onSt
                         ...(receipt !== undefined ? { receipt } : {}),
                     });
                 });
-                // A connection dying mid-stream ends here without an `end` — the broken-stream answer, with
+                // A connection dying mid-stream ends here without an `end`, the broken-stream answer, with
                 // whatever the trailer had said by then.
                 response.on("error", () => resolve({ ...BROKEN_STREAM, ...(receipt !== undefined ? { receipt } : {}) }));
             },

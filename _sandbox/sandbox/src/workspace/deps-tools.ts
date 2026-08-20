@@ -5,12 +5,12 @@ import type { DependencyRequestOrigin } from "./dependency-origin.js";
 import type { DependencyCoordinator } from "./reconcile-deps.js";
 import { INSTALLABLE, missingCount, type ProjectSetupStatus } from "./workspace-setup.js";
 
-/* THE DEPENDENCY TOOLS — readiness asked for, instead of announced.
+/* THE DEPENDENCY TOOLS, readiness asked for, instead of announced.
  *
  * The same three facts used to ride the front of every user message: which projects are behind, that an
  * unresolved import there is the install rather than the code, and that a turn must not run the install itself.
  * Pushing them cost a paragraph per turn whether or not the turn ever went near a drifted project, and it was
- * re-pushed identically for as long as the drift lasted — which, before the reconciler learned to watch for the
+ * re-pushed identically for as long as the drift lasted, which, before the reconciler learned to watch for the
  * manifest writes it was missing, could be days. Nothing about the paragraph was wrong; it was just addressed to
  * every turn rather than to the one that needed it.
  *
@@ -19,7 +19,7 @@ import { INSTALLABLE, missingCount, type ProjectSetupStatus } from "./workspace-
  * is the post-edit and post-command notices, which speak only after something has actually failed.
  *
  * WHY `install` REQUESTS RATHER THAN INSTALLS. An install from inside a turn writes to a scratch layer that dies
- * with the conversation, and — worse — it rewrites the dependency tree every other live turn has mounted
+ * with the conversation, and, worse, it rewrites the dependency tree every other live turn has mounted
  * beneath it, which the kernel does not define an answer for. That is a fact about where the turn stands, not
  * about who asked, so the tool cannot honour a request by running one: it hands the request to the reconciler,
  * which owns the one rule that makes an install safe (workspace/reconcile-deps.ts). The reply says so plainly,

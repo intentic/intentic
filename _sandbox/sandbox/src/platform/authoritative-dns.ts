@@ -1,6 +1,6 @@
 import { Resolver } from "node:dns/promises";
 
-/* WHAT A ZONE'S OWN NAMESERVERS SERVE FOR A NAME — the lookup that stands between publishing a DNS-01
+/* WHAT A ZONE'S OWN NAMESERVERS SERVE FOR A NAME, the lookup that stands between publishing a DNS-01
  * challenge and asking a CA to validate it.
  *
  * It has to be AUTHORITATIVE rather than an ordinary recursive lookup, and the reason is the whole point of
@@ -15,7 +15,7 @@ import { Resolver } from "node:dns/promises";
  * the timeout it actually is. */
 
 // A nameserver that has not answered in this long is not going to inside one poll interval. `tries: 1` because
-// the poll is the retry — c-ares' own backoff would only make each round less responsive.
+// the poll is the retry, c-ares' own backoff would only make each round less responsive.
 const QUERY_TIMEOUT_MS = 3_000;
 
 const resolverFor = (servers?: readonly string[]): Resolver => {
@@ -28,7 +28,7 @@ const resolverFor = (servers?: readonly string[]): Resolver => {
 
 /* The nameservers for whichever zone contains this record. Found by walking UP from the full name: the first
  * ancestor that has an NS set is the zone cut we want. Walking down from the root would stop at the TLD, and
- * asking the record's own name is wrong too — a leaf never carries NS records. */
+ * asking the record's own name is wrong too, a leaf never carries NS records. */
 const nameserversFor = async (recordName: string): Promise<string[]> => {
     const resolver = resolverFor();
     const labels = recordName.split(".");
@@ -45,7 +45,7 @@ const nameserversFor = async (recordName: string): Promise<string[]> => {
 
 /* The TXT values EVERY nameserver of the zone serves for this name. The intersection rather than the union is
  * deliberate: a value present on one nameserver and absent on another is a zone mid-propagation, which is
- * exactly the state the caller is waiting out — reporting it as published would defeat the wait. */
+ * exactly the state the caller is waiting out, reporting it as published would defeat the wait. */
 export const resolveTxtAuthoritatively = async (recordName: string): Promise<string[]> => {
     const nameservers = await nameserversFor(recordName);
     const perNameserver = await Promise.all(

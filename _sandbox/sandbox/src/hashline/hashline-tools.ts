@@ -4,8 +4,8 @@ import { z } from "zod";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { applyEdit, type HashlineOp, renderForRead } from "./hashline.js";
 
-// The hashline file tools (in-process SDK MCP server, the uiServer/discord-voice pattern). Registered — and the native
-// Edit/Write disabled — only when the hashlineEdits toggle is on. `read` tags each line + the whole file so `edit`
+// The hashline file tools (in-process SDK MCP server, the uiServer/discord-voice pattern). Registered, and the native
+// Edit/Write disabled, only when the hashlineEdits toggle is on. `read` tags each line + the whole file so `edit`
 // can point at tags instead of retyping unchanged lines and reject a stale edit; `write` creates/overwrites whole
 // files. Native Read stays enabled for viewing (images/PDFs); these own the mutation path plus the read-for-edit.
 

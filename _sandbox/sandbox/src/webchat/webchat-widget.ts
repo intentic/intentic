@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import type { Context } from "hono";
 import type { AppEnv } from "../context.js";
 
-/* Serves the Front Desk bundle at /webchat/widget.js — the one <script> a customer's page loads.
+/* Serves the Front Desk bundle at /webchat/widget.js, the one <script> a customer's page loads.
  *
  * The daemon serves it rather than a CDN because the widget and the routes it talks to then move together: a
  * daemon that has been redeployed cannot be handed a widget built against an older wire, and there is no cache
- * anywhere holding a version of one that disagrees with the other. The cost is honest and stated in the docs —
+ * anywhere holding a version of one that disagrees with the other. The cost is honest and stated in the docs,
  * while the sandbox is down the script does not load, so the site simply has no launcher. */
 
 // Resolved through the package's own export, so it works identically from src in dev and from the pruned
@@ -16,7 +16,7 @@ import type { AppEnv } from "../context.js";
 const widgetPath = (): string => fileURLToPath(import.meta.resolve("@intentic/webchat-widget/widget.js"));
 
 // Read once and kept: the bundle is ~18 KB and can only change with the daemon that serves it, so re-reading
-// per request would buy nothing. A read failure is not cached — a dev running from a checkout that hasn't been
+// per request would buy nothing. A read failure is not cached, a dev running from a checkout that hasn't been
 // built yet gets a working widget the moment it is, with no restart.
 let cached: { body: string; etag: string } | undefined;
 
@@ -42,7 +42,7 @@ export const createWidgetRoute =
             return c.body(`console.error("[intentic] the Front Desk widget bundle is missing from this sandbox image");`, 500);
         }
         // Revalidate every time, serve from the browser's cache when unchanged: the URL is version-less (it must
-        // be — the embed snippet is copied once and lives on the customer's page forever), so a long max-age
+        // be, the embed snippet is copied once and lives on the customer's page forever), so a long max-age
         // would pin visitors to a stale widget across a daemon upgrade.
         c.header("cache-control", "no-cache");
         c.header("etag", bundle.etag);

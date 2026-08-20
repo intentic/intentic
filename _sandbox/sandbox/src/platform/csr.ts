@@ -3,13 +3,13 @@ import { createPublicKey, type KeyObject, sign } from "node:crypto";
 /* A PKCS#10 certificate request (RFC 2986), in DER, hand-built.
  *
  * ACME's finalize step takes a CSR and nothing else will do, and node:crypto can parse certificates but not
- * produce a request — so this is the one gap between "the daemon holds an EC key" and "a CA will sign it".
+ * produce a request, so this is the one gap between "the daemon holds an EC key" and "a CA will sign it".
  * The alternative was a library that brings 127 transitive packages (several deprecated) into the image the
- * agent runs in; for ONE fixed shape — P-256, no subject, a single dNSName — the ASN.1 is small enough to own,
+ * agent runs in; for ONE fixed shape. P-256, no subject, a single dNSName, the ASN.1 is small enough to own,
  * and the platform already hand-writes its Cloudflare client for the same reason.
  *
  * Fixed shape means the encoder can stay minimal on purpose: no OID encoder (the three we need are written out
- * as their DER bytes), no Name builder (the subject is empty — the SAN is what a CA reads, and CA/B Forum
+ * as their DER bytes), no Name builder (the subject is empty, the SAN is what a CA reads, and CA/B Forum
  * deprecated the common name years ago), no attribute machinery beyond the one extensionRequest. Anything this
  * cannot express is something we do not ask for. */
 
@@ -45,12 +45,12 @@ const SEQUENCE = 0x30;
 const SET = 0x31;
 const OCTET_STRING = 0x04;
 const BIT_STRING = 0x03;
-// Context-specific constructed [0] — the CertificationRequestInfo attributes slot.
+// Context-specific constructed [0], the CertificationRequestInfo attributes slot.
 const CONTEXT_0 = 0xa0;
-// Context-specific primitive [2] — GeneralName's dNSName choice, an IA5String under the tag.
+// Context-specific primitive [2]. GeneralName's dNSName choice, an IA5String under the tag.
 const DNS_NAME = 0x82;
 
-// INTEGER 0 — the only integer here (CertificationRequestInfo's version, v1).
+// INTEGER 0, the only integer here (CertificationRequestInfo's version, v1).
 const VERSION_0 = Uint8Array.from([0x02, 0x01, 0x00]);
 
 // The three OIDs this shape needs, as their complete DER (tag 0x06 included) so no OID encoder is required.
@@ -60,7 +60,7 @@ const OID_ECDSA_WITH_SHA256 = Uint8Array.from([0x06, 0x08, 0x2a, 0x86, 0x48, 0xc
 
 // ——— The request ——————————————————————————————————————————————————————————————————————————————————————
 // subjectAltName as an extensionRequest attribute: Attribute { extensionRequest, SET { SEQUENCE OF Extension } }
-// with the one Extension being SAN over a GeneralNames of dNSNames. Not marked critical — a SAN alongside an
+// with the one Extension being SAN over a GeneralNames of dNSNames. Not marked critical, a SAN alongside an
 // empty subject is understood by every CA we would talk to, and Let's Encrypt reads only this.
 const sanAttributes = (hostnames: readonly string[]): Uint8Array => {
     const generalNames = der(SEQUENCE, concat(...hostnames.map((host) => der(DNS_NAME, new TextEncoder().encode(host)))));
@@ -71,7 +71,7 @@ const sanAttributes = (hostnames: readonly string[]): Uint8Array => {
 
 /* The DER of a CSR for `hostnames`, signed by `privateKey` (EC P-256).
  *
- * The public half is lifted straight off the private key as SPKI — the same bytes the CA will embed — so the
+ * The public half is lifted straight off the private key as SPKI, the same bytes the CA will embed, so the
  * key and the request can never disagree. `sign` with a plain "sha256" over an EC key emits the DER-encoded
  * ECDSA signature that ecdsa-with-SHA256 declares, which is node's default (`dsaEncoding: "der"`); saying so
  * here because the alternative encoding, IEEE P1363, is byte-identical in length and would be silently wrong. */
@@ -88,7 +88,7 @@ export const buildCsr = (privateKey: KeyObject, hostnames: readonly string[]): U
         concat(
             requestInfo,
             der(SEQUENCE, OID_ECDSA_WITH_SHA256),
-            // BIT STRING's leading octet counts unused trailing bits — always 0 for a whole-byte signature.
+            // BIT STRING's leading octet counts unused trailing bits, always 0 for a whole-byte signature.
             der(BIT_STRING, concat(Uint8Array.from([0x00]), signature)),
         ),
     );

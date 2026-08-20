@@ -5,13 +5,13 @@ import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
 import { jsonFile } from "../store/json-file.js";
 
-/* The credential half of a `host` capability — the user's own computer, enrolled once and then holding a
+/* The credential half of a `host` capability, the user's own computer, enrolled once and then holding a
  * long-lived socket to this daemon (hosts/host-hub.ts is the live half).
  *
  * The shape is the desktop-sync pairing (platform/sync.ts) narrowed to one machine: the owner mints a
  * single-use, short-lived pairing token in the browser, the one-liner carries it, and the @intentic/host agent
  * redeems it exactly once for a durable per-machine token. Nothing about the machine's identity is asserted by
- * the machine — the pairing already names WHICH capability it enrolls, so a redeemed token can only ever become
+ * the machine, the pairing already names WHICH capability it enrolls, so a redeemed token can only ever become
  * the computer the owner was looking at when they clicked Connect.
  *
  * WHERE THIS LIVES IS THE POINT. On /history, not /work/.intentic: this token is a key to somebody's actual
@@ -19,13 +19,13 @@ import { jsonFile } from "../store/json-file.js";
  * opposite call for a credential scoped to the agent's own surface (a stolen bridge token ≈ the agent's reach);
  * here a leak is a shell on the owner's machine, so the file sits where no tool the agent has can open it, and
  * holds digests rather than tokens even there. It also means an enrollment survives the `docker rm -f` of a
- * rebuild, exactly like sync's — the machine keeps working instead of silently going dark until someone
+ * rebuild, exactly like sync's, the machine keeps working instead of silently going dark until someone
  * re-pairs it. */
 
 const StoredHostsSchema = z.object({
     hosts: z.array(
         z.object({
-            // The capability id — the machine's name. One enrollment per machine, so a re-enroll rotates.
+            // The capability id, the machine's name. One enrollment per machine, so a re-enroll rotates.
             id: z.string(),
             hash: z.string(),
             enrolledAt: z.number(),
@@ -46,11 +46,11 @@ export interface HostsStore {
      * Answers false when the token has already been spent, which is the ordinary case on every boot after the
      * first.
      *
-     * SPENT ONCE, SPENT FOR GOOD — the desktop-sync seed's rule, and it matters more here. A browser-minted
+     * SPENT ONCE, SPENT FOR GOOD, the desktop-sync seed's rule, and it matters more here. A browser-minted
      * pairing dies with the daemon, but this one lives in the container's environment, which is immortal by
      * comparison: it is in `docker inspect`, in whatever shell ran the installer, and it is replayed verbatim
      * into every rebuilt container. Re-arming it each boot would turn a setup-time token into a permanent key
-     * for an enrollment route that is exempt from the bearer middleware — and whose reward is a socket onto
+     * for an enrollment route that is exempt from the bearer middleware, and whose reward is a socket onto
      * somebody's laptop. The burn is recorded on /history, which outlives the container. */
     readonly seedPairing: (id: string, token: string) => Promise<boolean>;
     // Redeem a pairing: the machine gets its durable token, and the pairing is spent whether or not the machine
@@ -59,10 +59,10 @@ export interface HostsStore {
     // Which machine is presenting this token, or undefined. The only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<string | undefined>;
     readonly enrolled: (id: string) => Promise<boolean>;
-    // Move an enrollment onto a new capability id, keeping the machine's key valid — a renamed computer must
+    // Move an enrollment onto a new capability id, keeping the machine's key valid, a renamed computer must
     // not have to be re-paired by hand at the far end.
     readonly rename: (from: string, to: string) => Promise<void>;
-    // Drop a machine's enrollment — its next connect is refused and its live socket is closed by the caller.
+    // Drop a machine's enrollment, its next connect is refused and its live socket is closed by the caller.
     readonly revoke: (id: string) => Promise<boolean>;
 }
 
@@ -89,7 +89,7 @@ export const fileHostsStore = (historyRoot: string): HostsStore => {
     // one click) and would mean persisting a live credential to protect.
     const pairings = new Map<string, { id: string; expiresAt: number }>();
     // Which of the live pairings came from the container's env, so `enroll` knows whose redemption is worth
-    // persisting. A browser-minted one is already unreplayable — nothing outside this map ever held it.
+    // persisting. A browser-minted one is already unreplayable, nothing outside this map ever held it.
     const seeded = new Set<string>();
 
     return {
@@ -119,7 +119,7 @@ export const fileHostsStore = (historyRoot: string): HostsStore => {
             }
             pairings.delete(pairToken);
             // A setup-time token is burned on /history the moment it works, so the copy still sitting in the
-            // container's environment is inert from here on — including across the rebuild that replays it.
+            // container's environment is inert from here on, including across the rebuild that replays it.
             if (seeded.delete(pairToken)) {
                 const digest = sha256Hex(pairToken);
                 await burned.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
@@ -141,7 +141,7 @@ export const fileHostsStore = (historyRoot: string): HostsStore => {
         },
         enrolled: async (id) => (await file.read()).hosts.some((host) => host.id === id),
         rename: async (from, to) => {
-            // The token digest is untouched, so the machine's own key keeps verifying — it simply comes back
+            // The token digest is untouched, so the machine's own key keeps verifying, it simply comes back
             // under the new name. Re-pairing would mean walking to that computer to run the installer again,
             // which is a strange price for changing what a row is called.
             await file.update((stored) => ({ hosts: stored.hosts.map((host) => (host.id === from ? { ...host, id: to } : host)) }));

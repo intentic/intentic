@@ -6,10 +6,10 @@ import type { VerifiedIdentity } from "./auth.js";
 
 /* Daemon-minted sessions: the steady-state browser credential. A Google ID token proves WHO a caller is
  * (auth.ts verifies it against Google's JWKS), but it lives about an hour and renewing it needs Google UI in
- * the browser — which is how "Sign in with Google" kept popping over a perfectly healthy workspace. So after
+ * the browser, which is how "Sign in with Google" kept popping over a perfectly healthy workspace. So after
  * any Google-verified request the daemon mints its own HMAC-signed session (system.session), and every later
  * call presents that instead: Google becomes the sign-in moment, not an hourly tax. The security shape is
- * unchanged — the secret never leaves the sandbox, the platform still holds nothing it could replay, and
+ * unchanged, the secret never leaves the sandbox, the platform still holds nothing it could replay, and
  * owner/member enforcement stays per-request in auth.ts, so a live session does not outlive a revoked grant. */
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -18,7 +18,7 @@ const ISSUER = "intentic-sandbox-session";
 
 export interface MintedSession {
     readonly token: string;
-    // Epoch ms — echoed to the browser so it can renew ahead of expiry without parsing the token.
+    // Epoch ms, echoed to the browser so it can renew ahead of expiry without parsing the token.
     readonly expiresAt: number;
 }
 
@@ -29,14 +29,14 @@ export interface Sessions {
     /* Re-key: every session minted under the old secret stops verifying, everywhere, at once.
      *
      * This is the sign-out-everywhere the token shape otherwise can't offer. A session is a self-contained
-     * signed claim — nothing is stored per session, which is what makes verification a local HMAC instead of a
-     * lookup — so there is no record to delete and no revocation list to consult. Rotating what SIGNS them is
+     * signed claim, nothing is stored per session, which is what makes verification a local HMAC instead of a
+     * lookup, so there is no record to delete and no revocation list to consult. Rotating what SIGNS them is
      * the whole answer, and a 30-day sliding credential sitting in a browser's localStorage needs one: a
      * shared laptop, a synced profile, a device that walked off.
      *
      * Deliberately not a per-session revoke. The owner is asking a question about the sandbox ("is anything
      * still holding a way in?"), not about a device list they never see, and the honest answer to that question
-     * is "nothing is now". Members are signed out too, which is the point of a kill switch — their next call
+     * is "nothing is now". Members are signed out too, which is the point of a kill switch, their next call
      * re-establishes from a fresh Google proof if they are still on the members list, and doesn't if they
      * aren't. The caller's own browser is included; it re-establishes silently from the Google token it holds. */
     rotate(): Promise<void>;
@@ -44,7 +44,7 @@ export interface Sessions {
 
 export const createSessions = (secretPath: string): Sessions => {
     // One secret per sandbox, created 0600 on first use (no provisioning step) and persisted so sessions
-    // survive daemon restarts — a rebuild must not re-prompt every browser. Cached as the promise so
+    // survive daemon restarts, a rebuild must not re-prompt every browser. Cached as the promise so
     // concurrent first requests share one load/create instead of racing to write two secrets.
     let secret: Promise<Uint8Array> | undefined;
     const writeFresh = async (): Promise<Uint8Array> => {
@@ -58,7 +58,7 @@ export const createSessions = (secretPath: string): Sessions => {
             const stored = await readFile(secretPath, "utf8").catch(() => undefined);
             if (stored !== undefined) {
                 const bytes = Buffer.from(stored.trim(), "base64url");
-                // A truncated/corrupt file must not become a weak HMAC key — fall through and re-key.
+                // A truncated/corrupt file must not become a weak HMAC key, fall through and re-key.
                 if (bytes.length >= 32) {
                     return bytes;
                 }

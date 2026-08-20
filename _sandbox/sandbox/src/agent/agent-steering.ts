@@ -1,10 +1,10 @@
-/* Mid-turn steering — the Claude Code queue-and-inject model. A running Claude turn consumes its prompt as a
+/* Mid-turn steering, the Claude Code queue-and-inject model. A running Claude turn consumes its prompt as a
  * streaming input (see agent.ts steeredInput), so user messages posted to /agent/steer while it works are
  * injected between tool calls instead of forcing an abort-and-resend. The registry below also carries each
  * turn's hard-cancel: /agent/stop aborts the turn daemon-side (closing the /agent fetch sends no cancel
  * frame, so the browser alone can't).
  *
- * Keyed by conversationId — the client-minted stable identity every chat turn already carries. The daemon is
+ * Keyed by conversationId, the client-minted stable identity every chat turn already carries. The daemon is
  * single-tenant behind its authenticated tunnel, so no per-user scoping (same bet as agent-requests.ts). */
 
 // An unbounded push/pull text queue: the steer route pushes, the turn's input generator pulls. close() ends
@@ -15,11 +15,11 @@ export class SteeringQueue implements AsyncIterable<string> {
     private wake: (() => void) | undefined;
 
     // How many messages were accepted into the turn. The SDK stream emits a `result` per turn, and a
-    // delivered steer may run as its own follow-up turn — streamSdk keeps consuming past a result while
+    // delivered steer may run as its own follow-up turn, streamSdk keeps consuming past a result while
     // this is non-zero (see its grace race) instead of ending the stream at the first one.
     delivered = 0;
 
-    // False once closed — the caller then knows the message was NOT delivered.
+    // False once closed, the caller then knows the message was NOT delivered.
     push(text: string): boolean {
         if (this.closed) {
             return false;
@@ -56,7 +56,7 @@ export class SteeringQueue implements AsyncIterable<string> {
 export interface ActiveTurn {
     // Hard-cancels the turn (aborts the SDK/provider adapter).
     readonly abort: () => void;
-    // Present only on turns that support mid-turn injection (capabilitiesOf().steering — the Claude Code
+    // Present only on turns that support mid-turn injection (capabilitiesOf().steering, the Claude Code
     // harness, and Pi's steer queue); a native codex/grok/ACP turn registers abort alone, so steering it
     // reports NOT_FOUND and the client falls back to a fresh send.
     readonly steering?: SteeringQueue;
@@ -76,7 +76,7 @@ export function registerTurn(conversationId: string, turn: ActiveTurn): () => vo
     };
 }
 
-// How many turns are in flight right now — the idle-stop verdict reads it (a machine mid-turn is not idle,
+// How many turns are in flight right now, the idle-stop verdict reads it (a machine mid-turn is not idle,
 // however long the person who started the turn has been gone).
 export const activeTurnCount = (): number => activeTurns.size;
 

@@ -3,7 +3,7 @@ import type { Services } from "../composition.js";
 
 /* WHAT THE RECORDED QUOTA ALREADY SAYS ABOUT A RUNG, BEFORE ANYTHING IS SPENT ON IT.
  *
- * The walk next door learned which models were refusing by asking them and being refused — one wasted call per
+ * The walk next door learned which models were refusing by asking them and being refused, one wasted call per
  * rung per window, re-bought every time the memo expired. For most providers that is a fact we already hold:
  * every connected account's headroom is on file, refreshed in the background, and it carries the provider's OWN
  * renewal instant. Measured on this workspace the day this was written: the ChatGPT plan read 100% of its weekly
@@ -13,24 +13,24 @@ import type { Services } from "../composition.js";
  * So a rung whose every account is spent is stepped over on the READING, and comes back when the provider said
  * it would rather than when a timer we invented runs out. The refusal memo stays underneath as the fallback it
  * always should have been: providers that publish no quota (Grok, a user's own endpoint), a snapshot that never
- * refreshed, and the refusals that were never about allowance at all — a revoked token, an outage, or a vendor
+ * refreshed, and the refusals that were never about allowance at all, a revoked token, an outage, or a vendor
  * that objects to the request and answers with a quota-shaped error anyway (Google does exactly this).
  *
- * IT ONLY EVER SAYS "SPENT", never "healthy". A reading with headroom means the allowance is not the blocker —
- * not that the call will work — so `undefined` here is "nothing on file stands in the way", which is also what
+ * IT ONLY EVER SAYS "SPENT", never "healthy". A reading with headroom means the allowance is not the blocker,
+ * not that the call will work, so `undefined` here is "nothing on file stands in the way", which is also what
  * an unmeasured provider, an unreachable translator and an endpoint all answer. Every one of those goes on to
  * be asked, which is the safe direction: the cost of asking is one call, and the cost of wrongly skipping is a
  * helper that does nothing while an account sits ready. */
 
 export interface SpentRung {
-    // The sentence the walk reports this rung as skipped with — it reaches the user in the landing report, so it
+    // The sentence the walk reports this rung as skipped with, it reaches the user in the landing report, so it
     // says which allowance and when it comes back, not which internal reading produced it.
     readonly reason: string;
     readonly reopensAt?: number;
 }
 
 /* Claude's pools, split by whether they gate THIS call. `five_hour` and `seven_day` are the plan's undivided
- * allowances and every model spends them. The rest are scoped — `model:Fable`, `surface:…` — and a scoped pool
+ * allowances and every model spends them. The rest are scoped, `model:Fable`, `surface:…`, and a scoped pool
  * cannot be matched to the model id we are about to run: the provider names those pools by display name and
  * nothing connects the two (claude-usage.ts says so where it maps them). A per-model pool at 100% therefore
  * proves nothing about the cheap model this helper runs, so it is not allowed to block it. Erring this way costs
@@ -38,7 +38,7 @@ export interface SpentRung {
 const GATES_EVERY_CLAUDE_CALL = new Set([`five_hour`, `seven_day`]);
 
 // How long until it comes back, in words, because the daemon cannot know the reader's timezone and an absolute
-// instant formatted in the container's would be wrong for most of them. Deliberately vague at every scale — the
+// instant formatted in the container's would be wrong for most of them. Deliberately vague at every scale, the
 // number is a snapshot of a provider's own estimate, and stating it to the minute would overclaim it.
 const inWords = (reopensAt: number, now: number): string => {
     const seconds = reopensAt - Math.floor(now / 1000);
@@ -60,7 +60,7 @@ const spentSentence = (subject: string, pool: string | undefined, reopensAt: num
     return `${subject} out of ${allowance}${renews}.`;
 };
 
-/* A ROUTED PROVIDER'S FLEET, from the translator's own reading — already scoped to the pool this model spends,
+/* A ROUTED PROVIDER'S FLEET, from the translator's own reading, already scoped to the pool this model spends,
  * which is the part that cannot be re-derived here. Google meters Gemini separately from the Claude/GPT models
  * on one sign-in, so "is the fleet spent" is only answerable per model, and turnLimit is where that lives.
  *
@@ -83,7 +83,7 @@ const spentRoutedRung = async (services: Services, choice: QuickModelChoice, now
 };
 
 /* NATIVE CLAUDE'S ACCOUNTS, from the same store the account picker ranks by. The picker already prefers the
- * account with the most room, so this only has something to say when EVERY account is at its cap — the one case
+ * account with the most room, so this only has something to say when EVERY account is at its cap, the one case
  * the picker cannot rescue, and the one where the call is certain to be refused.
  *
  * An account with no reading is not counted as spent, and that is what keeps a fresh sandbox (nothing measured
@@ -98,7 +98,7 @@ const spentClaudeRung = async (services: Services, now: number): Promise<SpentRu
     for (const account of connected) {
         const windows = (usage[account.id]?.windows ?? []).filter((window) => GATES_EVERY_CLAUDE_CALL.has(window.kind));
         if (windows.length === 0) {
-            // Unmeasured, so unproven — one such account is enough for the rung to be worth asking.
+            // Unmeasured, so unproven, one such account is enough for the rung to be worth asking.
             return undefined;
         }
         measured += 1;

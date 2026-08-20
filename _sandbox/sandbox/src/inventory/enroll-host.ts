@@ -11,7 +11,7 @@ import { hasManagedEntry, upsertManagedEntry } from "./managed-region.js";
 
 // Register a deploy-target host from the connect-host script's POST /enroll: write its SSH key (and, on the first
 // host, the Cloudflare token) to desired-state/.env, and upsert the i.have.host (+ i.have.cloudflare
-// "cf") into deploy.config.ts. Idempotent by name — re-running the script updates the address/key. Requires
+// "cf") into deploy.config.ts. Idempotent by name, re-running the script updates the address/key. Requires
 // DevOps (the desired-state repo); the config write independently throws PRECONDITION_FAILED if intent is absent.
 export const enrollHost = async (services: Services, input: EnrollHostInput): Promise<void> => {
     const desiredState = services.workspace.repos["desired-state"];

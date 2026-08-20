@@ -23,7 +23,7 @@ export const parseIntenticLine = (line: string): IntenticLine | undefined => {
 };
 
 // Split a stream of arbitrary string chunks into newline-delimited lines, carrying a partial line across
-// chunk boundaries and flushing any trailing remainder. Pure async transform — the unit-testable core of
+// chunk boundaries and flushing any trailing remainder. Pure async transform, the unit-testable core of
 // reading a subprocess's streamed stdout.
 export async function* chunksToLines(chunks: AsyncIterable<string>): AsyncGenerator<string> {
     let buffer = "";
@@ -49,10 +49,10 @@ export interface IntenticRun {
 }
 
 // Ceiling on one streamed CLI run. resolve/plan finish in seconds-to-a-minute when healthy and every network
-// operation below them is individually bounded now — a run still alive after this is wedged, not working.
+// operation below them is individually bounded now, a run still alive after this is wedged, not working.
 const RUN_WATCHDOG_MS = 10 * 60_000;
 
-// The slice of a pino logger the runner needs — structural, so tests pass a plain recorder.
+// The slice of a pino logger the runner needs, structural, so tests pass a plain recorder.
 export interface RunLogger {
     readonly info: (fields: object, message: string) => void;
     readonly warn: (fields: object, message: string) => void;
@@ -60,14 +60,14 @@ export interface RunLogger {
 
 // Run the in-sandbox intentic CLI and stream its ndjson lines as they arrive (so the UI sees live
 // resolve/plan progress). A non-zero exit propagates as an error once the stream ends, with captured stderr.
-// The child is KILLED when the caller aborts (browser tab closed — an abandoned SSE must not leak a live
+// The child is KILLED when the caller aborts (browser tab closed, an abandoned SSE must not leak a live
 // `intentic deploy plan` with its SSH connections), when the generator is torn down, or when the watchdog fires.
-// Every run's lifecycle (spawn, kill + reason, exit + duration + stderr head) lands in the daemon log — a
+// Every run's lifecycle (spawn, kill + reason, exit + duration + stderr head) lands in the daemon log, a
 // crashed or killed run must be attributable from daemon.log alone, not reconstructed from absence.
 export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logger?: RunLogger): AsyncGenerator<IntenticLine> {
     const startedAt = Date.now();
     // Daemon-owned: this generator kills its own child on abort and on exit, so the stamp is here for the one
-    // case that cannot — a daemon replaced mid-run, whose `intentic` child nothing is left to signal.
+    // case that cannot, a daemon replaced mid-run, whose `intentic` child nothing is left to signal.
     const child = spawn("intentic", [...run.args], {
         cwd: run.cwd,
         env: { ...process.env, INTENTIC_OUTPUT: "ndjson", ...workloadStamp(DAEMON_OWNER) },
@@ -112,7 +112,7 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
         clearTimeout(watchdog);
         signal?.removeEventListener("abort", onAbort);
         // Generator torn down mid-stream (the oRPC connection dropped without an abort event, or the consumer
-        // stopped iterating) with the child still alive — reap it.
+        // stopped iterating) with the child still alive, reap it.
         if (child.exitCode === null && child.signalCode === null) {
             kill("the stream consumer went away");
         }

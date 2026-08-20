@@ -9,14 +9,14 @@ import {
     EXTENSION_TOKEN_HEADER,
 } from "./backend-host-config.js";
 
-/* The BACKEND HOST's whole runtime, as a pure function of its config — the process entry (backend-host-main.ts)
+/* The BACKEND HOST's whole runtime, as a pure function of its config, the process entry (backend-host-main.ts)
  * only parses env and serves the returned fetch handler, so everything here is testable in-process without a
- * spawn. This file runs in the CHILD process: it must not import the daemon's services, stores or logger —
+ * spawn. This file runs in the CHILD process: it must not import the daemon's services, stores or logger,
  * its only channels back are stdout (the supervisor forwards lines into the daemon log) and the /health body.
  *
  * One activation failure is one row saying so, never a dead host: every extension is loaded in its own
  * try/catch and reported per id, the same containment rule the web loader applies. The host itself has no
- * restart logic — dying IS its teardown story (the supervisor respawns it), which is what keeps "unload this
+ * restart logic, dying IS its teardown story (the supervisor respawns it), which is what keeps "unload this
  * extension" an honest operation instead of a leak. */
 
 interface LoadedExtension {
@@ -24,7 +24,7 @@ interface LoadedExtension {
     readonly handler?: BackendRouteHandler;
 }
 
-// The bundle's activateServer, wherever it exports it — default export object or named export, the same
+// The bundle's activateServer, wherever it exports it, default export object or named export, the same
 // tolerance the web loader extends to UI bundles.
 const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: ExtensionServerModule }): ExtensionServerModule => {
     const resolved = imported.default ?? imported;
@@ -35,7 +35,7 @@ const resolveModule = (imported: Partial<ExtensionServerModule> & { default?: Ex
 };
 
 const loadOne = async (config: BackendHostConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
-    // The mount slot — a second mount replaces the first, per the API contract.
+    // The mount slot, a second mount replaces the first, per the API contract.
     let mounted: BackendRouteHandler | undefined;
     const api: ExtensionServerApi = {
         apiVersion: config.apiVersion,
@@ -111,7 +111,7 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
         statuses,
         fetch: async (request) => {
             // Only the daemon: the port is loopback but loopback is container-shared, and every credential
-            // check lives in the daemon's gate — an unproxied caller has been through none of it.
+            // check lives in the daemon's gate, an unproxied caller has been through none of it.
             if (request.headers.get(BACKEND_HOST_HEADER) !== config.hostToken) {
                 return json({ error: "unauthorized" }, 401);
             }
@@ -131,7 +131,7 @@ export const createBackendHostApp = async (config: BackendHostConfig): Promise<B
                 const detail = extension.status.state === "error" ? ` (its activation failed: ${extension.status.detail})` : "";
                 return json({ error: `the "${target.id}" backend serves no routes${detail}` }, 404);
             }
-            /* Rebase to the extension's own path space — its handler sees the same paths its contract declares.
+            /* Rebase to the extension's own path space, its handler sees the same paths its contract declares.
              * The origin is irrelevant to routing and deliberately synthetic. The daemon's proxy already
              * stripped the owner's credentials; the host token stays out too. */
             const headers = new Headers(request.headers);

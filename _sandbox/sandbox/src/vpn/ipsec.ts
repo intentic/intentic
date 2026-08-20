@@ -7,13 +7,13 @@ import { activeResolvers, toolMissing } from "./net-probe.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { connName, IPSEC_INCLUDE_DIR, ipsecConnPath, ipsecSecretsPath } from "./vpn-paths.js";
 
-// IKEv1/IKEv2 with a pre-shared key and optional XAuth — what FortiClient's <ipsecvpn> connections speak —
+// IKEv1/IKEv2 with a pre-shared key and optional XAuth, what FortiClient's <ipsecvpn> connections speak,
 // run by strongSwan. Unlike the other two providers there is no per-tunnel interface: strongSwan installs
 // kernel XFRM policies, so "connected" is read from charon's own status and the tunnel's address is the
 // virtual IP the gateway handed out through mode config.
 //
 // Each connection is written as its own pair of files under /etc/ipsec.d/intentic, which /etc/ipsec.conf and
-// /etc/ipsec.secrets `include` — so one connection can be written, reread and torn down without regenerating
+// /etc/ipsec.secrets `include`, so one connection can be written, reread and torn down without regenerating
 // anyone else's.
 
 const exec = promisify(execFile);
@@ -21,7 +21,7 @@ const config = (raw: VpnConfig): IpsecVpnConfig => raw as IpsecVpnConfig;
 
 // FortiGate dial-up defaults, covering the proposals FortiClient offers (AES128/AES256 with SHA256, DH groups
 // 5 and 14). Not terminated with "!" so strongSwan will still negotiate its own defaults if a gateway wants
-// something adjacent — a stricter list is the kind of thing that turns a working VPN into an opaque failure.
+// something adjacent, a stricter list is the kind of thing that turns a working VPN into an opaque failure.
 // FortiClient's DH group numbers to strongSwan's names.
 const DH_GROUPS: Record<IpsecVpnConfig["dhGroup"], string> = {
     "2": "modp1024",
@@ -33,8 +33,8 @@ const DH_GROUPS: Record<IpsecVpnConfig["dhGroup"], string> = {
     "20": "ecp384",
 };
 
-// ONE DH group across both phases, and it is load-bearing. IKEv1 quick mode carries a single KE payload, and
-// strongSwan derives its group from the IKE SA — so a phase-1 list whose FIRST entry is a different group than
+// ONE DH group across both phases, and it matters. IKEv1 quick mode carries a single KE payload, and
+// strongSwan derives its group from the IKE SA, so a phase-1 list whose FIRST entry is a different group than
 // the gateway wants for phase 2 gets NO_PROPOSAL_CHOSEN whatever the esp= line says. Verified end to end: with
 // phase 1 on modp1536 the gateway received ESP proposals carrying MODP_1536 and refused; pinning both phases
 // to the configured group established the CHILD_SA.
@@ -80,7 +80,7 @@ charon {
 }
 `;
 
-// The conn stanza for one connection. Pure so the generated config is unit-testable — the whole point of
+// The conn stanza for one connection. Pure so the generated config is unit-testable, the whole point of
 // keeping strongSwan's file format in one function.
 export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
     const xauth = raw.username !== undefined && raw.password !== undefined;
@@ -94,7 +94,7 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         `    right=${raw.server}`,
         `    rightid=${raw.remoteId ?? "%any"}`,
         // What the gateway is asked to route into the tunnel. NOT a fixed 0.0.0.0/0 any more: a dial-up gateway
-        // does not necessarily narrow what it is offered — a FortiGate happily accepts the catch-all, and then
+        // does not necessarily narrow what it is offered, a FortiGate happily accepts the catch-all, and then
         // drops everything it has no route for, so a sandbox that asked for everything loses the internet
         // (its own connection to the model included) the moment the tunnel comes up.
         `    rightsubnet=${routedNetworks(raw)}`,
@@ -143,12 +143,12 @@ const ensureCharon = async (): Promise<void> => {
     await exec("ipsec", ["start"]).catch(() => undefined);
 };
 
-// Whether charon has LOADED a connection — distinct from it being up. In `ipsec statusall` a loaded connection
+// Whether charon has LOADED a connection, distinct from it being up. In `ipsec statusall` a loaded connection
 // appears under "Connections:" as `<name>:` with no bracket, while its live SAs use `<name>[n]:` / `<name>{n}:`.
 export const parseIpsecLoaded = (conn: string, output: string): boolean =>
     output.split("\n").some((line) => new RegExp(`^\\s*${conn}:\\s`).test(line));
 
-// `ipsec start` forks and returns immediately, and `ipsec reload` only ASKS starter to re-read ipsec.conf —
+// `ipsec start` forks and returns immediately, and `ipsec reload` only ASKS starter to re-read ipsec.conf,
 // neither waits for the connection to reach charon. Dialling in that window fails with charon's least helpful
 // message, "no config named '<conn>'", which reads like the config was never written when in fact it was
 // written microseconds earlier. So wait for the connection to actually appear before `ipsec up`.
@@ -168,7 +168,7 @@ const waitForConn = async (conn: string): Promise<boolean> => {
 // carries "<localTS> === <remoteTS>", where the local traffic selector IS the virtual IP the gateway assigned
 // and the remote one is what it routed into the tunnel. Parsed as a pure function against real output shape.
 export interface IpsecStatus {
-    // A CHILD_SA is INSTALLED — the ONLY state in which traffic actually flows. Reported as "connected".
+    // A CHILD_SA is INSTALLED, the ONLY state in which traffic actually flows. Reported as "connected".
     readonly established: boolean;
     // Phase 1 is up but no CHILD_SA yet. Reporting this as connected was a false positive: XAuth and the
     // virtual IP can all succeed and quick mode still fail (NO_PROPOSAL_CHOSEN on a PFS mismatch), leaving a
@@ -185,7 +185,7 @@ export const parseIpsecStatus = (conn: string, output: string): IpsecStatus => {
     const ikeUp = lines.some((line) => new RegExp(`^\\s*${conn}\\[\\d+\\]:\\s+ESTABLISHED`).test(line));
     // e.g. "e2e{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: …"
     const childInstalled = lines.some((line) => new RegExp(`^\\s*${conn}\\{\\d+\\}:\\s+INSTALLED`).test(line));
-    // e.g. "systemeg{1}:   10.212.134.200/32 === 0.0.0.0/0" — the left side is the virtual IP the gateway
+    // e.g. "systemeg{1}:   10.212.134.200/32 === 0.0.0.0/0", the left side is the virtual IP the gateway
     // assigned through mode config, the right side is what it routed into the tunnel.
     const childPrefix = new RegExp(`^\\s*${conn}\\{\\d+\\}:`);
     const selectorLine = lines.find((line) => childPrefix.test(line) && line.includes(" === "));
@@ -210,7 +210,7 @@ export const parseIpsecStatus = (conn: string, output: string): IpsecStatus => {
 };
 
 // charon's own log is precise but says nothing about WHICH setting to change. Each pattern below maps a
-// negotiation failure onto the field responsible, because the raw line is close to unactionable otherwise —
+// negotiation failure onto the field responsible, because the raw line is close to unactionable otherwise,
 // "calculated HASH does not match HASH payload" is IKEv1's way of saying the pre-shared key is wrong, and
 // nothing in it points at the pre-shared key.
 export const ipsecFailureHint = (log: string): string | undefined => {
@@ -244,7 +244,7 @@ export const ipsecDriver: VpnDriver = {
             await writeFile(AGGRESSIVE_DROPIN_PATH, AGGRESSIVE_DROPIN, { mode: 0o644 });
         }
         await writeFile(ipsecConnPath(id), ipsecConnConfig(id, ipsec), { mode: 0o644 });
-        // Holds the PSK and the XAuth password — never group/world readable.
+        // Holds the PSK and the XAuth password, never group/world readable.
         await writeFile(ipsecSecretsPath(id), ipsecSecretsConfig(ipsec), { mode: 0o600 });
     },
     erase: async (id) => {
@@ -276,7 +276,7 @@ export const ipsecDriver: VpnDriver = {
         }
         yield { kind: "log", message: `Negotiating IKEv${ipsec.ikeVersion} with ${ipsec.server}…` };
         // `ipsec up` blocks until the negotiation resolves and exits non-zero on failure, printing charon's own
-        // reason (NO_PROPOSAL_CHOSEN, AUTHENTICATION_FAILED, …) — the message worth propagating either way,
+        // reason (NO_PROPOSAL_CHOSEN, AUTHENTICATION_FAILED, …), the message worth propagating either way,
         // since charon reports the failure on stdout even when the exit code is zero.
         const dialOutput = await exec("ipsec", ["up", conn]).then(
             (result) => `${result.stdout}${result.stderr}`.trim(),
@@ -294,7 +294,7 @@ export const ipsecDriver: VpnDriver = {
         }
         // Name what was asked for, and say the consequence out loud while a full tunnel is still the default.
         // This is the last message that reaches the user before a gateway without internet egress swallows the
-        // sandbox's own outbound traffic — after that there is nothing to read the explanation from.
+        // sandbox's own outbound traffic, after that there is nothing to read the explanation from.
         const networks = routedNetworks(ipsec);
         yield {
             kind: "log",
@@ -316,7 +316,7 @@ export const ipsecDriver: VpnDriver = {
         const status = parseIpsecStatus(conn, stdout);
         if (!status.established) {
             // Phase 1 up with no CHILD_SA is genuinely mid-negotiation (or a quick-mode failure that DPD will
-            // retry) — never "connected", because nothing routes through it.
+            // retry), never "connected", because nothing routes through it.
             return status.negotiating ? { state: "connecting", interface: `ipsec:${conn}` } : { state: "disconnected" };
         }
         return {

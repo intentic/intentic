@@ -9,10 +9,10 @@ import { treeDigest } from "./loop-progress.js";
 import { evaluateStop } from "./loop-stop.js";
 import { loopProjection } from "./loop-state.js";
 
-/* THE PUMP — run a conversation's turn, ask whether the goal is met, and if not run it again.
+/* THE PUMP, run a conversation's turn, ask whether the goal is met, and if not run it again.
  *
  * DAEMON-SIDE, and that is the single decision this module exists to enforce. A turn is already detached from
- * every client (turn-runs.ts), so one turn survives a closed browser without help — which is exactly why the
+ * every client (turn-runs.ts), so one turn survives a closed browser without help, which is exactly why the
  * acceptance extension can drive its fan-out from the browser and get away with it. A SEQUENCE cannot: driven
  * from a tab, iteration 4 never starts because the thing that would have started it was a closed laptop. Loops
  * therefore live where the scheduler lives, and the browser only ever watches.
@@ -26,7 +26,7 @@ import { loopProjection } from "./loop-state.js";
  * this order every iteration: the user asked it to stop, the spend ceiling is reached, the tree has not moved
  * for `stallLimit` iterations, the iteration budget is spent. A loop is the first thing in this sandbox that
  * can spend money with nobody pressing anything between turns, so none of them is optional and none of them is
- * a warning — each one ends the loop and says which it was.
+ * a warning, each one ends the loop and says which it was.
  */
 
 // A loop that is running right now, keyed by conversation. A module singleton for the same reason the
@@ -36,7 +36,7 @@ const running = new Map<string, { readonly abort: AbortController }>();
 
 export const loopRunning = (conversationId: string): boolean => running.has(conversationId);
 
-/* Ask a running loop to stop after the iteration in flight — deliberately NOT a turn abort.
+/* Ask a running loop to stop after the iteration in flight, deliberately NOT a turn abort.
  *
  * Stopping a loop means "do not start another one", not "throw away what is running". A user watching iteration
  * 6 do good work must be able to call it the last one without losing it; abandoning the work outright is
@@ -48,11 +48,11 @@ export const stopLoop = (conversationId: string): boolean => {
     return live !== undefined;
 };
 
-// The turn generator, injected — streamAgent's shape. Same reason the scheduler takes its WakeFn: importing
+// The turn generator, injected, streamAgent's shape. Same reason the scheduler takes its WakeFn: importing
 // agent.routes here would close a cycle through the workspace events it emits.
 export type TurnFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
-// The tree an iteration works in — an isolated loop's own checkout, or the workspace itself. What the stop
+// The tree an iteration works in, an isolated loop's own checkout, or the workspace itself. What the stop
 // command runs against and what the stall detector digests, so the two can never disagree about which tree the
 // loop is talking about.
 const treeOf = (services: Services, loop: Loop): string =>
@@ -69,7 +69,7 @@ interface IterationOutcome {
  *
  * IT RUNS THROUGH THE SAME DETACHED PUMP A COMPOSER'S TURN DOES (turn-runs.ts), and that is what makes a
  * looping agent WATCHABLE. `/agent/attach` renders a conversation by finding its live run in that pump's
- * registry — so a turn driven straight off the generator, as this used to be, is invisible to every browser in
+ * registry, so a turn driven straight off the generator, as this used to be, is invisible to every browser in
  * the world: the panes a workflow opens for its steps sat on "start a conversation" while the agent behind
  * them worked, and the transcript only appeared once the whole turn had settled and something thought to
  * re-read it. Nothing about a step makes it a different kind of turn, so it goes through the door every other
@@ -77,21 +77,21 @@ interface IterationOutcome {
  *
  * The pump also owns what this used to do by hand: it folds a thrown turn into the log as an error frame (so
  * the failure arrives as a frame rather than an exception) and writes the settled transcript once the turn is
- * whole. What is left here is the reduction — the four values that decide what happens next.
+ * whole. What is left here is the reduction, the four values that decide what happens next.
  */
 const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }, fn: TurnFn): Promise<IterationOutcome> => {
     const report: string[] = [];
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    // Adoption starts now and the pump waits for it before the provider runs — the send path's own order.
+    // Adoption starts now and the pump waits for it before the provider runs, the send path's own order.
     const opened = openTurnTranscript(services, turn);
     const run = startTurnRun((input, signal) => fn(services, input, signal), turn, {
         before: opened,
         transcript: (events, startedAt) => recordTurnTranscript(services, turn, events, startedAt),
     });
     if (run === undefined) {
-        // Another turn is already live on this conversation — a hand-sent message, or a previous iteration
+        // Another turn is already live on this conversation, a hand-sent message, or a previous iteration
         // whose pump has not unwound. The loop treats it as this iteration's failure and asks its own ceilings
         // what to do next, rather than racing the turn that holds the worktree.
         services.logger.warn({ conversationId: loop.conversationId }, "loop iteration: a turn is already running");
@@ -115,7 +115,7 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
 };
 
 // Publish where the loop stands to every fleet card. Called at each iteration boundary and once more at the
-// end — the last one is the whole reason loop-state carries a change notification, since no turn frame follows
+// end, the last one is the whole reason loop-state carries a change notification, since no turn frame follows
 // it to broadcast the roster.
 const publish = (loop: Loop, state: LoopState, iteration: number): void =>
     loopProjection.set(loop.conversationId, { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal });
@@ -123,7 +123,7 @@ const publish = (loop: Loop, state: LoopState, iteration: number): void =>
 /* HOW A LOOP ENDED, handed back to whoever started it.
  *
  * A route that acked and walked away ignores this; a workflow step is entirely made of it. Returned rather
- * than re-read from the store because this is the one moment everything is already in hand — re-reading the
+ * than re-read from the store because this is the one moment everything is already in hand, re-reading the
  * manifest to learn what the call you just awaited did is both slower and a chance to disagree with it.
  */
 export interface LoopSettlement {
@@ -154,18 +154,18 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
     const abort = new AbortController();
     running.set(conversationId, { abort });
     const tree = treeOf(services, record);
-    // The loop's own directory, made before the first iteration is told to write into it — a `fresh` iteration
+    // The loop's own directory, made before the first iteration is told to write into it, a `fresh` iteration
     // asked to read a progress file whose directory does not exist wastes its opening move on mkdir.
     await mkdir(loopDirIn(services.workspace.root, conversationId), { recursive: true }).catch(() => undefined);
 
     let iteration = record.iterations.length;
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);
     let stalls = 0;
-    // The session to resume, carried between iterations in `continue` mode. Undefined in `fresh` mode forever —
+    // The session to resume, carried between iterations in `continue` mode. Undefined in `fresh` mode forever,
     // that absence IS the mode: no session id means the provider opens a new one against the same worktree.
     let sessionId = record.context === "continue" ? services.agents.sessionIdOf(conversationId) : undefined;
     // What the loop hands back. Kept across iterations rather than taken from the last one, because the last
-    // iteration of a loop that ran out of road is often the one that produced the least — an `exhausted` loop
+    // iteration of a loop that ran out of road is often the one that produced the least, an `exhausted` loop
     // should still return the best document it ever wrote.
     let report = "";
     let document: LoopDocument | undefined;
@@ -193,7 +193,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 /* NOBODY IS AT A COMPOSER, which is what this flag means and what a loop is. It was missing,
                  * and the cost was not only the model defaults it selects (see AgentTurn.unattended): every
                  * iteration was also treated as a person's question by the turn's own prompt decorations,
-                 * which are scaffolding-blind — a loop's brief opens with "# Iteration 1 of at most 3", not
+                 * which are scaffolding-blind, a loop's brief opens with "# Iteration 1 of at most 3", not
                  * with the step's actual ask. */
                 unattended: true,
                 ...(record.isolated ? { isolated: true } : {}),
@@ -219,7 +219,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
             /* The stop check runs even on an iteration that ERRORED, and that is not an oversight: a turn can
              * fail on its closing frame having already made the change that meets the goal, and a loop that
              * skipped the check there would spend another iteration re-doing finished work. The check is cheap
-             * and it is the authority — the turn's own fate is not. */
+             * and it is the authority, the turn's own fate is not. */
             const verdict = await evaluateStop(services, record, {
                 iteration,
                 cwd: tree,
@@ -227,12 +227,12 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 signal: abort.signal,
             });
             document = verdict.document ?? document;
-            /* WHERE NOTHING WAS VERIFIED, THE TURN'S OWN FATE IS THE VERDICT — the one exception to the rule
+            /* WHERE NOTHING WAS VERIFIED, THE TURN'S OWN FATE IS THE VERDICT, the one exception to the rule
              * directly above, and the reason a workflow could report every step done having run none of them.
              *
              * `evaluateStop` is the authority wherever there is a bar to clear. A loop that declares NEITHER an
              * output NOR a check has no bar: `readDocument` answers `done` for a `none` output because for that
-             * loop the turn finishing IS the completion condition — and it says so without ever looking at
+             * loop the turn finishing IS the completion condition, and it says so without ever looking at
              * whether a turn happened. So a step whose model was refused ("your organization has disabled
              * Claude subscription access for Claude Code") settled `done` having said nothing at all. Three of
              * those made a run that reported 3/3 steps complete, handed each step "(this step finished without
@@ -253,11 +253,11 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 /* THE TURN'S FAILURE OUTRANKS THE CHECK'S VERDICT, unless the check says the goal was met.
                  *
                  * The two disagree in a specific, common way: a turn the provider refused writes nothing, so
-                 * the completion check reports "no output file — the iteration ended without writing
+                 * the completion check reports "no output file, the iteration ended without writing
                  * iteration-1.json". That is true and it is the CONSEQUENCE; the cause is a sentence the
                  * provider already handed us. Preferring the verdict buried it, and a workflow step whose
                  * model was refused ("your organization has disabled Claude subscription access") recorded
-                 * two rounds of a missing file instead — the reason nowhere, on any surface. */
+                 * two rounds of a missing file instead, the reason nowhere, on any surface. */
                 ...(done
                     ? verdict.detail !== undefined
                         ? { detail: verdict.detail }
@@ -278,10 +278,10 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 break;
             }
             // Checked AFTER the iteration is recorded, so the history shows the unchanged runs that earned the
-            // verdict — a stalled loop whose rows do not show the stall is an accusation with no evidence.
+            // verdict, a stalled loop whose rows do not show the stall is an accusation with no evidence.
             if (stalls >= record.stallLimit) {
                 /* A loop that stalled because every turn was REFUSED says so. Otherwise the step's one-line
-                 * detail — the sentence the run view and the fleet card both read — is "3 iterations in a row
+                 * detail, the sentence the run view and the fleet card both read, is "3 iterations in a row
                  * changed nothing", which describes a wedged agent and hides a provider that never ran one. */
                 ended = {
                     state: "stalled",
@@ -293,7 +293,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
             }
         }
     } catch (error) {
-        // Only the loop's own machinery reaches here — a failed digest, a store write that could not land. An
+        // Only the loop's own machinery reaches here, a failed digest, a store write that could not land. An
         // iteration's own failure is an iteration outcome and never gets this far.
         ended = { state: "error", detail: error instanceof Error ? error.message : "loop failed" };
         services.logger.error({ err: error, conversationId }, "loop failed");
@@ -317,11 +317,11 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
     };
 };
 
-/* THE BOOT PASS — every loop the daemon died under, picked back up.
+/* THE BOOT PASS, every loop the daemon died under, picked back up.
  *
  * The loops manifest is its own journal: a record still marked `running` when this runs is, by construction, a
  * loop no `settle` ever reached, and the container is recreated on every sandbox update, every environment
- * approval and every dev swap — so intentic's own flows are the main thing that kills loops. Without this, "the
+ * approval and every dev swap, so intentic's own flows are the main thing that kills loops. Without this, "the
  * user approved a Dockerfile change" and "the twelve-iteration loop silently stopped at four" are the same
  * event.
  *

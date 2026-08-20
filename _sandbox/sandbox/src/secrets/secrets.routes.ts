@@ -15,7 +15,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { stateRelPath } from "../workspace/state-paths.js";
 
-// One connected provider account as an inventory entry (never a value — provider tokens are not revealable).
+// One connected provider account as an inventory entry (never a value, provider tokens are not revealable).
 const providerAccountEntry = (provider: string, providerName: string, id: string, label: string, storedAt: string): SecretInventoryEntry => ({
     key: `${provider}:${id}`,
     kind: "provider",
@@ -32,11 +32,11 @@ const providerAccountEntry = (provider: string, providerName: string, id: string
  *
  * Serialization is envLine's, not this file's. Hardcoding `KEY="${value}"` here made the VALUE able to end its
  * own line: parseEnv has no escape inside a quoted value, so a secret containing a double quote was stored
- * truncated at it — and one containing `"` followed by a newline and `OTHER=…` added a second key to a file
+ * truncated at it, and one containing `"` followed by a newline and `OTHER=…` added a second key to a file
  * that feeds the deploy engine and is pushed to CI below. The value on this route is typed into the browser by
  * whoever holds a session, which is the whole distance from "unlikely input" to "input". */
 export const upsertEnv = (content: string, key: string, value: string): string => {
-    // parseEnv answers a Dict — `undefined` per key so a MISSING key reads as undefined; every key it does
+    // parseEnv answers a Dict, `undefined` per key so a MISSING key reads as undefined; every key it does
     // enumerate has a string value, which is what these round-trips iterate.
     const entries = { ...(parseEnv(content) as Record<string, string>), [key]: value };
     return Object.entries(entries)
@@ -53,7 +53,7 @@ export const removeEnv = (content: string, key: string): string => {
         .join("");
 };
 
-// The KEYS present in a .env's text (for the UI's "✓ set" badges) — never the values.
+// The KEYS present in a .env's text (for the UI's "✓ set" badges), never the values.
 export const envKeys = (content: string): string[] => Object.keys(parseEnv(content));
 
 export type SecretsRoutesDeps = Pick<
@@ -158,7 +158,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                     kind: "capability",
                     status: "connected",
                     requiredBy: [],
-                    /* THE VAULT, not the manifest — this line used to name capabilities.json and had been wrong
+                    /* THE VAULT, not the manifest, this line used to name capabilities.json and had been wrong
                      * since the credential values moved out of it. Harmless while that file was untracked and
                      * unreadable-ish; actively misleading now that it is neither, because "where does this live"
                      * would be pointing the owner at a file in their own Changes review. The value is beside the
@@ -171,7 +171,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                 ...claudeAccounts.map((a) =>
                     providerAccountEntry("claude", "Claude", a.id, a.label, stateRelPath(".intentic/secrets/auth/", "claude", `${a.id}.json`)),
                 ),
-                // Codex and Gemini authenticate through the translator on subscriptions — one auth file per
+                // Codex and Gemini authenticate through the translator on subscriptions, one auth file per
                 // connected account in the cliproxy auth-dir, its name doubling as the entry id.
                 ...translatorAccounts.codex.map((a) =>
                     providerAccountEntry("codex", "ChatGPT", a.name, a.label, stateRelPath(".intentic/secrets/auth/", "cliproxy")),
@@ -181,7 +181,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                 ),
                 ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", stateRelPath(".intentic/secrets/auth/", "opencode"))] : []),
             ];
-            // The use ledger's newest row per entry, joined in — the inventory is where "when did the agent
+            // The use ledger's newest row per entry, joined in, the inventory is where "when did the agent
             // last spend this" is answered, so the ledger never needs its own surface.
             const lastByName = lastUseByName(uses);
             const withUse = (entry: SecretInventoryEntry): SecretInventoryEntry => {
@@ -194,7 +194,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
             await ensureOwner(context.headers);
-            // Capability credentials first (key = capability id) — they exist pre-scaffold, before ensureActive.
+            // Capability credentials first (key = capability id), they exist pre-scaffold, before ensureActive.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
                 const field = secretField(capability, await contributionRegistry(services));

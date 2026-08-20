@@ -18,7 +18,7 @@ export const workspaceIdentity = async (services: Services): Promise<string> => 
                 return id;
             }
         } catch {
-            // corrupt file — fall through to mint
+            // corrupt file, fall through to mint
         }
     }
     const id = randomUUID();

@@ -5,7 +5,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { extract, type Headers } from "tar-stream";
 import { isControlPlanePath, MAX_UPLOAD_BYTES, resolveWithin, setWorkspaceMtime, writeStreamCounted } from "./workspace-files.js";
 
-// A tar entry whose path climbs out of /work — the route answers 400 (same as the single-file upload's escape
+// A tar entry whose path climbs out of /work, the route answers 400 (same as the single-file upload's escape
 // guard), aborting the whole extraction rather than writing a partial tree outside the workspace.
 export class PathEscapeError extends Error {
     constructor() {
@@ -23,7 +23,7 @@ const drain = (source: Readable): Promise<void> =>
     });
 
 // True when `path` already exists AND is a directory (false when absent or a file). Detects a file entry that
-// collides with an already-materialized directory — a symlink alias the browser packer can't filter out.
+// collides with an already-materialized directory, a symlink alias the browser packer can't filter out.
 const isDirectory = async (path: string): Promise<boolean> => {
     try {
         return (await stat(path)).isDirectory();
@@ -34,7 +34,7 @@ const isDirectory = async (path: string): Promise<boolean> => {
 
 // Stream a tar archive (a request body) into /work, materializing its tree entry-by-entry with the SAME guards as
 // the single-file upload: an escaping path aborts with 400, and a single shared byte budget spans the whole
-// archive (→ 413 via UploadTooLargeError). Nothing is buffered — each entry streams straight to disk — so a
+// archive (→ 413 via UploadTooLargeError). Nothing is buffered, each entry streams straight to disk, so a
 // multi-GB drop stays flat.
 export const extractTarToWorkspace = async (root: string, body: ReadableStream<Uint8Array>, limit = MAX_UPLOAD_BYTES): Promise<void> => {
     const ex = extract();
@@ -60,7 +60,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
             return;
         }
         // A file entry whose path already IS a directory in /work is a symlink-following alias Chrome duplicated
-        // (the browser API can't flag symlinks — see intentic-app dropEntries.ts): the real subtree is already
+        // (the browser API can't flag symlinks, see intentic-app dropEntries.ts): the real subtree is already
         // materialized by the sibling entries, so skip this duplicate rather than let createWriteStream(EISDIR) →
         // non-recursive cleanup rm(ENOTEMPTY) abort the whole upload.
         if (await isDirectory(target)) {
@@ -69,7 +69,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
             return;
         }
         // Mirror-image alias: a parent segment of this path is already a FILE. Recursive mkdir is idempotent for
-        // existing dirs, so it only throws here on that collision — ENOTDIR when an ancestor segment is the file,
+        // existing dirs, so it only throws here on that collision. ENOTDIR when an ancestor segment is the file,
         // EEXIST when the immediate parent is. Skip the entry either way (tar entry order is non-deterministic, so
         // either collision direction can land).
         try {

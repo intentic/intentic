@@ -26,30 +26,30 @@ import { identityLoginUrl } from "../capabilities/handlers/identity.js";
  * (profile-backed) Chromium for one account, screencasts it to the client, and forwards the owner's
  * mouse/keyboard back over CDP.
  *
- * ADDRESSED BY CAPABILITY, NOT BY SITE: the window opens ONE ENTRY — a browser account, or an IDENTITY, whose
+ * ADDRESSED BY CAPABILITY, NOT BY SITE: the window opens ONE ENTRY, a browser account, or an IDENTITY, whose
  * "site" is its own email provider and whose sign-in is the one login this product keeps in the owner's hands
  * (an automated Google login is exactly what Google blocks). Several accounts of one site can be connected at
  * once (reddit-work, reddit-personal). The PROFILE the window opens is the entry's owner's (profileOwner): an
- * identity-born account's window is a window into its identity's shared browser, which is the point — the
+ * identity-born account's window is a window into its identity's shared browser, which is the point, the
  * owner clearing a captcha on Reddit is sitting in the same browser the Google session lives in.
  *
  * Two modes over one window, because they are the same browser at two moments of its life:
- *   login  — open the site's sign-in page; when the owner clicks Done the profile holds the auth cookies
+ *   login , open the site's sign-in page; when the owner clicks Done the profile holds the auth cookies
  *            and the session is marked connected, so the agent's @playwright/mcp reuses it.
- *   browse — open the site's home page in the profile that ALREADY has those cookies. Nothing is marked:
+ *   browse, open the site's home page in the profile that ALREADY has those cookies. Nothing is marked:
  *            this is the owner using their own connected account by hand (check a message, clear a captcha,
  *            change a setting the agent shouldn't), and a session it cannot judge is not one to re-attest.
  * Browsing needs an address bar, which a screencast of the page alone can't provide (there is no window chrome
- * in the picture) — hence the `go`/`back`/`reload` frames and the `url` frames going the other way.
+ * in the picture), hence the `go`/`back`/`reload` frames and the `url` frames going the other way.
  *
- * One window per PROFILE at a time (a persistent profile can't be opened twice) — the same lock that parks the
+ * One window per PROFILE at a time (a persistent profile can't be opened twice), the same lock that parks the
  * agent's browser tools for that profile while the owner has the wheel. Two standalone accounts stay
  * independently drivable; an identity's browser is one browser, so holding it holds every account inside. */
 export const createBrowserProfileRoute = (services: Services) =>
     upgradeWebSocket((c) => {
-        // The capability id of the entry this window drives — what "done" marks connected.
+        // The capability id of the entry this window drives, what "done" marks connected.
         let account: string | undefined;
-        // Whose profile that entry lives in (profileOwner) — the dir, the passkeys and the lock are all its.
+        // Whose profile that entry lives in (profileOwner), the dir, the passkeys and the lock are all its.
         let owner: string | undefined;
         let context: BrowserContext | undefined;
         let screencast: Screencast | undefined;
@@ -82,7 +82,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 const url = new URL(c.req.url);
                 try {
                     // Signing a live Chromium into a service ADDS a credential, and browsing it is acting AS the
-                    // owner in their own account — the owner's tier alone, like everything else on the
+                    // owner in their own account, the owner's tier alone, like everything else on the
                     // capabilities surface.
                     const caller = redeemTicket(services, url, "owner");
                     if (caller !== undefined) {
@@ -93,7 +93,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     ws.close(1008, "unauthorized");
                     return;
                 }
-                // An entry is real iff the manifest holds a browser account or an identity with that id — the
+                // An entry is real iff the manifest holds a browser account or an identity with that id, the
                 // profile this window opens is its OWNER's, so an id nobody added has no profile to open.
                 const requested = url.searchParams.get("capability") ?? "";
                 const capability = await services.capabilities.get(requested);
@@ -103,7 +103,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 }
                 let urls: { loginUrl: string; homeUrl: string };
                 if (capability.kind === "browser") {
-                    // Its CARD is what knows where to open — real iff an enabled extension declares it, the same
+                    // Its CARD is what knows where to open, real iff an enabled extension declares it, the same
                     // registry the browser handler resolves against.
                     const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
                     if (contribution === undefined || contribution.spec.kind !== "browser") {
@@ -111,7 +111,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                         return;
                     }
                     // Pinned by a site card, answered on the form by a generic session (see browserUrls). Absent from
-                    // both is impossible here — the add that wrote this entry would have failed — so a missing pair is
+                    // both is impossible here, the add that wrote this entry would have failed, so a missing pair is
                     // a rotted install, and closing says so rather than opening a window on nothing.
                     const resolved = browserUrls(contribution.spec, capability.config);
                     if (resolved === undefined) {
@@ -126,7 +126,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     urls = { loginUrl: login, homeUrl: login };
                 }
                 signingIn = url.searchParams.get("mode") !== "browse";
-                // Signed in, a login page only bounces to the feed — so a browse window starts where the owner
+                // Signed in, a login page only bounces to the feed, so a browse window starts where the owner
                 // means to be. The two are separate answers because some sites sign in somewhere else entirely
                 // (YouTube at accounts.google.com).
                 const startUrl = signingIn ? urls.loginUrl : urls.homeUrl;
@@ -165,13 +165,13 @@ export const createBrowserProfileRoute = (services: Services) =>
                     await context.addInitScript(STEALTH_INIT);
                     const ctx = context;
                     // A persistent context opens with one page; make sure it exists BEFORE the screencast starts,
-                    // so the stream has something to bind to (it follows every later page — popups included —
+                    // so the stream has something to bind to (it follows every later page, popups included,
                     // by itself; see screencast.ts).
                     const page = ctx.pages()[0] ?? (await ctx.newPage());
                     // The profile owner's software security key, plugged in BEFORE the first navigation: this
                     // window is where the owner enrolls it (a site's "Add security key" lands on the virtual
                     // authenticator and persists) and where a stored one answers a 2FA prompt. One key per
-                    // browser — an identity's accounts share theirs the way its cookies are shared; two
+                    // browser, an identity's accounts share theirs the way its cookies are shared; two
                     // standalone accounts enroll their own, as they would on two physical keys.
                     const storePath = passkeyPath(services.workspace.root, profile);
                     const arm = (target: Page): void =>
@@ -182,7 +182,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     arm(page);
                     // WHERE THE ADDRESS BAR GETS ITS TEXT. Read off the STREAMED page rather than the one that
                     // fired the event, because a popup moves the picture: what the field must show is the page
-                    // being looked at. Same-document navigations count — an SPA's own routing is most of what
+                    // being looked at. Same-document navigations count, an SPA's own routing is most of what
                     // moves on these sites.
                     const report = (): void => {
                         const current = screencast?.page()?.url();
@@ -229,7 +229,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 }
                 if (message.type === "done") {
                     const finished = account;
-                    // Close first so Chromium flushes the profile's cookies to disk, then mark connected — a
+                    // Close first so Chromium flushes the profile's cookies to disk, then mark connected, a
                     // browse window changes nothing about whether the account is connected, so it only closes.
                     await cleanup();
                     if (signingIn && finished !== undefined) {
@@ -265,7 +265,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                     return;
                 }
                 if (message.type === "selectOption") {
-                    // The owner picked from the menu the client drew for them — see readSelect in screencast.ts.
+                    // The owner picked from the menu the client drew for them, see readSelect in screencast.ts.
                     const page = view.page();
                     if (page !== undefined) {
                         await applySelect(page, message.index);
@@ -277,7 +277,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 } catch (err) {
                     services.logger.warn({ err }, "browser-profile input dispatch failed");
                 }
-                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE — Chromium draws that list outside the page
+                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE. Chromium draws that list outside the page
                  * and the frames will never carry it, so the client is told what to draw instead. Answered on
                  * release either way: an empty answer closes a menu the owner has clicked away from. */
                 if (message.type === "mouse" && message.action === "up") {

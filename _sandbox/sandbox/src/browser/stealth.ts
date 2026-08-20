@@ -4,12 +4,12 @@ import { statePath } from "../workspace/state-paths.js";
 
 // A minimal anti-detection init script, run in every page before its own scripts. Headed full Chromium under
 // Xvfb already looks like a real browser (real window.chrome, plugins, normal UA); this patches the residual
-// tells a GPU-less server still leaks — chiefly WebGL reporting SwiftShader, plus a belt-and-braces webdriver /
+// tells a GPU-less server still leaks, chiefly WebGL reporting SwiftShader, plus a redundant webdriver /
 // languages fix. Kept tiny and hand-written (no puppeteer-extra dep). Used inline by the login context
 // (addInitScript) and written to disk for @playwright/mcp's --init-script.
 export const STEALTH_INIT = `(() => {
   try { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); } catch {}
-  // WebGL vendor/renderer → a common real GPU (Xvfb has no GPU, so Chromium reports SwiftShader — a headless/VM tell).
+  // WebGL vendor/renderer → a common real GPU (Xvfb has no GPU, so Chromium reports SwiftShader, a headless/VM tell).
   const patchGL = (proto) => {
     if (!proto) return;
     const getParameter = proto.getParameter;

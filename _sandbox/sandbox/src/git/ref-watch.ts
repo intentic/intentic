@@ -3,12 +3,12 @@ import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
-/* REF-MOVE PUSH — the third change feed, beside the file watcher and the repo-set differ.
+/* REF-MOVE PUSH, the third change feed, beside the file watcher and the repo-set differ.
  *
  * The other two cannot carry this, and not by omission. A repo's git dir is RELOCATED OFF /work entirely (onto
- * /history, so an isolated turn's worktree can stand in for the workspace root — repo-git-dirs.ts explains why),
+ * /history, so an isolated turn's worktree can stand in for the workspace root, repo-git-dirs.ts explains why),
  * and the workspace watcher descent-ignores `.git` on top of that. So no path the browser ever sees can say "a
- * commit landed". Without this feed the commit graph is exactly as fresh as the last thing the user clicked —
+ * commit landed". Without this feed the commit graph is exactly as fresh as the last thing the user clicked,
  * and in this product most commits are not the user's at all: the agent commits, rebases and lands out-of-band.
  *
  * WHAT IS WATCHED, and why these and not the git dir wholesale: `objects/` is rewritten continuously by fetch,
@@ -18,7 +18,7 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
  *   commondir  refs/**            branch/tag/remote-tracking updates, and creation + deletion
  *              packed-refs        the same after a gc or a clone packs them away
  *   gitdir     HEAD               a checkout, and which branch a commit lands on
- *              logs/HEAD          the reflog — a commit that moves HEAD without touching a loose ref
+ *              logs/HEAD          the reflog, a commit that moves HEAD without touching a loose ref
  *              MERGE_HEAD …       a merge, cherry-pick or revert starting, finishing or being aborted
  *              rebase-merge/ …    the same for either rebase backend, and for a queued sequencer run
  *
@@ -43,7 +43,7 @@ const gitDirsOf = async (dir: string, git: GitRunner): Promise<{ gitDir: string;
         const [gitDir, commonDir] = stdout.trim().split("\n");
         return gitDir === undefined || commonDir === undefined ? undefined : { gitDir, commonDir: commonDir === "" ? gitDir : commonDir };
     } catch {
-        // Not a repo (yet) — a directory the discovery listed a moment before it was removed, or a clone still
+        // Not a repo (yet), a directory the discovery listed a moment before it was removed, or a clone still
         // being written. The next repo-set frame re-runs this.
         return undefined;
     }
@@ -98,7 +98,7 @@ export const createRefWatch = (
         if (dirs === undefined) {
             return;
         }
-        // A second call may have won while this one awaited git — keep the first and drop this one, or the map
+        // A second call may have won while this one awaited git, keep the first and drop this one, or the map
         // loses a watcher it can never close.
         if (watchers.has(repo)) {
             return;

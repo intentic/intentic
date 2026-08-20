@@ -6,7 +6,7 @@ import type { Caller } from "./auth.js";
 /* One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-profile, /system/browser-view).
  *
  * A browser cannot put an Authorization header on a WebSocket, so those three routes used to take the caller's
- * bearer as `?token=` — a 30-day session, or an hour-long Google ID token, written into a URL. URLs are the
+ * bearer as `?token=`, a 30-day session, or an hour-long Google ID token, written into a URL. URLs are the
  * least private part of a request: they reach Cloudflare's edge logs, the tunnel connector's logs, and any
  * proxy in between, none of which are places a credential that opens a root PTY should come to rest.
  *
@@ -15,7 +15,7 @@ import type { Caller } from "./auth.js";
  * carries no identity a reader could extract. A ticket in a log is a spent ticket.
  *
  * In memory, deliberately. These are single-use and shorter-lived than a page load, so persisting them would
- * add a durable store of live credentials to protect — the opposite of the point. A daemon restart drops the
+ * add a durable store of live credentials to protect, the opposite of the point. A daemon restart drops the
  * outstanding ones, and the browser mints another on its reconnect, which it is already built to do. */
 
 // Long enough to survive a slow tunnel hop between the mint and the upgrade, short enough that a ticket which
@@ -32,18 +32,18 @@ export interface WsTickets {
     readonly revoke: (email?: string) => void;
 }
 
-/* The gate the three upgrade handlers share: redeem the `?ticket=` on this URL — and hold it to this socket's
- * role floor — or throw.
+/* The gate the three upgrade handlers share: redeem the `?ticket=` on this URL, and hold it to this socket's
+ * role floor, or throw.
  *
- * Throwing rather than returning a verdict is what keeps the call sites honest — each is inside a try that
+ * Throwing rather than returning a verdict is what keeps the call sites honest, each is inside a try that
  * closes the socket with 1008, so a handler cannot forget to check the answer. Loopback mode (no `auth`) has no
  * gate on these routes at all and passes straight through, exactly as it did when they verified bearers.
  *
  * The floor lives at REDEMPTION, not at the mint: minting rides the ordinary bearer middleware where every
- * member passes, and the three sockets it opens demand different tiers — the PTY is a shell (maintainer), the
+ * member passes, and the three sockets it opens demand different tiers, the PTY is a shell (maintainer), the
  * sign-in browser adds credentials (owner). A ticket carries the role it was minted under, so the check here is
  * against the same resolved tier every HTTP route sees. The identity is then dropped: none of the three shows
- * presence or attributes anything to a caller — redemption is the authorization. */
+ * presence or attributes anything to a caller, redemption is the authorization. */
 export const redeemTicket = (
     services: { readonly auth: unknown; readonly wsTickets: WsTickets },
     url: URL,
@@ -69,7 +69,7 @@ export const createWsTickets = (): WsTickets => {
             const ticket = randomBytes(32).toString("base64url");
             tickets.set(ticket, { identity, expiresAt: Date.now() + TICKET_TTL_MS });
             // Opportunistic sweep: a minted-but-never-redeemed ticket (a tab closed mid-connect) would otherwise
-            // sit here until the daemon restarts. Bounded work — the map only ever holds a few seconds' worth.
+            // sit here until the daemon restarts. Bounded work, the map only ever holds a few seconds' worth.
             for (const [key, entry] of tickets) {
                 if (entry.expiresAt < Date.now()) {
                     tickets.delete(key);

@@ -10,8 +10,8 @@ import type { AgentsRegistry } from "./agents-registry.js";
  * worlds with nothing to reconcile them.
  *
  * The user sees the registry. So the failure that matters is the registry reading idle while a turn is live: the
- * board shows a conversation at rest while it spends the owner's allowance, the reaper's `ownerLive` test — which
- * asks the TURN side — keeps its processes alive, and every surface that decides what to offer from `running`
+ * board shows a conversation at rest while it spends the owner's allowance, the reaper's `ownerLive` test, which
+ * asks the TURN side, keeps its processes alive, and every surface that decides what to offer from `running`
  * offers the wrong thing. It is also the direction that can be checked honestly, because the live run knows when
  * it started and the grace below can tell "not begun yet" from "never begun".
  */
@@ -49,7 +49,7 @@ export const checks = ({ agents, live = liveTurnConversations, now = Date.now }:
     },
 ];
 
-/* DEFERRED: the mirror direction — the registry holding `running` for a conversation with no live turn, which is
+/* DEFERRED: the mirror direction, the registry holding `running` for a conversation with no live turn, which is
  * the card that spins forever. It is not checked here because the registry records no moment at which it marked a
  * conversation running, so a mismatch cannot be told apart from a turn that is one tick from registering. The
  * registry's runtime state would have to carry that stamp; that is a change to the registry, not to its diagnostics. */

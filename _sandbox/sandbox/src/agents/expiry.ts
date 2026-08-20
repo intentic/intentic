@@ -1,12 +1,12 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { materializedPaths } from "../git/changes.js";
 
-/* WHICH PATHS HISTORY HAS TOUCHED SINCE A LANDING WENT IN — the one span in the whole attribution machinery
+/* WHICH PATHS HISTORY HAS TOUCHED SINCE A LANDING WENT IN, the one span in the whole attribution machinery
  * whose far end is the MOVING head, shared by both of its readers (agents/origins.ts, which reads a touched
  * path as "the claim ended", and agents/landed-presence.ts, which reads it as "the work is safe in history").
- * They disagree — deliberately — about what the answer MEANS; this module only makes sure they pay for it once.
+ * They disagree, deliberately, about what the answer MEANS; this module only makes sure they pay for it once.
  *
- * WHY IT IS INCREMENTAL. The naive cache is keyed on (landedHead, head), and a commit moves `head` — so every
+ * WHY IT IS INCREMENTAL. The naive cache is keyed on (landedHead, head), and a commit moves `head`, so every
  * commit invalidated every unspent landing's entry, and the next scan re-derived all of them as one
  * `git diff landedHead..head` EACH, sequentially, inside the repo lock, on the commit's own response path. On
  * a workspace with 150 unspent landings that was 150 spawns per commit; the daemon's perf log clocked the
@@ -15,7 +15,7 @@ import { materializedPaths } from "../git/changes.js";
  * repo remembers the head it last answered for, and a head move costs one diff unioned into every entry.
  *
  * THE UNION IS A ONE-WAY DOOR, and that is a semantic choice, not an approximation. A commit-then-revert
- * leaves a path in diff(H1,H2) but out of a fresh diff(landedHead,H2) — the recompute would resurrect the
+ * leaves a path in diff(H1,H2) but out of a fresh diff(landedHead,H2), the recompute would resurrect the
  * claim, the union keeps it expired. Expired is right: the commit put the agent's lines in a reachable commit,
  * and both readers already treat that as terminal at the landing granularity (the `absorbed` mark on the
  * registry entry, agents-store.ts) with exactly this reasoning. A tree reset hard behind a landing's head is
@@ -24,22 +24,22 @@ import { materializedPaths } from "../git/changes.js";
  *
  * The fallback stays exact: a landing this tracker has never answered for (first sight, or the first scan
  * after a restart) gets the full diff(landedHead, head) once, and rides the increments from there. Paths are
- * COPIED out of the stdout (materializedPaths) — these sets live for the life of the landing, and a sliced
+ * COPIED out of the stdout (materializedPaths), these sets live for the life of the landing, and a sliced
  * path pins its whole parent listing (see the leak documented at origins.ts). */
 
 export interface ExpiryTracker {
-    /** Paths whose committed content history has touched between `landedHead` and `head` (one-way — see the
+    /** Paths whose committed content history has touched between `landedHead` and `head` (one-way, see the
      *  header). One spawn per repo per head move, shared across every landing; one extra spawn the first time
      *  a landing is asked about. */
     readonly committedSince: (dir: string, repo: string, landedHead: string, head: string) => Promise<ReadonlySet<string>>;
-    /** Forget one landing's entry — its claim is over (absorbed, or retired), so its set is dead weight. */
+    /** Forget one landing's entry, its claim is over (absorbed, or retired), so its set is dead weight. */
     readonly drop: (repo: string, landedHead: string) => void;
-    // Cardinality and text weight, for the durable resource series — the same accounting, and the same reason,
+    // Cardinality and text weight, for the durable resource series, the same accounting, and the same reason,
     // as origins.metrics.
     readonly metrics: () => Readonly<Record<string, number>>;
 }
 
-/** Total characters across lists of paths — the text weight of one of the attribution caches, for the durable
+/** Total characters across lists of paths, the text weight of one of the attribution caches, for the durable
  *  resource series. Here because all three caches in this pair (this module's, origins.ts's spans,
  *  landed-presence.ts's) report the same figure the same way, and these maps were the daemon's memory leak
  *  once: the accounting is what keeps a regrowth visible, so it should not be three near-copies. */
@@ -55,7 +55,7 @@ export const pathWeight = (lists: Iterable<Iterable<string>>): number => {
 
 export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker => {
     // Per repo: the head every entry below is current AT, and one accumulated path set per landing (keyed by
-    // its landedHead — the same key both consumers retire on). `chain` serializes the state transitions: two
+    // its landedHead, the same key both consumers retire on). `chain` serializes the state transitions: two
     // overlapping scans (the commit route's one-repo read racing a workspace-wide one) must not interleave the
     // increment mid-union, or entries end up current at mixed heads and the per-entry union stops being sound.
     const repos = new Map<string, { head: string; entries: Map<string, Set<string>>; chain: Promise<unknown> }>();
@@ -95,7 +95,7 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
                 current.entries.set(landedHead, paths);
                 return paths;
             });
-            // A failed diff fails ITS caller and nobody queued behind it — the push-store idiom.
+            // A failed diff fails ITS caller and nobody queued behind it, the push-store idiom.
             current.chain = step.catch(() => undefined);
             return step;
         },

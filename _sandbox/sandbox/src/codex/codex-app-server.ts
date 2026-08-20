@@ -28,7 +28,7 @@ export interface CodexThreadOptions {
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 // Where the app-server process is born: the pid holding the turn's mount namespace open, and the workspace root
-// as that namespace sees it. Present only on an isolated turn whose container could build one — everything the
+// as that namespace sees it. Present only on an isolated turn whose container could build one, everything the
 // app-server then forks (its shell, its browser servers) inherits the namespace, so /work IS the worktree for
 // all of it. Absent ⇒ spawned plainly here, cwd'd into whatever `options.workingDirectory` says.
 export interface CodexNamespace {
@@ -45,7 +45,7 @@ export interface CodexTurn {
     readonly config?: Readonly<Record<string, JsonValue>>;
     readonly options: CodexThreadOptions;
     /* Mid-turn steering: each message pulled from here is delivered to the RUNNING turn as `turn/steer`. A plain
-     * per-turn iterable rather than the daemon's shared queue — codex's plan emulation runs two app-servers with
+     * per-turn iterable rather than the daemon's shared queue, codex's plan emulation runs two app-servers with
      * a person's approval in between, and the phase that has closed must not be holding the queue open (see
      * codex-agent.ts, which owns the one consumer and hands each phase a channel of its own). */
     readonly steering?: AsyncIterable<string>;
@@ -104,7 +104,7 @@ interface CodexUsage {
     readonly reasoning_output_tokens: number;
 }
 
-// One skill the thread's cwd publishes (`skills/list`) — Codex's answer to a slash command. `path` travels
+// One skill the thread's cwd publishes (`skills/list`). Codex's answer to a slash command. `path` travels
 // because invoking one takes both halves: app-server's skill input is keyed by name AND directory.
 export interface CodexSkill {
     readonly name: string;
@@ -129,7 +129,7 @@ export type CodexEvent =
     | { readonly type: "commands"; readonly skills: readonly CodexSkill[] }
     /* THE ONE SERVER-INITIATED REQUEST THIS CLIENT ANSWERS, handed over as an event so the answer travels the
      * stream rather than a side channel: the consumer raises its card, waits for a person, and calls `respond`.
-     * The runner's loop is parked on that yield meanwhile, which is exactly right — app-server is blocked on the
+     * The runner's loop is parked on that yield meanwhile, which is exactly right, app-server is blocked on the
      * answer too, so nothing can arrive out of order while the card is open.
      *
      * `respond` takes one entry per question id; ids Codex did not ask about are ignored by it. */
@@ -242,7 +242,7 @@ const normalizeItem = (value: unknown): CodexItem | undefined => {
             throw new Error("Codex app-server sent invalid fileChange.changes");
         }
         // Annotated because the `kind` guard below narrows a `string` to the three literals, and an object
-        // literal with no contextual type widens it straight back — the element type has to come from here.
+        // literal with no contextual type widens it straight back, the element type has to come from here.
         const changes = rawChanges.map((value, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
             const change = object(value, `fileChange.changes[${index}]`);
             const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);
@@ -397,12 +397,12 @@ const stdioConnector =
             throw new Error(CODEX_BINARY_MISSING);
         }
         /* THE NAMESPACE IS ENTERED BY EXEC, not by supervision: nsenter execs app-server into the turn's anchor,
-         * so this stays a direct child — its pipes, its exit code and the kill on abort all reach the real
+         * so this stays a direct child, its pipes, its exit code and the kill on abort all reach the real
          * process. Same seam and same reasoning as the Claude Code loop's spawn wrapper (agent.ts).
          *
          * The anchor's cwd wins over the turn's own working directory: it is the workspace root as the namespace
          * sees it, which INSIDE is the conversation's worktree. A failure here fails the turn rather than falling
-         * back to the shared checkout — an agent quietly editing the main tree is what the namespace exists to
+         * back to the shared checkout, an agent quietly editing the main tree is what the namespace exists to
          * prevent. */
         const argv =
             turn.namespace === undefined
@@ -568,7 +568,7 @@ const todoEvent = (value: unknown, turnId: string, turnIds: ReadonlySet<string>)
 
 /* THE SLASH COMMANDS CODEX ACTUALLY HAS: its skills, per working directory, as `skills/list` reports them.
  *
- * Disabled entries are dropped rather than shown greyed — the popover has no third state, and offering a name
+ * Disabled entries are dropped rather than shown greyed, the popover has no third state, and offering a name
  * that refuses to load is worse than not offering it. Deduplicated by name because the answer is per-cwd and
  * scoped (user, repo, system, admin), so one name can arrive several times; first wins, which is the same
  * precedence app-server itself applies when the model asks for it by name.
@@ -615,7 +615,7 @@ const skillsFrom = (result: unknown): readonly CodexSkill[] => {
  * makes the popover real: app-server LOADS the skill, instead of the model reading a stray slash word and
  * guessing. Whatever follows the name rides on as the text of the message.
  *
- * Undefined for prose that merely starts with a slash (a path, `/etc/hosts`, this product's own vocabulary) —
+ * Undefined for prose that merely starts with a slash (a path, `/etc/hosts`, this product's own vocabulary),
  * unmatched text is sent verbatim, because Codex parses no slash commands of its own and so cannot swallow it.
  * That is also what a plan turn gets: its prompt opens with the planning preamble, so the name is no longer
  * leading and reaches the model as the words the user typed rather than as a loaded skill. */
@@ -629,7 +629,7 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
 };
 
 // The questions on one `item/tool/requestUserInput` request. Undefined when it belongs to another turn on this
-// thread — nothing in this run can answer that, and its caller says so on the wire instead of asking a person.
+// thread, nothing in this run can answer that, and its caller says so on the wire instead of asking a person.
 const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly CodexQuestion[] | undefined => {
     const params = object(raw, "item/tool/requestUserInput params");
     if (!turnIds.has(string(params, "turnId", "item/tool/requestUserInput params"))) {
@@ -662,8 +662,8 @@ const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly Cod
     });
 };
 
-// The turn a `turn/steer` landed on. Normally the turn that was already running — Codex interrupts the model
-// and resubmits with the steer folded in — but it answers with an id rather than nothing, so the id is read
+// The turn a `turn/steer` landed on. Normally the turn that was already running. Codex interrupts the model
+// and resubmits with the steer folded in, but it answers with an id rather than nothing, so the id is read
 // rather than assumed: a steer that DID open a new turn would otherwise send every later frame to a dead id.
 const steeredTurnId = (value: unknown): string => string(object(value, "turn/steer result"), "turnId", "turn/steer result");
 
@@ -695,7 +695,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
 
             /* The thread's own slash commands, read before the turn starts because the prompt may name one.
              * Best-effort: a workspace with no skills answers with an empty list, and a build that does not
-             * publish them at all must not cost the turn — an empty popover is the cost of a failure here. */
+             * publish them at all must not cost the turn, an empty popover is the cost of a failure here. */
             const skills = await connection
                 .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
                 .then(skillsFrom)
@@ -730,7 +730,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
 
             /* MID-TURN STEERING. Best-effort by construction, the same posture as Pi's steer queue: the message
              * is already in the user's transcript by the time it reaches here, and every way `turn/steer` can
-             * refuse is a race the user cannot see and cannot act on — the turn finished between the click and
+             * refuse is a race the user cannot see and cannot act on, the turn finished between the click and
              * this call (`no_active_turn`), or a compaction owns the model for the moment (`non_steerable_*`).
              * Failing the turn over one would replace a lost sentence with a lost turn. */
             const steering = turn.steering;

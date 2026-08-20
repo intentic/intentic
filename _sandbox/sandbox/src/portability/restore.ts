@@ -11,16 +11,16 @@ import { resolveWithin, setWorkspaceMtime, writeStreamCounted } from "../workspa
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 
-/* UNPACKING A BUNDLE INTO A FRESH SANDBOX — and then telling the owner, honestly, what is still missing.
+/* UNPACKING A BUNDLE INTO A FRESH SANDBOX, and then telling the owner, honestly, what is still missing.
  *
  * The restore writes two trees and heals one thing. It does NOT try to make the target identical by itself,
  * because it cannot: the image the overlay describes is built by the host (the container holds no docker
  * socket), the provider logins are OAuth this daemon cannot mint, and identity is the target's own. Those
- * become `needsAction` entries rather than silent gaps — the report IS the deliverable, and a restore that
+ * become `needsAction` entries rather than silent gaps, the report IS the deliverable, and a restore that
  * claimed success while leaving a stock image would be the failure this whole feature exists to prevent.
  *
  * EVERY DECISION IS RE-DERIVED HERE. The bundle is a file the owner can hand around, so what it says about
- * itself is never load-bearing: an entry is written because THIS daemon's manifests class its path as
+ * itself is never trusted: an entry is written because THIS daemon's manifests class its path as
  * carryable, not because some exporter packed it. A tar carrying `history/session-secret` is refused and
  * reported, which is the same posture the generic upload route takes with isControlPlanePath.
  */
@@ -43,7 +43,7 @@ const readEntry = (source: Readable): Promise<Buffer> =>
     });
 
 // Which root an entry belongs to, and its path within it. An entry naming neither prefix is not part of this
-// format — a foreign tar, or a bundle from a version whose layout moved.
+// format, a foreign tar, or a bundle from a version whose layout moved.
 const placeEntry = (name: string): { root: "workspace" | "history"; relPath: string } | undefined => {
     for (const root of ["workspace", "history"] as const) {
         if (name.startsWith(`${root}/`)) {
@@ -55,14 +55,14 @@ const placeEntry = (name: string): { root: "workspace" | "history"; relPath: str
 
 /* THE HEAL. A repo's in-tree `.git` is a POINTER FILE naming its real git dir on /history (see
  * git/repo-git-dirs.ts for the invariant that forces it), and that path is ABSOLUTE. The bundle carries both
- * halves, but the pointer it carries was written for the SOURCE sandbox's historyRoot — so on a target whose
+ * halves, but the pointer it carries was written for the SOURCE sandbox's historyRoot, so on a target whose
  * HISTORY_ROOT differs, every pointer names a directory that does not exist and every git command in the
  * restored workspace answers `fatal: not a git repository`.
  *
  * Rewriting them is the whole difference between a restored workspace and a pile of files. It is cheap and it
  * is idempotent: the pointer is one line, and re-running on an already-correct tree writes the same line.
  *
- * The root repo is included deliberately — `/work/.git` is a pointer too, and `ensureRootRepo` heals only a
+ * The root repo is included deliberately, `/work/.git` is a pointer too, and `ensureRootRepo` heals only a
  * MISSING one. Over a dangling pointer, `git init --separate-git-dir` refuses outright (verified: exit 128,
  * "not a git repository"), so boot convergence cannot rescue this and the restore has to.
  */
@@ -97,7 +97,7 @@ const actionsFor = (manifest: BundleManifest): ImportReport["needsAction"] => {
     /* RECONNECT, NOT RE-ADD, and the difference is the credential split. This used to say the capability manifest
      * had not travelled, which was true while the manifest WAS the credential; it now holds only the shape of
      * each connection and travels in every bundle (workspace-state.ts argues it on the entry). So the target
-     * arrives with the cards already there and no way to authenticate them — the failure this has to name,
+     * arrives with the cards already there and no way to authenticate them, the failure this has to name,
      * because a list that looks complete is worse than one that is visibly missing. */
     if (!manifest.secrets && manifest.environment.capabilities.length > 0) {
         actions.push({
@@ -113,7 +113,7 @@ const actionsFor = (manifest: BundleManifest): ImportReport["needsAction"] => {
     return actions;
 };
 
-/* Extract a bundle. Streamed entry by entry — nothing is buffered but the manifest, which is small and has to
+/* Extract a bundle. Streamed entry by entry, nothing is buffered but the manifest, which is small and has to
  * be read before anything can be decided.
  *
  * `limit` bounds the whole archive the way the upload route bounds a drop; past it the restore aborts with
@@ -157,7 +157,7 @@ export const restoreBundle = async (
         /* Re-derived, never trusted: `secrets: true` here means "this daemon would carry it under SOME export
          * choice", so a hand-added identity file is refused whatever the bundle claims about itself.
          *
-         * A directory entry is judged by the descent rule instead — an empty `.intentic/records/sessions/claude/projects/` is a
+         * A directory entry is judged by the descent rule instead, an empty `.intentic/records/sessions/claude/projects/` is a
          * legitimate carried directory even though the store above it is a credential root. */
         const allowed =
             header.type === "directory"
@@ -184,7 +184,7 @@ export const restoreBundle = async (
         if (header.type === "symlink") {
             await mkdir(dirname(target), { recursive: true });
             // A restore runs onto a fresh sandbox, but the daemon's own boot has already converged some of
-            // these paths — replacing rather than failing keeps the restore idempotent.
+            // these paths, replacing rather than failing keeps the restore idempotent.
             await rm(target, { force: true });
             await symlink(header.linkname ?? "", target);
             await drain(stream);
@@ -207,7 +207,7 @@ export const restoreBundle = async (
             await setWorkspaceMtime(target, header.mtime.getTime());
         }
         // The mode is what the existing folder-drop path loses: every entry it writes gets the default, so a
-        // restored `+x` script is no longer executable. Best-effort — a chmod failure must not fail a restore.
+        // restored `+x` script is no longer executable. Best-effort, a chmod failure must not fail a restore.
         if (header.mode !== undefined) {
             await chmod(target, header.mode & 0o7777).catch(() => {});
         }
@@ -227,7 +227,7 @@ export const restoreBundle = async (
         };
         /* A failure of the DECODERS is the caller's fault, not the daemon's: gunzip answers Z_DATA_ERROR for
          * anything that is not gzip, and tar-stream throws on a truncated or malformed member. Both mean "that
-         * upload is not a bundle", which is a 400 — reported as one rather than escaping as an unhandled throw
+         * upload is not a bundle", which is a 400, reported as one rather than escaping as an unhandled throw
          * the route turns into a 500 and the owner reads as "the sandbox broke".
          *
          * Failures of `handleEntry` propagate UNCHANGED, because they are a different class entirely: a full

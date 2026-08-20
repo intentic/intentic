@@ -2,36 +2,36 @@ import type { AgentEvent, AgentTurn, ParkedCard } from "@intentic/sandbox-contra
 import { recordCommands } from "./agent-commands.js";
 import type { TurnJournal } from "./turn-journal.js";
 
-/* Detached turn runs — turn EXECUTION decoupled from any client connection. POST /agent starts a run: the
+/* Detached turn runs, turn EXECUTION decoupled from any client connection. POST /agent starts a run: the
  * turn generator is pumped daemon-side into a seq-stamped frame log, and any number of clients render it by
- * attaching (replay from a cursor, then live). The initiating window holds no special stream — a reload, a
+ * attaching (replay from a cursor, then live). The initiating window holds no special stream, a reload, a
  * second window, or another device attaches the same way, which is what makes a turn survive all of them.
  *
  * A finished run is retained briefly so a client that lost its stream near the end still replays the tail;
- * after that the transcript record is the copy and attach reports NOT_FOUND. Keyed by conversationId — the
+ * after that the transcript record is the copy and attach reports NOT_FOUND. Keyed by conversationId, the
  * daemon is single-tenant behind its authenticated tunnel (same bet as agent-steering).
  *
  * The frame log is in memory; what makes that safe is that the settled turn is written down on its way out. It
  * used to be the PROVIDER's session store that held the durable copy, which meant a conversation could only be
- * reopened if its provider kept one and the daemon still held the right key into it — the standing cause of
+ * reopened if its provider kept one and the daemon still held the right key into it, the standing cause of
  * "the chat opens empty" (see sessions/transcript-record.ts). Two things now leave this pump: the TURN, one
  * journal entry naming what to run again while it is in flight (turn-journal.ts), and the TRANSCRIPT, the
  * frames it produced, once it is whole. */
 
-// The turn generator a run pumps — streamAgent's shape, injected to keep this module cycle-free of
+// The turn generator a run pumps, streamAgent's shape, injected to keep this module cycle-free of
 // agent.routes (and swappable in tests).
 export type TurnFn = (input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
 // The two moments in a turn's life where the operator might want to be told, reported to whoever started the
 // run. Deliberately narrow and copy-free: this module knows WHEN a turn parks or settles, and nothing about
-// how that should read on a lock screen — agent.routes owns the wording (and the decision to send at all).
+// how that should read on a lock screen, agent.routes owns the wording (and the decision to send at all).
 // Both are fire-and-forget; an observer that throws must never affect the turn, so the pump guards them.
 export interface TurnObserver {
     // The agent has stopped and is waiting for the user: a plan to approve, a question to answer, a tool
-    // permission to grant, or one of its two handovers — a browser stuck on something only a person can clear,
+    // permission to grant, or one of its two handovers, a browser stuck on something only a person can clear,
     // a terminal parked at a prompt only a person can answer. May fire several times in one turn.
     readonly awaiting: (kind: "plan" | "question" | "permission" | "browser_help" | "terminal_help") => void;
-    // The run reached its end, exactly once. `error` is set only for a genuine failure — an abort via
+    // The run reached its end, exactly once. `error` is set only for a genuine failure, an abort via
     // /agent/stop settles as a clean "done", because the user who pressed stop knows how it ended.
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
@@ -53,18 +53,18 @@ export class TurnRun {
         return this.finishedAt !== undefined;
     }
 
-    // True once the run is finished AND past retention — attach then reports NOT_FOUND and the map entry drops.
+    // True once the run is finished AND past retention, attach then reports NOT_FOUND and the map entry drops.
     expired(now: number): boolean {
         return this.finishedAt !== undefined && now - this.finishedAt > RETAIN_MS;
     }
 
-    // The log length — a frame's seq is its 1-based position, so this is also the last stamped seq.
+    // The log length, a frame's seq is its 1-based position, so this is also the last stamped seq.
     get seq(): number {
         return this.frames.length;
     }
 
     // Everything this run pumped, for the transcript sink to write down once the turn is whole. The log stays
-    // the run's own — this hands it out to read, not to hold.
+    // the run's own, this hands it out to read, not to hold.
     get events(): readonly AgentEvent[] {
         return this.frames;
     }
@@ -104,7 +104,7 @@ export class TurnRun {
 
     // Replay frames after `after`, then follow live until the run finishes. Any number of followers may run
     // concurrently. A follower whose consumer disconnects while parked here stays parked until the next
-    // push/finish wake — bounded by the turn's end, when every follower drains and returns.
+    // push/finish wake, bounded by the turn's end, when every follower drains and returns.
     async *follow(after: number): AsyncGenerator<{ readonly seq: number; readonly event: AgentEvent }> {
         let cursor = Math.min(after, this.frames.length);
         for (;;) {
@@ -126,7 +126,7 @@ const runs = new Map<string, TurnRun>();
 
 /* The module-level settle event, beside the per-run observer rather than inside it: the observer is the run
  * STARTER's channel (notifications, wording), while this is for machinery that cares about every run however it
- * was started — the resource reaper seeds its stop clock here. Guarded like `tell`: a listener that throws must
+ * was started, the resource reaper seeds its stop clock here. Guarded like `tell`: a listener that throws must
  * never reach a turn that is otherwise finished. */
 const settleListeners = new Set<(conversationId: string) => void>();
 export const onTurnSettled = (listener: (conversationId: string) => void): (() => void) => {
@@ -160,7 +160,7 @@ export interface RunOptions {
     // Where the in-flight turn is written down so a daemon death doesn't take it with it. Injected like TurnFn,
     // for the same reason: this module stays free of the composition (and swappable in tests).
     readonly journal?: TurnJournal;
-    // Where the SETTLED turn is written down — the conversation's durable transcript, the copy every provider
+    // Where the SETTLED turn is written down, the conversation's durable transcript, the copy every provider
     // gets whether or not it keeps a session store of its own (sessions/transcript-record.ts). Handed the raw
     // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
     // `startedAt` rides along because this pump is the only thing that knows it by the time the turn settles,
@@ -169,14 +169,14 @@ export interface RunOptions {
     // Side-channel preparation that must precede the provider (the transcript record's legacy adoption). A
     // caller passes a guarded promise: its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
-    // How many boots have already re-run this turn — carried through so a resume that dies again is not resumed
+    // How many boots have already re-run this turn, carried through so a resume that dies again is not resumed
     // a third time (see turn-resume's boot pass). A first-hand turn starts at 0.
     readonly attempts?: number;
 }
 
-// Start a detached run for the conversation's turn, or undefined when one is already live (the route 409s —
+// Start a detached run for the conversation's turn, or undefined when one is already live (the route 409s,
 // the client serializes its own turns, so a live run means another window/device is mid-turn). The pump owns
-// the generator: a thrown turn is folded into the log as an error frame (an abort — /agent/stop — as a clean
+// the generator: a thrown turn is folded into the log as an error frame (an abort — /agent/stop, as a clean
 // done), so followers always see the run settle.
 export function startTurnRun(
     turnFn: TurnFn,
@@ -191,12 +191,12 @@ export function startTurnRun(
     const run = new TurnRun(input.prompt);
     runs.set(input.conversationId, run);
     const provider = input.agent ?? "claude";
-    /* THE JOURNAL ENTRY — opened here, updated when the session is known, closed in the pump's finally.
+    /* THE JOURNAL ENTRY, opened here, updated when the session is known, closed in the pump's finally.
      *
      * Every one of those is queued behind the previous one rather than fired at the disk independently. None of
      * them may block the caller (the route acks the run id synchronously), but they must not overtake each other
      * either: a clear that raced the opening write would delete a file that does not exist yet, and one that
-     * raced the session-frame update would be followed by that update RE-CREATING the entry — leaving behind, in
+     * raced the session-frame update would be followed by that update RE-CREATING the entry, leaving behind, in
      * both cases, a journal entry for a turn that has already finished. Which the next boot would dutifully
      * resume. Serializing costs nothing here (at most three writes in a whole turn) and removes the entire class.
      *
@@ -209,11 +209,11 @@ export function startTurnRun(
         }
         journalled = journalled.then(() => op(journal)).catch(() => undefined);
     };
-    /* The journal entry's live fields, held so every rewrite carries ALL of them — the session update and a
+    /* The journal entry's live fields, held so every rewrite carries ALL of them, the session update and a
      * park update writing only what each knew would erase the other's half. `parked` is the cards the turn is
      * waiting on right now, written down because a daemon death under a park must restore the card, not the
      * turn (turn-resume.ts), and the card's content exists nowhere else once the frame log dies with the
-     * process. The entry is SNAPSHOTTED synchronously — only the write is queued; a closure that read these
+     * process. The entry is SNAPSHOTTED synchronously, only the write is queued; a closure that read these
      * fields when it finally ran would journal a later frame's state under this one's write. */
     let sessionId: string | undefined;
     const parked: ParkedCard[] = [];
@@ -229,7 +229,7 @@ export function startTurnRun(
         journalOp((target) => target.recordTurn(entry));
     };
     journalEntry();
-    // An observer is an optional side-channel, so it must be unable to break the turn — a throw from a
+    // An observer is an optional side-channel, so it must be unable to break the turn, a throw from a
     // notification hook cannot be allowed to abort a run that is otherwise fine.
     const tell = (report: (target: TurnObserver) => void): void => {
         if (observer === undefined) {
@@ -253,7 +253,7 @@ export function startTurnRun(
                     recordCommands(provider, event.items);
                 }
                 // The frames that park the turn on the user. They keep the run's fetch open, so from the
-                // outside it still looks "live" — which is exactly why they need their own signal.
+                // outside it still looks "live", which is exactly why they need their own signal.
                 if (
                     event.kind === "plan" ||
                     event.kind === "question" ||
@@ -264,7 +264,7 @@ export function startTurnRun(
                     tell((target) => target.awaiting(event.kind));
                 }
                 // The restorable cards ride the journal entry while they are up (the two handover cards stay
-                // out — see ParkedCardSchema), and come off it as each resolves: what is in the entry at any
+                // out, see ParkedCardSchema), and come off it as each resolves: what is in the entry at any
                 // instant is exactly what a boot would have to restore.
                 if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
                     parked.push(event);
@@ -278,7 +278,7 @@ export function startTurnRun(
                     }
                 }
                 // The session the provider minted or advanced for this turn, folded into the journal entry as
-                // soon as it is known. It is what makes a resume CONTINUE — the partial work of the interrupted
+                // soon as it is known. It is what makes a resume CONTINUE, the partial work of the interrupted
                 // turn lives in that session, and a resume without it re-runs the whole turn from nothing.
                 if (event.kind === "session") {
                     sessionId = event.sessionId;
@@ -290,7 +290,7 @@ export function startTurnRun(
                 run.push(event);
             }
         } catch (error) {
-            // An abort is /agent/stop doing its job, not a failure — settle with a clean done. Detected by
+            // An abort is /agent/stop doing its job, not a failure, settle with a clean done. Detected by
             // name, not instanceof: Node's DOMException AbortError does not inherit from Error.
             const aborted = typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
             if (!aborted) {
@@ -308,7 +308,7 @@ export function startTurnRun(
                 }
             }, RETAIN_MS);
             expiry.unref();
-            /* The conversation's durable transcript, written once the turn is WHOLE — a settled failure and an
+            /* The conversation's durable transcript, written once the turn is WHOLE, a settled failure and an
              * abort included, because both are things the user watched happen and will look for when they come
              * back. Guarded on both sides like `tell`: a sink that throws where it stands and one whose write
              * rejects are the same kind of side-channel failure, and neither may reach a turn that is otherwise
@@ -317,10 +317,10 @@ export function startTurnRun(
                 try {
                     void transcript(run.events, run.startedAt).catch(() => undefined);
                 } catch {
-                    // Nothing to do and nowhere to report it — the turn is the thing that matters.
+                    // Nothing to do and nowhere to report it, the turn is the thing that matters.
                 }
             }
-            // This turn is no longer in flight, however it ended — a failure and an abort are both settled
+            // This turn is no longer in flight, however it ended, a failure and an abort are both settled
             // outcomes the user has seen, and only a turn nobody got to see the end of deserves resuming.
             // Queued behind the writes above, never racing them (see the note where journalOp is defined).
             journalOp((target) => target.clearTurn(input.conversationId));
@@ -331,13 +331,13 @@ export function startTurnRun(
     return run;
 }
 
-// The conversation's current run — live, or finished within retention. Undefined = nothing to attach to.
+// The conversation's current run, live, or finished within retention. Undefined = nothing to attach to.
 export function turnRunOf(conversationId: string): TurnRun | undefined {
     sweep();
     return runs.get(conversationId);
 }
 
-// The one conversation with a LIVE run, when exactly one exists — how a caller that knows it was spawned by
+// The one conversation with a LIVE run, when exactly one exists, how a caller that knows it was spawned by
 // "the" running turn but not which conversation (an agent CLI under a harness that stamps no conversation id
 // into its shell) finds the chat its card belongs in. Two live runs are an honest "don't know": guessing
 // would park a card in somebody else's conversation, so the caller refuses instead.
@@ -358,7 +358,7 @@ export function soleLiveConversation(): string | undefined {
 
 /* Every conversation with a turn still running, with the moment it started. `turnRunOf` answers for one
  * conversation and `soleLiveConversation` refuses to guess between two; this is the whole set, for the two
- * readers that have to compare it against a SECOND record of the same fact — the journal on disk and the fleet
+ * readers that have to compare it against a SECOND record of the same fact, the journal on disk and the fleet
  * registry's own `running` flags (invariants/). `startedAt` rides along because both of those records are
  * written asynchronously, so a comparison that did not know a run's age would report every turn younger than
  * its own first write as a violation. */

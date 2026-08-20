@@ -6,22 +6,22 @@ import { ciProjects, type CiProject } from "./projects.js";
 
 /* The webhook reconciler: every mapped repo gets a hook delivering completed pipelines to this sandbox's
  * public receiver, so `ci` automations wake instantly and the runs cache stays fresh without polling. Runs on
- * an interval (and once at boot) because the things it reconciles against all drift on their own clock — repos
+ * an interval (and once at boot) because the things it reconciles against all drift on their own clock, repos
  * appear via clone, capabilities connect/disconnect, a hook gets hand-deleted on the provider.
  *
  * Registration is best-effort per repo, the setupGitAccess posture: a refusal (github classic PAT without
  * admin:repo_hook / fine-grained without "Webhooks: write"; gitlab below Maintainer) or a sandbox with no
- * public URL degrades that repo to a WARNING carrying the manual recipe — the exact URL + secret to paste into
- * the repo's webhook settings — surfaced on GET /ci/runs where the Pipelines view renders it inline.
+ * public URL degrades that repo to a WARNING carrying the manual recipe, the exact URL + secret to paste into
+ * the repo's webhook settings, surfaced on GET /ci/runs where the Pipelines view renders it inline.
  *
  * A repo that unmaps while its account is still connected gets its hook removed on the next pass. A REMOVED
  * capability keeps its hooks on the provider (no token left to delete them with); deliveries then fail and the
- * provider auto-disables the hook — the same "stale key on the account" trade teardownGitAccess accepts when
+ * provider auto-disables the hook, the same "stale key on the account" trade teardownGitAccess accepts when
  * the network is gone. */
 
 const RECONCILE_INTERVAL_MS = 10 * 60_000;
 
-// One vendor-kind receiver path — the webhook route verifies per vendor, and the project is identified from
+// One vendor-kind receiver path, the webhook route verifies per vendor, and the project is identified from
 // the payload, so every repo of a host shares the same delivery URL (which is also each hook's identity).
 export const webhookUrlFor = (publicUrl: string, host: "github" | "gitlab"): string => `${publicUrl.replace(/\/+$/, "")}/ci/webhook/${host}`;
 
@@ -61,7 +61,7 @@ export const createCiHookReconciler = (
     fetchFn: FetchFn = fetch,
 ): CiHookReconciler => {
     const warnings = new Map<string, string>();
-    // What the previous pass had wired, keyed host+project — how an unmapped repo's hook gets noticed.
+    // What the previous pass had wired, keyed host+project, how an unmapped repo's hook gets noticed.
     let wired = new Map<string, CiProject>();
     let timer: NodeJS.Timeout | undefined;
     let pass: Promise<void> = Promise.resolve();

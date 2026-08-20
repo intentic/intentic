@@ -3,7 +3,7 @@ import type { RestoredMessage, RestoredToolCall, ShareDetail, ToolCallContent } 
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
 import { SECRET_PATTERNS } from "../public/public-files.js";
 
-/* WHAT ACTUALLY LEAVES — the one place a conversation is reduced to the thing a stranger may read.
+/* WHAT ACTUALLY LEAVES, the one place a conversation is reduced to the thing a stranger may read.
  *
  * Pure and synchronous on purpose: everything about what a share contains is decided here, over plain values,
  * so the questions that matter ("does a messages-only share carry the diffs?", "does an API key pasted into a
@@ -17,8 +17,8 @@ import { SECRET_PATTERNS } from "../public/public-files.js";
  *      recipient's browser for a file it has no business fetching (and could not fetch anyway).
  *
  * What is dropped in BOTH levels, and why it is not a third option:
- *   · `checkpointId` — an address in the daemon's own rewind state. Meaningless off this machine.
- *   · `notes` — the context the daemon prepended to a turn (a rebase that moved the branch, dependencies that
+ *   · `checkpointId`, an address in the daemon's own rewind state. Meaningless off this machine.
+ *   · `notes`, the context the daemon prepended to a turn (a rebase that moved the branch, dependencies that
  *     are behind, retrieved workspace context). The published page has no surface that draws them, so keeping
  *     them would publish text nobody can read, which is strictly worse than not keeping it. */
 
@@ -29,7 +29,7 @@ export const REDACTED = "[redacted]";
 const redact = (text: string): string => SECRET_PATTERNS.reduce((value, pattern) => value.replace(new RegExp(pattern, "g"), REDACTED), text);
 
 // What the page can actually draw. A path that is not one of these is not a picture, whatever a tool called it
-// — and since this list is also what decides which workspace bytes get copied out, it is the reason a share
+//, and since this list is also what decides which workspace bytes get copied out, it is the reason a share
 // cannot be talked into publishing an arbitrary file by naming it in an image entry.
 const PICTURE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"]);
 
@@ -38,7 +38,7 @@ const isPicture = (path: string): boolean => PICTURE_EXTS.has(extname(path).toLo
 // One picture to copy: where it is in the workspace, and what it is called beside the page.
 export interface SharePicture {
     readonly source: string;
-    // Relative to the share's own directory, which is what the payload now carries — `files/2-screenshot.png`.
+    // Relative to the share's own directory, which is what the payload now carries, `files/2-screenshot.png`.
     readonly published: string;
 }
 
@@ -88,7 +88,7 @@ const shareContent = (content: readonly ToolCallContent[], pictures: Pictures): 
         return published === undefined ? [] : [{ type: "image", path: published }];
     });
 
-// One tool call, recursively — a delegation's nested calls are part of the work it did.
+// One tool call, recursively, a delegation's nested calls are part of the work it did.
 const shareTool = (tool: RestoredToolCall, pictures: Pictures): RestoredToolCall => ({
     id: tool.id,
     name: tool.name,
@@ -113,8 +113,8 @@ export const shareTranscript = (messages: readonly RestoredMessage[], detail: Sh
             role: message.role,
             text: redact(message.text),
             ...(message.sentAt === undefined ? {} : { sentAt: message.sentAt }),
-            // A row the user placed wearing the agent's voice keeps its mark. A share is a HUMAN-facing page —
-            // the one audience the flag exists for — and a recipient reading planted words as the agent's own
+            // A row the user placed wearing the agent's voice keeps its mark. A share is a HUMAN-facing page,
+            // the one audience the flag exists for, and a recipient reading planted words as the agent's own
             // is exactly the confusion the mark was added to prevent. (The agent-facing handoff stays blind to
             // it; see RestoredMessageSchema.)
             ...(message.placed === true ? { placed: true } : {}),

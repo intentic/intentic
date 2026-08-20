@@ -4,7 +4,7 @@ import type { Services } from "../composition.js";
 import { discoverRepos } from "./repo-discovery.js";
 
 // A repo's sync outcome for one turn: the git result, plus the two turn-orchestration outcomes that aren't the
-// git op itself — "skipped" (throttled, or a concurrent turn is already syncing this repo) and "error" (the
+// git op itself, "skipped" (throttled, or a concurrent turn is already syncing this repo) and "error" (the
 // fetch/merge threw, e.g. an unreachable remote). Errors become a reported outcome, never a thrown turn.
 export type RepoSyncOutcome = GitSyncResult | { readonly status: "skipped" } | { readonly status: "error"; readonly message: string };
 
@@ -49,16 +49,16 @@ export const syncWorkspaceRepos = async (services: Services, throttleMs: number)
 
 const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
 
-/* The note's fixed opening — what turn-preamble.ts recognizes it by, in the list that decides both what the
+/* The note's fixed opening, what turn-preamble.ts recognizes it by, in the list that decides both what the
  * chat discloses and what a restore strips back out of the stored message.
  *
  * It used to have neither. The advisory was pasted onto the front of the prompt by hand, which put it outside
- * every mechanism built for exactly this kind of text: the chat never mentioned it, and — because the stripper
- * only ever cuts an opening it knows — a reopened tab redrew the whole thing as a paragraph the user had
+ * every mechanism built for exactly this kind of text: the chat never mentioned it, and, because the stripper
+ * only ever cuts an opening it knows, a reopened tab redrew the whole thing as a paragraph the user had
  * supposedly typed above their own words. */
 export const REPO_SYNC_NOTE_HEADER = "## Repos synced with their remotes";
 
-// A note prepended to the turn's prompt so the agent knows what moved and — critically — which repos it could
+// A note prepended to the turn's prompt so the agent knows what moved and which repos it could
 // NOT advance (its context there may be stale). Clean/current/no-remote/skipped repos add nothing.
 export const syncAdvisory = (results: readonly RepoSync[]): string | undefined => {
     const notes = results.flatMap(({ repo, outcome }) => {
