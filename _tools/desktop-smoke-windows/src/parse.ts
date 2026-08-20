@@ -10,6 +10,12 @@
  * `asList` is that asymmetry absorbed in one place, and it is why every probe here parses through it.
  */
 
+// `posix`, not the platform's own: every path these build is a path INSIDE the Linux container, written by a
+// tool whose own process is running on Windows. `dirname` off the default namespace would read a backslash as
+// a separator on the machine this actually runs on.
+import { posix } from "node:path";
+import { shellQuote } from "@intentic/sandbox-run/quote";
+
 /** `ConvertTo-Json` output, as the list it was always meant to be. */
 export const asList = <T>(json: string): T[] => {
     const text = json.trim();
@@ -130,6 +136,19 @@ export const controlTokenStore = (digest: string): string =>
     JSON.stringify({
         tokens: [{ id: `windows-smoke`, label: `windows smoke`, scope: `drive`, hash: digest, createdAt: 0 }],
     });
+
+/* The sh that puts that store on disk inside the container — here, and not spliced into the `docker exec`
+ * beside it, for one reason: the directory it creates is DERIVED from the path it writes.
+ *
+ * The two used to be written down separately, and the day the daemon moved its identity files into
+ * `.intentic/identity/` the `mkdir` kept naming the parent the store used to have. Every write after that
+ * failed with "nonexistent directory", and the tier said only "could not seed a drive-scoped control token" —
+ * a red Windows build whose message pointed at the credential rather than at the rename that broke it. A path
+ * and the directory it needs cannot disagree when only one of them is written down.
+ *
+ * `<<'STORE'` is quoted, so the JSON reaches the file byte for byte with no expansion of anything inside it. */
+export const controlTokenSeedScript = (storePath: string, store: string): string =>
+    `mkdir -p ${shellQuote(posix.dirname(storePath))} && cat > ${shellQuote(storePath)} <<'STORE'\n${store}\nSTORE`;
 
 /* The WebView2 runtime's version, from the Edge updater's client key.
  *

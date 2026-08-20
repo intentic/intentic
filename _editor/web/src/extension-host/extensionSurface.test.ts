@@ -70,9 +70,11 @@ const candidatesIn = (files: readonly string[]): string[] => {
 
 /* Tokens that compile to a utility but are not one anybody wrote. `flex-shrink` is a real Tailwind class AND a
  * real CSS property, so neither the net above nor the compiler can tell that this one came out of a `<style>`
- * block in MediaViewer.vue. Naming it here says "we looked", which is more honest than widening the promise to
- * cover a class no markup contains. */
-const NOT_CLASSES = new Set([`flex-shrink`]);
+ * block in MediaViewer.vue. `antialiased` is the same coincidence one step further out: it is a real utility
+ * and an ordinary English word about how edges are drawn, and the one in this tree is PROSE — a sentence in
+ * WorkflowNodeCard.vue explaining why a status stripe stops short of the card's corner. Naming both here says
+ * "we looked", which is more honest than widening the promise to cover a class no markup contains. */
+const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`]);
 
 const classesOf = (css: string): Set<string> =>
     new Set([...css.matchAll(/\.(-?(?:[A-Za-z_]|\\.)(?:[\w-]|\\.)*)/gu)].map((match) => (match[1] ?? ``).replaceAll(/\\(.)/gu, `$1`)));

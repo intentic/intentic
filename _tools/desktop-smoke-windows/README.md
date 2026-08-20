@@ -121,6 +121,11 @@ The control token is **seeded, not minted** — minting is owner-gated and the o
 account. Seeding writes the store the daemon reads, inside the container, as root. This is the same shape of
 move the browser tier makes when it seeds a signed session cookie instead of signing in to Google.
 
+Seeding creates the store's directory on the way in, and derives it from the path it is writing rather than
+naming it a second time. Nothing on a fresh sandbox has made that directory yet — the daemon writes its
+identity files when a browser first connects, and this tier never opens one — so the write is the first thing
+there, and a directory named twice is a directory that disagrees with itself the next time one of them moves.
+
 The AI account is **connected once, by hand**, and shared through a Docker volume the setup mounts at
 `/agent-auth`. Connecting one is a subscription OAuth flow through a browser; there is no API-key route in this
 product, by design. Absent the volume, the turn stands down naming it and everything before it still runs.

@@ -37,7 +37,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { CONNECT_TOKEN } from "./constants.js";
 import type { Harness } from "./harness.js";
-import { assistantReplied, controlTokenStore } from "./parse.js";
+import { assistantReplied, controlTokenSeedScript, controlTokenStore } from "./parse.js";
 import { run } from "./run.js";
 
 export interface AgentsTierOptions {
@@ -60,15 +60,19 @@ const EXPECTED = `ready`;
 
 const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/identity/control-tokens.json`;
 
-/** sha256, computed by the container so the digest is the one that container's own code would compute. */
-const seedControlToken = async (container: string, token: string): Promise<boolean> => {
+/* sha256, computed by the container so the digest is the one that container's own code would compute.
+ *
+ * Returns what went wrong rather than a bare false: the two steps here fail for entirely different reasons —
+ * a container that is gone, and a store the daemon has never written a directory for — and a tier that
+ * reported both as "could not seed" once cost a Windows build the one line that would have explained it. */
+const seedControlToken = async (container: string, token: string): Promise<string | undefined> => {
     const digest = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf %s ${shellQuote(token)} | sha256sum | cut -d" " -f1`]);
     if (digest.code !== 0) {
-        return false;
+        return `hashing the token in the container exited ${digest.code}: ${digest.stderr.trim()}`;
     }
     const store = controlTokenStore(digest.stdout.trim());
-    const write = await run(`docker`, [`exec`, container, `sh`, `-c`, `mkdir -p /work/.intentic && cat > ${STORE_PATH} <<'STORE'\n${store}\nSTORE`]);
-    return write.code === 0;
+    const write = await run(`docker`, [`exec`, container, `sh`, `-c`, controlTokenSeedScript(STORE_PATH, store)]);
+    return write.code === 0 ? undefined : `writing ${STORE_PATH} exited ${write.code}: ${write.stderr.trim()}`;
 };
 
 interface DaemonCall {
@@ -131,8 +135,9 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     // ── the credential a program is meant to use ─────────────────────────────────────────────────────────
     harness.section(`driving it with a control token`);
     const token = `ict_windows_smoke_${sandboxId}`;
-    if (!(await seedControlToken(options.container, token))) {
-        harness.fail(`could not seed a drive-scoped control token into ${options.container}`);
+    const unseeded = await seedControlToken(options.container, token);
+    if (unseeded !== undefined) {
+        harness.fail(`could not seed a drive-scoped control token into ${options.container}`, unseeded);
         return;
     }
     harness.pass(`a drive-scoped control token is in place`);
