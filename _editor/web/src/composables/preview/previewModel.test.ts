@@ -42,6 +42,11 @@ const port = (over: Partial<PortSummary>): PortSummary => ({
     host: `127.0.0.1`,
     forwardable: true,
     kind: `workspace`,
+    // What the row is CALLED and where it came from — the daemon resolves all three (ports/port-identity.ts);
+    // the rail only counts and links, so any honest values do here.
+    title: `Vite dev server`,
+    purpose: `Started in one of your terminals.`,
+    origin: `terminal`,
     forwarded: true,
     previewUrl: `https://port-1-s.zone`,
     ...over,
@@ -116,8 +121,8 @@ describe(`portTargets`, () => {
         expect(targets[0]).toMatchObject({ label: `Port 3000`, healthy: true, startable: false });
     });
 
-    it(`says what is answering there, from the tail of the command`, () => {
-        expect(portTargets([port({ command: `node /work/app/node_modules/.bin/vite` })])[0]?.detail).toBe(`vite`);
+    it(`says what is answering there, by the name the daemon resolved for it`, () => {
+        expect(portTargets([port({ title: `Vite dev server` })])[0]?.detail).toBe(`Vite dev server`);
     });
 });
 

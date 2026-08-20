@@ -368,7 +368,22 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
     const withToken = (path: string, method = "GET") => app.request(path, { method, headers: { "x-intentic-sync": syncToken } });
     const list = await withToken("/ports");
     expect(list.status).toBe(200);
-    expect(await list.json()).toEqual({ ports: [{ port: 3000, host: "127.0.0.1", forwardable: true, kind: "system", forwarded: false }] });
+    // Every row carries what it IS as well as where it answers — a listener with no command and no session is
+    // named as exactly that rather than guessed at (ports/port-identity.ts).
+    expect(await list.json()).toEqual({
+        ports: [
+            {
+                port: 3000,
+                host: "127.0.0.1",
+                forwardable: true,
+                kind: "system",
+                forwarded: false,
+                title: "Unclaimed port",
+                purpose: "Something is listening here that no process in this sandbox owns — usually container plumbing.",
+                origin: "unknown",
+            },
+        ],
+    });
     /* The one WRITE the token carries: the machine's own report — the folders/ports/watcher half of desktop sync
      * that the daemon has no other way to learn (SYNC_DIR never reaches it). Filed under the enrollment that
      * presented the token, so the `hostname` in the body is a label and never an identity. */

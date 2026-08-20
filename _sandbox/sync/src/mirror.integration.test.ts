@@ -31,6 +31,9 @@ const ws = (port: number, host: "127.0.0.1" | "::1" = "127.0.0.1", command = "vi
     host,
     forwardable: true,
     kind: "workspace",
+    title: "Vite dev server",
+    purpose: "Started in one of your terminals.",
+    origin: "terminal",
     command,
     forwarded: false,
 });
@@ -55,15 +58,19 @@ const log = (): void => {};
 // Nothing else on this machine is mirroring — the single-pairing case, and the default for these tests.
 const unclaimed = new Map<number, string>();
 
+// Every row on the wire now carries what it IS as well as where it runs; the mirror ignores all three, but
+// the schema is strict so a fixture without them never parses.
+const named = { title: "Vite dev server", purpose: "Started in one of your terminals.", origin: "terminal" as const };
+
 describe("fetchWorkspacePorts", () => {
     it("sends the sync token and returns only forwardable workspace-kind ports", async () => {
         const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
             jsonResponse(200, {
                 ports: [
-                    { port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false },
-                    { port: 4096, host: "127.0.0.1", forwardable: true, kind: "system", command: "opencode serve", forwarded: false },
+                    { port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false, ...named },
+                    { port: 4096, host: "127.0.0.1", forwardable: true, kind: "system", command: "opencode serve", forwarded: false, ...named },
                     // A workspace bind on a loopback alias — Mutagen would dial 127.0.0.1 and never reach it, so it's dropped.
-                    { port: 9500, host: "127.0.0.1", forwardable: false, kind: "workspace", command: "alias-bound", forwarded: false },
+                    { port: 9500, host: "127.0.0.1", forwardable: false, kind: "workspace", command: "alias-bound", forwarded: false, ...named },
                 ],
             }),
         );
@@ -71,7 +78,7 @@ describe("fetchWorkspacePorts", () => {
 
         const ports = await fetchWorkspacePorts("https://sandbox-abc.example.dev/", "ist_tok");
 
-        expect(ports).toEqual([{ port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false }]);
+        expect(ports).toEqual([{ port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false, ...named }]);
         expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", {
             headers: { "x-intentic-sync": "ist_tok" },
             // Bounded, because the watcher loop is sequential: an unbounded read here stalls the git bridge too.

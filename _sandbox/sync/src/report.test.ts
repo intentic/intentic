@@ -92,6 +92,9 @@ describe("skippedPortsOf", () => {
         host: "127.0.0.1",
         forwardable: true,
         kind: "workspace",
+        title: "Vite dev server",
+        purpose: "Started in one of your terminals.",
+        origin: "terminal",
         forwarded: false,
         command,
     });

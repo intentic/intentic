@@ -124,8 +124,9 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
             id: `port:${port.port}`,
             kind: `port`,
             label: `Port ${port.port}`,
-            // What is answering there, trimmed to the part that identifies it, a full argv is a paragraph.
-            detail: port.command?.split(/\s+/u).at(-1)?.split(`/`).at(-1),
+            // What is answering there, in the daemon's own words (ports/port-identity.ts). It used to be the
+            // tail of the argv, which named a FILE ("main.js", "gateway.js") rather than a thing.
+            detail: port.title,
             repo: undefined,
             app: undefined,
             url: port.previewUrl,

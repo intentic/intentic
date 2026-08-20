@@ -1,34 +1,22 @@
 <script setup lang="ts">
-import {
-    Button,
-    ui,
-    Icon,
-    InfoHint,
-    Notice,
-    noticeOf,
-    openForwardedPort,
-    Row,
-    RowGroup,
-    SkeletonRows,
-    StatusBadge,
-    useLoadingReveal,
-} from "@intentic/extension-ui";
+import { Icon, InfoHint, Notice, noticeOf, openForwardedPort, RowGroup, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
-import SharePreview from "./SharePreview.vue";
+import PortRow from "./PortRow.vue";
 import { usePorts } from "./usePorts";
 
-/* The Ports view: every TCP port listening inside the sandbox (procfs scan), each attributed to its owning
- * process and grouped by the daemon's classification — the user's own work (dev servers, terminal processes,
- * published containers) leads; the sandbox's internals (agent runtimes, translator, docker plumbing) sit in a
- * muted section below, listed for transparency rather than previewing. "Preview" forwards the port onto its
- * public port-<slot> hostname and opens it; forwarded rows keep a live link until "Stop". Forwarding is the
- * explicit exposure gesture — previews are public.
+/* The Ports view: every TCP port listening inside the sandbox (procfs scan), each NAMED and attributed by the
+ * daemon (ports/port-identity.ts) and grouped by whose it is — the user's own work (dev servers, terminal
+ * processes, published container ports) leads; the sandbox's internals (its own service, the agent runtimes,
+ * the translator, docker plumbing) sit in a muted section below, listed for transparency rather than previewing.
+ * "Preview" forwards the port onto its public port-<slot> hostname and opens it; forwarded rows keep a live link
+ * until "Stop". Forwarding is the explicit exposure gesture — previews are public.
  *
- * AND WHERE IT IS RUNNING, which is what makes the list something you can act on rather than only read. The
- * command and cwd say what took the port; the terminal it descends from is the place to watch it, Ctrl+C it, or
- * kill it, and it is one click from the row. A port with no terminal (the sandbox's own runtimes, a published
- * container's proxy) says so, because "no way to reach this from here" is itself the answer.
+ * WHAT IT IS, NOT WHAT IT RAN. This view used to render each row's argv as its headline, which meant the
+ * explanation of a port somebody was being invited to publish read `node --report-on-fatalerror
+ * --report-directory=/history/logs /opt/sandbox/dist/main.js` — and three separate rows were that one process.
+ * Now the row leads with the name and the sentence the daemon resolved, the terminal it descends from stays one
+ * click away, and the raw evidence lives under the row's own disclosure for whoever actually needs it.
  *
  * Mounted as a tab on the sandbox hub (surface: "sandbox"), so it renders a BODY — the hub owns the Page and
  * the header above the tab strip. What would have been the page's description rides the section's InfoHint. */
@@ -74,28 +62,22 @@ const stop = async (port: number): Promise<void> => {
     }
 };
 
-// Cosmetic: the workspace mounts at /work, so a cwd reads better repo-relative.
-const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
-
 const openTerminal = (session: string): void => host().terminal.open(session);
-// Said the same way wherever a port has no terminal — the sandbox's own runtimes and a container's published
-// port both land here, and the useful part is that this view is not where they get stopped.
-const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — nothing here can show its output or stop it.`;
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
         <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
 
-        <RowGroup label="Listening">
+        <RowGroup label="Your services">
             <template #info>
                 <InfoHint label="Ports">
-                    <span class="block text-sm font-medium text-content">Listening ports</span>
+                    <span class="block text-sm font-medium text-content">What is listening here</span>
                     <span class="mt-1 block text-xs text-muted">
-                        Every TCP port something inside the sandbox is listening on — dev servers started in terminals, published containers,
-                        anything.
-                        <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until you stop
-                        it.
+                        Every TCP port something inside the sandbox is listening on — dev servers you or an agent started, ports your containers
+                        publish, anything at all. Each row is named from the process behind it; open the <b>ⓘ</b> for the exact command, folder and
+                        terminal. <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until
+                        you stop it.
                     </span>
                     <!-- WHICH PORTS THIS PAGE IS NOT ABOUT. Two different things are called "ports" here: sending
                          one out to the public internet (this view) and mirroring one onto the localhost of the
@@ -112,8 +94,8 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
 
             <!-- The scan already knows not to say "nothing is listening" before it has looked — but what it did
                  instead was say nothing at all, and a group whose body is empty reads as the same answer with
-                 less confidence. The rows that are coming stand in: a port number's block, the command on the
-                 title line, where it runs underneath, and the Preview button. -->
+                 less confidence. The rows that are coming stand in: a port number's block, the name on the
+                 title line, what it is for underneath, and the Preview button. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true">
                 <span class="sr-only">Scanning for listening ports…</span>
                 <SkeletonRows :rows="3" density="compact" description control />
@@ -125,142 +107,43 @@ const NO_TERMINAL_HINT = `Not running in any of this sandbox's terminals — not
                 <p class="text-2xs text-subtle">Start a dev server in a terminal and it appears here.</p>
             </div>
 
-            <Row v-for="entry in workspacePorts" :key="entry.port" density="compact">
-                <!-- The port number leads because it is what the reader came looking for, and a fixed width is
-                     what makes a column of them scannable rather than ragged. -->
-                <template #lead>
-                    <span class="w-14 shrink-0 font-mono text-sm text-content">{{ entry.port }}</span>
-                    <StatusBadge v-if="entry.forwarded" variant="success" label="forwarded" size="xs" />
-                </template>
-                <template #title>
-                    <span class="block truncate font-mono text-xs font-normal text-muted" :title="entry.command">
-                        {{ entry.command ?? `unknown process` }}
-                    </span>
-                </template>
-                <!-- Where it runs, on the line under what it is: the directory it was launched from, and the
-                     terminal it descends from. The terminal is a link because reaching it is the point — a port
-                     you can see and not reach is a port you can only wonder about. -->
-                <template #description>
-                    <span class="flex min-w-0 items-baseline gap-2">
-                        <span v-if="entry.cwd" class="truncate" :title="entry.cwd">{{ displayCwd(entry.cwd) }}</span>
-                        <button
-                            v-if="entry.session"
-                            type="button"
-                            :class="ui.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
-                            v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
-                            @click="openTerminal(entry.session)"
-                        >
-                            <Icon name="desktop" class="shrink-0" />
-                            {{ entry.session }}
-                        </button>
-                        <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="NO_TERMINAL_HINT">no terminal</span>
-                    </span>
-                </template>
-
-                <template #control>
-                    <a
-                        v-if="entry.previewUrl"
-                        :href="entry.previewUrl"
-                        target="_blank"
-                        rel="noopener"
-                        :class="ui.iconButton(`h-8 w-8`)"
-                        :aria-label="`Open the port ${entry.port} preview in a new tab`"
-                        v-tooltip.bottom="'Open in new tab'"
-                    >
-                        <Icon name="external-link" />
-                    </a>
-                    <!-- A forwarded port is public — offer the one-click shareable link right where it's exposed. -->
-                    <SharePreview v-if="entry.previewUrl" :url="entry.previewUrl" />
-                    <Button
-                        v-if="entry.forwarded"
-                        label="Stop"
-                        size="small"
-                        severity="secondary"
-                        :disabled="busy !== undefined"
-                        @click="stop(entry.port)"
-                    >
-                        <template #icon><Icon name="stop" /></template>
-                    </Button>
-                    <Button
-                        v-else-if="entry.forwardable"
-                        label="Preview"
-                        size="small"
-                        :disabled="busy !== undefined"
-                        @click="openPreview(entry.port)"
-                    >
-                        <template #icon><Icon name="play" /></template>
-                    </Button>
-                    <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'">
-                        not forwardable
-                    </span>
-                </template>
-            </Row>
+            <PortRow
+                v-for="entry in workspacePorts"
+                :key="entry.port"
+                :entry="entry"
+                :busy="busy !== undefined"
+                @preview="openPreview(entry.port)"
+                @stop="stop(entry.port)"
+                @terminal="openTerminal"
+            />
         </RowGroup>
 
         <!-- The sandbox's own machinery — visible for transparency, muted because nobody previews it.
-             Forwarding stays possible (it's explicitly gated anyway), just de-emphasized. -->
+             Forwarding stays possible (it's explicitly gated anyway), just de-emphasized. The hint is here
+             because "what are these and did I start them?" is the question this whole section provokes, and
+             the honest answer — no, they came with the box — is what makes it safe to ignore. -->
         <RowGroup v-if="systemPorts.length > 0" label="Sandbox internals" class="opacity-70">
-            <Row v-for="entry in systemPorts" :key="entry.port" density="compact">
-                <template #lead>
-                    <span class="w-14 shrink-0 font-mono text-xs text-muted">{{ entry.port }}</span>
-                    <StatusBadge v-if="entry.forwarded" variant="success" label="forwarded" size="xs" />
-                </template>
-                <template #title>
-                    <span class="block truncate font-mono text-2xs font-normal text-subtle" :title="entry.command">
-                        {{ entry.command ?? `unknown process` }}
+            <template #info>
+                <InfoHint label="Internals">
+                    <span class="block text-sm font-medium text-content">The sandbox's own services</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        These come with the sandbox and run whether or not you start anything — the service this app talks to, the agent runtimes,
+                        Docker's plumbing, an extension's background worker. They are listed so nothing is hidden from you, not because there is
+                        anything to do with them.
                     </span>
-                </template>
-                <!-- Internals mostly have no terminal, so only the ones that DO say anything here — a dev server
-                     misfiled as machinery is exactly the case worth being able to reach. -->
-                <template v-if="entry.session" #description>
-                    <button
-                        type="button"
-                        :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content hover:no-underline`)"
-                        v-tooltip.bottom="`Open ${entry.session} — the terminal this is running in`"
-                        @click="openTerminal(entry.session)"
-                    >
-                        <Icon name="desktop" class="shrink-0" />
-                        {{ entry.session }}
-                    </button>
-                </template>
+                </InfoHint>
+            </template>
 
-                <template #control>
-                    <a
-                        v-if="entry.previewUrl"
-                        :href="entry.previewUrl"
-                        target="_blank"
-                        rel="noopener"
-                        :class="ui.iconButton(`h-7 w-7`)"
-                        :aria-label="`Open the port ${entry.port} preview in a new tab`"
-                        v-tooltip.bottom="'Open in new tab'"
-                    >
-                        <Icon name="external-link" />
-                    </a>
-                    <Button
-                        v-if="entry.forwarded"
-                        label="Stop"
-                        size="small"
-                        severity="secondary"
-                        :disabled="busy !== undefined"
-                        @click="stop(entry.port)"
-                    >
-                        <template #icon><Icon name="stop" /></template>
-                    </Button>
-                    <Button
-                        v-else-if="entry.forwardable"
-                        label="Preview"
-                        size="small"
-                        severity="secondary"
-                        :disabled="busy !== undefined"
-                        @click="openPreview(entry.port)"
-                    >
-                        <template #icon><Icon name="play" /></template>
-                    </Button>
-                    <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'">
-                        not forwardable
-                    </span>
-                </template>
-            </Row>
+            <PortRow
+                v-for="entry in systemPorts"
+                :key="entry.port"
+                :entry="entry"
+                muted
+                :busy="busy !== undefined"
+                @preview="openPreview(entry.port)"
+                @stop="stop(entry.port)"
+                @terminal="openTerminal"
+            />
         </RowGroup>
     </div>
 </template>

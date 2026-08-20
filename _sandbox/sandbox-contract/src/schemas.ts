@@ -5431,6 +5431,18 @@ export const PortSummarySchema = z.object({
     // processes, published container ports), the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.
     kind: z.enum(["workspace", "system"]),
+    /* WHAT IS ON THIS PORT, IN WORDS — resolved by the daemon (ports/port-identity.ts), because the two facts
+     * that attribute a listener (the panel key → extension index, the workspace root) exist there and nowhere
+     * else. `title` is what a person would call it ("Vite dev server", "Sandbox service", "Container port"),
+     * `purpose` is the one sentence a row shows under it, and `origin` says who put it there — which is what
+     * the reader is really asking when they ask what a port is: mine, my agent's, or the box's own.
+     *
+     * All three are required. A listener nothing can explain still gets a name ("Unclaimed port") and a
+     * sentence that says so out loud, because the alternative — a raw argv, or nothing — is what made this
+     * view unreadable, and the button beside the row publishes the port to the internet. */
+    title: z.string(),
+    purpose: z.string(),
+    origin: z.enum(["terminal", "agent", "panel", "extension", "container", "sandbox", "unknown"]),
     // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
     pid: z.number().optional(),
     // How the row is labeled: the process argv joined with spaces ("node /work/app/node_modules/.bin/vite"),

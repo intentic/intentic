@@ -1,5 +1,7 @@
 import { portLabel, portsContract, portUrl, zoneFromUrl } from "@intentic/sandbox-contract";
-import { portKind } from "./port-scan.js";
+import { identifyPort } from "./port-identity.js";
+import { extensionProcessIndex } from "../extensions/extension-processes.js";
+import type { ExtensionHost } from "../extensions/installed-extensions.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -10,7 +12,11 @@ import type { OrpcContext } from "../context.js";
 // public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it,
 // and the daemon's own surfaces are never listed or forwardable at all.
 
-export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "workspace">;
+// The `ExtensionHost` half is for the extension process index alone: it is what turns a
+// `panel-ext-intentic-discord-gateway` session into "the discord extension's gateway" instead of leaving the
+// row to describe somebody's background service as `node dist/gateway.js`. Taken as the narrow host interface
+// rather than as more of `Services`, so this file's blast radius stays what the type says it is.
+export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "workspace"> & ExtensionHost;
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
@@ -23,13 +29,22 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
     return {
         list: i.list.handler(async () => {
             const listeners = await services.scanPorts();
+            /* One index for the whole list (it reads every installed manifest), the same way the scan itself is
+             * taken once — a per-row lookup would re-read the extensions directory once per listening port.
+             *
+             * Its failure costs a NAME, never the list: this route is also what the desktop mirror reconciles
+             * against on a loop, and a route that answered 500 because one manifest was unreadable would stop
+             * mirroring every port on somebody's machine over a cosmetic lookup. Those rows just read as the
+             * generic extension service. */
+            const extensionProcesses = await extensionProcessIndex(services).catch(() => new Map());
+            const attribution = { workspaceRoot: services.workspace.root, extensionProcesses };
             return {
                 ports: listeners
                     .filter(({ port }) => !reserved.has(port))
                     .map((listener) => {
                         const slot = services.portForwards.slotOf(listener.port);
                         const url = slot !== undefined ? portUrl(slot, zone, sandboxId) : undefined;
-                        const summary = Object.assign({ kind: portKind(listener, services.workspace.root), forwarded: slot !== undefined }, listener);
+                        const summary = Object.assign({ forwarded: slot !== undefined }, listener, identifyPort(listener, attribution));
                         return url === undefined ? summary : Object.assign(summary, { previewUrl: url });
                     }),
             };

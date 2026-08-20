@@ -127,31 +127,9 @@ const parseListeners = (table: string): { port: number; host: LoopbackHost; forw
     return listeners;
 };
 
-// Which bucket a listener belongs to in the Ports view: `workspace` = something the user runs (a dev server in
-// a repo, an ad-hoc terminal process, a published container port), the previewable set; `system` = the
-// sandbox's own machinery (agent runtimes, the translator, dockerd, sshd), which nobody previews. Classified
-// by evidence, strongest first: a cwd inside a workspace repo beats the binary name (a user running `opencode`
-// in their repo is user work); docker-proxy publishes a USER container's port, the sandbox only provides the
-// plumbing; a known sandbox binary marks system; anything else attributed to the workspace root is a user
-// terminal process (shells open there); an unattributable listener defaults to system.
-export type PortKind = "workspace" | "system";
-
-const SYSTEM_BINARIES = new Set(["dockerd", "sshd", "cloudflared", "opencode", "cli-proxy-api", "intentic", "chrome", "chromium", "headless_shell"]);
-
-export const portKind = (listener: Pick<ListeningPort, "command" | "cwd">, workspaceRoot: string): PortKind => {
-    if (listener.cwd !== undefined && listener.cwd.startsWith(`${workspaceRoot}/`)) {
-        return "workspace";
-    }
-    const argv0 = listener.command?.split(" ")[0] ?? "";
-    const binary = argv0.slice(argv0.lastIndexOf("/") + 1);
-    if (binary === "docker-proxy") {
-        return "workspace";
-    }
-    if (SYSTEM_BINARIES.has(binary)) {
-        return "system";
-    }
-    return listener.cwd === workspaceRoot ? "workspace" : "system";
-};
+// What a listener IS (its name, its one-line purpose, who started it, and which of the view's two groups it
+// belongs to) lives in port-identity.ts. That reasoning reads the fields above plus two facts this scan has no
+// business knowing, the workspace root and the extension process index, so it takes them as arguments there.
 
 // Map the wanted socket inodes to their owning pids by walking every process's fd table, the same resolution
 // `ss -p` performs. Processes vanish mid-scan and some fds aren't readable; both just skip. First claimant
