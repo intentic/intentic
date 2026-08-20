@@ -159,6 +159,11 @@ import Lotus from "./Lotus.astro";
         backdrop-filter: blur(14px);
     }
 
+    /* THE BAR IS FURNITURE INSIDE A FRAME, so its height is the frame's, not a number picked for a
+       bar. The plate's carved top band runs from its outer glow down to an inner rule about 88px in at
+       this width; the bar's content has to sit on the middle of THAT, or the nav floats in a border it
+       is supposed to be living in. See `--a-plate-band` in angkor.css, which is where the two numbers
+       are kept together. */
     .a-bar-inner {
         display: flex;
         align-items: center;
@@ -166,7 +171,8 @@ import Lotus from "./Lotus.astro";
         gap: 1.25rem;
         max-width: 84rem;
         margin: 0 auto;
-        padding: 0.9rem 1.5rem;
+        padding: 0 1.5rem;
+        min-height: var(--a-plate-band, 4.2rem);
     }
 
     /* ── The brand ───────────────────────────────────────
@@ -210,6 +216,11 @@ import Lotus from "./Lotus.astro";
         align-items: center;
         gap: 0.35rem;
     }
+    /* THE TITLING SERIF, not the body sans. The bar was the one run of type on the page still set in
+       Inter for no reason but habit: it is not running copy and it is not a control, it is a row of
+       six labels read one word at a time — which is exactly the tier Spectral exists for. At 15px in
+       500 it stays as legible as the sans was and stops the bar reading as a different website's
+       furniture bolted onto this one. */
     .a-bar-link {
         display: inline-flex;
         align-items: center;
@@ -217,8 +228,10 @@ import Lotus from "./Lotus.astro";
         padding: 0.45rem 0.65rem;
         border: 0;
         background: none;
-        font-family: inherit;
+        font-family: var(--a-font-title);
+        font-weight: 500;
         font-size: 0.9375rem;
+        letter-spacing: 0.008em;
         color: var(--a-cream);
         text-decoration: none;
         opacity: 0.86;
@@ -255,10 +268,19 @@ import Lotus from "./Lotus.astro";
         z-index: 10;
         min-width: 22rem;
         padding: 1.1rem 1.15rem 0.9rem;
-        border: 1px solid var(--a-line-mid);
         background: linear-gradient(165deg, rgba(38, 28, 18, 0.97), rgba(16, 11, 8, 0.985));
         box-shadow: 0 26px 60px -18px rgba(0, 0, 0, 0.9);
         backdrop-filter: blur(10px);
+        /* THE FRAME HAS TO TURN THE CORNER. A plain 1px border plus a clip-path is the one combination
+           that cannot work here: the clip removes the square corner and takes the border's corner with
+           it, leaving four gaps where the notch is — the panel read as an outline that had been snipped.
+           So the outline is a nine-slice frame drawn WITH the notch in it, exactly as the buttons do it,
+           and the clip is set to the same diagonal so the two agree. */
+        border: 1px solid transparent;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6L47.4 8.4V39.6L39.6 47.4H8.4L0.6 39.6V8.4Z' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M10.22 5H37.78L43 10.22V37.78L37.78 43H10.22L5 37.78V10.22Z' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3C/svg%3E");
+        border-image-slice: 16;
+        border-image-width: 16px;
+        border-image-repeat: stretch;
         clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
         opacity: 0;
         visibility: hidden;

@@ -161,6 +161,14 @@
     --a-line-mid: rgba(201, 160, 92, 0.3);
     --a-line-strong: rgba(201, 160, 92, 0.5);
 
+    /* THE CARVED TOP BAND, as one number two files share. The plate's frame is not decoration around
+     * the hero, it is the hero's edge — so the bar has to sit on the middle of it rather than at a
+     * height of its own choosing. In the art the band runs from the outer glow to an inner rule about
+     * 9.8% of the plate's height down; at the widths this page is read at that lands near 5.5rem, and
+     * the bar takes that as its minimum height so its content centres inside the frame.
+     * If the plate art is ever recut, re-measure the rule and change this. */
+    --a-plate-band: 5.5rem;
+
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
      * `--a-plate-scrim` the flat wash of canvas laid over whatever did.
@@ -574,17 +582,32 @@ body:has(.a-page) {
     position: absolute;
     inset: 0;
     background-image: url("/assets/angkor/temple-1600.webp");
-    background-position: 50% 42%;
+    /* TOP-ANCHORED, not centred. `cover` has to crop somewhere, and the old 42% spent that crop on the
+     * top edge — which is where the art's carved border is, and where the navigation sits. The result
+     * was a bar floating in a frame whose top rail had been cut off above the viewport. Anchored at 0
+     * the whole top band is on screen and the crop falls at the foot, under the fade that is already
+     * there for it. */
+    background-position: 50% 0%;
     background-size: cover;
     background-repeat: no-repeat;
     opacity: var(--a-plate-dim);
 }
+/* The band is a fraction of the PLATE, and on a phone the plate is scaled up rather than down — the
+ * art is narrower than the crop needs, so `cover` enlarges it and the carved band with it lands nearer
+ * 4rem than 5.5. The bar follows, or it stands taller than the frame it is meant to sit inside. */
+@media (max-width: 48rem) {
+    .a-page {
+        --a-plate-band: 4.2rem;
+    }
+}
+
 @media (max-width: 40rem) {
     .a-page .a-plate-img {
         background-image: url("/assets/angkor/temple-900.webp");
         /* On a phone the plate is cropped hard, and its left third — the lit devata — is exactly where
-         * the headline now sits. Slide the frame right so the copy lands on the sky instead. */
-        background-position: 68% 40%;
+         * the headline now sits. Slide the frame right so the copy lands on the sky instead; the top
+         * stays anchored for the same reason it does above. */
+        background-position: 68% 0%;
     }
 }
 @media (min-width: 100rem) {
@@ -770,18 +793,28 @@ body:has(.a-page) {
     border-bottom: 1px solid var(--a-line);
     background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
 }
+/* The rail's three studs. Outlined they read as empty boxes at 8px — too little ink to be a shape, so
+ * they looked like a rendering fault rather than hardware. Filled they are what they are meant to be:
+ * three small stones set into the rail, lit from the same side as everything else on the page. */
 .a-page .a-window-dot {
     width: 0.5rem;
     height: 0.5rem;
-    border: 1px solid var(--a-line-strong);
+    border: 1px solid rgba(150, 140, 126, 0.5);
+    background: linear-gradient(150deg, #6b6459, #46413a);
     transform: rotate(45deg);
 }
+/* NOT MONOSPACE. This is an address — a workspace and the screen it is on — and setting it in the code
+ * face made the one label on the frame read as a terminal echo, all slab-sided glyphs and wide gaps, on
+ * a page whose whole argument is that this is a workspace rather than a console. The titling serif at
+ * 12px says the same words and belongs to the frame it sits on. */
 .a-page .a-pill {
     border: 1px solid var(--a-line);
     background: rgba(10, 7, 5, 0.6);
-    padding: 0.2rem 0.7rem;
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
+    padding: 0.22rem 0.75rem;
+    font-family: var(--a-font-title);
+    font-weight: 500;
+    font-size: 0.75rem;
+    letter-spacing: 0.01em;
     color: var(--a-muted);
 }
 

@@ -60,6 +60,12 @@ const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, imag
 const appSizes = "(min-width: 80rem) 1040px, (min-width: 64rem) 780px, (min-width: 40rem) 880px, calc((100vw - 3rem) * 1.95)";
 const chatSizes = "(min-width: 80rem) 700px, (min-width: 64rem) 560px, (min-width: 40rem) 500px, calc((100vw - 3rem) * 1.55)";
 
+/* THE SUBHEAD, FIRST CLAUSE ONLY. The shared line is two sentences — what the product is, then a claim
+ * about visibility — and this treatment keeps the first. The second is carried here by the picture
+ * beside it rather than by words: three live surfaces of the product, turning, in the same screenful.
+ * Sliced off the shared string rather than retyped, so a rewording upstream still lands on this page. */
+const subheadLead = `${content.hero.subhead.split(/(?<=\.)\s+/u)[0] ?? content.hero.subhead}`;
+
 const [leadVerb, ...verbCards] = content.verbs.items;
 
 /* The one number on this page that would rot: every land changes it, so it is MEASURED from git during
@@ -164,7 +170,7 @@ const GITHUB_MARK =
                             }
                         </h1>
 
-                        <p class="a-hero-sub">{content.hero.subhead}</p>
+                        <p class="a-hero-sub">{subheadLead}</p>
                         <p class="a-hero-summary">{content.hero.summary}</p>
 
                         <span class="a-divider a-hero-divider" aria-hidden="true" set:html={DIVIDER} />
