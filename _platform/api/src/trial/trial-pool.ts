@@ -8,10 +8,17 @@ import type { Config } from "../config.js";
  * and the user meets a 429 on the first message of a product they have not decided about yet. So the trial holds
  * several keys and moves to the next when one refuses.
  *
- * FAILOVER IS ON THE RESPONSE. A refusal briefly quarantines that key so the next user does not pay again to
- * rediscover a 401, quota window or dead connection; it is deliberately a cooldown rather than a durable health
- * table, because upstream is still the authority and every key is retried after the condition can have changed.
- * Rotation spreads steady traffic across the healthy pool instead of hammering the first key until it refuses. */
+ * FAILOVER IS ON THE RESPONSE. A refusal briefly quarantines the (key, model) pair it was observed on, so the
+ * next user does not pay again to rediscover a 401, quota window or dead connection; it is deliberately a
+ * cooldown rather than a durable health table, because upstream is still the authority and every pair is retried
+ * after the condition can have changed. Rotation spreads steady traffic across the healthy pool instead of
+ * hammering the first key until it refuses.
+ *
+ * THE SECOND DIMENSION IS THE MODEL, and it is what makes the trial's single published id work. A caller hands
+ * this pool a LADDER of models (trial-ladder.ts) rather than one, and the walk takes the first rung that
+ * answers — so a Flash quota window that has closed costs a user the latency of one refusal rather than their
+ * message. Quotas are metered per model upstream, so the two dimensions are genuinely independent and the
+ * quarantine has to be keyed on both; see `bucket` below for what sidelining a whole key would have cost. */
 
 /* A response worth trying the NEXT key for: a key the upstream rejects (401/403), quota refusals (429), and the
  * upstream's own failures (5xx). Anything else — a malformed request, an unsupported model, a rejected prompt —
@@ -46,7 +53,8 @@ const withoutInlineComment = (raw: string): string => {
 };
 
 // Both settings are comma-separated lists of things that cannot contain a space, so they read the same way.
-const listed = (raw: string): string[] =>
+// Exported for the ladder's TRIAL_MODELS, which is the other one and must read it identically.
+export const listed = (raw: string): string[] =>
     withoutInlineComment(raw)
         .split(`,`)
         .map((entry) => entry.trim())
@@ -57,52 +65,6 @@ const trialKeys = (config: Config): string[] => listed(config.trial.keys);
 // Whether the trial is on at all. Empty keys is the default and the only sane one for a self-hosted platform:
 // nothing to spend, so the routes 404 and the daemon provisions no trial endpoint.
 export const trialEnabled = (config: Config): boolean => trialKeys(config).length > 0;
-
-// The ids an operator narrowed the trial to, or an empty list meaning "whatever the upstream publishes".
-export const trialModels = (config: Config): string[] => listed(config.trial.models);
-
-/* WHERE THE UPSTREAM SAYS WHAT EACH MODEL CAN DO — the one question its OpenAI-compatible surface cannot answer.
- *
- * `/v1beta/openai/models` publishes a bare list of ids: 54 of them on a fresh Google key, and only a third are
- * things a chat can be had with. The rest are Imagen, Veo, Lyria, the embedding and TTS endpoints, the Live and
- * computer-use previews, and models that answer "This model only supports Interactions API" — every one of them
- * a picker row whose first message fails. That is not a list to filter by name: `nano-banana-pro-preview` draws
- * pictures and `antigravity-preview-05-2026` reads like the flagship, and a regex over ids gets both wrong.
- *
- * Google's OWN listing carries `supportedGenerationMethods`, and `generateContent` is exactly the capability
- * the trial spends. It sits one path segment up from the compatibility shim, so it is derived rather than
- * configured — an upstream that is not Google has no such surface, answers nothing, and the catalog falls back
- * to the floor below (trial.routes), which is the same thing the operator's own TRIAL_MODELS does better.
- *
- * `pageSize` is not a nicety: this surface pages at 50 by default where the shim beside it returns everything,
- * and a key already listing 54 models would have had four of them silently read as "cannot chat". 1000 is the
- * documented maximum and leaves no second page to forget about. */
-export const nativeModelsUrl = (config: Config): string | undefined => {
-    const compat = config.trial.baseUrl.replace(/\/+$/, ``);
-    return compat.endsWith(`/openai`) ? `${compat.slice(0, -`/openai`.length)}/models?pageSize=1000` : undefined;
-};
-
-/* THE FLOOR UNDER THE CATALOG, and the reason the trial is offerable at all.
- *
- * Every other catalog in this product ends in a seed list; this one ended in whatever Google felt like
- * publishing, and one day that became nothing. Its OpenAI-compatible `/models` answers a fresh key with an
- * EMPTY list while chat on that same key answers normally — so the trial worked, no request anywhere failed,
- * and every picker showed a "Free trial" group with nothing in it. A feature is not shipped until it cannot be
- * silently emptied by the other end.
- *
- * ALIASES, not versions. A pinned id is retired out from under a free key — `gemini-2.5-flash` now answers
- * "no longer available to new users" — and a list of those would need re-shipping to notice; Google repoints
- * `-latest` itself. Flash only: the free tier serves Pro no quota at all, so a Pro row would be one that only
- * ever 429s. They name the DEFAULT upstream, so an operator who repoints TRIAL_BASE_URL elsewhere should name
- * their own ids in TRIAL_MODELS — those win here whenever they are set. */
-const FALLBACK_TRIAL_MODELS: readonly string[] = [`gemini-flash-latest`, `gemini-flash-lite-latest`];
-
-// What the trial offers when discovery publishes nothing it can serve. Never empty, which is the whole point:
-// no combination of operator config and upstream silence may leave a user with no model to pick.
-export const trialFloorModels = (config: Config): readonly string[] => {
-    const declared = trialModels(config);
-    return declared.length > 0 ? declared : FALLBACK_TRIAL_MODELS;
-};
 
 export type Fetcher = typeof fetch;
 
@@ -119,9 +81,13 @@ const authHeaders = (auth: UpstreamAuth, key: string): Record<string, string> =>
 
 export interface UpstreamAttempt {
     readonly response: Response;
-    // How many keys were tried before this answer. Logged, never returned to the caller: it describes intentic's
-    // pool, which is nobody else's business and is exactly the kind of detail that makes a pool worth probing.
+    // How many (key, model) pairs were tried before this answer. Logged, never returned to the caller: it
+    // describes intentic's pool, which is nobody else's business and is exactly the kind of detail that makes a
+    // pool worth probing.
     readonly tried: number;
+    // Which model answered — the one fact about the walk the caller DOES get, because the user is entitled to
+    // know what wrote their message back. Undefined for a request with no model dimension (the catalog reads).
+    readonly model?: string;
 }
 
 export interface TrialServiceStatus {
@@ -129,11 +95,21 @@ export interface TrialServiceStatus {
     readonly retryAt?: string;
 }
 
+export interface TrialCall {
+    readonly method: string;
+    readonly url?: string;
+    readonly auth?: UpstreamAuth;
+    readonly observeHealth?: boolean;
+    /* The candidate models, in preference order — each its own quota bucket upstream, and therefore its own
+     * rung of the walk. Omitted (or empty) for a request with no model dimension, which is one attempt set
+     * against the keys alone. */
+    readonly models?: readonly string[];
+    // The request body for a given candidate, called once per attempt. Absent on a GET.
+    readonly body?: (model: string | undefined) => string;
+}
+
 export interface TrialPool {
-    readonly call: (
-        path: string,
-        init: { method: string; body?: string; url?: string; auth?: UpstreamAuth; observeHealth?: boolean },
-    ) => Promise<UpstreamAttempt | undefined>;
+    readonly call: (path: string, init: TrialCall) => Promise<UpstreamAttempt | undefined>;
     readonly status: () => TrialServiceStatus;
 }
 
@@ -167,6 +143,20 @@ const quarantineMs = (response: Response, now: number): number | undefined => {
     return response.status >= 500 ? FAILURE_QUARANTINE_MS : undefined;
 };
 
+/* WHAT A QUARANTINE IS ABOUT — a key AND the model it was refused for, not a key alone.
+ *
+ * Google meters each model separately per project: a 429 on `gemini-flash-latest` with key A says nothing
+ * about `gemini-flash-lite-latest` with key A, and the whole point of a ladder is to reach for the second
+ * when the first is spent. Sidelining the key would throw away the one credential that could still answer,
+ * and on a pool where every key runs out of Flash at roughly the same time it would take the trial down at
+ * exactly the moment the fallback rung existed to save it.
+ *
+ * A 401/403 is genuinely about the key rather than the model, so it briefly quarantines only the pair it was
+ * observed on — the next model retries it, is refused identically, and quarantines that pair too. One
+ * wasted attempt per model against a dead key, in exchange for never inferring a model-wide fact from a
+ * model-scoped refusal. */
+const bucket = (key: string, model: string | undefined): string => `${key} ${model ?? ``}`;
+
 /* One live pool. Its rotation, quarantine and health belong to the route instance rather than to the module: a
  * test app (and any future second platform app in one process) gets an independent view of its own keys.
  *
@@ -178,17 +168,24 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
     let cursor = 0;
     let service: { health: TrialHealth; retryAt?: number } = { health: `unknown` };
 
-    const orderedKeys = (at: number): string[] => {
+    // One rotation per call, reused across every rung: asking again per model would advance the cursor once per
+    // rung and turn a fair rotation into a walk that favours whichever key the last model happened to stop on.
+    const rotatedKeys = (): readonly string[] => {
         if (keys.length === 0) {
             return [];
         }
         const start = cursor % keys.length;
         cursor = (cursor + 1) % keys.length;
-        return [...keys.slice(start), ...keys.slice(0, start)].filter((key) => (quarantine.get(key) ?? 0) <= at);
+        return [...keys.slice(start), ...keys.slice(0, start)];
     };
 
+    const healthyKeys = (rotation: readonly string[], model: string | undefined, at: number): readonly string[] =>
+        rotation.filter((key) => (quarantine.get(bucket(key, model)) ?? 0) <= at);
+
+    // Read off the live quarantine rather than recomputed per key, since a bucket is now a pair and the map is
+    // the only thing that knows which pairs exist.
     const nextRetry = (at: number): number | undefined => {
-        const times = keys.map((key) => quarantine.get(key) ?? at).filter((retry) => retry > at);
+        const times = [...quarantine.values()].filter((retry) => retry > at);
         return times.length === 0 ? undefined : Math.min(...times);
     };
 
@@ -227,45 +224,60 @@ export const createTrialPool = (config: Config, fetchFn: Fetcher, now: () => num
         }
     };
 
+    /* THE WALK: every candidate model, and within each the healthy keys, under ONE deadline for the whole thing.
+     *
+     * Models are the OUTER loop because the ladder is a preference: the second rung exists to be reached only
+     * when the first cannot answer on any key, and interleaving them would hand a user the fallback model while
+     * the one we would rather serve still had a working credential.
+     *
+     * The deadline spans the entire walk rather than each rung. A caller is waiting on one message, and two
+     * rungs of twenty seconds is a forty-second silence that ends in a refusal — worse than the fast refusal it
+     * was trying to avoid. Whatever the walk has reached when the clock runs out is what gets answered. */
     const call: TrialPool["call"] = async (path, init) => {
         const started = now();
         const deadline = started + POOL_DEADLINE_MS;
-        const ordered = orderedKeys(started);
-        if (ordered.length === 0) {
-            if (init.observeHealth === true) {
-                unavailable(started);
-            }
-            return undefined;
-        }
+        const rotation = rotatedKeys();
+        // A request with no model dimension is one rung whose model is `undefined` — the same walk, one bucket.
+        const candidates: readonly (string | undefined)[] = init.models === undefined || init.models.length === 0 ? [undefined] : init.models;
         let last: Response | undefined;
+        let lastModel: string | undefined;
         let tried = 0;
-        for (const key of ordered) {
-            const remaining = deadline - now();
-            if (remaining <= 0) {
-                break;
-            }
-            tried += 1;
-            const response = await responseWithin(key, path, init, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
-            const at = now();
-            if (response === undefined) {
-                quarantine.set(key, at + FAILURE_QUARANTINE_MS);
-                continue;
-            }
-            await last?.body?.cancel().catch(() => undefined);
-            if (!poolRefused(response.status)) {
-                quarantine.delete(key);
-                if (init.observeHealth === true) {
-                    service = { health: tried === 1 && quarantine.size === 0 ? `healthy` : `degraded` };
+        for (const model of candidates) {
+            for (const key of healthyKeys(rotation, model, started)) {
+                const remaining = deadline - now();
+                if (remaining <= 0) {
+                    break;
                 }
-                return { response, tried };
+                tried += 1;
+                const attempt = {
+                    method: init.method,
+                    ...(init.url === undefined ? {} : { url: init.url }),
+                    ...(init.auth === undefined ? {} : { auth: init.auth }),
+                    ...(init.body === undefined ? {} : { body: init.body(model) }),
+                };
+                const response = await responseWithin(key, path, attempt, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
+                const at = now();
+                if (response === undefined) {
+                    quarantine.set(bucket(key, model), at + FAILURE_QUARANTINE_MS);
+                    continue;
+                }
+                await last?.body?.cancel().catch(() => undefined);
+                if (!poolRefused(response.status)) {
+                    quarantine.delete(bucket(key, model));
+                    if (init.observeHealth === true) {
+                        service = { health: tried === 1 && quarantine.size === 0 ? `healthy` : `degraded` };
+                    }
+                    return { response, tried, ...(model === undefined ? {} : { model }) };
+                }
+                quarantine.set(bucket(key, model), at + (quarantineMs(response, at) ?? FAILURE_QUARANTINE_MS));
+                last = response;
+                lastModel = model;
             }
-            quarantine.set(key, at + (quarantineMs(response, at) ?? FAILURE_QUARANTINE_MS));
-            last = response;
         }
         if (init.observeHealth === true) {
             unavailable(now());
         }
-        return last === undefined ? undefined : { response: last, tried };
+        return last === undefined ? undefined : { response: last, tried, ...(lastModel === undefined ? {} : { model: lastModel }) };
     };
 
     return {

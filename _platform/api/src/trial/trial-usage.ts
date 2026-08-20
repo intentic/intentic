@@ -32,6 +32,9 @@ export interface TrialStatus {
     readonly used: number;
     readonly remaining: number;
     readonly resetsAt: string;
+    // The real model behind the trial's single published id, on this account's most recent message. Absent until
+    // one has been served today.
+    readonly servedModel?: string;
 }
 
 // What this account has left today, WITHOUT spending anything — the read the daemon polls so the model picker
@@ -41,7 +44,26 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
     const allowance = config.trial.dailyMessages;
     const row = await prisma.trialUsage.findUnique({ where: { userId_day: { userId, day: trialDay(now) } } });
     const used = row?.messages ?? 0;
-    return { allowance, used, remaining: Math.max(0, allowance - used), resetsAt: trialResetsAt(now) };
+    return {
+        allowance,
+        used,
+        remaining: Math.max(0, allowance - used),
+        resetsAt: trialResetsAt(now),
+        ...(row?.lastModel === null || row?.lastModel === undefined ? {} : { servedModel: row.lastModel }),
+    };
+};
+
+/* WHICH REAL MODEL ANSWERED, written after the fact — the trial publishes one synthetic id and routes behind
+ * it, so this is the only record of what a given answer actually ran on.
+ *
+ * A second write rather than part of the spend, because the spend has to happen BEFORE the upstream call (it is
+ * the only shape that cannot be raced) and the model is not known until after. Cheap at trial volume, which is
+ * a dozen messages per account per day.
+ *
+ * Non-throwing: a status line is worth nothing next to the answer the user is waiting for, and the row can
+ * legitimately be gone by now — a refund on a refused turn races the day rolling over. */
+export const recordServedModel = async (prisma: PrismaClient, userId: string, now: Date, model: string): Promise<void> => {
+    await prisma.trialUsage.update({ where: { userId_day: { userId, day: trialDay(now) } }, data: { lastModel: model } }).catch(() => undefined);
 };
 
 /* SPEND ONE MESSAGE, or refuse — one statement, because the check and the increment must not be two.

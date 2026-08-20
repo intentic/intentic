@@ -54,11 +54,17 @@ model User {
 //
 // Rows are disposable: nothing reads a past day, so retention.ts sweeps them. Cascades with the user.
 model TrialUsage {
-    id        String   @id @default(cuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    day       String
-    messages  Int      @default(0)
+    id       String @id @default(cuid())
+    userId   String
+    user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    day      String
+    messages Int    @default(0)
+    // The real model that served this account's most recent trial message. The trial publishes ONE synthetic id
+    // and routes behind it, so without this nobody — not the user, not us reading a bug report — can say which
+    // model actually wrote an answer. It lives on the row rather than in process memory because the daemon
+    // learns it by polling /trial/status, and a poll may reach a different replica than the one that served.
+    lastModel String?
+
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 

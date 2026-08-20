@@ -29,6 +29,17 @@ export const TrialStatusSchema = z.object({
     resetsAt: z.string().optional(),
     // Earliest known time a quarantined upstream key can be tried again.
     retryAt: z.string().optional(),
+    /* THE REAL MODEL BEHIND THE TRIAL'S ONE PUBLISHED ID, on this account's most recent message.
+     *
+     * The trial routes per message across a ladder of models (the platform's trial-ladder.ts), so the id the
+     * user selected names the trial rather than what answered them. Telling them which model ran is what keeps
+     * that from being a black box: an answer that reads as weak has a visible cause, and a bug report can name
+     * the model instead of guessing at one.
+     *
+     * It arrives on the STATUS poll rather than in the turn's own stream because the translator sits between the
+     * platform and this daemon and does not forward response headers. The client refreshes this when a trial
+     * turn ends, so in practice it is the model that served the turn just finished. Absent until one has been. */
+    servedModel: z.string().optional(),
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 

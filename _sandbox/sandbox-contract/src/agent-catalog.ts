@@ -115,6 +115,22 @@ export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 
 export const TRIAL_ENDPOINT_ID = "free-trial";
 export const TRIAL_PROVIDER = "endpoint/free-trial";
 export const isTrialProvider = (provider: AgentProvider): boolean => provider === TRIAL_PROVIDER;
+
+/* THE ONLY MODEL THE TRIAL PUBLISHES — a synthetic id, not one of Google's, and that is the point.
+ *
+ * The trial used to publish whatever the upstream listed. Two things were wrong with that and neither could be
+ * fixed by filtering harder. Google lists ~54 models on a fresh key and declares `generateContent` for many that
+ * cannot serve an agent turn — deep-research, antigravity, gemma, robotics and computer-use previews all pass a
+ * capability check and then fail the first message — so the picker was full of rows whose only outcome was an
+ * error. And the list MOVED: the translator's routing table is written at boot and on capability edits, while
+ * the picker re-reads the catalog every minute, so a model discovered in between was pickable and unroutable,
+ * refused with "unknown provider for model".
+ *
+ * One id, never changing, ends both. There is nothing to filter because nothing is discovered, and the routing
+ * table cannot drift from a list of one constant. WHICH real model answers is decided per message by the
+ * platform, which is the only party that can see which of its keys still has quota on which model — the sandbox
+ * cannot, and a user choosing blind between rows they know nothing about was never a choice worth offering. */
+export const TRIAL_MODEL_ID = "auto";
 // What the picker calls it, and the sentence the surfaces put underneath. One wording, so the composer's notice
 // and the picker's row cannot end up describing different bargains.
 export const TRIAL_LABEL = "Free trial";

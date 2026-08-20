@@ -23,6 +23,9 @@ export interface TrialStatus {
     // ISO stamp of the next UTC midnight — the browser renders it in local time.
     readonly resetsAt: string;
     readonly retryAt?: string;
+    // The real model behind the trial's one published id, on this account's most recent message. The platform
+    // routes across a ladder, so this is the only thing that can say what actually answered.
+    readonly servedModel?: string;
 }
 
 export interface TrialService {

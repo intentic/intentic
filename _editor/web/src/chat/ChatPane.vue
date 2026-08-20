@@ -282,7 +282,13 @@ const trialNotice = computed(() => {
         return `Free trial service is degraded — another upstream key may still answer, and failed messages aren’t counted.`;
     }
     const left = `${trialLeft.value} free ${trialLeft.value === 1 ? `message` : `messages`} left today`;
-    return `${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
+    /* WHICH MODEL ANSWERED, once one has. The trial publishes a single row and picks a real model per message
+     * (the platform's trial-ladder.ts), so without this the user cannot tell a weak answer from a fallback rung
+     * — and neither can we, reading their bug report. It leads the sentence only after a turn has run: before
+     * that there is nothing true to say, and a placeholder would be a promise about a choice not yet made. */
+    const served = trialStatus.value.servedModel;
+    const answered = served === undefined ? `` : `Last answer: ${served}. `;
+    return `${answered}${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
 });
 const retryTrial = async (): Promise<void> => {
     if (!reachable.value) {

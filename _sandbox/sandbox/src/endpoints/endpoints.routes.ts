@@ -40,6 +40,7 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
                 health: status.health,
                 resetsAt: status.resetsAt,
                 ...(status.retryAt === undefined ? {} : { retryAt: status.retryAt }),
+                ...(status.servedModel === undefined ? {} : { servedModel: status.servedModel }),
             };
         }),
     };

@@ -181,16 +181,15 @@ export const configSchema = z.object({
             // Google's OpenAI-compatible surface. Any OpenAI-shaped upstream works; this is the one whose free
             // tier is meant for serving end users. TRIAL_BASE_URL.
             baseUrl: z.url().default(`https://generativelanguage.googleapis.com/v1beta/openai`),
-            /* Comma-separated model ids the trial may serve. Empty = whatever the upstream publishes, which
-             * stays the default because narrowing is a decision only the operator can make — set it to keep the
-             * trial off the expensive end of a free tier.
+            /* Comma-separated model ids the trial may ROUTE TO, in preference order. Empty (the default) uses
+             * the curated ladder in code (trial-ladder.ts).
              *
-             * What empty deliberately does NOT mean any more is "offer nothing". Google's OpenAI-compatible
-             * `/models` answers a fresh key with an empty list while chat on it works fine, and this setting
-             * being blank in every deployment is what turned that into a trial with no model to pick. The floor
-             * beneath discovery is therefore in code (trial-pool.ts), not in this default: an operator cannot
-             * empty the picker by leaving a line blank, and one who repoints TRIAL_BASE_URL off Google should
-             * name their own ids here. TRIAL_MODELS. */
+             * This narrows what the trial SPENDS, not what it OFFERS — the two used to be the same list and
+             * that was the bug. The trial now publishes a single synthetic id and picks a real model per
+             * message, walking this list until one answers, so an operator keeping a free tier off the
+             * expensive end sets it here and users never see the difference. An operator who repoints
+             * TRIAL_BASE_URL off Google must set it: the curated ladder names Google's aliases, and this
+             * replaces it wholesale rather than filtering it. TRIAL_MODELS. */
             models: z.string().default(``),
             // Messages per signed-in account per UTC day. Enough to judge the product, far too few to work on.
             // TRIAL_DAILY_MESSAGES.

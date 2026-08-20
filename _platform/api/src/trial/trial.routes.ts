@@ -1,10 +1,12 @@
 import type { PrismaClient } from "@intentic-app/prisma";
+import { TRIAL_LABEL, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
-import { createTrialPool, type Fetcher, nativeModelsUrl, poolRefused, type TrialPool, trialEnabled, trialFloorModels, trialModels } from "./trial-pool.js";
-import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
+import { createTrialLadder } from "./trial-ladder.js";
+import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
+import { recordServedModel, refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
 
 /* THE FREE TRIAL, served as a model API — the one place the platform sits ON the command path, and the reason
  * that sentence needed the word "one".
@@ -25,44 +27,33 @@ import { refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usag
  * to /sandbox/announce — as a bearer, which is where an OpenAI-shaped client puts its API key. It resolves to
  * the sandbox's OWNER, and the owner is who the allowance belongs to. */
 
-// One row of an OpenAI-shaped catalog. `owned_by` names the trial rather than Google on purpose: what the user
-// is spending is intentic's allowance, and the surfaces that read this say so in those words.
-const modelEntry = (id: string) => ({ id, object: `model`, owned_by: `intentic-trial` });
+/* THE WHOLE CATALOG — one row, and `display_name` is what the picker renders, so the trial names itself rather
+ * than being labelled again in the client. `owned_by` names the trial rather than Google on purpose: what the
+ * user is spending is intentic's allowance, and the surfaces that read this say so in those words. */
+const TRIAL_CATALOG = { object: `list`, data: [{ id: TRIAL_MODEL_ID, object: `model`, owned_by: `intentic-trial`, display_name: TRIAL_LABEL }] };
 
-// Google addresses a model as `models/<id>` on both of its listing surfaces; the harness addresses the bare id.
-const bareId = (name: unknown): string | undefined => (typeof name === `string` ? name.replace(/^models\//, ``) : undefined);
-
-/* WHICH OF THE UPSTREAM'S MODELS CAN BE CHATTED WITH, straight from the upstream (trial-pool's nativeModelsUrl).
- * `undefined` means it would not say — no such surface, unreachable, or a shape we do not recognise — which is
- * NOT the same as "none of them" and is why the caller falls back to the floor instead of publishing the list
- * unfiltered. Publishing it unfiltered is the bug this exists for: Imagen, Veo, Lyria, the embedding and TTS
- * endpoints and the Interactions-only previews all sorted ABOVE the Gemini rows (nothing about their ids says
- * "not a chat model"), so a fresh conversation defaulted to one and every first message failed. */
-const chatCapableIds = async (config: Config, pool: TrialPool): Promise<Set<string> | undefined> => {
-    const url = nativeModelsUrl(config);
-    if (url === undefined) {
-        return undefined;
+/* THE MODEL FIELD IS OURS TO SET, not the caller's to choose — which is the whole bargain of a routed trial.
+ *
+ * The body arrives as text and is streamed to whichever rung of the ladder is being tried, so the id in it has
+ * to be replaced per attempt. A body that is not JSON is passed through untouched: it is going to be refused by
+ * the upstream either way, and the upstream's own complaint about it is more useful than ours.
+ *
+ * Whatever the caller put in `model` is discarded rather than honoured. The published catalog has exactly one
+ * id, so a caller naming anything else is naming a model this trial does not offer — and one that names a real
+ * Google id is asking to pick their own rung, which is the choice the ladder exists to take away. */
+const withModel = (body: string, model: string | undefined): string => {
+    if (model === undefined) {
+        return body;
     }
-    const attempt = await pool.call(``, { method: `GET`, url, auth: `goog` });
-    if (attempt?.response.ok !== true) {
-        return undefined;
-    }
-    const body = (await attempt.response.json().catch(() => undefined)) as
-        { models?: { name?: unknown; supportedGenerationMethods?: unknown }[] } | undefined;
-    if (!Array.isArray(body?.models)) {
-        return undefined;
-    }
-    const capable = new Set<string>();
-    for (const model of body.models) {
-        const id = bareId(model.name);
-        const methods = model.supportedGenerationMethods;
-        if (id !== undefined && Array.isArray(methods) && methods.includes(`generateContent`)) {
-            capable.add(id);
+    try {
+        const parsed: unknown = JSON.parse(body);
+        if (typeof parsed !== `object` || parsed === null || Array.isArray(parsed)) {
+            return body;
         }
+        return JSON.stringify({ ...parsed, model });
+    } catch {
+        return body;
     }
-    // An answer that named nothing chat-capable is as uninformative as no answer: it can only mean the shape
-    // moved under us, since a key that serves this trial demonstrably serves generateContent.
-    return capable.size > 0 ? capable : undefined;
 };
 
 export interface TrialDeps {
@@ -85,6 +76,7 @@ const connectToken = (authorization: string | undefined, header: string | undefi
 export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new Date() }: TrialDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
     const pool = createTrialPool(config, fetchFn, () => now().getTime());
+    const ladder = createTrialLadder(config, pool, () => now().getTime());
 
     /* Resolve the caller to the account that pays, or refuse. 404 rather than 401 for an unknown token, and for
      * a trial that is switched off: both are "there is nothing here", and a 401 would confirm to a probe that a
@@ -111,25 +103,20 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         return c.json({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
     });
 
-    /* The model list: discovery first, floor underneath — a ladder, like every other catalog in this product,
-     * for the reason none of them may answer nothing. What made this one worth a rewrite is that its bottom rung
-     * was the upstream's goodwill: Google's `/models` answers a fresh key with an EMPTY list while chat on that
-     * same key answers normally, so the trial ran fine and every picker showed a group with nothing in it.
+    /* THE MODEL LIST IS A CONSTANT NOW, and every hard thing about this route went away with the list.
      *
-     * Discovery still leads — a list written down here goes stale the day Google ships a model, and `trial.models`
-     * narrows it for an operator keeping a free tier off the expensive end. Beneath it sits trialFloorModels,
-     * which is never empty (trial-pool.ts). So there is no 502 rung left: an unreachable listing surface is not a
-     * reason to empty a picker when we already know what this trial serves.
+     * It used to discover the upstream's catalog, filter it by capability, and publish the survivors — with a
+     * floor underneath, because Google's `/models` answers a fresh key with an EMPTY list while chat on that same
+     * key works. Three failure modes lived in that: a picker with nothing in it, a picker full of rows that
+     * cannot answer (the `generateContent` flag is declared by deep-research, gemma, lyria, robotics and
+     * computer-use models that all fail the first message), and — the one that produced the error people
+     * actually reported — a list that MOVED. The sandbox's translator writes its routing table from this
+     * catalog at boot and on capability edits while the picker re-reads it every minute, so a model discovered
+     * in between was offered and then refused with "unknown provider for model".
      *
-     * WHAT DISCOVERY IS NOT ALLOWED TO DO ANY MORE IS PUBLISH EVERYTHING IT FINDS. A picker offering rows that
-     * cannot answer is worse than a shorter picker, and it was worse in the way that costs the most: the ids the
-     * upstream serves are ranked by the id-derived order every unranked catalog uses (model-order.ts), a family
-     * it has never heard of leads on the reasoning that an unknown name is likelier to be a new flagship than a
-     * new budget tier — and against a raw Google list the leaders were `antigravity-…`, `deep-research-…`,
-     * `imagen-…`. So the FIRST row, which is the model a fresh conversation starts on, was one that answers
-     * "This model only supports Interactions API", and the whole trial read as broken to anyone who did not go
-     * looking through the picker for a Gemini row. Capability comes from the upstream itself; where it will not
-     * say, the floor is served rather than a list we cannot vouch for. */
+     * One id ends all three. It cannot be empty, nothing unvouched-for can appear in it, and a routing table
+     * built from a constant cannot go stale. WHICH real model runs is decided per message on the chat route,
+     * by the only party that can see which key still has quota on which model. */
     app.get(`/v1/models`, async (c) => {
         if (!trialEnabled(config)) {
             return c.json({ error: `the free trial is not enabled on this platform` }, 404);
@@ -137,32 +124,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if ((await ownerOf(c)) === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        const narrowedTo = trialModels(config);
-        const [attempt, chatCapable] = await Promise.all([
-            pool.call(`/models`, { method: `GET` }),
-            chatCapableIds(config, pool),
-        ]);
-        const body =
-            attempt?.response.ok === true
-                ? ((await attempt.response.json().catch(() => undefined)) as { data?: { id?: unknown }[] } | undefined)
-                : undefined;
-        const servable = chatCapable ?? new Set<string>();
-        const discovered = (chatCapable === undefined ? [] : (body?.data ?? [])).flatMap((model) => {
-            const id = bareId(model.id);
-            if (id === undefined || !servable.has(id) || (narrowedTo.length > 0 && !narrowedTo.includes(id))) {
-                return [];
-            }
-            return [modelEntry(id)];
-        });
-        if (discovered.length > 0) {
-            return c.json({ object: `list`, data: discovered });
-        }
-        const floor = trialFloorModels(config);
-        c.get(`logger`)?.info(
-            { status: attempt?.response.status ?? 0, capabilityKnown: chatCapable !== undefined, floor },
-            `trial: upstream offered no chat model, serving the floor`,
-        );
-        return c.json({ object: `list`, data: floor.map(modelEntry) });
+        return c.json(TRIAL_CATALOG);
     });
 
     /* One trial message. The allowance is spent BEFORE the upstream call and refunded unless it returns a
@@ -193,16 +155,30 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
                 429,
             );
         }
-        /* A turn NO key served is refunded and answered in our own words — including the pool's own quota
+        /* WHERE THE ROUTING HAPPENS. The caller asked for the trial's single published id; the ladder says which
+         * real models may answer, in preference order, and the pool walks them against its keys until one does.
+         * A quota window closed on the first rung therefore costs a user one refused request rather than their
+         * message, which is the entire reason the picker no longer asks them to choose.
+         *
+         * A turn NO rung served is refunded and answered in our own words — including the pool's own quota
          * ceiling, which used to ride through as upstream's 429. Two things were wrong with that: the account
          * was billed a message nobody answered, so a "12 left today" that had served eight was simply untrue;
          * and Google's refusal tells the reader to "check your plan and billing details", which belongs to
          * intentic's key, not to a user who has no plan with Google and never asked for one. */
-        const attempt = await pool.call(`/chat/completions`, { method: `POST`, body, observeHealth: true });
+        const candidates = await ladder.candidates();
+        const attempt = await pool.call(`/chat/completions`, {
+            method: `POST`,
+            models: candidates,
+            body: (model) => withModel(body, model),
+            observeHealth: true,
+        });
         if (attempt === undefined || poolRefused(attempt.response.status)) {
             await attempt?.response.body?.cancel().catch(() => undefined);
             await refundTrialMessage(prisma, ownerId, at);
-            c.get(`logger`)?.warn({ tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0 }, `trial: no key answered`);
+            c.get(`logger`)?.warn(
+                { tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0, candidates },
+                `trial: no key answered on any model`,
+            );
             return c.json(
                 { error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } },
                 502,
@@ -217,13 +193,25 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
          * plain one — and re-encoding it here would mean owning a wire format that is not ours and re-shipping
          * this service every time it gains a field. The remaining-allowance count deliberately does NOT ride
          * along in it: the daemon reads that from /status, because a count buried in a stream the translator
-         * re-encodes would arrive at the picker mangled or not at all. */
+         * re-encodes would arrive at the picker mangled or not at all.
+         *
+         * WHICH MODEL ANSWERED is recorded before the response leaves, because the user is told it on the turn
+         * and this is the only moment anyone knows. The header beside it is for whatever reads this API
+         * directly; the daemon cannot see it, since the translator between us does not forward response headers,
+         * which is exactly why the fact is also written to the account's status. */
+        /* Not awaited: the upstream's headers are in and the body is about to start flowing, so a database
+         * round trip here is delay on the user's first token — paid for a label. The write is non-throwing and
+         * the value is not read until the status poll that follows the turn, which is seconds away. */
+        if (attempt.model !== undefined) {
+            void recordServedModel(prisma, ownerId, at, attempt.model);
+        }
         return new Response(attempt.response.body, {
             status: attempt.response.status,
             headers: {
                 "content-type": attempt.response.headers.get(`content-type`) ?? `application/json`,
                 // Advisory, for anything reading this API directly. Nothing in the product depends on it.
                 "x-intentic-trial-remaining": String(spend.remaining),
+                ...(attempt.model === undefined ? {} : { "x-intentic-trial-model": attempt.model }),
             },
         });
     });

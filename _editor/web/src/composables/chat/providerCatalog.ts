@@ -101,6 +101,9 @@ export const trialStatus = ref<{
     health: TrialHealth;
     resetsAt?: string;
     retryAt?: string;
+    // The real model behind the trial's one published row, on the most recent message. The trial routes per
+    // message, so this is what turns "Free trial" from a black box into something a person can report a bug about.
+    servedModel?: string;
 }>({
     available: false,
     allowance: 0,
