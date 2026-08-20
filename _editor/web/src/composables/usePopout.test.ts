@@ -272,6 +272,81 @@ describe(`createPopout`, () => {
         expect(win.close).toHaveBeenCalled();
     });
 
+    /* THE ROLL-CALL. Everything above happens the moment the window asks — which is the catch, because when a
+     * window gets to ask is not up to it. A window the user is not looking at (behind another, on a monitor
+     * that has gone to sleep) has its interval throttled to one a second and, after a few minutes, to one a
+     * MINUTE, while the wait above runs out in two and a half. That gap IS the report this exists for: the
+     * panel back in its column, the window still standing on the other screen showing the last frame it was
+     * handed, not even veiled — painting the veil is something the tick does too.
+     *
+     * So the page says out loud that it can answer, and every window holding the panel asks straight away
+     * (popout/handshake.ts). Real timers here: a broadcast is delivered by the runtime's own queue, which is
+     * the whole reason it outruns a throttled clock, and a fake one never gets to it. */
+    const nudges = async (): Promise<string[]> => {
+        const heard: string[] = [];
+        const channel = new BroadcastChannel(`intentic.popout`);
+        channel.addEventListener(`message`, (event: MessageEvent<{ panel: string }>) => heard.push(event.data.panel));
+        // Let anything already in flight land, so a test only reads what it asked for.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        heard.length = 0;
+        return heard;
+    };
+
+    it(`asks any window still holding the panel to report in, the moment this page can answer`, async () => {
+        vi.useRealTimers();
+        sessionStorage.setItem(`ui-popout-rollcall-panel`, `1`);
+        const heard = await nudges();
+
+        createPopout(`rollcall-panel`, `Panel`, size);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(heard).toContain(`rollcall-panel`);
+    });
+
+    it(`asks unprompted too, because the note a window leaves does not survive every reload`, async () => {
+        // A self-heal reload wipes this origin's storage on the way out (composables/selfHeal.ts) — the window
+        // it left floating is real all the same, so the roll-call does not wait to be told one is expected.
+        vi.useRealTimers();
+        const heard = await nudges();
+
+        createPopout(`unprompted-panel`, `Panel`, size);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(heard).toContain(`unprompted-panel`);
+    });
+
+    it(`tells the window at once when the panel arrives, and again when it leaves`, async () => {
+        vi.useRealTimers();
+        const popout = createPopout(`answer-panel`, `Panel`, size);
+        adopt(`answer-panel`, fakeWindow(`answer-panel`));
+        const heard = await nudges();
+
+        // The veil comes off on the arrival and back on at the departure — both used to reach the window a tick
+        // later at best, and a throttled minute later at worst.
+        const unmount = renders(popout);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(heard).toContain(`answer-panel`);
+
+        heard.length = 0;
+        unmount();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(heard).toContain(`answer-panel`);
+    });
+
+    it(`asks a window still on its way in to report, so a deliberate dock retires it now`, async () => {
+        vi.useRealTimers();
+        sessionStorage.setItem(`ui-popout-retire-panel`, `1`);
+        const popout = createPopout(`retire-panel`, `Panel`, size);
+        const heard = await nudges();
+
+        // Nothing observable changed here — the store simply stopped expecting the window — so the ask is
+        // explicit, and the leftover closes itself on the answer rather than floating until its next tick.
+        popout.dock();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(heard).toContain(`retire-panel`);
+    });
+
     /* THE GHOST. Everything below is one bug, reported as "I refreshed and ended up with the chat in a floating
      * window AND in its column, and the floating one doesn't react to anything". It was possible because the
      * answer used to be a claim — "I attached to this window once" — so any state that left a store attached to

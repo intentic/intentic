@@ -13,6 +13,7 @@ import {
 } from "vue";
 import { traceFocus } from "./chat/focusTrace";
 import { unwatchOnScreen, watchOnScreen } from "./onScreen";
+import { nudgePopout, type PopoutAnswer } from "../popout/handshake";
 
 /* Pop-out window core, shared by the chat panel and the terminal panel. createPopout builds one independent
  * pop-out store: the panel's DOM is teleported into a REAL browser window (window.open) while the JS stays in
@@ -71,10 +72,12 @@ import { unwatchOnScreen, watchOnScreen } from "./onScreen";
  * that adopted the window before its panel host had mounted; a dev hot update leaving a second copy of this
  * store behind to claim the same window) produced a window told it was alive forever: never veiled, never
  * closed, frozen on the last frame it was handed, while the panel itself sat docked in the app. The answer now
- * comes from whatever renders the panel (holdWhile), which is the only party that can tell the two apart. */
-
-/** What a pop-out window is told when its keeper asks whether anyone is driving it, see the contract above. */
-export type PopoutAnswer = `live` | `waiting` | `none`;
+ * comes from whatever renders the panel (holdWhile), which is the only party that can tell the two apart.
+ *
+ * WHEN THE WINDOW IS ASKED is its own half of the contract and it lives in popout/handshake.ts: the answers
+ * above are only worth what their timing is worth, and a window the user is not looking at has its clock taken
+ * away by the browser. So this store NUDGES — at load, and on every change to what it would answer — and the
+ * window replies on the spot instead of on whatever tick it is next allowed. */
 
 declare global {
     interface Window {
@@ -109,10 +112,12 @@ const popoutPage = (): string => `${import.meta.env.BASE_URL}popout.html`;
 // leaves the page's own head, its icon, its keeper, untouched.
 const CLONE_ATTR = `data-intentic-clone`;
 
-// How long a remembered window gets to come back before the panel stops holding its docked slot shut. One
-// keeper tick plus the app's own boot. Both ways of being wrong are now cheap: overshooting means an emptier
-// column for a moment, and undershooting only means the panel shows docked until the window reports in, it is
-// no longer a deadline the window has to beat to survive (see stopWaiting).
+// How long a remembered window gets to come back before the panel stops holding its docked slot shut. A backstop
+// for the window that ISN'T there — a note left by a browser crash, a window the user closed while this tab was
+// gone — rather than the mechanism: the roll-call this store posts at load reaches a live window in about a
+// millisecond, so a wait that reaches this deadline is almost always a wait for nothing. Both ways of being
+// wrong are cheap: overshooting means an emptier column for a moment, and undershooting only means the panel
+// shows docked until the window reports in, it is no longer a deadline the window has to beat to survive.
 const RECLAIM_GRACE_MS = 2500;
 
 // How long a window whose panel has just left is kept before it is handed back and closed. The same span as the
@@ -553,11 +558,11 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     const answer = (): PopoutAnswer => (holders.value > 0 ? `live` : `waiting`);
 
     /* The keeper's question, answered for this store's window. It arrives from the moment the window's page
-     * loads and every 200ms after, so the common case by far is "still mine, still drawing", and answering it
-     * at all is the proof of life, since a torn-down realm never gets here. The ways to say `none` each mean
-     * something different to the asker: a window this page no longer holds (docked deliberately, or replaced by
-     * another) is told to close, while a page that simply isn't driving it, because it never adopted it, lets
-     * the keeper veil the panel and keep asking. */
+     * loads, on every nudge below, and on the window's own tick, so the common case by far is "still mine, still
+     * drawing", and answering it at all is the proof of life, since a torn-down realm never gets here. The ways
+     * to say `none` each mean something different to the asker: a window this page no longer holds (docked
+     * deliberately, or replaced by another) is told to close, while a page that simply isn't driving it, because
+     * it never adopted it, lets the keeper veil the panel and keep asking. */
     adopters.set(name, (win) => {
         if (win.closed) {
             return `none`;
@@ -579,6 +584,24 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         attach(win);
         return answer();
     });
+
+    /* THE ROLL-CALL, and the reason the wait above is a backstop rather than a race. A page that has just loaded
+     * cannot see the window a previous page left floating — it holds no reference to it, and asking is the
+     * window's job. So this page says so out loud the moment it can answer, and every window holding this panel
+     * puts the question straight away instead of on whatever tick the browser next allows it. That is the whole
+     * of the fix for a panel that came back to its column while its window was still on the other screen: a
+     * hidden window's clock is throttled to a second, then to a MINUTE, and the app used to give up in 2.5s.
+     *
+     * Unconditional rather than only while `restoring`, because the note that sets that flag is not the only
+     * truth about whether a window is out there: a self-heal reload wipes this origin's storage on its way out
+     * (composables/selfHeal.ts), and the window it left floating is real all the same. */
+    nudgePopout(name);
+
+    /* …and again whenever what this store would ANSWER changes: the panel arriving (the veil comes off), its
+     * host going away (the veil goes back on), a deliberate dock (the window closes). Each of those used to
+     * reach the window a tick later at best, and a throttled minute later at worst — long enough for the reader
+     * to act on a window showing something that is no longer true. */
+    watch([holders, poppedOut], () => nudgePopout(name), { flush: `sync` });
 
     /* The three ways a panel leaves a window, which differ in what happens to the window and in what is decided
      * about the next one:
@@ -624,6 +647,9 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         if (!poppedOut.value) {
             stopWaiting();
             dismissed = true;
+            // Nothing watched changed, so say it explicitly: a window still on its way in is now a leftover, and
+            // the sooner it is asked the sooner it closes itself rather than floating with nothing in it.
+            nudgePopout(name);
             return;
         }
         const win = popoutWindow;
