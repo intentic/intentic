@@ -948,6 +948,13 @@ const GITHUB_MARK =
         display: block;
         white-space: nowrap;
     }
+    /* A little more air between the three beats than the line-height alone gives. Each beat is its own
+       sentence and its own claim, so the gap between them is set on the sibling join rather than by
+       loosening the leading — the first beat keeps its distance from the eyebrow, the last from the
+       subhead, and only the beat-to-beat step opens up. */
+    .a-page .a-headline-line + .a-headline-line {
+        margin-top: 0.14em;
+    }
     /* The ember stop rides just off the last letter, the way a carved full stop would. */
     .a-page .a-stop {
         margin-left: 0.06em;
@@ -993,8 +1000,16 @@ const GITHUB_MARK =
         position: relative;
         margin: 2.6rem 0 0;
     }
+    /* THE STACK TAKES A CEILING, so the three frames stop filling the whole window on a wide screen.
+       Uncapped, the workspace and its two wings grew with the viewport until they ran off both edges and
+       swamped the copy above them. The centre is 62% of this box and each wing a fifth of it, so capping
+       the box and centring it shrinks all three together and holds every overlap exactly as it was — the
+       wings still climb into the figures, just a touch further in. It only bites past ~74rem, so the
+       tablet and phone layouts below are untouched. */
     .a-page .a-hero-stack {
         position: relative;
+        max-width: 74rem;
+        margin-inline: auto;
     }
     /* The centre frame is the only one in flow, so it sets the block's height, and it carries a deeper
        shadow than the shared frame style gives it: it is standing ON the two wings rather than beside
