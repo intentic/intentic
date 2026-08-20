@@ -19,6 +19,14 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     useRouter: () => ({ push, replace: vi.fn() }) as never,
 }));
 
+// The device the page is read on — desktop unless a test flips it. The phone default is behavior of its own
+// (the hosted rung takes it whenever one is offered); every other test below describes the desktop page.
+const mobileDevice = ref(false);
+vi.mock(import(`@intentic/ui`), async (importOriginal) => {
+    const actual = await importOriginal();
+    return { ...actual, useDevice: (() => ({ ...actual.useDevice(), mobile: mobileDevice })) as typeof actual.useDevice };
+});
+
 // The sandbox registry, as the page sees it. `sandboxes` is what the auto-name counts against, `list` is the
 // read on mount, and `create`/`update` are the two writes these tests are about.
 const sandboxes = ref<SandboxSummary[]>([]);
@@ -156,6 +164,7 @@ const nameRow = (): string => {
 };
 
 beforeEach(() => {
+    mobileDevice.value = false;
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
     refresh.mockReset().mockResolvedValue([]);
@@ -231,7 +240,9 @@ it(`keeps the sandbox once its name has been typed`, async () => {
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
+        card.textContent?.includes(`Start instantly`),
+    );
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
@@ -325,15 +336,15 @@ it(`defaults a fresh sandbox to the reader's own computer, with hosted available
     expect(create).toHaveBeenCalledWith(`workspace`);
     expect(hostedProvision).not.toHaveBeenCalled();
     expect(el.textContent).not.toContain(`Starting the machine`);
-    // Default rung is A computer I own, not We host it
+    // Default rung is the reader's own computer, never the hosted machine
     const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
-    const hostedRung = rungs.find((card) => card.textContent?.includes(`We host it`));
-    const mineRung = rungs.find((card) => card.textContent?.includes(`A computer I own`));
+    const hostedRung = rungs.find((card) => card.textContent?.includes(`Start instantly`));
+    const mineRung = rungs.find((card) => card.textContent?.includes(`My own computer`));
     expect(mineRung?.getAttribute(`aria-checked`)).toBe(`true`);
     expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`false`);
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 
-    // Clicking We host it reveals the commitment and Start my machine
+    // Clicking the hosted rung reveals the commitment and Start my machine
     hostedRung!.click();
     await nextTick();
     expect(buttonLabelled(`Start my machine`)).toBeDefined();
@@ -347,6 +358,24 @@ it(`defaults a fresh sandbox to the reader's own computer, with hosted available
     expect(el.textContent).toContain(`Putting it on the internet`);
 });
 
+/* A PHONE'S DEFAULT RUNG IS THE HOSTED MACHINE, whenever one is on offer. `cloud` held the phone default for
+ * being the one lane a phone could finish alone — but it opens on a cloud credential paste, the hardest
+ * possible first ask. The hosted rung finishes alone too, off a single tap. */
+it(`defaults a phone to the hosted rung when one is offered`, async () => {
+    mobileDevice.value = true;
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
+        card.textContent?.includes(`Start instantly`),
+    );
+    expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`true`);
+    // The rung is described, never taken: nothing is provisioned until the button under it is pressed.
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(buttonLabelled(`Start my machine`)).toBeDefined();
+    // No credential ask on a phone's first frame — the cloud rung is one tap away, never the opener.
+    expect(el.textContent).not.toContain(`Private key`);
+});
+
 /* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first
  * run, AND must not hide why: the sandbox that was already created carries on into the command lane with the
  * reason on the step. The silent version of this — bounce lanes, wipe the message — is what made the page
@@ -355,7 +384,9 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
+        card.textContent?.includes(`Start instantly`),
+    );
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
@@ -415,8 +446,10 @@ it(`offers the rungs as readable cards, each stating its trade`, async () => {
     const cards = [...el.querySelectorAll(`[role="radio"]`)];
     expect(cards).toHaveLength(3);
     // Not a bare label each: the cost and what it asks of you are on the card, before it is clicked.
-    expect(cards[0]?.textContent).toContain(`We host it`);
+    expect(cards[0]?.textContent).toContain(`Start instantly`);
     expect(cards[0]?.textContent).toContain(`Free`);
+    // Whose machine the instant one is stays on the card — the title sells the speed, the note says where it runs.
+    expect(cards[0]?.textContent).toContain(`Runs on our servers`);
     expect(cards[1]?.textContent).toContain(`One pasted command`);
     // What the reader's own machine actually wins over the free one, said where the choice is made rather
     // than discovered in week three.
@@ -432,7 +465,7 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
-    expect(hosted?.textContent).toContain(`40h a month, then membership`);
+    expect(hosted?.textContent).toContain(`40h a month, more with membership`);
     hosted!.click();
     await nextTick();
     // The card stays three lines: what this machine's disk is, the reader reads where they commit to it.
@@ -454,13 +487,15 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`We host it`));
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
+        card.textContent?.includes(`Start instantly`),
+    );
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
     const mine = (): HTMLButtonElement =>
-        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`A computer I own`)) as HTMLButtonElement;
+        [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`)) as HTMLButtonElement;
     // The rungs are disabled while the machine is being made AND while the allowance that made it is re-read —
     // clicked before that settles, this does nothing, which is what the card is saying by being greyed out.
     await vi.waitFor(() => expect(mine().disabled).toBe(false));
@@ -486,9 +521,9 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
     const rung = (label: string): HTMLButtonElement =>
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
 
-    rung(`A computer I own`).click();
+    rung(`My own computer`).click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
-    await vi.waitFor(() => expect(rung(`We host it`).disabled).toBe(false));
+    await vi.waitFor(() => expect(rung(`Start instantly`).disabled).toBe(false));
     expect(el.textContent).not.toContain(`Already using yours`);
 });
 

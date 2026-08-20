@@ -290,9 +290,12 @@ const commandVisible = computed(() => (desktop.value || mobile.value ? showComma
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
 /* WHICH MACHINE runs step 2 — the computer the user already has (the command / handoff / app button), or a
- * new one created in THEIR cloud account (SetupCloud.vue). A phone defaults to `cloud` because it is the
- * first path a phone can actually finish alone: the email handoff asks for a second computer, this asks for a
- * credential paste. The picker is hidden inside the desktop app (the app IS a computer the user has — its one
+ * new one created in THEIR cloud account (SetupCloud.vue). A phone starts on `cloud` only until the offers
+ * land: the hosted rung takes the phone's default the moment it is offered (see arrive()), because a phone
+ * can finish it alone off a single tap — where `cloud` opens on a credential paste, the hardest possible
+ * opening ask, and the email handoff asks for a second computer. `cloud` stays the phone's fallback on a
+ * platform that doesn't host, for the original reason: it is the one classic lane a phone finishes alone.
+ * The picker is hidden inside the desktop app (the app IS a computer the user has — its one
  * button is the step there), so `machine` stays `mine` in it by construction.
  *
  * The cloud machine claims the SAME minted setup code the command would, so everything downstream — the
@@ -444,16 +447,24 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               {
                   value: `hosted` as const,
                   icon: `bolt` as const,
-                  title: `We host it`,
+                  /* Titles answer the reader's question — what do I do — never the topology's. This one read
+                   * "We host it", which asks a newcomer to weigh hosting arrangements before they have seen
+                   * the product. The note is where whose-machine-it-is moved: selling the speed without
+                   * saying where it runs would be the quiet push toward our servers this page must not make. */
+                  title: `Start instantly`,
                   /* The badge carries the hour ceiling when there is one, because "Free" alone in the place a
                    * reader looks for the cost is the version of this card that has to be corrected later —
                    * AND IT SAYS WHAT HAPPENS AFTER THE HOURS, for the same reason. "40h a month" answers
                    * "how much do I get" and leaves "and then?" hanging, which is precisely the question a
                    * price is read to settle; the honest answer is that a membership lifts the limit (and the
-                   * two rungs beside this one never had it). Members and ceiling-less platforms send no hours
-                   * at all and read the old way. */
-                  meta: hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, then membership`,
-                  note: `Nothing to install`,
+                   * two rungs beside this one never had it) — said as the upgrade it is. It read "then
+                   * membership" for a release, which names the same fact as a subscription already scheduled.
+                   * Members and ceiling-less platforms send no hours at all and read the old way. */
+                  meta:
+                      hostedHours.value === null
+                          ? `Free · ready in seconds`
+                          : `Free · ${hostedHours.value.allowance}h a month, more with membership`,
+                  note: `Runs on our servers`,
               },
           ]
         : []),
@@ -465,7 +476,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
               {
                   value: `mine` as const,
                   icon: `desktop` as const,
-                  title: `A computer I own`,
+                  title: `My own computer`,
                   meta: `Most power · no limits`,
                   note: `One pasted command`,
               },
@@ -484,7 +495,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * a paraphrase of its first. It names the three providers instead: somebody who already
                    * has a Hetzner account recognises this rung as theirs from the picker, without opening
                    * it. */
-                  title: `A cloud machine I own`,
+                  title: `My cloud account`,
                   meta: `From free · 12 GB`,
                   note: `Oracle, Hetzner or DigitalOcean`,
               },
@@ -1361,10 +1372,12 @@ const arrive = async (): Promise<void> => {
     ]);
     hostedOffer.value = offer;
     intenticAvailable.value = address.enabled;
-    /* The picker's default may not survive the offers: `mine` needs an address to put on that machine, and a
-     * phone's `cloud` needs the same one — so on a platform that mints none, both defaults point at a step
-     * that can only sit locked while the machine we host sits unoffered behind a hidden picker. */
-    if (!commandOffered.value && hostedOffered.value && !hostedSpent.value) {
+    /* The picker's default may not survive the offers, in two ways. On a platform that mints no addresses,
+     * `mine` and `cloud` both point at a step that can only sit locked while the machine we host sits
+     * unoffered behind a hidden picker. And a PHONE takes the hosted rung whenever it is on offer: `cloud`
+     * earned the phone default by being the one lane a phone finishes alone, but it opens on a cloud
+     * credential paste — the hosted rung finishes alone too, off a single tap. */
+    if (hostedOffered.value && !hostedSpent.value && (mobile.value || !commandOffered.value)) {
         machine.value = `hosted`;
     }
     const requested = route.query[`sandbox`];
@@ -1877,7 +1890,7 @@ watch(commandReady, (ready) => {
                             <p v-if="resuming" class="text-xs text-muted">
                                 {{
                                     neverStarted
-                                        ? `Made last time you were here, never started.`
+                                        ? `Picking up where you left off — nothing has run yet.`
                                         : `Still on the platform — the cleanup only cleared its local container.`
                                 }}
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
