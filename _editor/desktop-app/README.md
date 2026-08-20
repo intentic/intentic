@@ -87,6 +87,19 @@ button to minimise it. An install runs for minutes and it took the machine for a
 window is movable, minimisable, resizable and never topmost, and its card scrolls inside it — the requirements
 list a stopped Windows install draws is taller than the window it arrives in.
 
+**A window that fits the screen still has to be put on it, and for a while only the first half was done.**
+`fit_to_screen` stopped the app asking for a window taller than the display; nothing then chose where that
+window went. Tauri leaves an unplaced window to the platform, and the platform's answer on Windows is
+`CW_USEDEFAULT` — the cascade, which steps each new window down and right from the top-left corner. A window
+fitted to the full height of the work area and then pushed down by that cascade puts its bottom edge under the
+taskbar, and on a first run the strip that goes missing is the one holding the chat composer: the single
+control the whole screen exists for, absent from the first impression the app ever makes. So a cold start is
+now *placed* as well as sized (`opening_position`) — centred on the work area rather than on the monitor
+(Tauri's own `center()` does the latter and hands back half a taskbar of the same overhang), centring the
+outer rectangle rather than the inner one, and offset by the work area's own origin, which is not `(0, 0)` on
+a second monitor or with the taskbar docked left. A swap that has a real frame to inherit still overrides it:
+the window the user is already looking at outranks the middle of the screen.
+
 Both smoke tiers assert the geometry rather than a window count, since size and position are the only part of
 this a test outside the process can see: the setup window is much smaller than the workspace and centred on
 it. Asserting *equal* rectangles is what the sheet made sense of, and the tiers said so right up until the

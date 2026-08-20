@@ -1,6 +1,6 @@
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -79,19 +79,83 @@ fn opening_bounds(available: Option<(f64, f64)>) -> ((f64, f64), (f64, f64)) {
     (size, (MIN_SIZE.0.min(size.0), MIN_SIZE.1.min(size.1)))
 }
 
-/* The screen a window is about to open on, in LOGICAL units — its WORK AREA rather than its full size, so a
- * taskbar, a dock or a panel is space this app does not try to open into.
+/// The screen a window is about to open on: where its usable area STARTS and how big it is, logical, plus the
+/// scale that turns the answer back into pixels. The origin is carried because it is not (0, 0) on a secondary
+/// monitor, nor on a display with the taskbar docked to the left or the top.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WorkArea {
+    origin: (f64, f64),
+    size: (f64, f64),
+    scale: f64,
+}
+
+/* WHERE A COLD-START WINDOW OPENS — the half of the fit that was missing, and the half the user meets first.
+ *
+ * `fit_to_screen` stopped this app asking for a window taller than the display. It did not put the window
+ * anywhere, and an unplaced window is not a centred one: Tauri leaves the position to the platform, and the
+ * platform's answer on Windows is `CW_USEDEFAULT` — the cascade, which steps each new window down and to the
+ * right of the last. Fit a window to the full height of the work area and then let the cascade push it down,
+ * and its bottom edge is under the taskbar. On a first run that is exactly the strip the chat composer lives
+ * in: the one control the whole screen exists for, missing, in the first impression the app ever makes.
+ *
+ * Centring is the placement that cannot do that, and it is what a window with nothing remembered about it is
+ * expected to do anyway. Two details are load-bearing:
+ *
+ * - It centres on the WORK AREA, not on the monitor — which is why this is arithmetic here rather than
+ *   Tauri's own `center()`. That one centres on the full screen, so with a taskbar at the bottom it hands
+ *   back half a taskbar of the very overhang this exists to remove.
+ * - It centres the OUTER rectangle. Every size in this file is an inner one with the frame added outside it
+ *   (`FRAME_ALLOWANCE`), so centring the inner size leaves the title bar over the top edge of the screen and
+ *   the same distance of window past the bottom.
+ *
+ * Never negative: a window bigger than the work area starts AT the origin, where the part of it that is on
+ * screen is the top-left — the corner carrying the title bar to drag it by and the controls to resize it. */
+fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
+    let offset = |available: f64, outer: f64| ((available - outer) / 2.0).max(0.0);
+    (
+        work.origin.0 + offset(work.size.0, inner.0 + FRAME_ALLOWANCE.0),
+        work.origin.1 + offset(work.size.1, inner.1 + FRAME_ALLOWANCE.1),
+    )
+}
+
+/* The work area of the screen a window is about to open on — its usable rectangle rather than its full size,
+ * so a taskbar, a dock or a panel is space this app neither sizes into nor places into.
  *
  * `None` when the platform will not say, which is a real answer on a headless or freshly-plugged display and
- * is read as "no reason to shrink the preference". */
-fn available_logical(app: &AppHandle) -> Option<(f64, f64)> {
+ * is read as "no reason to shrink the preference, and no better guess than the platform's own placement".
+ *
+ * The PRIMARY monitor, because a window that does not exist yet is not on any of them — which is the same
+ * assumption the OS makes when it places an unplaced window, so the two agree on which screen this is about. */
+fn work_area(app: &AppHandle) -> Option<WorkArea> {
     let monitor = app.primary_monitor().ok().flatten()?;
     let scale = monitor.scale_factor();
     if !scale.is_finite() || scale <= 0.0 {
         return None;
     }
-    let area = monitor.work_area().size;
-    Some((area.width as f64 / scale, area.height as f64 / scale))
+    let area = monitor.work_area();
+    Some(WorkArea {
+        origin: (
+            f64::from(area.position.x) / scale,
+            f64::from(area.position.y) / scale,
+        ),
+        size: (
+            f64::from(area.size.width) / scale,
+            f64::from(area.size.height) / scale,
+        ),
+        scale,
+    })
+}
+
+/// Put `window` in the middle of `work` at the inner size it was just built with. Physical, converted here
+/// from the monitor's own scale rather than handed to Tauri as logical units: a logical position is resolved
+/// against whatever scale the WINDOW reports, and a window the platform has just cascaded onto another display
+/// reports that display's — which is how a placement computed for one screen lands on a different one.
+fn place_in_work_area(window: &WebviewWindow, work: WorkArea, inner: (f64, f64)) {
+    let at = opening_position(work, inner);
+    let _ = window.set_position(PhysicalPosition::new(
+        (at.0 * work.scale).round() as i32,
+        (at.1 * work.scale).round() as i32,
+    ));
 }
 
 /* THE SETUP WINDOW'S OWN FRAME — a dialog, sized to the card in it rather than to the screen.
@@ -203,7 +267,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             .expect("static app url parses"),
     };
     let link_handler = app.clone();
-    let (size, min) = opening_bounds(available_logical(app));
+    let screen = work_area(app);
+    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
     let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
         .title("Intentic")
         .inner_size(size.0, size.1)
@@ -238,6 +303,12 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                     request_close(&handle);
                 }
             });
+            // Before `swap_in`, and while the window is still hidden. This is the placement for a COLD start —
+            // a swap that has a frame to inherit overwrites it a line later, which is the right precedence:
+            // the window the user is already looking at beats the middle of the screen.
+            if let Some(screen) = screen {
+                place_in_work_area(&window, screen, size);
+            }
             swap_in(&window, app.get_webview_window(LAUNCHER));
         }
         Err(error) => eprintln!("workspace window failed to open: {error}"),
@@ -401,7 +472,8 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(window) = app.get_webview_window(LAUNCHER) {
         return Some(window);
     }
-    let (size, min) = opening_bounds(available_logical(app));
+    let screen = work_area(app);
+    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("Intentic")
         .inner_size(size.0, size.1)
@@ -427,6 +499,14 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
                     show_workspace(&handle);
                 }
             });
+            // The same cold-start placement the workspace gets, and needed for the same reason: this face can
+            // be the FIRST window an install ever shows (a link from the browser, nothing else running), and
+            // the platform's cascade puts a work-area-tall window's bottom edge under the taskbar. Both callers
+            // move it afterwards — the manager onto the workspace's frame, a setup into its own small centred
+            // one — so this only decides where a window nothing else has an opinion about goes.
+            if let Some(screen) = screen {
+                place_in_work_area(&window, screen, size);
+            }
             Some(window)
         }
         Err(error) => {
@@ -478,7 +558,8 @@ pub fn set_setup_frame(app: &AppHandle, setup: bool) {
         // Fitted to the screen, exactly as the opening frame is: this is the same full-window size, and the
         // manager face restoring it unfitted would put the oversized window back on a scaled display the
         // moment an install finished.
-        let (full, min) = opening_bounds(available_logical(app));
+        let screen = work_area(app);
+        let (full, min) = opening_bounds(screen.map(|screen| screen.size));
         let _ = window.set_min_size(Some(LogicalSize::new(min.0, min.1)));
         /* And a full window's SIZE back, when this is a setup frame being taken off. `show_launcher` swaps in
          * the workspace's frame straight after and would make this redundant — but only when there is a
@@ -486,6 +567,13 @@ pub fn set_setup_frame(app: &AppHandle, setup: bool) {
          * that. Without it the manager face draws in a 620-wide window, under its own 900 minimum. */
         if was_setup {
             let _ = window.set_size(LogicalSize::new(full.0, full.1));
+            // And a full window's PLACE back with it. A dialog-sized window sits wherever it was centred or
+            // dragged to; growing it to the full size around that point is the same overhang the cascade
+            // causes, reached a different way. Same precedence as the cold start: `show_launcher`'s swap
+            // overwrites this whenever there is a workspace frame to inherit instead.
+            if let Some(screen) = screen {
+                place_in_work_area(&window, screen, full);
+            }
         }
         return;
     }
@@ -604,7 +692,28 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
-    use tauri::PhysicalPosition;
+
+    /// A screen to open onto, as the platform would describe it: a work area starting at the top-left with a
+    /// taskbar taken off the bottom.
+    fn screen(size: (f64, f64)) -> WorkArea {
+        WorkArea {
+            origin: (0.0, 0.0),
+            size,
+            scale: 1.0,
+        }
+    }
+
+    /// The bottom edge of the window `opening_bounds` + `opening_position` agree on, against the bottom edge
+    /// of the work area it was given. The whole of what the reported bug was: those two numbers, in the wrong
+    /// order.
+    fn bottom_edge(work: WorkArea) -> (f64, f64) {
+        let (size, _) = opening_bounds(Some(work.size));
+        let at = opening_position(work, size);
+        (
+            at.1 + size.1 + FRAME_ALLOWANCE.1,
+            work.origin.1 + work.size.1,
+        )
+    }
 
     /// THE BUG THIS SHIPPED WITH, in the numbers that caused it: a 1080p panel at the 150% scale most laptops
     /// are sold with leaves 1080 physical rows, which is 720 logical — and the preference is 900. The first
@@ -673,6 +782,104 @@ mod frame_tests {
             at.x - 100,
             (workspace.width as i32 - setup.width as i32) - (at.x - 100)
         );
+    }
+
+    /* THE BUG AS REPORTED, which the fit alone did not cover: the window opened with its bottom edge — and the
+     * chat composer in it — under the taskbar. Sizing it to the screen was never enough on its own, because
+     * nothing then said where it went, and Windows' answer to that is a cascade DOWN from the top-left.
+     *
+     * The numbers are the ones off the screenshot: a work area 1531×883 logical, which is a 2297×1324 pixel
+     * usable rectangle at the 150% scale the display was running. */
+    #[test]
+    fn a_cold_start_window_opens_fully_inside_the_work_area() {
+        let work = screen((1531.0, 883.0));
+        let (window, available) = bottom_edge(work);
+
+        assert!(
+            window <= available,
+            "window ends at {window}, screen at {available}"
+        );
+        // And it is not merely on screen by being tiny: the fit gives it every row the screen has to spare.
+        let (size, _) = opening_bounds(Some(work.size));
+        assert_eq!(size.1 + FRAME_ALLOWANCE.1, work.size.1);
+    }
+
+    /// The same, on the screens this app is actually met on — including the one where the preference fits and
+    /// the cascade was therefore never the thing that broke it.
+    #[test]
+    fn no_ordinary_screen_gets_a_window_hanging_off_its_bottom() {
+        for size in [
+            (1531.0, 883.0),  // 1920×1080 at 150%, the reported one
+            (1280.0, 688.0),  // 1920×1080 at 150% with a taller taskbar
+            (2560.0, 1400.0), // room to spare — the preference wins and still has to be placed
+            (1024.0, 700.0),  // a small laptop
+            (800.0, 500.0),   // smaller than MIN_SIZE
+        ] {
+            let (window, available) = bottom_edge(screen(size));
+            assert!(
+                window <= available,
+                "{size:?}: window ends at {window}, screen at {available}"
+            );
+        }
+    }
+
+    /// Centred, not merely on screen — the same gap above the window as below it, so nothing about the opening
+    /// frame reads as having been shoved against an edge.
+    #[test]
+    fn a_cold_start_window_is_centred_in_the_work_area() {
+        let work = screen((2560.0, 1400.0));
+        let (size, _) = opening_bounds(Some(work.size));
+        let at = opening_position(work, size);
+
+        let above = at.1 - work.origin.1;
+        let below = (work.origin.1 + work.size.1) - (at.1 + size.1 + FRAME_ALLOWANCE.1);
+        assert!(
+            (above - below).abs() < 0.001,
+            "above {above}, below {below}"
+        );
+        let left = at.0 - work.origin.0;
+        let right = (work.origin.0 + work.size.0) - (at.0 + size.0 + FRAME_ALLOWANCE.0);
+        assert!((left - right).abs() < 0.001, "left {left}, right {right}");
+    }
+
+    /// The work area does not start at the origin of the screen, let alone of the desktop: a taskbar docked to
+    /// the left or the top moves it, and so does every monitor that is not the first. A placement that ignored
+    /// that would open the window over the taskbar, or on the wrong display entirely.
+    #[test]
+    fn the_window_opens_inside_the_work_area_wherever_that_area_starts() {
+        let work = WorkArea {
+            // A second monitor to the right, with the taskbar docked to the left of it.
+            origin: (1920.0, 0.0),
+            size: (1400.0, 1080.0),
+            scale: 1.0,
+        };
+        let (size, _) = opening_bounds(Some(work.size));
+        let at = opening_position(work, size);
+
+        assert!(
+            at.0 >= work.origin.0,
+            "opened at {at:?}, area starts {:?}",
+            work.origin
+        );
+        assert!(
+            at.1 >= work.origin.1,
+            "opened at {at:?}, area starts {:?}",
+            work.origin
+        );
+        assert!(at.0 + size.0 + FRAME_ALLOWANCE.0 <= work.origin.0 + work.size.0);
+        assert!(at.1 + size.1 + FRAME_ALLOWANCE.1 <= work.origin.1 + work.size.1);
+    }
+
+    /// A window that cannot fit starts AT the corner rather than at a negative offset — the piece of it left on
+    /// screen is then the top-left, which is the piece carrying the title bar and the resize controls.
+    #[test]
+    fn a_window_too_big_for_its_screen_starts_at_the_corner() {
+        let work = WorkArea {
+            origin: (100.0, 50.0),
+            size: (300.0, 200.0),
+            scale: 1.0,
+        };
+        assert_eq!(opening_position(work, DEFAULT_SIZE), work.origin);
     }
 
     /// A window CENTRED on a smaller one hangs off it on both sides — the two stay concentric, where clamping
