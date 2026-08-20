@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import { type CommandRegistration, registerCommand } from "./useCommands";
 import { chatOnRail, toggleChatHome, toggleChatPopout } from "../chat/chatSurface";
 import { useChatPopout } from "../chat/useChatPopout";
+import { openPreview } from "../preview/previewSurface";
+import { togglePreviewPopout, usePreviewPopout } from "../preview/usePreviewPopout";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
 import { useQuickOpen } from "../useQuickOpen";
@@ -22,6 +24,7 @@ export function useShellCommands(): void {
     const { canShip } = useRole();
     const chat = useChatPopout();
     const terminalPopout = useTerminalPopout();
+    const previewPopout = usePreviewPopout();
     const { isOpen, mode } = useQuickOpen();
 
     let disposables: readonly Disposable[] = [];
@@ -135,6 +138,17 @@ export function useShellCommands(): void {
                     terminal.setOpen(true);
                     terminalPopout.toggle();
                 },
+            },
+            // The live app preview's two doors, on the chat's terms: a jump to its area, and the window toggle
+            // whose title says which direction the press will take.
+            { command: `view.preview`, title: `Go to Preview`, icon: `eye`, handler: () => openPreview(router) },
+            {
+                command: `preview.togglePopout`,
+                get title(): string {
+                    return previewPopout.poppedOut.value ? `Dock Preview Back` : `Move Preview into New Window`;
+                },
+                icon: `external-link`,
+                handler: () => togglePreviewPopout(router),
             },
         ];
         // Object.assign rather than `{ owner, ...entry }`: a spread READS every property, which would freeze the

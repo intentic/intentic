@@ -1,41 +1,20 @@
 import { expect, test } from "@playwright/test";
 
 /* THE FIRST SESSION, in the browser: what somebody sees the moment setup finishes and the shell opens for the
- * first time. What each screen shows is decided by real state rather than by a flag a spec can set — the
- * workspace pane reads whether the tree is empty, the board reads whether anything is connected — so this
- * drives the app the way a new user meets it and reads what it actually put on screen.
+ * first time. What each screen shows is decided by real state — the workspace pane reads whether the tree is
+ * empty, the board reads whether anything is connected — so this drives the app the way a new user meets it
+ * and reads what it actually put on screen.
  *
  * Serial and first: `workers: 1` means these specs share one seeded world, and every fact under test here is
  * "nothing has happened yet". A spec that started an agent or uploaded a file before this one would be
  * asserting against a workspace that is no longer new. */
 test.describe.configure({ mode: `serial` });
 
-test(`the first landing gives something before it asks for anything`, async ({ page }) => {
-    /* The shell's own entry, not /start directly: the redirect IS what is under test. A sandbox nobody has
-     * done anything on lands here rather than on the workspace, because every other surface in this product is
-     * evidence-driven — the board's starters read the repos, the capability recommendations read the remotes —
-     * so an empty box makes all of them silent at once, which is the worst possible moment for the product to
-     * have nothing to say. (A browser that has answered this screen once goes back to /workspace; that is the
-     * localStorage flag in pages/start/firstRun.ts, and this context is fresh.) */
+test(`the first landing is the workspace`, async ({ page }) => {
+    // The shell's own entry, not /workspace directly: the redirect IS what is under test. Desktop lands on the
+    // workspace — the code, the doors for getting code in, and the docked chat already sitting to be typed at.
     await page.goto(`/`);
 
-    await expect(page).toHaveURL(/\/start$/);
-
-    /* NOTHING IS CONNECTED ON A FRESH SANDBOX, so this screen is the way in rather than a question it could
-     * not act on — the same card the chat's gate and the empty board show (ConnectOffer). */
-    await expect(page.getByText(`Try free with Google`)).toBeVisible();
-    // And it is never in the way: somebody who arrived with their own repository leaves in one press.
-    await expect(page.getByRole(`button`, { name: `Skip — I have my own code` })).toBeVisible();
-});
-
-test(`skipping the first-run screen lands on the workspace, and it stays skipped`, async ({ page }) => {
-    await page.goto(`/start`);
-    await page.getByRole(`button`, { name: `Skip — I have my own code` }).click();
-
-    await expect(page).toHaveURL(/\/workspace$/);
-
-    // The whole point of the flag: the offer is answered, so the shell's entry goes back to what it always was.
-    await page.goto(`/`);
     await expect(page).toHaveURL(/\/workspace$/);
 });
 

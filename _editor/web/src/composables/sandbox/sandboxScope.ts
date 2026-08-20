@@ -3,6 +3,7 @@ import { loadArchived, resetAgents, resetArchive } from "../agents/useAgents";
 import { loadAccountStatus, resetChat } from "../chat/useChat";
 import { resetCodeStats } from "../workspace/useCodeStats";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
+import { resetPreviewSurface } from "../preview/previewSurface";
 import { resetPresence } from "../usePresence";
 import { resetPushFlow } from "../workspace/usePushFlow";
 import { useSandbox } from "./useSandbox";
@@ -53,6 +54,9 @@ export const resetWorkspaceScopedState = (): void => {
     resetPushFlow();
     // Content-keyed, so never wrong — just unbounded. A switch is where it is worth letting go.
     resetCodeStats();
+    // The preview shows ONE sandbox's app; the parked panel goes with the box, and the new box's own last
+    // target comes back (a popped-out window survives — see resetPreviewSurface).
+    resetPreviewSurface();
 };
 
 watch(activeSandboxId, (id, previous) => {

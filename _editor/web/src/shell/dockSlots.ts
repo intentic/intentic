@@ -26,4 +26,7 @@ export const chatDock = shallowRef<HTMLElement | null>(null);
 // preferred over the docked column when both exist: standing in the chat area IS the ask to see the chat fill
 // it. The pop-out window still outranks both (PoppablePanels holds the priority in one place).
 export const chatFullDock = shallowRef<HTMLElement | null>(null);
+// The preview panel's only in-shell home — published by the /preview area (pages/PreviewArea.vue). It has no
+// side-column slot: the panel is either filling this area, floating in its own window, or parked.
+export const previewDock = shallowRef<HTMLElement | null>(null);
 export const terminalDock = shallowRef<HTMLElement | null>(null);

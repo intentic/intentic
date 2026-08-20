@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 //
-// THE EMPTY BOARD, MOUNTED. Out of setup the desktop now lands on /start (router/index.ts, and the screen
-// there gives something before it asks for anything) — but this board is still what a user meets the moment
-// they leave it, and on a box with nothing on it the things that make it work are easy to break silently: that
-// it offers the way in rather than a composer it cannot send from, that the docked chat then drops its copy of
-// that offer, that an empty workspace is offered the one task needing no code and none of the ones that need
-// some, and that a starter fills the chat's composer rather than dispatching an agent. All are asserted
-// against the real component.
+// THE EMPTY BOARD, MOUNTED. Out of setup the desktop lands on the workspace, and this board is the first
+// screen most new users deliberately open — and on a box with nothing on it the things that make it work are
+// easy to break silently: that it offers the way in rather than a composer it cannot send from, that the
+// docked chat then drops its copy of that offer, that an empty workspace is offered the one task needing no
+// code and none of the ones that need some, and that a starter fills the chat's composer rather than
+// dispatching an agent. All are asserted against the real component.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -17,7 +16,7 @@ import { endpointProviders, trialStatus } from "../composables/chat/providerCata
 import { useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
 import { PANELS } from "../composables/queryKeys";
-import { BUILD_IDEAS, buildPrompt } from "../pages/start/firstRun";
+import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import { router } from "../router";
 import AgentsView from "./AgentsView.vue";
 
@@ -138,7 +137,7 @@ it(`offers building on an empty workspace, and nothing that points at code which
     expect(starterNamed(board, `Explain this codebase`)).toBeUndefined();
     expect(starterNamed(board, `Review my changes`)).toBeUndefined();
 
-    // And the build ladder is, from the shared source the first-run screen uses.
+    // And the build ladder is, from the board's own source (buildIdeas.ts).
     for (const example of BUILD_IDEAS) {
         expect(starterNamed(board, example.label)).toBeDefined();
     }
@@ -176,7 +175,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
     expect(useChat().active.value.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
-    // Still the first-run screen — filling the composer is not starting anything.
+    // Still the empty board — filling the composer is not starting anything.
     expect(board.textContent).toContain(`Start your first agent`);
 });
 

@@ -29,7 +29,7 @@ import { publishContextKey } from "../composables/commands/contextKeys";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import MatchLine from "../components/MatchLine.vue";
 import ConnectOffer from "../chat/ConnectOffer.vue";
-import { BUILD_IDEAS, buildPrompt } from "../pages/start/firstRun";
+import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
 import AgentCard from "./AgentCard.vue";
 import HeldWakeCard from "./HeldWakeCard.vue";
 import WorkflowRunCard from "./WorkflowRunCard.vue";
@@ -705,8 +705,7 @@ const clearable = computed(() => lanes.value.finished.length);
  * of any door in the workspace pane — none of them makes anything — and it is the only suggestion on this
  * board that a user with an empty box can actually press and get an artifact from. A board that offered
  * literally nothing to somebody who has just connected an account is the silence this product is trying to
- * stop having; the ladder is the same one the first-run screen walks (pages/start/firstRun.ts), which is where
- * a user who has not made this choice yet meets it first. */
+ * stop having; the ladder lives in buildIdeas.ts, beside this board. */
 // The workspace facts the suggestions turn on, both already in flight for the rail — the board adds no fetch.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -719,9 +718,8 @@ const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChang
  * than feature names — "Explain this codebase" is a thing to press; "code understanding" is a brochure. */
 const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
     /* NOTHING TO WORK ON. Everything below this branch points an agent at code that has to exist, so none of
-     * it can be offered — but the one task that needs no code can, and it is the same one the first-run screen
-     * is built around: make something, and get a public link to it. Written from the shared prompt rather than
-     * from a second copy of it, so the two surfaces cannot drift into asking for different things. */
+     * it can be offered — but the one task that needs no code can: make something, and get a public link to
+     * it. The built page lands in the outbox and shows up as the Preview area's "Public site" target. */
     if (!hasWork.value) {
         return BUILD_IDEAS.map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
     }
@@ -1534,12 +1532,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              board to make by accident — so unlike stop / land / discard it stops here first. The dialog is the
              whole explanation of what the agent is about to do, because the drag hint that got here is four
              words long. -->
-        <Modal
-            :open="pendingResolve !== undefined"
-            size="sm"
-            header="Have the agent resolve the conflict?"
-            @update:open="cancelResolve"
-        >
+        <Modal :open="pendingResolve !== undefined" size="sm" header="Have the agent resolve the conflict?" @update:open="cancelResolve">
             <p class="text-xs text-content">
                 {{ resolveTarget?.title ?? `This agent` }} will start a turn: it rebases its branch onto your current workspace, resolves the conflict
                 in its own worktree, and lands the result when it's done.

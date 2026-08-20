@@ -7,9 +7,10 @@ import { detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 
 /* The in-tree management surface for one repository directory: renders the directory-surface extension views the
- * repo activates (Apps, its own UI, the dev-server preview). With more than one, a segmented switch — the same
- * control the sidebar uses for Files/Changes/History — picks which. Empty (the repo lost its markers) renders
- * nothing; the tree only opens this for a manageable directory anyway. */
+ * repo activates (Apps, its own UI). With more than one, a segmented switch — the same control the sidebar uses
+ * for Files/Changes/History — picks which. Empty (the repo lost its markers) renders nothing; the tree only
+ * opens this for a manageable directory anyway. The dev-server preview is NOT here — that is the rail's Preview
+ * area, which the row's eye opens. */
 
 const { dir } = defineProps<{ dir: string }>();
 const { panels } = usePanels();

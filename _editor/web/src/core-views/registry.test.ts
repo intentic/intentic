@@ -8,9 +8,10 @@ import { describe, expect, it } from "vitest";
 import { RAIL_GROUPS, detectActivations, railRank, registerView } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
-// static core views (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
-// cross-extension rules — apps claims a monorepo, preview is the dropped-when-claimed fallback — are exercised
-// against the same registry the shell composes.
+// static core views (infrastructure/live-status/directory-ui). Register the packaged detects here so the
+// cross-extension rules — apps claims a monorepo, a fallback view is dropped when claimed — are exercised
+// against the same registry the shell composes. (The fallback rule's exemplar is a local registration below:
+// no first-party view ships as a fallback since the dev-server preview moved to the shell's Preview area.)
 // Views are what this file is about; `commands` and `viewers` are here because activate() is one function — an
 // extension that registers a command as well as a view must not fail to register the view.
 const registerApi = {
@@ -71,21 +72,19 @@ const contributes = (id: string, key: string, panels: PanelSummary[]): boolean =
     detectActivations(panels, []).some(({ extension, activation }) => extension.id === id && activation.key === key);
 
 describe(`apps extension — merged tests view`, () => {
-    it(`a monorepo-with-vitest gets ONE claiming tile (props.monorepo) — no duplicate ⚡ tile, preview suppressed`, () => {
+    it(`a monorepo-with-vitest gets ONE claiming tile (props.monorepo) — no duplicate ⚡ tile`, () => {
         const panels = [panel({ repo: `mono`, monorepo: true, vitest: true, hasPanel: true })];
         const tile = appsTile(`mono`, panels);
         expect(tile?.repo).toBe(`mono`);
         expect(tile?.props).toEqual({ monorepo: true });
-        expect(contributes(`preview`, `mono`, panels)).toBe(false);
     });
 
-    it(`a vitest-only non-monorepo repo gets a non-claiming ⚡ tile and keeps its preview fallback`, () => {
+    it(`a vitest-only non-monorepo repo gets a non-claiming ⚡ tile`, () => {
         const panels = [panel({ repo: `lib`, vitest: true, hasPanel: true })];
         const tile = appsTile(`lib`, panels);
         expect(tile?.repo).toBeUndefined();
         expect(tile?.icon).toBe(`bolt`);
         expect(tile?.props).toEqual({ repo: `lib`, monorepo: false });
-        expect(contributes(`preview`, `lib`, panels)).toBe(true);
     });
 
     it(`the intent monorepo's vitest surfaces as a tests-only tile beside Infrastructure, never a browsable app monorepo`, () => {
@@ -102,10 +101,11 @@ describe(`apps extension — merged tests view`, () => {
     });
 });
 
-/* An AUXILIARY view is the third position in the claim rule: it sets `activation.repo` (so the directory panel
- * renders it and the tree marks the dir manageable) yet leaves the preview fallback standing, because it adds a
- * surface beside the repo's main one instead of subsuming it. Without this, any repo that both runs a dev
- * server and activates such a view would silently lose its Preview tab. */
+/* THE CLAIM RULE'S THREE POSITIONS, exercised against a local fallback view (no first-party view ships as one
+ * any more — the dev-server preview moved to the shell's Preview area — but the rule stays for third-party
+ * bundles): a claiming view suppresses a fallback for its repo, and an AUXILIARY view sets `activation.repo`
+ * (so the directory panel renders it and the tree marks the dir manageable) yet leaves the fallback standing,
+ * because it adds a surface beside the repo's main one instead of subsuming it. */
 describe(`auxiliary views`, () => {
     const register = (id: string, extra: Partial<ViewRegistration>): Disposable =>
         registerView(`test`, {
@@ -117,20 +117,24 @@ describe(`auxiliary views`, () => {
             ...extra,
         });
 
-    it(`renders for its repo AND leaves the preview fallback in place`, () => {
+    it(`renders for its repo AND leaves a fallback in place`, () => {
+        const fallback = register(`stand-in`, { fallback: true });
         const disposable = register(`aux`, { auxiliary: true });
         const panels = [panel({ repo: `site`, hasPanel: true })];
         expect(contributes(`aux`, `site`, panels)).toBe(true);
-        expect(contributes(`preview`, `site`, panels)).toBe(true);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(true);
         disposable.dispose();
+        fallback.dispose();
     });
 
-    it(`the same view without the flag claims the repo and suppresses preview`, () => {
+    it(`the same view without the flag claims the repo and suppresses the fallback`, () => {
+        const fallback = register(`stand-in`, { fallback: true });
         const disposable = register(`claimer`, {});
         const panels = [panel({ repo: `site`, hasPanel: true })];
         expect(contributes(`claimer`, `site`, panels)).toBe(true);
-        expect(contributes(`preview`, `site`, panels)).toBe(false);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(false);
         disposable.dispose();
+        fallback.dispose();
     });
 });
 
@@ -158,11 +162,20 @@ describe(`acceptance extension`, () => {
         expect(tiles([panel({ repo: `docs` })])).toHaveLength(0);
     });
 
-    // Rooted at no repo ⇒ it claims none, so a repo that both runs a dev server and has stories keeps Preview.
+    // Rooted at no repo ⇒ it claims none: a fallback view for a repo with stories still stands.
     it(`costs no repo its own surface`, () => {
+        const fallback = registerView(`test`, {
+            id: `stand-in`,
+            label: `Stand-in`,
+            surface: `directory`,
+            fallback: true,
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+            view: async () => await Promise.resolve({}),
+        });
         const panels = [panel({ repo: `site`, hasPanel: true, userStories: true })];
         expect(tiles(panels)).toHaveLength(1);
-        expect(contributes(`preview`, `site`, panels)).toBe(true);
+        expect(contributes(`stand-in`, `site`, panels)).toBe(true);
+        fallback.dispose();
     });
 });
 

@@ -5,7 +5,10 @@ import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../composables/commands/useCommands";
+import { openPreview } from "../../composables/preview/previewSurface";
+import { repoTargetId } from "../../composables/preview/previewModel";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { personaStartDirs } from "../../composables/sandbox/personaCard";
@@ -179,8 +182,8 @@ const diffOutline = useLoadingReveal(
     computed(() => activeTab.value?.id ?? ``),
 );
 
-// Repository directories that a directory-surface extension serves (Apps, UI, preview) — selecting one in the
-// tree opens its management surface as a tab. Rail-surface repos (intent/desired-state) are absent by design.
+// Repository directories that a directory-surface extension serves (Apps, UI) — selecting one in the tree
+// opens its management surface as a tab. Rail-surface repos (intent/desired-state) are absent by design.
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const manageableDirs = computed(
@@ -191,6 +194,10 @@ const manageableDirs = computed(
             ),
         ),
 );
+// …and the ones the Preview area can show live — a runnable repo, or a monorepo whose apps preview. The row's
+// eye selects that repo's target and walks to /preview (the rail panel), rather than opening an editor tab.
+const router = useRouter();
+const previewableDirs = computed(() => new Set(panels.value.filter((panel) => panel.hasPanel || panel.monorepo).map((panel) => panel.repo)));
 /* WHO WORKS IN EACH FOLDER — the personas whose sessions start there, counted once per render rather than
  * re-filtered on every visible row. The folder a card starts in is set from the row itself (see
  * <DirectoryPersonas>), so this is also what makes that icon light up the moment one is saved. */
@@ -208,9 +215,11 @@ const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
         repoDirs: repoDirs.value,
         manageableDirs: manageableDirs.value,
+        previewableDirs: previewableDirs.value,
         personaDirs: personaDirs.value,
         openHealth,
         openDirectory,
+        openPreview: (target: string): void => openPreview(router, repoTargetId(target)),
         openPersonas: (target: string): void => {
             personaDir.value = target;
         },

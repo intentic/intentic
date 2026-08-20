@@ -25,6 +25,8 @@ import { uiLength } from "../composables/uiScale";
 import { ICON_RAIL_WIDTH_REM, useIconRailSize } from "../composables/useIconRailSize";
 import { presenceOthers } from "../composables/usePresence";
 import { usePanels } from "../composables/extensions/usePanels";
+import { previewEvidence, previewHealthyCount } from "../composables/preview/previewModel";
+import { usePublicOutbox } from "../composables/workspace/usePublicOutbox";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { useChanges } from "../composables/workspace/useChanges";
 import { pushBadge } from "../composables/workspace/pushBadge";
@@ -167,11 +169,32 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 const chatAway = computed(() => poppedOut.value || chatRestoring.value);
 const chatTileSeated = computed(() => chatOnRail.value && (!chatAway.value || route.name === `chat`));
 
-// The thin shell: three always-present areas, then one tile per EXTENSION ACTIVATION — extensions detect
-// workspace content (repo facts from /panels) and contribute their own sidebar elements (Infrastructure, Live
-// status, one per monorepo, …) — then the "+" Capabilities tile (rendered separately below). The Sandbox
-// status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
-// no extension serves lives only in the Workspace file tree.
+/* Preview closes the Work band: start a turn (Chat), read what it did (Agents/Workspace), LOOK at the running
+ * app. Evidence-driven like every extension tile — it appears once the workspace has anything a live iframe
+ * can show (a runnable repo, a monorepo's apps, a served public page) and is absent on a box with none, where
+ * it could only open an empty state. An `eye` among the Work band's face/bubble/tree: what this tile does is
+ * look. The badge counts repos actually ANSWERING right now — neutral, because "your app is up" is inventory,
+ * not a debt (viewBadge.ts). */
+const { files: publicFiles } = usePublicOutbox();
+const previewTile = computed<AreaTile | undefined>(() => {
+    if (!previewEvidence(panels.value, publicFiles.value)) {
+        return undefined;
+    }
+    const healthy = previewHealthyCount(panels.value);
+    return {
+        id: `preview`,
+        to: `/preview`,
+        label: `Preview`,
+        icon: `eye`,
+        ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: `${healthy} running` } } : {}),
+    };
+});
+
+// The thin shell: the always-present areas plus the evidence-driven Preview above, then one tile per EXTENSION
+// ACTIVATION — extensions detect workspace content (repo facts from /panels) and contribute their own sidebar
+// elements (Infrastructure, Live status, one per monorepo, …) — then the "+" Capabilities tile (rendered
+// separately below). The Sandbox status/management view lives behind the switcher chip, not a rail tile. The
+// rail is capability-first: a repo no extension serves lives only in the Workspace file tree.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
     // THE CHAT'S SEAT — see chatTileSeated for exactly when the rail holds one. First in the Work band because
     // talking to the agent is the product's primary surface; unbadged, because the Agents tile below carries
@@ -212,6 +235,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
+    ...(previewTile.value === undefined ? [] : [previewTile.value]),
 ]);
 /* Browsers appears the moment a turn opens one and stays while the daemon still lists it — a rail tile that
  * tracks live work rather than a permanent surface. It renders in the rail's live-runtime cluster (next to the
@@ -289,7 +313,7 @@ const tiles = computed<readonly AreaTile[]>(() =>
     [
         ...fixedTiles.value,
         ...detectActivations(panels.value, capabilities.value)
-            // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI, preview) open from
+            // Only rail-surface extensions get a tile; per-repo directory panels (Apps, UI) open from
             // the Workspace tree instead, so the rail stays a short, capability-first list.
             .filter(({ extension }) => extension.surface === `rail`)
             .map(extensionTile),

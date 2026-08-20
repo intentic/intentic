@@ -1,25 +1,25 @@
 # @intentic/ext-preview
 
-What the outside world can reach: a repo's dev server, the ports the box is forwarding, and the files in `public/`.
+What the outside world can reach: the ports the box is forwarding, and the files in `public/`.
 
 ## Responsibilities
 
-- Show any runnable repo's dev server in an iframe — the fallback for repos no first-party view already serves.
 - List what is listening inside the box, what took each port and which terminal it is running in, and what the
   tunnel currently exposes — and let exposure be revoked.
 - Show what is published from the workspace's `public/` folder with nothing running at all.
 
 ## Key files
 
-- [src/usePanels.ts](src/usePanels.ts) — the dev-server panel, and which repo claims it.
 - [src/usePorts.ts](src/usePorts.ts) — what is listening, what is forwarded, and revoking it.
 - [src/usePublic.ts](src/usePublic.ts) — the `public/` folder as a served surface.
-- [src/extension.ts](src/extension.ts) — activation, `fallback: true`, and why none of these is a rail tile.
+- [src/extension.ts](src/extension.ts) — activation, and why neither view is a rail tile.
 
 ## How it fits
 
-The panel view is a **fallback**: `fallback: true` means the registry drops its activation for a repo another
-view already claims, so a repo with a real first-party surface gets that instead of a raw iframe.
+LOOKING at a running app is not this extension's job: that is the shell's own Preview area (a rail tile whose
+panel pops out like the chat), which previews repos' dev servers, monorepo apps and the public page from the
+same daemon routes. This extension used to carry a per-repo dev-server iframe as a fallback directory view;
+one preview surface is enough.
 
 Ports and Public are **Sandbox hub tabs**, not rail tiles. Both answer "what can the outside reach" — Ports while
 something is running, Public with nothing running — which is a fact about the box, alongside Status and Access.
@@ -34,4 +34,4 @@ is forwarded, the way a VPN shield does.
 - A port is reported with the terminal it descends from, so the row is somewhere to GO, not just something to
   read. Ports with none — the box's own runtimes, a container's published port — say "no terminal" rather than
   offering one: nothing here can show their output or stop them, and a button that opens an empty panel is worse
-  than the plain fact. Same rule on the panel view: its Terminal button appears only when a session exists.
+  than the plain fact.

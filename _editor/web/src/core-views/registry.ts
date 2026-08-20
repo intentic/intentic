@@ -48,7 +48,7 @@ export interface ActiveExtension {
 }
 
 // The deep-link path to a sidebar element. The `:key` segment only disambiguates a view's multiple activations
-// (one per repo: /ext/preview/<repo>); a singleton view names its sole activation after itself (key === id), so
+// (one per repo: /ext/apps/<repo>); a singleton view names its sole activation after itself (key === id), so
 // that segment would just repeat the view id — drop it. `/ext/documentation`, not `/ext/documentation/documentation`. ExtensionHost
 // resolves the missing segment back to the view id.
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
@@ -113,7 +113,9 @@ export interface RailGroup {
 }
 
 export const RAIL_GROUPS: readonly RailGroup[] = [
-    { id: `work`, label: `Work`, ids: [`chat`, `agents`, `workspace`] },
+    // Preview closes the Work loop's third end: start a turn, read what it did, LOOK at the running app. Its
+    // tile appears only while the workspace has something previewable (ShellDesktop.previewTile).
+    { id: `work`, label: `Work`, ids: [`chat`, `agents`, `workspace`, `preview`] },
     { id: `judge`, label: `Judge`, ids: [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`] },
     { id: `setup`, label: `Set up`, ids: [`workflows`, `automations`] },
     { id: `know`, label: `Know`, ids: [`documentation`, `infrastructure`, `live-status`] },

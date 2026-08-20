@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from "vue";
+import { computed, onUnmounted, watch, watchEffect } from "vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { chatFullscreen, chatOnRail } from "../composables/chat/chatSurface";
+import { markPreviewOpened, previewOpened } from "../composables/preview/previewSurface";
+import { usePreviewPopout } from "../composables/preview/usePreviewPopout";
 import ChatPanel from "../chat/ChatPanel.vue";
+import PreviewPanel from "../preview/PreviewPanel.vue";
 import TerminalPanel from "../pages/TerminalPanel.vue";
-import { chatDock, chatFullDock, terminalDock } from "./dockSlots";
+import { chatDock, chatFullDock, previewDock, terminalDock } from "./dockSlots";
 
-/* THE TWO POPPABLE PANELS — the chat and the sandbox-global terminal — each mounted exactly once per page, here
- * above the router rather than inside the workspace shell (dockSlots.ts has the why). One instance whose live
- * DOM is teleported to wherever the panel currently belongs: its pop-out window, the shell's docked slot, or
- * the parking stage below. A move is a move, never a rebuild, so a streaming turn, an open picker and an
- * attached xterm ride through navigation the way they already ride through popping out.
+/* THE THREE POPPABLE PANELS — the chat, the sandbox-global terminal and the app preview — each mounted exactly
+ * once per page, here above the router rather than inside the workspace shell (dockSlots.ts has the why). One
+ * instance whose live DOM is teleported to wherever the panel currently belongs: its pop-out window, the
+ * shell's docked slot, or the parking stage below. A move is a move, never a rebuild, so a streaming turn, an
+ * open picker and an attached xterm ride through navigation the way they already ride through popping out.
  *
  * WHAT THIS COMPONENT'S OWN LIFETIME MEANS. It owns the panels, so it is the one thing whose going away really
  * does orphan a floating window — and it now goes away only when the workspace itself does: a lost session
@@ -37,6 +40,7 @@ const {
     holdWhile: holdTerminal,
 } = useTerminalPopout();
 const terminal = useTerminalPanel();
+const { poppedOut: previewPoppedOut, restoring: previewRestoring, body: previewPopoutBody, holdWhile: holdPreview } = usePreviewPopout();
 
 /* THE PARKING STAGE — where a docked panel waits out a route that has no shell to dock into. Offscreen rather
  * than `display: none`, because a panel with no box is a panel whose every measurement is zero: the terminal's
@@ -56,6 +60,19 @@ onUnmounted(() => park.remove());
 // stage behind the rail's Chat tile, which is the whole meaning of that choice (chatSurface.ts).
 const chatTarget = computed(() => chatPopoutBody.value ?? chatFullDock.value ?? (chatOnRail.value ? park : (chatDock.value ?? park)));
 const terminalTarget = computed(() => terminalPopoutBody.value ?? terminalDock.value ?? park);
+// The preview's two homes plus the stage: its window, the /preview area's slot, else parked — where a live
+// iframe keeps the previewed app's own state (its route, a half-filled form) across every trip to the code.
+const previewTarget = computed(() => previewPopoutBody.value ?? previewDock.value ?? park);
+
+/* A PREVIEW WINDOW IS ITS OWN DOOR. The panel exists only once someone opened it (previewSurface.opened —
+ * an iframe nobody asked to see would be requests into their app), and a window is proof someone did: one
+ * re-adopted after a reload, or restored, marks the panel open so it mounts straight out there — otherwise a
+ * fresh page would answer the returning window `waiting` forever. */
+watchEffect(() => {
+    if (previewPoppedOut.value || previewRestoring.value) {
+        markPreviewOpened();
+    }
+});
 
 // Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window. A decision
 // by the reader, so it is a dock and not merely a released hold: the window goes now rather than after a grace.
@@ -70,6 +87,7 @@ watch(terminal.open, (open) => {
 // account of "the app stopped rendering into you" available anywhere in the page.
 holdChat(() => !chatRestoring.value);
 holdTerminal(() => terminal.open.value && !terminalRestoring.value);
+holdPreview(() => previewOpened.value && !previewRestoring.value);
 </script>
 
 <template>
@@ -93,5 +111,10 @@ holdTerminal(() => terminal.open.value && !terminalRestoring.value);
             :resizable="!terminalPoppedOut"
             @close="terminal.setOpen(false)"
         />
+    </Teleport>
+    <!-- The preview mounts only once someone has opened it (see the watch above), and then stays: parked, the
+         iframe keeps the previewed app alive between looks. -->
+    <Teleport :to="previewTarget">
+        <PreviewPanel v-if="previewOpened && !previewRestoring" />
     </Teleport>
 </template>

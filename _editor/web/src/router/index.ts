@@ -8,7 +8,6 @@ import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { firstRunDone } from "../pages/start/firstRun";
 import { setupRedirect } from "./setupGate";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
 
@@ -152,42 +151,45 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            /* WHERE SETUP LETS GO OF THE USER.
-             *
-             * The FIRST time, it is /start: a sandbox nobody has done anything on yet lands on the one screen
-             * that gives something before it asks for anything (pages/start/StartScreen.vue). Every other surface
-             * in this product is evidence-driven — the board's starters read the repos, the capability
-             * recommendations read the remotes — so an empty box makes all of them silent at once, which is the
-             * worst possible moment for the product to have nothing to say.
-             *
-             * AFTERWARDS it is what it always was: mobile lands on the agent fleet, desktop on the workspace
-             * (its chat is docked) — the workspace is where the code is, where getting code IN is offered, and
-             * where the docked chat is already sitting to be typed at.
-             *
-             * The flag is read SYNCHRONOUSLY here because a redirect cannot wait, and it is only ever half the
-             * decision: /start re-reads the live workspace and stands itself down the moment the panel list
-             * says there are already repositories, so a browser with cleared storage cannot strand anybody on
-             * an offer that no longer applies. */
+            /* WHERE SETUP LETS GO OF THE USER: mobile lands on the agent fleet, desktop on the workspace (its
+             * chat is docked) — the workspace is where the code is, where getting code IN is offered, and
+             * where the docked chat is already sitting to be typed at. */
             {
                 path: ``,
-                redirect: () => (firstRunDone() ? (useDevice().mobile.value ? `/agents` : `/workspace`) : `/start`),
-            },
-            {
-                path: `start`,
-                name: `start`,
-                meta: { title: `Start` },
-                component: asyncView(() => import(`../pages/start/StartScreen.vue`)),
+                redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's whole surface (pages/ChatArea.vue lends it the slot,
             // and standing here is what makes the rail the chat's home — useLayout.chatHome). An area rather
             // than a layout switch, so the rail, the back button and a reload all already know how to enter
             // and leave it.
-            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [desktopOnly], component: asyncView(() => import(`../pages/ChatArea.vue`)) },
+            {
+                path: `chat`,
+                name: `chat`,
+                meta: { title: `Chat` },
+                beforeEnter: [desktopOnly],
+                component: asyncView(() => import(`../pages/ChatArea.vue`)),
+            },
+            // The live app preview: the preview panel's full-window home (pages/PreviewArea.vue lends it the
+            // slot, exactly the chat area's arrangement). Desktop only — the mobile shell mounts no poppable
+            // panels, and a phone opens the preview URL itself.
+            {
+                path: `preview`,
+                name: `preview`,
+                meta: { title: `Preview` },
+                beforeEnter: [desktopOnly],
+                component: asyncView(() => import(`../pages/PreviewArea.vue`)),
+            },
             { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: asyncView(() => import(`../pages/Agents.vue`)) },
             // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
             // in here (an agent's conversation IS the chat surface).
             { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: asyncView(() => import(`../agents/AgentDetail.vue`)) },
-            { path: `menu`, name: `menu`, meta: { title: `Menu` }, beforeEnter: [mobileOnly], component: asyncView(() => import(`../pages/MobileMenu.vue`)) },
+            {
+                path: `menu`,
+                name: `menu`,
+                meta: { title: `Menu` },
+                beforeEnter: [mobileOnly],
+                component: asyncView(() => import(`../pages/MobileMenu.vue`)),
+            },
             {
                 path: `terminal`,
                 name: `terminal`,
@@ -235,7 +237,12 @@ const routes: RouteRecordRaw[] = [
             },
             // The session is in the URL so a reload reopens the same browser; optional, because the rail tile
             // links to the bare path and the view picks the most recently active one.
-            { path: `browsers/:session?`, name: `browsers`, meta: { title: `Browsers` }, component: asyncView(() => import(`../pages/Browsers.vue`)) },
+            {
+                path: `browsers/:session?`,
+                name: `browsers`,
+                meta: { title: `Browsers` },
+                component: asyncView(() => import(`../pages/Browsers.vue`)),
+            },
             // Same shape and same reason as the browsers above: the id is in the URL so a reload — or the chat
             // card's link — reopens the same agent, and the bare path shows whichever is most recently active.
             { path: `subagents/:id?`, name: `subagents`, meta: { title: `Subagents` }, component: asyncView(() => import(`../pages/Subagents.vue`)) },

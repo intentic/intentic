@@ -9,10 +9,12 @@ import { rowActionsFor, type RowActionSources } from "./rowActions";
 const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     repoDirs: new Set<string>(),
     manageableDirs: new Set<string>(),
+    previewableDirs: new Set<string>(),
     personaDirs: new Map<string, number>(),
     openHealth: vi.fn(),
     openDirectory: vi.fn(),
     openPersonas: vi.fn(),
+    openPreview: vi.fn(),
     openDocument: vi.fn(),
     ...over,
 });
@@ -47,6 +49,20 @@ describe(`rowActionsFor`, () => {
     it(`gives a repo its health, and a managed repo its cog`, () => {
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) }));
         expect(actions.map((action) => action.id)).toEqual([`health`, `personas`, `directory`]);
+    });
+
+    // The eye is the Preview AREA's door, not another in-tree tab — a runnable repo used to open an iframe tab
+    // here, and this is where that gesture went.
+    it(`gives a previewable repo its eye, ahead of the cog`, () => {
+        const source = sources({
+            repoDirs: new Set([`shop`]),
+            manageableDirs: new Set([`shop`]),
+            previewableDirs: new Set([`shop`]),
+        });
+        const actions = rowActionsFor(`shop`, source);
+        expect(actions.map((action) => action.id)).toEqual([`health`, `personas`, `preview`, `directory`]);
+        actions.find((action) => action.id === `preview`)?.run();
+        expect(source.openPreview).toHaveBeenCalledWith(`shop`);
     });
 
     // The document is what the directory IS, so it leads — the same narrowing the rail's order follows, rather

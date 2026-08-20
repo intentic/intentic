@@ -30,14 +30,18 @@ export interface RowAction {
 export interface RowActionSources {
     // Directory paths that are git repos — each carries its own health report.
     readonly repoDirs: ReadonlySet<string>;
-    // Directory paths a directory-surface extension serves (Apps, the repo's own UI, the dev-server preview).
+    // Directory paths a directory-surface extension serves (Apps, the repo's own UI).
     readonly manageableDirs: ReadonlySet<string>;
+    // Directory paths the Preview area can show live (a runnable repo, or a monorepo whose apps preview).
+    readonly previewableDirs: ReadonlySet<string>;
     /* How many personas START in each directory — a count rather than a set, because the icon says whether there
      * is one card here or three, and a folder holding several is the ordinary case. */
     readonly personaDirs: ReadonlyMap<string, number>;
     readonly openHealth: (repo: string) => void;
     readonly openDirectory: (dir: string) => void;
     readonly openPersonas: (dir: string) => void;
+    // The door into the Preview area with this repo's target selected — the rail panel, not an in-tree tab.
+    readonly openPreview: (dir: string) => void;
     readonly openDocument: (extension: string, provider: string, path: string, title: string, icon: string) => void;
 }
 
@@ -96,6 +100,19 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         standing: personaCount > 0,
         run: (): void => sources.openPersonas(dir),
     });
+    /* SEE IT RUNNING. A runnable repo's door into the Preview area, with this repo's target selected — it
+     * replaces the in-tree iframe tab such repos used to open, because the live preview is a rail surface now
+     * (one panel, poppable, parked between looks) rather than one more editor tab. On hover with the other
+     * things you DO to a repo. */
+    if (sources.previewableDirs.has(dir)) {
+        actions.push({
+            id: `preview`,
+            icon: `eye`,
+            tooltip: `Open live preview`,
+            standing: false,
+            run: (): void => sources.openPreview(dir),
+        });
+    }
     if (sources.manageableDirs.has(dir)) {
         actions.push({
             id: `directory`,

@@ -1,10 +1,11 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host";
 
-/* ext-preview activation: bind the host handle, then register the fallback directory view — a raw dev-server
- * iframe for any runnable repo (repo.hasPanel) that no first-party extension already serves (`fallback: true`
- * means the registry drops its activation for a repo another view claims) — and the always-present "Ports"
- * view, the generic forward surface for ports the panel machinery never assigned.
+/* ext-preview activation: bind the host handle, then register the two exposure surfaces — "Ports" and
+ * "Public". LOOKING at a running app is not registered here: that is the shell's own Preview area (a rail
+ * tile whose panel pops out like the chat), which reads the same /panels, /apps and /public routes; this
+ * extension used to carry a per-repo dev-server iframe as a fallback directory view, and one preview surface
+ * is enough.
  *
  * Ports is a SANDBOX HUB tab (/sandbox/ports), not a rail tile: what is listening inside the box and what the
  * tunnel exposes is a fact about the box, alongside Status and Access. The everyday path to a dev server is
@@ -20,14 +21,6 @@ import { bindHost } from "./host";
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
     context.subscriptions.push(
-        api.views.register({
-            id: `preview`,
-            label: `Preview`,
-            surface: `directory`,
-            fallback: true,
-            detect: (repos) => repos.filter((repo) => repo.hasPanel).map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
-            view: async () => (await import(`./PanelView.vue`)).default,
-        }),
         api.views.register({
             id: `ports`,
             label: `Ports`,
