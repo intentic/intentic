@@ -192,23 +192,21 @@
      *
      * The plate's frame is not decoration around the hero, it is the hero's edge, so the bar has to sit
      * on the middle of the frame's top band rather than at a height of its own choosing. Scanning the
-     * art (1600×900) for its horizontal rules: the outer one is at y=9 and the inner one at y=81, so the
-     * band's centre is y=45. The bar hangs from the plate's TOP, not from the band's, so for its content
-     * to land on that centre the bar's height must be twice the offset: 90 art-units, times whatever
-     * scale `cover` chose.
+     * art (1600×900) for its horizontal rules: the outer one is at y=11 and the inner one at y=74, so
+     * the band's centre is y=42.5. The bar hangs from the plate's TOP, not from the band's, so for its
+     * content to land on that centre the bar's height must be twice the offset: 85 art-units, times
+     * whatever scale the plate was painted at.
      *
-     * AND THAT SCALE CANNOT BE WRITTEN IN CSS. `cover` scales by `max(boxWidth/1600, boxHeight/900)`,
-     * and the plate's box is the hero's box — whose height comes from its CONTENT, not from a fraction
-     * of the viewport (measured: 810px at 1280 wide, 956 at 1920, 1156 at 2560, 1556 at 3840). Which
-     * term wins therefore changes with the window, and neither term is a unit CSS can name. A `vw`
-     * formula is only right in the narrow range where width happens to be the driver AND the content
-     * height happens to agree: the previous one was tuned at 1680 and measured up to 48px out at the
-     * extremes — the bar sitting well above the rule it is supposed to be centred in.
+     * AND THAT SCALE IS NOW A SINGLE TERM, which is the whole reason the plate is sized `100% auto`
+     * rather than `cover` (see `.a-plate-img`). The art is laid across the plate's full width at its own
+     * ratio, so the scale is exactly `plateWidth / 1600` and nothing about the hero's content height can
+     * move it. Under `cover` it was `max(width/1600, height/900)`, the height term came from the hero's
+     * CONTENT, and which term won changed with the window — no stylesheet could name it, and the `vw`
+     * formula that stood here measured up to 48px out at the extremes.
      *
-     * So the real value is measured off the painted box at runtime; see the observer in angkor.astro.
-     * What is left here is the fallback used before that runs and if it never does — correct from about
-     * 1440 to 1920, and sane either side of that. */
-    --a-plate-band: clamp(3.6rem, 5.625vw, 7.5rem);
+     * So this value is now correct on its own, and the observer in angkor.astro only refines it for the
+     * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 = 5.3125vw. */
+    --a-plate-band: clamp(3.4rem, 5.3125vw, 7.1rem);
 
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
@@ -575,6 +573,16 @@ body:has(.a-page) {
 
 /* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
  * with it: 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px. */
+/* The play mark on the secondary button. An inline SVG with no intrinsic size fills whatever box it is
+ * given, which on a flex button is the button — so the size is set here rather than left to the sprite. */
+.a-page .a-btn-play {
+    flex: none;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-right: -0.1rem;
+    opacity: 0.85;
+}
+
 .a-page .a-btn-sm {
     --a-cut: 5.4px;
     padding: 0.55rem 1.05rem;
@@ -618,67 +626,113 @@ body:has(.a-page) {
     inset: 0;
     overflow: hidden;
     pointer-events: none;
+    /* What shows below the plaque on a hero taller than the art. Set here rather than left transparent
+     * so the strip is the page's own warm black and not the browser's white. */
+    background: var(--a-canvas);
 }
 .a-page .a-plate-img {
     position: absolute;
-    inset: 0;
-    background-image: url("/assets/angkor/temple-1600.webp");
-    /* TOP-ANCHORED, not centred. `cover` has to crop somewhere, and the old 42% spent that crop on the
-     * top edge — which is where the art's carved border is, and where the navigation sits. The result
-     * was a bar floating in a frame whose top rail had been cut off above the viewport. Anchored at 0
-     * the whole top band is on screen and the crop falls at the foot, under the fade that is already
-     * there for it. */
+    top: 0;
+    right: 0;
+    left: 0;
+    /* THE BOX IS THE ART'S OWN SHAPE. That is the whole trick, and it is what makes the `cover` below an
+     * exact fit rather than a crop: matching ratios leave nothing to cut on either axis.
+     *
+     * The art is a framed plaque — a carved border on all four sides, a devata standing in each outer
+     * third, and a deliberately empty middle for the copy. Sized against the hero's own box, `cover`
+     * would crop whichever axis is spare, and on a hero whose height comes from its content that axis is
+     * the WIDTH. The two figures, the one thing a reader remembers about the picture, would be the first
+     * thing thrown away, and how much of them went would change with every window size.
+     *
+     * Pinned to 16/9 the plaque is always whole across the screen: both columns, both figures, and the top
+     * rail the navigation bar is fitted to. What runs out instead is the BOTTOM, on any hero taller than
+     * 9/16 of its width — which is exactly where the product frames are stacked and where the fade below is
+     * already waiting, so nothing being looked at is lost. The canvas behind fills that strip, which is why
+     * the colour is set on `.a-plate` rather than left transparent.
+     *
+     * It also makes the scale a single term, `width / 1600`, which is what lets `--a-plate-band` above
+     * be an honest number rather than a guess. */
+    aspect-ratio: 16 / 9;
+    background-image: url("/assets/angkor/temple-1600.avif");
     background-position: 50% 0%;
     background-size: cover;
     background-repeat: no-repeat;
     opacity: var(--a-plate-dim);
 }
-@media (max-width: 40rem) {
+/* THE CUT EDGE. On a hero taller than 9/16 of its width the plaque simply stops, and a carved gold rule
+ * with flat canvas under it is a seam. This dissolves the last third of the art into that canvas so the
+ * picture runs out instead of ending. On a hero SHORTER than the art the plate's own `overflow: hidden`
+ * clips this away unseen, so it costs nothing in the case where it is not wanted. */
+.a-page .a-plate-img::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 38%;
+    background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--a-canvas) 100%);
+}
+/* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice.
+ *
+ * The hero is twice as tall as it is wide here, so the plaque either lies across the top as a 220px band
+ * over an ocean of black, or it fills the box and the crop falls on the sides. Filling is the better
+ * picture — but this composition is a wide empty middle with a devata standing in each outer third, and a
+ * CENTRED crop of it at this width shows the empty middle and nothing else: a black rectangle where a
+ * desktop gets a temple.
+ *
+ * 21% lands the left-hand devata just off the centre line, with the wall and the spires running out to
+ * her right. Fitting both figures takes the full width, which is the 220px band this rule exists to
+ * avoid, so the page shows one of them properly instead. */
+@media (max-width: 48rem) {
     .a-page .a-plate-img {
-        background-image: url("/assets/angkor/temple-900.webp");
-        /* On a phone the plate is cropped hard, and its left third — the lit devata — is exactly where
-         * the headline now sits. Slide the frame right so the copy lands on the sky instead; the top
-         * stays anchored for the same reason it does above. */
-        background-position: 68% 0%;
+        aspect-ratio: auto;
+        bottom: 0;
+        background-image: url("/assets/angkor/temple-900.avif");
+        background-position: 21% 0%;
+    }
+    .a-page .a-plate-img::after {
+        display: none;
     }
 }
 @media (min-width: 100rem) {
     .a-page .a-plate-img {
-        background-image: url("/assets/angkor/temple-2400.webp");
+        background-image: url("/assets/angkor/temple-2400.avif");
     }
 }
 
-/* The scrim. A flat wash, then a ramp that is heavy where the copy is and clears entirely over the
- * right half where the product windows sit, then a vignette that keeps the eye off the edges. Three
- * gradients on one element: they composite in a single paint, and separating them into three stacked
- * divs bought nothing but nodes. */
+/* THE SCRIM IS A WELL, not a ramp, and the symmetry of the art is why. A gradient run left to right
+ * would darken one devata and leave the other lit, which reads as a lighting fault rather than as a
+ * treatment. Sunk in the middle instead, it follows the copy and leaves both figures alone.
+ *
+ * Four layers, one paint:
+ *   1. THE WELL — an ellipse of shadow centred where the headline sits. It is what makes cream type
+ *      legible over stone without touching the outer thirds, where the two figures stand.
+ *   2. THE FLOOR — a bottom-up ramp. The art's own brightest pixels are the ember glow along its lower
+ *      edge, and that is precisely where the product windows are stacked; unchecked it reads through
+ *      the gaps between them as a fire behind the UI.
+ *   3. THE VIGNETTE — keeps the eye off the four corners, and stops the carved border from being the
+ *      most contrasted thing on the screen.
+ *   4. THE WASH — a flat pane of canvas over all of it, so the whole plate belongs to the page's black.
+ * Separating these into stacked divs bought nothing but nodes. */
 .a-page .a-plate::after {
     content: "";
     position: absolute;
     inset: 0;
     background:
-        /* NOT a simple left-to-right ramp: it peaks at 14%, not at 0. The heaviest part has to sit under
-           the copy column, which starts an inch in — and the strip to the LEFT of the copy is where the
-           plate's lit devata stands, the single most recognisable thing in the art. A ramp that was
-           darkest at the edge spent all its ink erasing her and still had to dim the text area anyway. */
-            linear-gradient(
-                100deg,
-                rgba(9, 6, 4, 0.4) 0%,
-                rgba(9, 6, 4, 0.66) 14%,
-                rgba(9, 6, 4, 0.52) 30%,
-                rgba(9, 6, 4, 0.24) 52%,
-                rgba(9, 6, 4, 0.06) 74%,
-                transparent 100%
-            ),
-        radial-gradient(130% 110% at 50% 45%, transparent 48%, rgba(9, 6, 4, 0.4) 100%),
+        radial-gradient(58% 46% at 50% 30%, rgba(9, 6, 4, 0.74) 0%, rgba(9, 6, 4, 0.6) 42%, rgba(9, 6, 4, 0.28) 72%, transparent 100%),
+        linear-gradient(0deg, rgba(9, 6, 4, 0.72) 0%, rgba(9, 6, 4, 0.42) 18%, rgba(9, 6, 4, 0.12) 38%, transparent 58%),
+        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
         rgba(12, 9, 7, var(--a-plate-scrim));
 }
-/* Below the columns break there is no copy column to clear, so the ramp becomes a plain top-down one. */
-@media (max-width: 64rem) {
+/* Below the columns break the copy takes the whole width, so the well has nothing left to spare and
+ * becomes a plain top-down darkening, heavier at the foot where the product frame sits. Keep these
+ * numbers low. The crop above is holding a figure rather than empty wall, and a heavier wash buries her
+ * while buying legibility the type does not need at this size. */
+@media (max-width: 48rem) {
     .a-page .a-plate::after {
         background:
-            linear-gradient(180deg, rgba(10, 7, 5, 0.86) 0%, rgba(10, 7, 5, 0.7) 45%, rgba(10, 7, 5, 0.5) 70%, rgba(10, 7, 5, 0.8) 100%),
-            rgba(12, 9, 7, calc(var(--a-plate-scrim) + 0.08));
+            linear-gradient(180deg, rgba(10, 7, 5, 0.62) 0%, rgba(10, 7, 5, 0.5) 40%, rgba(10, 7, 5, 0.52) 66%, rgba(10, 7, 5, 0.86) 100%),
+            rgba(12, 9, 7, var(--a-plate-scrim));
     }
 }
 
@@ -694,79 +748,6 @@ body:has(.a-page) {
     height: 7rem;
     background: linear-gradient(180deg, transparent, rgba(12, 9, 7, 0.6) 55%, var(--a-canvas) 96%);
     pointer-events: none;
-}
-
-/* ── Sky ornaments ───────────────────────────────────────
- * The ringed stars, laid over the plate at low opacity and slowly breathing. Decorative in the strict
- * sense: `aria-hidden`, no layout, and the first thing reduced-motion switches off. */
-.a-page .a-sky {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-}
-.a-page .a-mandala {
-    position: absolute;
-    color: var(--a-ember);
-    opacity: 0.14;
-    filter: drop-shadow(0 0 18px rgba(224, 123, 39, 0.5));
-    animation: a-breathe 14s ease-in-out infinite;
-}
-.a-page .a-mandala svg {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-.a-page .a-mandala-1 {
-    top: 12%;
-    left: 6%;
-    width: 9rem;
-    height: 9rem;
-    opacity: 0.11;
-}
-.a-page .a-mandala-2 {
-    top: 6%;
-    left: 34%;
-    width: 6rem;
-    height: 6rem;
-    opacity: 0.09;
-    animation-delay: -4s;
-}
-.a-page .a-mandala-3 {
-    top: 9%;
-    right: 5%;
-    width: 13rem;
-    height: 13rem;
-    opacity: 0.2;
-    animation-delay: -8s;
-}
-@keyframes a-breathe {
-    0%,
-    100% {
-        transform: scale(1);
-        opacity: var(--a-breathe-lo, 0.1);
-    }
-    50% {
-        transform: scale(1.06);
-        opacity: var(--a-breathe-hi, 0.2);
-    }
-}
-/* The sky is sized in rem, so on a phone the same three figures that sat in the empty upper third of a
- * desktop hero land squarely behind the headline — 13rem of concentric rings through "Agents work". The
- * copy column is the whole width down here and there is no empty sky left to decorate, so two of them go
- * and the survivor shrinks to a glint in the corner. */
-@media (max-width: 48rem) {
-    .a-page .a-mandala-1,
-    .a-page .a-mandala-2 {
-        display: none;
-    }
-    .a-page .a-mandala-3 {
-        top: 4%;
-        right: -3rem;
-        width: 8rem;
-        height: 8rem;
-        opacity: 0.12;
-    }
 }
 
 /* ── Cards ───────────────────────────────────────────────
@@ -839,13 +820,17 @@ body:has(.a-page) {
     background: linear-gradient(150deg, #6b6459, #46413a);
     transform: rotate(45deg);
 }
-/* Each screen is stacked in one box and cross-faded, exactly as the live hero does it, so a reader who
- * watches sees the product's several surfaces instead of one still. */
-.a-page .a-screen {
+/* Each CYCLING screen is stacked in one box and cross-faded, exactly as the live hero does it, so a
+ * reader who watches sees the product's several surfaces instead of one still.
+ *
+ * Keyed on `data-hero-screen`, the attribute the cycling script walks, rather than on the class: one
+ * frame in the hero holds a lone still that nothing ever turns. On the class it would sit at zero opacity
+ * for good, and the frame around it would render as an empty black box. */
+.a-page .a-screen[data-hero-screen] {
     opacity: 0;
     transition: opacity 0.7s ease;
 }
-.a-page .a-screen.is-on {
+.a-page .a-screen[data-hero-screen].is-on {
     opacity: 1;
 }
 
@@ -881,9 +866,6 @@ body:has(.a-page) {
         opacity: 1;
         transform: none;
         transition: none;
-    }
-    .a-page .a-mandala {
-        animation: none;
     }
     .a-page .a-screen {
         transition: none;

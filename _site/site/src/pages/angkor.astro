@@ -37,7 +37,7 @@ import DiscordIcon from "../components/DiscordIcon.astro";
 import AngkorNav from "../components/angkor/AngkorNav.astro";
 import Corners from "../components/angkor/Corners.astro";
 import Lotus from "../components/angkor/Lotus.astro";
-import { DIVIDER, LOZENGE, MANDALA } from "../components/angkor/ornaments";
+import { DIVIDER, LOZENGE } from "../components/angkor/ornaments";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { DESKTOP_DOWNLOADS_PAGE, desktopPlatforms } from "../lib/desktop-downloads";
 import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
@@ -57,8 +57,14 @@ const beats = content.hero.headlineLines
 
 const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
 const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-const appSizes = "(min-width: 80rem) 1040px, (min-width: 64rem) 780px, (min-width: 40rem) 880px, calc((100vw - 3rem) * 1.95)";
-const chatSizes = "(min-width: 80rem) 700px, (min-width: 64rem) 560px, (min-width: 40rem) 500px, calc((100vw - 3rem) * 1.55)";
+/* THREE FRAMES ON ONE AXIS, so three measures. The centre window is the wide one and the two wings lean
+ * in over its edges at roughly two fifths of it; each screen is then drawn at more than 100% of its own
+ * frame (see `.a-screen-*`) because these are crops of a legible top-left corner, not whole screenshots
+ * shrunk to fit. The numbers below are the RENDERED pixel widths of the images, crop included, so the
+ * browser fetches the rung it will actually paint rather than the one the frame is wide. */
+const appSizes = "(min-width: 80rem) 940px, (min-width: 64rem) 760px, (min-width: 48rem) 660px, calc((100vw - 2.5rem) * 1.75)";
+const chatSizes = "(min-width: 80rem) 500px, (min-width: 64rem) 400px, (min-width: 48rem) 350px, calc((100vw - 2.5rem) * 1.05)";
+const planSizes = "(min-width: 80rem) 460px, (min-width: 64rem) 370px, (min-width: 48rem) 320px, calc((100vw - 2.5rem) * 1.05)";
 
 /* THE SUBHEAD, FIRST CLAUSE ONLY. The shared line is two sentences — what the product is, then a claim
  * about visibility — and this treatment keeps the first. The second is carried here by the picture
@@ -147,23 +153,29 @@ const GITHUB_MARK =
 
         <main class="flex-1">
             <!-- ═══ 1 · The first screen ═══════════════════════════════════════════════════════════
-                 The plate, the sky, the claim and the product. The copy sits in the left third because
-                 that is the only part of the photograph the scrim can take all the way down to black
-                 without erasing the temple, and the windows lean into the right two thirds where the
-                 art is darkest of its own accord. -->
+                 SYMMETRIC, because the picture behind it is. The art is a framed plaque with a devata
+                 standing in each outer third and a deliberately empty middle; the copy sits in that
+                 middle, on the axis, and the product is spread underneath it in three frames — one
+                 wide one on the centre line and a narrower one leaning in from either side. An
+                 off-centre column over this plate reads as a misprint. -->
             <section class="a-hero" id="hero">
                 <div class="a-plate" aria-hidden="true">
                     <div class="a-plate-img"></div>
-                </div>
-                <div class="a-sky" aria-hidden="true">
-                    <span class="a-mandala a-mandala-1" set:html={MANDALA} />
-                    <span class="a-mandala a-mandala-2" set:html={MANDALA} />
-                    <span class="a-mandala a-mandala-3" set:html={MANDALA} />
                 </div>
                 <div class="a-plate-fade" aria-hidden="true"></div>
 
                 <div class="a-hero-grid">
                     <div class="a-hero-copy">
+                        {/* The one line on this page that is a greeting rather than a claim. It is built
+                            from the brand name rather than typed, so a rename lands here too, and it is
+                            flanked rather than underlined — the band eyebrows elsewhere trail a hairline
+                            to the right, which on a centred axis would tip the whole block sideways. */}
+                        <p class="a-hero-eyebrow">
+                            <span class="a-hero-eyebrow-mark" set:html={LOZENGE} />
+                            <span>Welcome to {ORG_NAME}</span>
+                            <span class="a-hero-eyebrow-mark" set:html={LOZENGE} />
+                        </p>
+
                         <h1 class="a-headline">
                             {
                                 beats.map((beat) => (
@@ -178,27 +190,17 @@ const GITHUB_MARK =
                         <p class="a-hero-sub">{subheadLead}</p>
                         <p class="a-hero-summary">{content.hero.summary}</p>
 
-                        <span class="a-divider a-hero-divider" aria-hidden="true" set:html={DIVIDER} />
-
+                        {/* TWO PRESSES, and resist adding a third. On a centred axis three controls in a
+                            row read as a toolbar, and the claim above them drops to a caption on it. The
+                            installer is the one that goes: it lives in `#connect`, beside the install
+                            command, where it answers the question a reader is actually asking. */}
                         <div class="a-hero-actions">
                             <a class="a-btn a-btn-primary" href={APP_URL}>
                                 Create your workspace
                             </a>
-                            <a class="a-btn" href={githubUrl} target="_blank" rel="noopener">
-                                See the source
-                            </a>
-                        </div>
-
-                        {/* The installer for the machine this is being read on. Ships as the honest
-                            general case and is narrowed to a named platform by the inline script below,
-                            exactly as the live hero's button does — same table, same behaviour, so a
-                            reader on a Mac is never promised a build that does not exist. */}
-                        <div class="a-hero-actions a-hero-actions-second">
-                            <a class="a-btn" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
-                                <svg viewBox="0 0 24 24" class="a-win" fill="currentColor" aria-hidden="true">
-                                    <path d="M3 5.4 10.2 4.4v7.1H3zM11.4 4.2 21 3v8.5h-9.6zM3 12.6h7.2v7.1L3 18.7zM11.4 12.6H21V21l-9.6-1.3z"></path>
-                                </svg>
-                                <span data-download-label>Download the app</span>
+                            <a class="a-btn" href={DEMO_PATH}>
+                                <svg viewBox="0 0 24 24" class="a-btn-play" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                                {content.hero.demo.playLabel}
                             </a>
                         </div>
 
@@ -214,12 +216,25 @@ const GITHUB_MARK =
                         </ul>
                     </div>
 
-                    <!-- The two windows, in the arrangement the product itself offers: the workspace
-                         behind, the chat popped out of it and tucked into its bottom corner. Both crop
-                         their screens from the top-left rather than fitting them, so what a reader sees
-                         is the legible top of a screen instead of a whole one shrunk past reading. -->
+                    <!-- THE PRODUCT, IN THREE FRAMES ON ONE AXIS. The workspace is the wide one on the
+                         centre line and the only one that cycles its surfaces; the plan and the chat
+                         lean in from the sides, overlapping its edges, at the size a thing in the
+                         middle distance would be. All three crop their screens from the top-left
+                         rather than fitting them, so a reader sees the legible top of a screen instead
+                         of a whole one shrunk past reading. -->
                     <figure class="a-hero-visual">
                         <div class="a-hero-stack">
+                            <div class="a-window a-window-plan" aria-hidden="true">
+                                <Corners set="diag" />
+                                <div class="a-window-rail">
+                                    <span class="a-window-dot"></span>
+                                    <span class="a-window-dot"></span>
+                                </div>
+                                <div class="a-window-crop a-window-crop-plan">
+                                    <Image src={shotAsset("chat-plan")} alt="" widths={SHOT_WIDTHS} sizes={planSizes} loading="lazy" decoding="async" class="a-screen a-screen-plan" />
+                                </div>
+                            </div>
+
                             <div class="a-window a-window-app">
                                 <Corners />
                                 <span class="a-finial" aria-hidden="true"><Lotus size="md" /></span>
@@ -246,17 +261,11 @@ const GITHUB_MARK =
                                             />
                                         ))
                                     }
-                                    <a href={DEMO_PATH} class="a-play">
-                                        <span class="a-play-pill">
-                                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
-                                            {content.hero.demo.playLabel}
-                                        </span>
-                                    </a>
                                 </div>
                             </div>
 
                             <div class="a-window a-window-chat" aria-hidden="true">
-                                <Corners />
+                                <Corners set="diag" />
                                 <div class="a-window-rail">
                                     <span class="a-window-dot"></span>
                                     <span class="a-window-dot"></span>
@@ -576,8 +585,13 @@ const GITHUB_MARK =
                             <p class="a-desktop-lead">{content.connect.desktop.lead}</p>
                             <p class="a-desktop-note">{content.connect.desktop.note}</p>
                         </div>
-                        <a class="a-btn a-btn-sm" href="/download/">
-                            {content.connect.desktop.cta}
+                        {/* THE ONE DOWNLOAD ON THE PAGE, and it names the reader's own machine. It sits
+                            beside the install command because that is the question it answers: the same
+                            step, for someone who would rather not open a terminal. The two data
+                            attributes are what the inline script at the foot of this file narrows. With
+                            no JavaScript the label and the href stay general, and both are still true. */}
+                        <a class="a-btn a-btn-sm" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
+                            <span data-download-label>{content.connect.desktop.cta}</span>
                         </a>
                     </div>
                 </div>
@@ -653,7 +667,7 @@ const GITHUB_MARK =
                         Contribute to our code, extend workspace<br />or offer services for others.
                     </p>
                     <span class="a-divider a-final-divider" aria-hidden="true" set:html={DIVIDER} />
-                    <div class="a-hero-actions a-final-actions">
+                    <div class="a-hero-actions">
                         <a class="a-btn a-btn-primary" href={APP_URL}>
                             Create your workspace
                         </a>
@@ -882,30 +896,61 @@ const GITHUB_MARK =
         position: relative;
         overflow: hidden;
     }
-    /* THE HEIGHT IS THE PICTURE'S. The plate is a framed plaque — a carved border on all four sides —
-       and a hero taller than the plate's own proportion pushes the bottom rail of that frame below the
-       fold, which turns a framed wall into a wall that just runs out. So the padding is set to land the
-       whole band within about one screen of a laptop, and the copy column takes 33rem: wide enough for
-       the summary to break where its clauses do rather than mid-phrase. */
+    /* ONE AXIS, and the picture is why. The plate behind this band is a framed plaque with a figure
+       standing in each outer third and a deliberately empty middle; the copy sits on that middle and the
+       product is laid out UNDER it rather than beside it. The two-column grid that stood here set the
+       headline in the left third, which on this art is a devata's shoulder.
+       The padding lands the whole band — frame, copy and product — inside about one screen of a laptop.
+       Pushing the plaque's bottom rail below the fold turns a framed wall into a wall that runs out. */
     .a-page .a-hero-grid {
         position: relative;
-        display: grid;
-        grid-template-columns: minmax(0, 33rem) minmax(0, 1fr);
-        align-items: center;
-        gap: 2.5rem;
         max-width: 84rem;
         margin: 0 auto;
-        padding: 8.5rem 1.5rem 5rem;
+        padding: 7rem 1.5rem 3rem;
     }
+    /* 44rem, and the headline sets it: three beats, one sentence to a line, and this is the widest the
+       column can be before the shortest of them stops filling its line. */
     .a-page .a-hero-copy {
         position: relative;
-        z-index: 1;
+        z-index: 3;
+        max-width: 44rem;
+        margin: 0 auto;
+        text-align: center;
     }
 
+    /* THE GREETING, FLANKED RATHER THAN UNDERLINED. Every other eyebrow on this page trails a fading
+       hairline to the right, which opens a left-set band and tilts a centred one. Here the same lozenge
+       stands on either side instead and the rule is dropped. */
+    .a-page .a-hero-eyebrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.9rem;
+        margin: 0 0 1.4rem;
+        font-size: 0.6875rem;
+        line-height: 1rem;
+        font-weight: 600;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--a-ember);
+    }
+    .a-page .a-hero-eyebrow-mark {
+        flex: none;
+        width: 0.58rem;
+        height: 0.58rem;
+        opacity: 0.9;
+    }
+    .a-page .a-hero-eyebrow-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Sized against the full width of the screen rather than a column, because on this layout it has one. */
     .a-page .a-headline {
         margin: 0;
-        font-size: clamp(2.6rem, 5.1vw, 4.15rem);
-        line-height: 1.03;
+        font-size: clamp(2.55rem, 5.6vw, 4.6rem);
+        line-height: 1.04;
         font-weight: 600;
     }
     .a-page .a-headline-line {
@@ -930,81 +975,120 @@ const GITHUB_MARK =
        separated by TEMPERATURE as much as by brightness, which is what stops the block looking like
        one paragraph in three sizes. */
     .a-page .a-hero-sub {
-        margin: 1.5rem 0 0;
-        max-width: 40ch;
-        font-size: 1.125rem;
+        margin: 1.4rem auto 0;
+        max-width: 36ch;
+        font-size: 1.15rem;
         line-height: 1.6;
         color: #c2a077;
         text-wrap: balance;
     }
-    /* 45ch, not the 50 the column would allow: at 50 the line broke between "git" and "worktree", and
-       a git worktree is one noun. Narrowing moves the break to the comma before it. */
+    /* 54ch: wide enough that balanced text puts its own break at the comma before "and review", which is
+       where the sentence turns. Narrower and the break lands inside "its own container and git worktree",
+       which is one idea. */
     .a-page .a-hero-summary {
-        margin: 0.8rem 0 0;
-        max-width: 45ch;
+        margin: 0.65rem auto 0;
+        max-width: 54ch;
         font-size: 0.9375rem;
-        line-height: 1.7;
+        line-height: 1.75;
         color: #9c8971;
-    }
-    .a-page .a-hero-divider {
-        margin: 1.7rem 0 1.6rem;
-        max-width: 17rem;
+        text-wrap: balance;
     }
 
+    /* One control row, used twice — here and in the closing band — and centred in both. */
     .a-page .a-hero-actions {
         display: flex;
         flex-wrap: wrap;
+        justify-content: center;
         gap: 0.9rem;
     }
-    .a-page .a-hero-actions-second {
-        margin-top: 0.9rem;
-    }
-    .a-page .a-win {
-        width: 1rem;
-        height: 1rem;
-        flex: none;
+    .a-page .a-hero-copy .a-hero-actions {
+        margin-top: 2.1rem;
     }
 
+    /* The three free-ness claims, on one line under the buttons. Separated by their own lotus rather than
+       by a middot: the bullet of every list on this page is the brand's mark, and a row of chips is a
+       list set sideways. */
     .a-page .a-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.55rem 1.5rem;
-        margin: 1.9rem 0 0;
+        justify-content: center;
+        gap: 0.5rem 1.6rem;
+        margin: 1.7rem 0 0;
         padding: 0;
         list-style: none;
-        font-size: 0.875rem;
+        font-size: 0.8125rem;
         color: var(--a-muted);
     }
     .a-page .a-chips li {
         display: inline-flex;
         align-items: center;
-        gap: 0.55rem;
+        gap: 0.5rem;
     }
 
-    /* The visual leans out of its column on the widest screens: the composition wants the width more
-       than the gutter does, and the copy beside it is capped at its own measure anyway. */
+    /* ── The product, in three frames on one axis ─────────
+       The workspace sits on the centre line and a narrower surface leans in from either side, overlapping
+       its edges: one near thing in the middle, two at middle distance. Only the centre frame is in flow —
+       it sets the block's height — and the two wings hang off their own edges of the same span, so the
+       composition holds its proportions at every width without a media query per frame.
+       All three CROP their screenshot from the top-left rather than fitting it. A whole screen shrunk into
+       a 370px wing is a grey rectangle; its top-left corner at full size is still a readable list. */
     .a-page .a-hero-visual {
         position: relative;
-        margin: 0;
-    }
-    @media (min-width: 90rem) {
-        .a-page .a-hero-visual {
-            margin-right: min(0px, calc(700px - 50vw));
-        }
+        margin: 2.6rem 0 0;
     }
     .a-page .a-hero-stack {
         position: relative;
-        padding: 0 0.5rem 6.5rem 0;
     }
+    .a-page .a-window-app {
+        position: relative;
+        z-index: 2;
+        width: 62%;
+        margin: 0 auto;
+    }
+    /* The wings STRADDLE the centre frame rather than standing level with it — the plan rides above its
+       top rail, the chat drops below its foot. Level, the three read as a row of thumbnails; offset, they
+       read as one arrangement with a front and a back. Each throws its shadow inward, towards the frame
+       it overlaps, which is what carries the depth. */
+    .a-page .a-window-plan,
+    .a-page .a-window-chat {
+        position: absolute;
+        pointer-events: none;
+    }
+    .a-page .a-window-plan {
+        z-index: 1;
+        top: -2.25rem;
+        left: 0;
+        width: 24%;
+        box-shadow:
+            0.9rem 0 1.8rem -0.4rem rgba(0, 0, 0, 0.7),
+            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
+    }
+    .a-page .a-window-chat {
+        z-index: 3;
+        right: 0;
+        bottom: -2.25rem;
+        width: 25.5%;
+        box-shadow:
+            -0.9rem 0 1.8rem -0.4rem rgba(0, 0, 0, 0.7),
+            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
+    }
+
     .a-page .a-window-crop {
         position: relative;
         overflow: hidden;
     }
+    /* One crop shape per surface, each cut to end on a horizon in the screenshot rather than through the
+       middle of a row: the workspace on its table of runs, the plan on its checklist, the chat on a reply.
+       The centre is the widest of the three on purpose — it is the only one carrying rows a reader is
+       meant to read across, and every 100px of height it takes is 100px the whole first screen grows by. */
     .a-page .a-window-crop-app {
-        aspect-ratio: 16 / 10;
+        aspect-ratio: 16 / 9;
+    }
+    .a-page .a-window-crop-plan {
+        aspect-ratio: 5 / 6;
     }
     .a-page .a-window-crop-chat {
-        aspect-ratio: 4 / 3;
+        aspect-ratio: 6 / 5;
     }
     .a-page .a-screen {
         position: absolute;
@@ -1012,92 +1096,15 @@ const GITHUB_MARK =
         left: 0;
         max-width: none;
     }
+    /* The centre frame is wide enough to hold its screenshot at close to true size; the two wings are not,
+       so they are drawn a third over and crop harder. A wing set at the centre's scale is a grey mosaic —
+       the point of a surface at middle distance is that you can still tell what it is. */
     .a-page .a-screen-app {
         width: 112%;
     }
+    .a-page .a-screen-plan,
     .a-page .a-screen-chat {
-        width: 100%;
-    }
-
-    /* The press into the demo sits top-right rather than dead centre: the chat window covers this
-       screen from its middle down at every width, and the top strip is the one band all three
-       surfaces leave clear. */
-    .a-page .a-play {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: flex-start;
-        justify-content: flex-end;
-        padding: 0.9rem;
-        background: rgba(10, 7, 5, 0.08);
-        transition: background-color 0.25s ease;
-    }
-    .a-page .a-play:hover {
-        background: rgba(10, 7, 5, 0.35);
-    }
-    /* THE PRESS INTO THE DEMO. It sits ON a screenshot rather than on the page, which is what makes it
-       different from every other control here: whatever is behind it is busy, bright in places, and not
-       ours. So it is the quietest possible chip — sans, small, tight, on a near-solid plate — and it
-       borrows the buttons' cut corners so it still belongs to the page. It was set in the titling serif
-       at 15px, which over a screenshot of an IDE read as decoration rather than as something to press. */
-    /* Same fault the menu panel had: a plain 1px border plus a clip-path loses its corners exactly
-       where the notch is, so the outline arrives in four disconnected pieces. The frame is a nine-slice
-       drawn WITH the notch, like the buttons, and the clip follows the same diagonal. */
-    .a-page .a-play-pill {
-        --a-cut: 5.4px;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.3'/%3E%3C/svg%3E");
-        border-image-slice: 15;
-        border-image-width: 11px;
-        border-image-repeat: stretch;
-        background: rgba(10, 7, 5, 0.92);
-        padding: 0.42rem 0.85rem;
-        font-family: var(--font-sans);
-        font-size: 0.8125rem;
-        font-weight: 500;
-        letter-spacing: 0.01em;
-        color: var(--a-cream);
-        clip-path: polygon(
-            var(--a-cut) 0,
-            calc(100% - var(--a-cut)) 0,
-            100% var(--a-cut),
-            100% calc(100% - var(--a-cut)),
-            calc(100% - var(--a-cut)) 100%,
-            var(--a-cut) 100%,
-            0 calc(100% - var(--a-cut)),
-            0 var(--a-cut)
-        );
-        transition: color 0.22s ease;
-    }
-    .a-page .a-play:hover .a-play-pill {
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(245,155,63,0.9)' stroke-width='1.3'/%3E%3C/svg%3E");
-        color: var(--a-ember-bright);
-    }
-    .a-page .a-play-pill svg {
-        display: block;
-        flex: none;
-        width: 0.7rem;
-        height: 0.7rem;
-    }
-
-    .a-page .a-window-chat {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        width: 66%;
-        pointer-events: none;
-        box-shadow:
-            -0.9rem 0 1.6rem -0.35rem rgba(0, 0, 0, 0.7),
-            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
-    }
-    .a-page .a-hero-visual figcaption {
-        margin-top: 1rem;
-        font-size: 0.75rem;
-        line-height: 1.6;
-        color: var(--a-subtle);
+        width: 134%;
     }
 
     /* ── 2 · The verbs ───────────────────────────────────── */
@@ -1713,9 +1720,6 @@ const GITHUB_MARK =
     .a-page .a-final-divider {
         margin: 2rem 0;
     }
-    .a-page .a-final-actions {
-        justify-content: center;
-    }
 
     /* ── The foot ─────────────────────────────────────────
        Five columns and a brand cell, on a ground a shade darker than the page so the band reads as the
@@ -1841,13 +1845,8 @@ const GITHUB_MARK =
     /* ── Below the columns break ─────────────────────────── */
     @media (max-width: 64rem) {
         .a-page .a-hero-grid {
-            grid-template-columns: minmax(0, 1fr);
-            gap: 3.5rem;
-            padding-top: 7.5rem;
-            padding-bottom: 4rem;
-        }
-        .a-page .a-hero-visual {
-            max-width: 40rem;
+            padding-top: 7rem;
+            padding-bottom: 3.5rem;
         }
         .a-page .a-headline-line {
             white-space: normal;
@@ -1856,25 +1855,48 @@ const GITHUB_MARK =
             padding-top: 4rem;
             padding-bottom: 4rem;
         }
-        .a-page .a-screen-app {
-            width: 155%;
+        /* The three widths are percentages of the same span, so the arrangement holds itself together as
+           the window narrows — what has to change is the CROP. Each frame is smaller in real pixels here,
+           so each screenshot is drawn further over and shows less of itself, which keeps its type at
+           roughly the size it had on a desktop. The vertical straddle tightens for the same reason. */
+        .a-page .a-window-plan {
+            top: -1.5rem;
         }
+        .a-page .a-window-chat {
+            bottom: -1.5rem;
+        }
+        .a-page .a-screen-app {
+            width: 138%;
+        }
+        .a-page .a-screen-plan,
         .a-page .a-screen-chat {
-            width: 150%;
+            width: 175%;
         }
     }
-    @media (max-width: 40rem) {
-        .a-page .a-hero-stack {
-            padding-bottom: 5.5rem;
+    /* THE WINGS COME OFF ON A PHONE. Overlapped across 380px the three frames hide most of each other and
+       none of them is readable; the workspace alone, full width and cropped harder, carries the same point.
+       Both wings are decoration a screen reader never sees, so only the arrangement is lost. */
+    @media (max-width: 48rem) {
+        .a-page .a-hero-visual {
+            margin-top: 2.75rem;
         }
-        .a-page .a-screen-app {
-            width: 200%;
+        .a-page .a-window-plan,
+        .a-page .a-window-chat {
+            display: none;
         }
-        .a-page .a-screen-chat {
-            width: 220%;
+        .a-page .a-window-app {
+            width: 100%;
         }
         .a-page .a-window-crop-app {
             aspect-ratio: 5 / 4;
+        }
+        .a-page .a-screen-app {
+            width: 175%;
+        }
+    }
+    @media (max-width: 40rem) {
+        .a-page .a-screen-app {
+            width: 205%;
         }
         .a-page .a-triggers ul {
             grid-template-columns: minmax(0, 1fr);

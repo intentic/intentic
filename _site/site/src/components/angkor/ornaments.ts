@@ -1,14 +1,13 @@
 /* THE ORNAMENT KIT for the Angkor landing (`/angkor/`), an alternative treatment of the home page.
  *
- * Every flourish on that page is one of these five shapes, drawn in `currentColor` so a caller sets the
+ * Every flourish on that page is one of these four shapes, drawn in `currentColor` so a caller sets the
  * metal by setting a text colour. They are strings rather than components because most of them are used
  * inside CSS `background-image` as well as in markup, and one definition that can do both is the only way
  * the drawn corner and the CSS corner cannot drift apart.
  *
  * The vocabulary is the reference image's: a lotus (the brand's own mark, and the bullet of every list on
- * the page), a double-ruled corner with a lozenge at its elbow (every frame and every button), a lozenge on
- * its own (dividers, list bullets, the seam between chips) and a radiant mandala (the glows in the sky of
- * the hero).
+ * the page), a double-ruled corner with a lozenge at its elbow (every frame and every button), and a lozenge
+ * on its own (dividers, list bullets, the seam between chips).
  */
 
 /** The lotus, five petals over two leaves. The brand mark of the page: the wordmark's companion, every
@@ -52,19 +51,6 @@ export const CORNER = `<svg viewBox="0 0 44 44" fill="none" aria-hidden="true">
     <path d="M1 25c3.9 0 7-3.1 7-7"/>
   </g>
   <path d="M12.5 8.6 16.4 12.5 12.5 16.4 8.6 12.5z" stroke="currentColor" stroke-width="1" fill="none"/>
-</svg>`;
-
-/** The sky ornaments: a ringed star, the same figure the reference image scatters above the temple.
- *  Used at low opacity behind the hero and the closing band. */
-export const MANDALA = `<svg viewBox="0 0 120 120" fill="none" aria-hidden="true">
-  <g stroke="currentColor" stroke-width="1">
-    <circle cx="60" cy="60" r="14" opacity=".9"/>
-    <circle cx="60" cy="60" r="26" opacity=".6"/>
-    <circle cx="60" cy="60" r="40" opacity=".35"/>
-    <circle cx="60" cy="60" r="54" opacity=".18"/>
-    <path d="M60 0v120M0 60h120M18 18l84 84M102 18l-84 84" opacity=".22"/>
-  </g>
-  <circle cx="60" cy="60" r="5" fill="currentColor"/>
 </svg>`;
 
 /** The rule between a block of copy and what it leads to: a hairline out of nothing on both sides, a
