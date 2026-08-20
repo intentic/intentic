@@ -30,7 +30,7 @@
      subject is personas, on a workspace with none, has to explain itself. -->
 <script setup lang="ts">
 import { personaBounds } from "@intentic/sandbox-contract";
-import { ui, Icon, type IconName, StatusBadge } from "@intentic/ui";
+import { ui, Icon, type IconName, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
@@ -41,7 +41,6 @@ import type { Conversation } from "../composables/chat/conversation";
 import { laneOfTab, tabLabel } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { usePersonas } from "../composables/sandbox/usePersonas";
-import PersonaFace from "../components/PersonaFace.vue";
 import RailCard from "../components/RailCard.vue";
 
 // The host focuses the chat, exactly as it does for the lanes' rows — this list emits verbs and never writes

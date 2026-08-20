@@ -51,6 +51,7 @@ export const extensionUiNames = [
     "Page",
     "PageAction",
     "PageHeader",
+    "PersonaFace",
     "Picker",
     "Popover",
     "ProgressRing",

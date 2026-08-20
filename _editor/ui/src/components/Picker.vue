@@ -21,6 +21,7 @@ import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs, useSlots } from "vue";
 import { useDevice } from "../composables/useDevice.js";
 import { normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
+import PersonaFace from "./PersonaFace.vue";
 import PickerPanel from "./PickerPanel.vue";
 import ResponsiveOverlay from "./ResponsiveOverlay.vue";
 
@@ -82,6 +83,17 @@ const open = ref(false);
 // rather than watched: the trigger cannot resize while a modal panel is over it.
 const panelMinWidth = ref(0);
 
+/* THE CAP HAS TO CLEAR THE FLOOR, and for a long time it did not — which was a clipping bug rather than a
+ * sizing preference. The floor above lived on this sizing div; the cap (a flat `max-w-96`) lived on the panel
+ * WRAPPER, one element up, inside a surface whose whole job is to clip. So a full-width form field — the
+ * automations "Runs as" row is ~40rem — asked for a 40rem list inside a 24rem box, and everything at the right
+ * end of every row was simply cut off: the quiet annotation, and the tick marking the current choice. The panel
+ * also came out visibly narrower than the control that opened it, which is the tell.
+ * One element owns both numbers now, so they cannot contradict: comfortable by default, as wide as its own
+ * trigger when that is wider, and never past the edge of the window. */
+const PANEL_WIDTH_CAP = 384; // 24rem — the comfortable reading measure for a list of names
+const panelMaxWidth = computed(() => Math.max(PANEL_WIDTH_CAP, panelMinWidth.value));
+
 const toggle = (): void => {
     if (disabled) {
         return;
@@ -126,7 +138,17 @@ const applyPick = (option: PickerOption<T>): void => {
     >
         <template v-if="selected !== undefined">
             <slot name="icon" :option="selected">
-                <Icon v-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-xs text-muted" aria-hidden="true" />
+                <!-- A face rather than a glyph when the pick is a person, because the closed trigger is the only
+                     thing on screen once the panel shuts and "who is this set to" is the whole question it
+                     answers. Sized to the room the trigger ALREADY has, which is the constraint that settled the
+                     number: this field sits in a two-column form beside plain inputs and other pickers, and 24
+                     grew it two pixels taller than all of them — a persona field visibly out of line with its
+                     neighbours, to make one avatar bigger. 20 changes no height at all, and a toolbar's
+                     borderless pill only has room for 16. Both are under the 28 a panel row gets, which is the
+                     right way round: a list of people is where you recognise a face, and a closed field is where
+                     you confirm one you have already chosen. -->
+                <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="variant === `ghost` ? 16 : 20" />
+                <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-xs text-muted" aria-hidden="true" />
             </slot>
         </template>
         <!-- The label reveals itself only when this span actually clips it. A native `title` on the BUTTON said
@@ -142,10 +164,12 @@ const applyPick = (option: PickerOption<T>): void => {
         <Icon name="chevron-down" class="shrink-0 text-subtle" :class="variant === `ghost` ? `text-4xs` : `text-2xs`" aria-hidden="true" />
     </button>
 
-    <ResponsiveOverlay v-model="open" :anchor="triggerEl ?? undefined" :header="header ?? ariaLabel" side="bottom" panel-class="w-max max-w-96">
+    <ResponsiveOverlay v-model="open" :anchor="triggerEl ?? undefined" :header="header ?? ariaLabel" side="bottom" panel-class="w-max">
         <!-- The trigger-width floor is the DESKTOP panel's, and only its. A sheet is already as wide as the
              phone, and a min-width taken from a full-width trigger would push it wider than the screen. -->
-        <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px` }">
+        <!-- The window clamp rides the same declaration rather than a class, because an inline max-width would
+             simply win over one and the panel would hang off the edge of a narrow window. -->
+        <div :style="mobile ? undefined : { minWidth: `${panelMinWidth}px`, maxWidth: `min(${panelMaxWidth}px, calc(100vw - 1rem))` }">
             <PickerPanel
                 :options="options"
                 :selected-value="model"

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { ui, Modal, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { ui, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
-import PersonaFace from "../../components/PersonaFace.vue";
 import {
     FULL_POWERS,
     grantablesFrom,
@@ -275,13 +274,7 @@ const submit = async (): Promise<void> => {
                      same kind of thing, one folder along. Each says where it starts TODAY, because that is what
                      picking it takes away — a persona has one starting folder, so this moves it. -->
                 <template v-if="mode === `existing`">
-                    <input
-                        v-if="filterable"
-                        v-model="filter"
-                        :class="ui.input('w-full')"
-                        placeholder="Find a persona…"
-                        aria-label="Find a persona"
-                    />
+                    <input v-if="filterable" v-model="filter" :class="ui.input('w-full')" placeholder="Find a persona…" aria-label="Find a persona" />
                     <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
                         <button
                             v-for="persona in shown"

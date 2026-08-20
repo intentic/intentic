@@ -5,6 +5,7 @@
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../composables/useListNavigation.js";
+import PersonaFace from "./PersonaFace.vue";
 import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
 
@@ -58,6 +59,12 @@ const flat = computed<readonly PickerOption<T>[]>(() => shown.value.flatMap((gro
 /* Hinted rows are two lines, so the whole LIST switches to top-alignment — per-row would step the icons and
  * checks up and down the column as the reader's eye travels it. One list, one baseline. */
 const hinted = computed(() => flat.value.some((option) => option.hint !== undefined));
+
+/* And for the same reason, one list, one row HEIGHT once anything in it wears a face. A face is taller than the
+ * line of text beside it, so a list of people with a "Nobody" glyph at the top came out with one short row and
+ * five tall ones — a visible hitch at exactly the row a reader lands on first. Applied to the whole list rather
+ * than per row, so the column steps evenly whichever rows happen to be filtered out. */
+const faced = computed(() => flat.value.some((option) => option.face !== undefined));
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (option) => option.value);
 
@@ -150,14 +157,23 @@ onMounted(() => {
                     role="option"
                     :aria-selected="row.option.value === selectedValue"
                     class="ui-row-select flex w-full gap-2 px-3 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
-                    :class="[{ 'ui-row-select-on': row.index === activeIndex }, hinted ? `items-start py-2` : `items-center py-1.5`]"
+                    :class="[
+                        { 'ui-row-select-on': row.index === activeIndex },
+                        hinted ? `items-start py-2` : `items-center py-1.5`,
+                        faced ? `min-h-10` : ``,
+                    ]"
                     :disabled="row.option.disabled === true"
                     @click="pick(row.option)"
                     @mouseenter="activeIndex = row.index"
                 >
                     <slot name="icon" :option="row.option">
+                        <!-- A row that names a PERSON wears their face. Bigger than the glyph beside it and
+                             bigger than the closed trigger's, on purpose: the trigger is a form field that must
+                             not grow, while a list of people is the one place where recognising a face at a
+                             glance is the entire reason you are looking. -->
+                        <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="28" />
                         <Icon
-                            v-if="row.option.icon !== undefined"
+                            v-else-if="row.option.icon !== undefined"
                             :name="row.option.icon"
                             class="shrink-0 text-xs"
                             :class="[row.option.value === selectedValue ? `text-primary-500` : `text-muted`, hinted ? `mt-0.5` : ``]"

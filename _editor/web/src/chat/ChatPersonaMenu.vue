@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { StatusBadge } from "@intentic/ui";
+import { PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import PersonaFace from "../components/PersonaFace.vue";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 
 /* THE COMPOSER'S PERSONA PICKER — "who is this chat when it reaches the outside world".
@@ -63,10 +62,17 @@ const openPersonas = (): void => {
         </template>
 
         <template v-else>
+            <!-- THE TICK IS WHY THIS LIST GREW A THIRD COLUMN. Picked and merely-hovered were painted the same
+                 tint, and the pointer is resting on a row the entire time the menu is open — so the one question
+                 the list exists to answer ("who is it set to?") was the one it could not answer while you were
+                 reading it. Every other picker in the app already ticks its current row; this one now agrees.
+                 It also has to be on ANYONE, which is a real choice here rather than the absence of one: a chat
+                 with no persona keeps every account, so "nothing ticked" would read as a broken menu. -->
             <button
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 :class="{ 'ui-row-select-on': picked === undefined }"
+                :aria-selected="picked === undefined"
                 @click="emit(`picked`, undefined)"
             >
                 <Icon name="users" class="mt-0.5 shrink-0 text-xs text-subtle" />
@@ -74,6 +80,7 @@ const openPersonas = (): void => {
                     <span class="text-sm text-content md:text-xs">Anyone</span>
                     <span class="text-2xs text-subtle">Every account you've connected is in reach, and the full toolbox.</span>
                 </span>
+                <Icon v-if="picked === undefined" name="check" class="ml-auto mt-0.5 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
             </button>
 
             <button
@@ -82,6 +89,7 @@ const openPersonas = (): void => {
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 :class="{ 'ui-row-select-on': persona.id === picked }"
+                :aria-selected="persona.id === picked"
                 @click="emit(`picked`, persona.id)"
             >
                 <!-- The same face this persona wears on its own page and in the chat rail — assembled from its
@@ -108,16 +116,13 @@ const openPersonas = (): void => {
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)"> — not signed in yet</template>
                     </span>
                 </span>
+                <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
             </button>
 
             <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is: a
                  picker is where someone notices a persona is missing an account, and sending them hunting for
                  the sandbox hub from here is how a two-second fix becomes a task for later. -->
-            <button
-                type="button"
-                class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
-                @click="openPersonas"
-            >
+            <button type="button" class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3" @click="openPersonas">
                 <Icon name="cog" class="shrink-0 text-xs text-subtle" />
                 <span class="text-2xs text-subtle">Manage personas</span>
             </button>

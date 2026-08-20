@@ -1,4 +1,5 @@
 import type { IconName } from "../icons/iconSets.js";
+import type { PersonaLike } from "./personaFace.js";
 
 /* The Picker's option model. One shape serves every site: a flat list for simple choices (enum settings,
  * repo names) and labelled groups where the options have families (models per provider). Options are data,
@@ -17,6 +18,14 @@ export interface PickerOption<T extends string = string> {
     readonly hint?: string;
     /** Leading glyph for the row and the closed trigger. */
     readonly icon?: IconName;
+    /* THIS ROW IS A SOMEBODY — draw <PersonaFace> for it, in the row and in the closed trigger, instead of a
+     * glyph. Data rather than markup like everything else here, and the reason it is a field rather than the
+     * #icon slot: the two surfaces that pick a persona are extensions, so the "persona rows get a face, Nobody
+     * gets a glyph" rule would have been hand-written in each of them and free to disagree — which is exactly
+     * how the app came to have four different opinions about how a persona is drawn before <PersonaFace>
+     * existed. A row carrying both `face` and `icon` draws the face: a name that belongs to a person outranks a
+     * category glyph. */
+    readonly face?: PersonaLike;
     /** Monospace label — domains, repo paths, other machine names. */
     readonly mono?: boolean;
     readonly disabled?: boolean;

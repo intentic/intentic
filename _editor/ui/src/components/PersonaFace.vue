@@ -29,6 +29,13 @@
      them, but a persona's are two letters of an invented noun ("SS" over "MA"), so you end up reading the name
      underneath anyway — exactly the work the mark was supposed to save.
 
+     IT LIVES IN THE DESIGN SYSTEM, and it did not start here. It sat in the web app beside the pages that draw
+     persona LISTS, which was fine until the two surfaces where you CHOOSE a persona — an automation's "Runs as"
+     and a workflow step's "Acts as" — turned out to be extensions, and an extension can import nothing out of
+     the app. Both of them therefore drew a persona as a line of text, on the one kind of screen where you are
+     picking by sight. That is the same journey <BrandMark> and <SplitView> made, for the same reason: this is
+     identity, and identity that changes drawing depending on which surface you meet it on is not identity.
+
      IT TAKES THE PERSONA, NOT A SEED, and that is load-bearing rather than tidy. Every caller used to write
      `persona.label ?? persona.id` at the call site, which is a RULE — "a card's face is made of the name you
      gave it, falling back to its id" — copied into four templates that were each free to disagree, and the
@@ -47,13 +54,7 @@
 import { Avatar, Style } from "@dicebear/core";
 import definition from "@dicebear/styles/adventurer.json";
 import { computed } from "vue";
-
-/* Everything this needs of a persona, and nothing more — so the folder panel's cards, the rail's rows and the
- * page's own list all satisfy it without any of them having to hold a whole Persona to draw one. */
-interface PersonaLike {
-    readonly id: string;
-    readonly label?: string;
-}
+import type { PersonaLike } from "./personaFace.js";
 
 /* THE SIZE DEFAULTS TO THE LIST SIZE, so the two surfaces that show a persona AS A PERSON — its own page and
  * the chat's persona rail — both say `<PersonaFace :persona />` and cannot drift apart the way a 32 here and a

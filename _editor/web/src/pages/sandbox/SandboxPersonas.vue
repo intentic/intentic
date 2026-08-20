@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { Avatar, BrandMark, ui, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
+import { Avatar, BrandMark, ui, ConfirmDialog, Notice, type NoticeModel, PersonaFace, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
@@ -8,7 +8,6 @@ import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { createInlineRename } from "../../composables/inlineRename";
 import { useBrowserAccounts } from "../../composables/extensions/useBrowserAccounts";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
-import PersonaFace from "../../components/PersonaFace.vue";
 import { grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";

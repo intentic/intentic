@@ -102,6 +102,13 @@ export { default as Page } from "./components/Page.vue";
 // PrimeVue Button's variant matrix out of the one slot every view fills.
 export { default as PageAction } from "./components/PageAction.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
+/* <Avatar>'s counterpart for a name nobody has a photograph of: a cartoon character assembled from the name
+ * itself, so a persona looks like somebody rather than like a label. It sat in the web app until the two
+ * surfaces where you CHOOSE a persona turned out to be extensions, which could reach nothing in there — the
+ * same reason <BrandMark> and <SplitView> ended up here. A face is identity, and identity has to be the same
+ * drawing on every surface or it is not identity. */
+export { default as PersonaFace } from "./components/PersonaFace.vue";
+export { type PersonaLike } from "./components/personaFace.js";
 // A bordered surface: its own header, its own interrupting strips, one scrolling body. Header and frame are one
 // component because every caller of the header wrapped it in the frame — and the min-h-0/overflow-hidden scroll
 // contract it owns is the failure three views had each rediscovered, one of them incorrectly.

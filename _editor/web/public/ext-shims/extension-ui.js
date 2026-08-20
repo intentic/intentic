@@ -35,6 +35,7 @@ export const NoticeStack = m["NoticeStack"];
 export const Page = m["Page"];
 export const PageAction = m["PageAction"];
 export const PageHeader = m["PageHeader"];
+export const PersonaFace = m["PersonaFace"];
 export const Picker = m["Picker"];
 export const Popover = m["Popover"];
 export const ProgressRing = m["ProgressRing"];

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/extension-ui";
+import { Button, Checkbox, ui, Icon, Picker, type PickerOption, ProseField, SegmentedControl } from "@intentic/extension-ui";
 import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
@@ -218,11 +218,34 @@ const unpin = (): void => patch({ agent: undefined, model: undefined, account: u
  * card is how a release check gets the folder scope, toolbox and account set its owner already wrote down.
  * The cards are authored on the Personas page — this is only a pointer at one. */
 const { personas } = usePersonas();
-const actsAs = computed({
-    get: () => step.value.actsAs,
-    set: (value: string | undefined) => patch({ actsAs: value }),
+
+/* NOBODY IS A REAL ROW, not grey placeholder text, and that swap is the whole of this control's redesign. A
+ * placeholder cannot be TICKED: the panel marks the row whose value matches the current one, and an absent value
+ * matches no row, so the commonest setting of this field was the one setting the open list refused to confirm —
+ * you opened it, saw nothing marked, and could not tell whether the step was pinned to a card you had scrolled
+ * past. It also has something to SAY that an absence cannot: unattended-with-nobody reaches no logged-in account
+ * at all, which is the opposite of what an empty persona means in a chat.
+ *
+ * Empty string is the row's value only because a picker option is keyed by a string. The step keeps storing
+ * `undefined`, which is what the daemon means by nobody, and this is the one place that translates.
+ *
+ * PICKING IT IS UNPINNING, so the separate unpin button beside the field is gone. Two controls for one setting
+ * is how a panel teaches that the pick does not fully commit — and the button could only ever undo, while the
+ * row can also confirm. */
+const NOBODY = ``;
+const actsAs = computed<string>({
+    get: () => step.value.actsAs ?? NOBODY,
+    set: (value: string) => patch({ actsAs: value === NOBODY ? undefined : value }),
 });
-const personaOptions = computed(() => personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id })));
+
+/* `face` is what turns a row into a PERSON: the picker draws the card's own derived character in the row and
+ * again in the closed field, so a step's speaker is recognised the same way here as on the Personas page and in
+ * the chat. Nobody keeps a glyph — an empty ring above a column of faces is what says "none of these" before
+ * either label has been read. */
+const personaOptions = computed<readonly PickerOption[]>(() => [
+    { value: NOBODY, label: `Nobody`, description: `full tools, no accounts`, icon: `circle` as const },
+    ...personas.value.map((persona) => ({ value: persona.id, label: persona.label ?? persona.id, face: persona })),
+]);
 const personaLabel = (id: string): string => personas.value.find((persona) => persona.id === id)?.label ?? id;
 
 const setMaxSpend = (value: string): void => {
@@ -452,25 +475,7 @@ const advancedSummary = computed(() => {
 
                 <div class="flex flex-col gap-1.5">
                     <span :class="ui.sectionLabel()">Acts as</span>
-                    <div class="flex items-center gap-1.5">
-                        <Picker
-                            v-model="actsAs"
-                            :options="personaOptions"
-                            placeholder="Nobody — full tools, no accounts"
-                            aria-label="Persona for this step"
-                            class="min-w-0 flex-1 text-xs"
-                        />
-                        <button
-                            v-if="step.actsAs !== undefined"
-                            type="button"
-                            v-tooltip.top="`Unpin — this step acts as nobody`"
-                            :class="ui.iconButton()"
-                            aria-label="Unpin the persona"
-                            @click="actsAs = undefined"
-                        >
-                            <Icon name="times" />
-                        </button>
-                    </div>
+                    <Picker v-model="actsAs" :options="personaOptions" aria-label="Persona for this step" class="w-full text-xs" />
                     <span class="text-2xs text-subtle">
                         A step runs with nobody at the keyboard, so it reaches no logged-in account unless it acts as a persona — the card also sets
                         how far its tools go and where it works.

@@ -964,6 +964,12 @@ importers:
       '@dagrejs/dagre':
         specifier: 'catalog:'
         version: 3.0.0
+      '@dicebear/core':
+        specifier: 'catalog:'
+        version: 10.5.0
+      '@dicebear/styles':
+        specifier: 'catalog:'
+        version: 10.4.0
       '@iconify/vue':
         specifier: 'catalog:'
         version: 5.0.1(vue@3.5.40(typescript@5.9.3))
@@ -1028,12 +1034,6 @@ importers:
 
   _editor/web:
     dependencies:
-      '@dicebear/core':
-        specifier: 'catalog:'
-        version: 10.5.0
-      '@dicebear/styles':
-        specifier: 'catalog:'
-        version: 10.4.0
       '@intentic-app/api-contract':
         specifier: workspace:*
         version: link:../../_platform/api-contract

@@ -21,8 +21,6 @@
         "typecheck": "vue-tsc --noEmit -p tsconfig.app.json"
     },
     "dependencies": {
-        "@dicebear/core": "catalog:",
-        "@dicebear/styles": "catalog:",
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/capability-catalog": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",

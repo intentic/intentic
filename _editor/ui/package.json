@@ -78,6 +78,8 @@
     },
     "dependencies": {
         "@dagrejs/dagre": "catalog:",
+        "@dicebear/core": "catalog:",
+        "@dicebear/styles": "catalog:",
         "@iconify/vue": "catalog:",
         "@primeuix/themes": "catalog:",
         "@shikijs/langs": "catalog:",

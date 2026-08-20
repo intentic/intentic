@@ -61,9 +61,13 @@ const personaList = useQuery({
     queryFn: () => host().sandbox.rpc.personas.list(),
     enabled: computed(() => host().sandbox.reachable()),
 });
-const personas = computed(() =>
+const personas = computed<readonly PickerOption[]>(() =>
     (personaList.data.value?.personas ?? [])
-        .map((persona) => ({ value: persona.id, label: persona.label ?? persona.id }))
+        /* `face` is what makes the row a PERSON rather than a value: the picker draws this card's own derived
+         * character for it, in the row and again in the closed field, so choosing who an automation speaks as is
+         * the same act of recognition here as it is on the Personas page and in the chat. The card goes over
+         * whole rather than as a name because the label-or-id rule belongs to <PersonaFace>, not to this file. */
+        .map((persona) => ({ value: persona.id, label: persona.label ?? persona.id, face: persona }))
         // Ordered, because a picker whose rows arrive in the file's order is a list you have to read twice.
         .toSorted((a, b) => a.label.localeCompare(b.label)),
 );
@@ -72,12 +76,19 @@ const personas = computed(() =>
  * leaving it alone is filled in with the read-only front desk on save — and the row says which it is.
  *
  * A PIN WHOSE CARD IS GONE still has to appear, or the trigger renders empty and reads as "nobody", which is
- * the one other thing it could mean and behaves very differently: that one gets nothing at all. */
+ * the one other thing it could mean and behaves very differently: that one gets nothing at all.
+ *
+ * NEITHER OF THE BLANK ROW'S TWO MEANINGS IS A PERSON, so it wears a glyph while everything under it wears a
+ * face — which is the whole of how a reader tells "no one in particular" from "this one" at a glance, without
+ * reading either label. The missing card is a person who is GONE, so it keeps a face: greying the row is what
+ * says it cannot be used, and drawing it as a category would hide that a name was pinned here at all. */
 const personaOptions = computed<readonly PickerOption[]>(() => [
-    isFrontDesk.value ? { value: ``, label: `Front desk`, description: `read-only` } : { value: ``, label: `Nobody`, description: `no accounts` },
+    isFrontDesk.value
+        ? { value: ``, label: `Front desk`, description: `read-only`, icon: `globe` as const }
+        : { value: ``, label: `Nobody`, description: `no accounts`, icon: `circle` as const },
     ...personas.value,
     ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
-        ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, disabled: true }]
+        ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, face: { id: form.actsAs }, disabled: true }]
         : []),
 ]);
 

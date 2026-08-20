@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, type IconName, ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { Icon, type IconName, PersonaFace, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -2451,7 +2451,21 @@ watch(
                                             :aria-expanded="personaOpen"
                                             :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
                                         >
-                                            <Icon name="users" class="text-2xs" :class="conversation.actsAs.value !== undefined ? 'text-link' : ''" />
+                                            <!-- PICKED, IT WEARS THE FACE. The glyph is right for the unset pill —
+                                                 "anyone" is a category and has no face — but once a message is
+                                                 about to go out under somebody's account, the pill is the last
+                                                 thing seen before Enter, and the character every other surface
+                                                 identifies that persona by belongs here too. It is also what
+                                                 survives the narrow composer: the name hides under @max-lg, and
+                                                 without this the whole pill collapsed to the same grey glyph it
+                                                 wears when nobody is picked at all. -->
+                                            <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="16" />
+                                            <Icon
+                                                v-else
+                                                name="users"
+                                                class="text-2xs"
+                                                :class="conversation.actsAs.value !== undefined ? 'text-link' : ''"
+                                            />
                                             <span v-if="conversation.actsAs.value !== undefined" class="max-w-32 truncate @max-lg:hidden">
                                                 {{ personaName }}
                                             </span>

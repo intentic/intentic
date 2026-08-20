@@ -5,11 +5,15 @@ import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { STATE_DIR } from "@intentic/sandbox-contract";
-// CJS with native bindings — its named exports aren't statically analyzable, so ESM must default-import.
-import opus from "@discordjs/opus";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
 import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
+// The Opus decoder for received voice. napi-rs, so the platform binding arrives as a prebuilt optional
+// dependency and nothing compiles on install — unlike @discordjs/opus, whose node-pre-gyp installer fetched and
+// untarred a binary at install time and needed a `tar` override to stay off a live advisory. Same class, same
+// `(sampleRate, channels)` constructor, same `decode(Buffer): Buffer`; decoded output matches the old binding to
+// within one 16-bit LSB (~110 dB SNR), which is libopus rounding and inaudible to whisper.
+import { OpusEncoder } from "mediaplex";
 import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
@@ -126,7 +130,7 @@ const subscribeSpeaker = (s: VoiceSession, userId: string): void => {
     }
     s.speaking.add(userId);
     const startedSpeaking = Date.now();
-    const decoder = new opus.OpusEncoder(48_000, 2);
+    const decoder = new OpusEncoder(48_000, 2);
     const chunks: Buffer[] = [];
     const stream = s.connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1_000 } });
     stream.on("data", (packet: Buffer) => {

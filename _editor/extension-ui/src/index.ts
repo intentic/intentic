@@ -122,6 +122,13 @@ export {
     PageAction,
     PageHeader,
     ScrollFrame,
+    /* <PersonaFace> ships because the TWO surfaces in the whole app where you choose a persona are both out
+     * here — an automation's "Runs as" and a workflow step's "Acts as" — and neither could reach the drawing
+     * every surface that merely LISTS a persona already uses. So the one screen where you are picking a person
+     * by sight was the one screen showing a line of text. It is exported alongside <Picker>'s own `face` option
+     * field, which is what most callers actually want: hand the row a persona and the picker draws it. */
+    PersonaFace,
+    type PersonaLike,
     Picker,
     type PickerGroup,
     type PickerOption,

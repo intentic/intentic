@@ -53,10 +53,6 @@ overrides:
   # miniflare (wrangler's local Workers runtime, a devDependency of the site) pins undici 7.28.0, which has five
   # request/response-smuggling advisories. Patch bump inside the same major.
   "miniflare>undici": 7.29.0
-  # @discordjs/node-pre-gyp unpacks @discordjs/opus's prebuilt binary with tar 6.2.1 — twelve path-traversal and
-  # DoS advisories, on the code path that extracts an archive fetched over the network at install time. That
-  # build is enabled in `allowBuilds`, so this is live rather than theoretical.
-  "@discordjs/node-pre-gyp>tar": 7.5.22
 
 minimumReleaseAgeExclude:
   - knip@6.29.0
@@ -85,7 +81,6 @@ allowBuilds:
   "@ast-grep/lang-java": true
   "@ast-grep/lang-python": true
   "@ast-grep/lang-rust": true
-  "@discordjs/opus": true
   # The workspace watcher's native backend. Its `install` script only builds from source; the platform binding
   # ships as a prebuilt optional dependency (@parcel/watcher-linux-x64-glibc and friends), so skipping the
   # script still yields a working native watcher — verified by loading it with scripts disabled.
@@ -130,7 +125,6 @@ catalog:
   # rather than one entry standing in for the other.
   "@dicebear/core": 10.5.0
   "@dicebear/styles": 10.4.0
-  "@discordjs/opus": 0.10.0
   "@discordjs/voice": 0.19.2
   "@hono/node-server": 2.0.12
   "@hono/otel": 1.1.2
@@ -222,6 +216,13 @@ catalog:
   knip: 6.31.0
   mailparser: 3.9.14
   marked: 18.0.7
+  # The Opus decoder for received Discord voice (the gateway decodes packets to PCM for whisper; it never sends
+  # audio, so nothing here encodes). napi-rs: the platform binding ships as a prebuilt optional dependency, one
+  # per target and sixteen of them — including musl, which the binding it replaced had no prebuild for — and
+  # there is no install script, so nothing is compiled or unpacked on install. That is the whole reason it is
+  # here rather than @discordjs/opus, whose node-pre-gyp installer fetched a tarball over the network at install
+  # time and dragged in a `tar` override to stay clear of a live path-traversal advisory.
+  mediaplex: 1.0.0
   mermaid: 11.16.1
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
