@@ -8,8 +8,12 @@
  * end up making different claims, and a copy change lands on both.
  *
  * What is different is everything around the words: a photographed temple wall behind the first screen,
- * engraved Playfair display type with an ember full stop on each beat, gold rules and turned corners in
- * place of hairline borders, and a lotus wherever the live page sets a bullet dot.
+ * engraved display type with an ember full stop on each beat, gold rules and turned corners in place of
+ * hairline borders, and a lotus wherever the live page sets a bullet dot.
+ *
+ * THREE FACES, EACH FENCED TO A SIZE BAND — Playfair above ~28px, Spectral from 13 to 24, Inter for
+ * running copy. `styles/angkor.css` sets that out at length and explains what went wrong when it was
+ * two. The short version: if you are adding something between 13 and 24px, it is `--a-font-title`.
  *
  * NOINDEX, and excluded from the sitemap in astro.config.mjs. It is a second dress on the same body:
  * left crawlable it would be a duplicate of the home page, which is the one thing a marketing site must
@@ -236,10 +240,21 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                     <h2 class="a-h2 a-display">{content.verbs.heading}</h2>
                     <p class="a-lede">{content.verbs.sub}</p>
 
+                    {/* THE LEAD VERB IS ONE OF THE FIVE, so it is titled like the other four rather than
+                        with a style of its own. It used to carry a 13px letterspaced ember caps label,
+                        which was three separate mistakes in one line: display type at a size display
+                        type cannot hold, a second eyebrow in a band whose eyebrow is twelve rem above
+                        it, and the only element on the page wearing that treatment. It is now a heading
+                        — the same lotus-and-title pair the trust cards use, one step up in size because
+                        this one leads. That also gives the block the <h3> its four siblings all have,
+                        so the section finally has an outline a screen reader can walk. */}
                     <div class="a-lead-verb">
                         <div class="a-lead-verb-head">
                             <div>
-                                <div class="a-verb-name">{leadVerb.verb}</div>
+                                <h3 class="a-lead-verb-name">
+                                    <Lotus />
+                                    {leadVerb.verb}
+                                </h3>
                                 <p class="a-lead-verb-line">{leadVerb.line}</p>
                             </div>
                             <a href={leadVerb.href} class="a-link a-see">See it →</a>
@@ -452,7 +467,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                                             {card.title}
                                         </h3>
                                         {card.stat === "commits" && stats !== null && (
-                                            <p class="a-trust-stat a-display">
+                                            <p class="a-trust-stat">
                                                 {stats.agent.toLocaleString("en-US")} of {stats.total.toLocaleString("en-US")}
                                                 <span>commits since {stats.since}</span>
                                             </p>
@@ -765,7 +780,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     /* The ember stop rides just off the last letter, the way a carved full stop would. */
     .a-page .a-stop {
         margin-left: 0.06em;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-display);
     }
 
     /* BALANCED, and that is what decides the cap. This sentence is two clauses and the column is a
@@ -885,8 +900,11 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         border: 1px solid var(--a-line-mid);
         background: rgba(12, 9, 7, 0.86);
         padding: 0.5rem 1rem;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 0.9375rem;
+        /* 500, explicitly: only 500 and 600 of this face are loaded, so an unset weight falls to a
+           400 that does not exist and the browser synthesises one. */
+        font-weight: 500;
         color: var(--a-cream);
         backdrop-filter: blur(4px);
         transition:
@@ -931,13 +949,15 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         gap: 1.5rem;
         max-width: 52rem;
     }
-    .a-page .a-verb-name {
-        font-family: "Playfair Display", Georgia, serif;
-        font-size: 0.8125rem;
+    .a-page .a-lead-verb-name {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0;
+        font-family: var(--a-font-title);
+        font-size: 1.375rem;
         font-weight: 600;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--a-ember);
+        color: var(--a-cream);
     }
     .a-page .a-lead-verb-line {
         margin: 0.6rem 0 0;
@@ -997,7 +1017,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     }
     .a-page .a-verb-body h3 {
         margin: 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.1875rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1088,7 +1108,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     }
     .a-page .a-compare-head h3 {
         margin: 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.25rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1182,7 +1202,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         border-bottom: 0;
     }
     .a-page .a-account-name {
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1rem;
         font-weight: 600;
     }
@@ -1257,7 +1277,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         align-items: center;
         gap: 0.6rem;
         margin: 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1268,19 +1288,30 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         line-height: 1.65;
         color: var(--a-muted);
     }
-    .a-page .a-trust-stat {
-        font-size: 1.6rem;
+    /* A FIGURE IS READ, NOT ADMIRED, so it takes the titling face and a flat fill. Set in the display
+       face with the metal gradient it was a 25px number whose lower third faded to brown — the two
+       things a reader most needs to tell apart here are 1,577 and 1,775, and the gradient was dimming
+       exactly the strokes that distinguish them. */
+    /* `p.` earns this rule the element the sibling `.a-trust-card p` above already has, and without it
+       that rule ties on specificity and wins on order — which is why the figure was silently rendering
+       at body size in the muted grey, the exact opposite of a headline number. */
+    .a-page .a-trust-card p.a-trust-stat {
+        margin: 0.9rem 0 0;
+        font-family: var(--a-font-title);
+        font-size: 1.75rem;
         line-height: 1.2;
-        font-weight: 700;
+        font-weight: 600;
+        /* Lining figures, so 1,579 and 1,777 differ by their shapes rather than by where they sit. */
+        font-variant-numeric: lining-nums tabular-nums;
+        color: var(--a-gold-bright);
     }
     .a-page .a-trust-stat span {
         display: block;
-        margin-top: 0.2rem;
+        margin-top: 0.25rem;
         font-family: var(--font-sans);
         font-size: 0.75rem;
         font-weight: 400;
         color: var(--a-subtle);
-        -webkit-text-fill-color: var(--a-subtle);
     }
     .a-page .a-trust-card a {
         display: inline-block;
@@ -1300,15 +1331,19 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
             gap: 2rem;
         }
     }
+    /* Lining figures: these are step markers, so 01/02/03 should sit on one line at one height. The
+       display face's default old-style figures drop the 3 below the baseline, which on a counter reads
+       as a typo rather than as a style. */
     .a-page .a-step-num {
         font-size: 3.25rem;
         line-height: 1;
         font-weight: 700;
+        font-variant-numeric: lining-nums;
         opacity: 0.32;
     }
     .a-page .a-step h3 {
         margin: 0.75rem 0 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1359,7 +1394,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     }
     .a-page .a-desktop-lead {
         margin: 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1387,7 +1422,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     }
     .a-page .a-faq-group-head h3 {
         margin: 0;
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-title);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
@@ -1519,9 +1554,11 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         align-items: center;
         gap: 0.6rem;
     }
+    /* The wordmark, so it is the bar's face and not a smaller cousin of it — which means display, which
+       means it has to clear the ~28px fence. 1.75rem does; the 1.35 it started at did not. */
     .a-page .a-foot-word {
-        font-family: "Playfair Display", Georgia, serif;
-        font-size: 1.35rem;
+        font-family: var(--a-font-display);
+        font-size: 1.75rem;
         color: var(--a-ember);
     }
     .a-page .a-foot-note {

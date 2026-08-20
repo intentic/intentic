@@ -18,10 +18,27 @@
  * plate with the two variables at the top of the block rather than by editing the layers.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 
-/* Playfair Display — the display face, and ONLY the display face: headings, the buttons, the numerals
- * and the wordmark's companion. Body copy stays Inter (already self-hosted by global.css), because the
- * reference art sets its paragraphs in a sans too, and a whole page of high-contrast serif at 14px is
- * a page nobody finishes. Same two subsets and the same variable-weight range as the site's Inter. */
+/* ── THE THREE FACES, AND THE SIZE BAND EACH IS ALLOWED IN ──────────────────────────────────────────
+ *
+ * This page started with two and that was one too few. Playfair is a DISPLAY face: its whole character
+ * is the jump between a thick stem and a hairline, and a hairline is a fraction of a pixel once the type
+ * is under about 20px. Below that it does not look elegant, it looks broken — the strokes drop out, and
+ * BOLD makes it worse rather than better, because weight is added to the stems the hairlines have to
+ * hold up. Every complaint about this page's small type was a Playfair heading at 13–20px, semibold, on
+ * a dark ground: card titles, buttons, and a 13px letterspaced "RUN" that had almost nothing left of it.
+ *
+ * So the faces are split by JOB and each is fenced to a size band:
+ *
+ *   Playfair Display  — display only, and nothing under ~28px: the hero's three beats, the section
+ *                       headings, the step numerals, the wordmark. This is where the contrast pays.
+ *   Spectral          — the titling tier, 13–24px: card headings, buttons, list labels. A screen-first
+ *                       text serif with moderate contrast and sturdy wedge serifs, so it keeps the
+ *                       carved character exactly where Playfair loses it. 500 and 600 only.
+ *   Inter             — running copy and all small print, as global.css already serves it. The
+ *                       reference art sets its paragraphs in a sans too.
+ *
+ * If a new element is between 13 and 24px, it is Spectral. That is the whole rule.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────────── */
 @font-face {
     font-family: "Playfair Display";
     font-style: normal;
@@ -41,7 +58,51 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* Spectral ships static weights rather than a variable axis, so the two the page uses are two files
+ * each. Nothing asks for 400 or 700: a weight the page never sets is a download nobody needs. */
+@font-face {
+    font-family: "Spectral";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/spectral-500-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Spectral";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/spectral-500-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Spectral";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/spectral-600-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Spectral";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/spectral-600-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 .a-page {
+    /* The two serifs, named by the job rather than by the typeface, so a call site says which TIER it
+     * belongs to and the fence above is enforced by which variable it reaches for. */
+    --a-font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --a-font-title: "Spectral", Georgia, "Times New Roman", serif;
+
     /* ── The metals ──────────────────────────────────────
      * Two of them, and the page is built on the difference. GOLD is structure: every rule, frame,
      * corner and lozenge. EMBER is the brand's own orange and it is spent, never spread — the one
@@ -94,7 +155,7 @@ body:has(.a-page) {
  * one for the shadow it throws). `filter` rather than `text-shadow` because the fill is a clipped
  * background, which text-shadow paints straight over. */
 .a-page .a-display {
-    font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+    font-family: var(--a-font-display);
     font-weight: 600;
     letter-spacing: -0.005em;
     background: linear-gradient(178deg, #fbf3e2 0%, #ecdcbd 38%, #cbb086 72%, #a98c60 100%);
@@ -251,9 +312,11 @@ body:has(.a-page) {
     padding: 0.85rem 1.65rem;
     border: 1px solid var(--a-line-mid);
     border-radius: 3px;
-    font-family: "Playfair Display", Georgia, serif;
+    /* Titling tier: a button label is 17px and it is the most clicked type on the page. */
+    font-family: var(--a-font-title);
     font-size: 1.0625rem;
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     line-height: 1.35;
     color: var(--a-cream);
     text-decoration: none;

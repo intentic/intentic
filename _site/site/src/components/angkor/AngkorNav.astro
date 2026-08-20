@@ -108,7 +108,7 @@ const links = navEntries.map((entry) => ({
         flex: none;
     }
     .a-wordmark {
-        font-family: "Playfair Display", Georgia, serif;
+        font-family: var(--a-font-display);
         font-size: 1.85rem;
         font-weight: 500;
         line-height: 1;
@@ -165,8 +165,11 @@ const links = navEntries.map((entry) => ({
         .a-bar-icon {
             display: none;
         }
+        /* Still 28px, not the 24 this used to shrink to: the fence in angkor.css is a fence, and the
+           wordmark is the one piece of display type on the page that cannot be replaced with something
+           else. There is room — the bar down here holds only the brand and one compact cartouche. */
         .a-wordmark {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
         }
         .a-bar-inner {
             padding: 0.75rem 1.1rem;
