@@ -54,8 +54,8 @@ const checkNote = (loop: Loop): string | undefined => {
         check.kind === `command`
             ? `\`${check.command}\` is run for you once you finish, and this is not done until it exits 0. ` +
               `Run it yourself to check your work, and do not edit it, skip it, or weaken what it asserts to make it pass.`
-            : `A separate reviewer — one that did none of this work and cannot see your reasoning, only what you wrote ` +
-              `down — will decide whether the goal is met, against this rubric:\n\n> ${check.rubric}\n\n` +
+            : `A separate reviewer (one that did none of this work and cannot see your reasoning, only what you wrote ` +
+              `down) will decide whether the goal is met, against this rubric:\n\n> ${check.rubric}\n\n` +
               `So make the evidence legible: say what you changed and how you verified it, in your final message.`,
     );
     if (notes.length === 0) {
@@ -84,7 +84,7 @@ const outputNote = (loop: Loop, iteration: number): string | undefined => {
     return [
         `## Before you finish: the output file`,
         ``,
-        `Write \`${verdictPathIn(AGENT_ROOT, loop.conversationId, iteration)}\` — exactly this shape, and nothing else in the file:`,
+        `Write \`${verdictPathIn(AGENT_ROOT, loop.conversationId, iteration)}\` in exactly this shape, and nothing else in the file:`,
         ``,
         `\`\`\`json`,
         JSON.stringify(shape, undefined, 2),
@@ -93,12 +93,12 @@ const outputNote = (loop: Loop, iteration: number): string | undefined => {
         ...(loop.output.kind === `json`
             ? [
                   `Every string above is a DESCRIPTION of what belongs there, not a value to copy. \`data\` is what the ` +
-                      `next step of this job receives — it is read by a program, so the keys and types have to be exactly ` +
+                      `next step of this job receives. It is read by a program, so the keys and types have to be exactly ` +
                       `as shown, and a field you fill with a guess is worse than one you leave out.`,
                   ``,
               ]
             : []),
-        `\`done\` is \`true\` ONLY if the goal is fully met right now — not "nearly", not "met once the ` +
+        `\`done\` is \`true\` ONLY if the goal is fully met right now, not "nearly", not "met once the ` +
             `remaining item is handled". If it is not met, say in \`reason\` what is left: that line is what ` +
             `whoever picks this up next reads first.`,
         ``,
@@ -118,7 +118,7 @@ const progressNote = (loop: Loop): string =>
             `tree and one file: \`${progressPathIn(AGENT_ROOT, loop.conversationId)}\`.`,
         ``,
         `So: **read that file before you do anything else**, and **update it before you finish**. Keep it short and ` +
-            `factual — what is done, what is left, what you tried that did not work and must not be tried again. ` +
+            `factual: what is done, what is left, what you tried that did not work and must not be tried again. ` +
             `That last one is what stops the same dead end being walked into twice.`,
     ].join(`\n`);
 
@@ -143,7 +143,7 @@ export const briefForIteration = (loop: Loop, iteration: number): string => {
     const output = outputNote(loop, iteration);
     return [
         loop.prompt,
-        // A goal the prompt already carries is the same words twice — see the header. The ordinary case for a
+        // A goal the prompt already carries is the same words twice. The ordinary case for a
         // workflow step, whose goal defaults to the very request it was handed.
         ...(loop.prompt.includes(loop.goal) ? [] : [[`## Done when`, ``, `> ${loop.goal}`].join(`\n`)]),
         ...(loop.context === `fresh` ? [progressNote(loop)] : []),

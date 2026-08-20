@@ -97,7 +97,7 @@ const handoverFrom = ({ title, document, report, reportPath, branches }: Handove
             : branches.length === 0
               ? [
                     ``,
-                    `It left no committed changes in any repository, so there is no diff to read. Judge it on what it said above and on the current state of the tree — do not go looking for a branch of its work.`,
+                    `It left no committed changes in any repository, so there is no diff to read. Judge it on what it said above and on the current state of the tree. Do not go looking for a branch of its work.`,
                 ]
               : [
                     ``,

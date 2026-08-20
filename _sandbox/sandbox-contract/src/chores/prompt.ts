@@ -36,7 +36,7 @@ export const composeAsk = ({ subject, why, diagnosis, goal, invariants, done }: 
 export const TRIAGE_NOTE =
     `The measurement woke you; it did not decide anything. Read the repository before you touch it, and treat every ` +
     `finding as a claim to verify rather than a task to execute. If a finding is wrong, say why in one line and leave ` +
-    `it — a run that verifies ten and fixes two is a good run.`;
+    `it. A run that verifies ten and fixes two is a good run.`;
 
 /* The invariants for a turn that CHANGES things. Whatever it does lands as uncommitted work in the owner's
  * workspace, so it is reviewed as one diff by someone who did not watch it happen — which is what every clause
@@ -60,5 +60,5 @@ export const REPORT_INVARIANTS =
  * chore ones because the blast radius is the thing at stake: named as a radius rather than "only this file",
  * since half those archetypes ask for new files and must not read as forbidding them. */
 export const REFACTOR_INVARIANTS =
-    `Read it first. Behaviour stays identical, and the blast radius is this file, whatever it splits into, and the ` +
-    `importers that must follow — no re-export shims left behind.`;
+    `Read it first. Behaviour stays identical. Changes affect only this file, whatever it splits into, and the ` +
+    `importers that must follow. Leave no re-export shims behind.`;

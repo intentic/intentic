@@ -49,8 +49,8 @@ const AUDIENCE = [
         `a document that is long, stale within a week, and unread.`,
     ``,
     `Write in plain language. Prefer a short sentence to a precise-sounding one. Expand an acronym the first ` +
-        `time. When something is surprising, say that it is surprising and say why — that sentence is usually the ` +
-        `most valuable one on the page. When a design decision has a reason, give the reason; when you cannot find ` +
+        `time. When something is surprising, say that it is surprising and say why. When a design decision has a ` +
+        `reason, give the reason; when you cannot find ` +
         `the reason, say what the code does and do not invent one.`,
     ``,
     `Length is a budget, not a target: one screen per package. If you cannot say what a package is for in one ` +
@@ -65,7 +65,7 @@ const FIGURES = [
     `Put figures INLINE, at the sentence they illustrate, as fenced blocks whose language names the figure kind.`,
     `The body is JSON. A fence that does not parse renders as a plain code block, so keep it valid.`,
     ``,
-    `A graph — components, dependencies, a request path. \`direction\` is "LR" (default) or "TB".`,
+    `A graph: components, dependencies, a request path. \`direction\` is "LR" (default) or "TB".`,
     `\`accent\` is "1".."5" or "neutral": assign a slot to a COMPONENT and reuse that same slot everywhere.`,
     ``,
     `\`\`\`dag`,
@@ -81,14 +81,14 @@ const FIGURES = [
     `{ "title": "Lines of code", "items": [{ "label": "_editor/web", "value": 77114, "display": "77.1k" }] }`,
     `\`\`\``,
     ``,
-    `An orientation strip of counts. Values are TEXT — write the units you mean.`,
+    `An orientation strip of counts. Values are TEXT, so write the units you mean.`,
     ``,
     `\`\`\`stats`,
     `{ "items": [{ "label": "Packages", "value": "53", "note": "18 with tests" }] }`,
     `\`\`\``,
     ``,
     `Edges carry no labels (the renderer draws paths, not text on paths). Use \`"dashed": true\` for a weaker or ` +
-        `dev-only relationship. Do not describe a figure in prose as well as drawing it — say the thing the figure ` +
+        `dev-only relationship. Do not describe a figure in prose as well as drawing it. Say the thing the figure ` +
         `cannot: what to notice in it.`,
 ].join(`\n`);
 
@@ -103,8 +103,8 @@ const PACKAGE_FIGURES = [
         `depends on are computed and drawn above your prose automatically. Writing them into the page yourself ` +
         `duplicates a number that goes stale the next time anyone commits.`,
     ``,
-    `Draw a figure only for something the dependency graph cannot say — a request's path, a state machine, an ` +
-        `ordering. Then put it INLINE, at the sentence it illustrates, as a fence whose body is JSON. A fence that ` +
+    `Draw a figure only for something the dependency graph cannot say (a request's path, a state machine, an ` +
+        `ordering). Then put it INLINE, at the sentence it illustrates, as a fence whose body is JSON. A fence that ` +
         `does not parse renders as a plain code block, so keep it valid.`,
     ``,
     `\`\`\`dag`,
@@ -114,7 +114,7 @@ const PACKAGE_FIGURES = [
     `  "edges": [{ "from": "web", "to": "daemon" }] }`,
     `\`\`\``,
     ``,
-    `\`direction\` is "LR" (default) or "TB". \`accent\` is "1".."5" or "neutral" and belongs to a COMPONENT — reuse ` +
+    `\`direction\` is "LR" (default) or "TB". \`accent\` is "1".."5" or "neutral" and belongs to a COMPONENT. Reuse ` +
         `your component's slot. Edges carry no labels; use \`"dashed": true\` for a weaker or dev-only relationship. ` +
         `Do not describe a figure in prose as well as drawing it.`,
 ].join(`\n`);
@@ -133,7 +133,7 @@ const provenanceRule = (source: string): string =>
         `    "provenance": { "sourceRev": "<see below>", "generatedAt": <epoch ms>, "model": "<the model you are>" }`,
         ``,
         `\`sourceRev\` is ${source} It is what makes rot detectable later: it is compared against the directory's ` +
-            `current revision to answer "is this still true?". Take it from the tool's output — do not invent one, and ` +
+            `current revision to answer "is this still true?". Take it from the tool's output. Do not invent one, and ` +
             `do not use a short sha.`,
     ].join(`\n`);
 
@@ -167,7 +167,7 @@ export const mapBrief = (input: MapBriefInput): string => {
     const { repo, label } = input;
     const repoFlag = repo === `` ? `` : ` --repo ${repo}`;
     return [
-        `You are writing the MAP for the repository "${label}" — the top of a documentation set that other agents ` +
+        `You are writing the MAP for the repository "${label}": the top of a documentation set that other agents ` +
             `will then fill in, one package each. You are not documenting any single package.`,
         ``,
         AUDIENCE,
@@ -179,15 +179,15 @@ export const mapBrief = (input: MapBriefInput): string => {
         `    intentic-docs facts${repoFlag}`,
         ``,
         `It gives you every package in the repository, the dependency edges between them, each one's size and ` +
-            `whether it has tests. That is your ground truth for structure — do not restate it from reading, and do ` +
+            `whether it has tests. That is your ground truth for structure, so do not restate it from reading, and do ` +
             `not contradict it. Read source only to understand what things are FOR: \`iq map\`, \`iq outline\` and the ` +
             `repo's own README/ARCHITECTURE files will take you further per token than opening files.`,
         ``,
         `## What to decide`,
         ``,
         `**Logical components.** Group the packages into the handful of things a reader actually thinks in ("the ` +
-            `control plane", "the wire", "the browser app"). This is the highest-value judgement in the whole set and ` +
-            `the one nothing else can supply. A component is not a directory: it is a job. Aim for 4–9 of them; a ` +
+            `control plane", "the wire", "the browser app"). Only this step can make these groupings; no single-package ` +
+            `agent sees enough to do it. A component is not a directory: it is a job. Aim for 4–9 of them; a ` +
             `component per package is not a map, and two components for forty packages is not either. Every package ` +
             `should belong to exactly one.`,
         ``,
@@ -209,11 +209,11 @@ export const mapBrief = (input: MapBriefInput): string => {
         `      "provenance": { … }`,
         `    }`,
         ``,
-        `Give each component a distinct \`accent\` from "1".."5", and "neutral" for any past the fifth — the package ` +
+        `Give each component a distinct \`accent\` from "1".."5", and "neutral" for any past the fifth. The package ` +
             `agents reuse their component's slot in every figure they draw, which is what makes the diagrams across ` +
             `the set read as one system.`,
         ``,
-        `**${stagingPath(repo, REPO_PROSE_TAIL)}** — the repository's own page, in prose, with figures. What is this ` +
+        `**${stagingPath(repo, REPO_PROSE_TAIL)}**: the repository's own page, in prose, with figures. What is this ` +
             `repo, what are the components and how do they relate, what should I read first, and what would surprise ` +
             `me. Open with a \`stats\` figure and include a \`dag\` of the components. This is the page someone reads ` +
             `before anything else, so it is worth more care than any single package page.`,
@@ -224,7 +224,7 @@ export const mapBrief = (input: MapBriefInput): string => {
         ``,
         `## Rules`,
         ``,
-        `- Write ONLY into \`${stagingDir(repo)}\`. Do not create or edit anything under the repository itself — the ` +
+        `- Write ONLY into \`${stagingDir(repo)}\`. Do not create or edit anything under the repository itself. The ` +
             `owner publishes these documents into the repo after reading them, and that is not your step.`,
         `- Do not modify the code you are documenting. If you find a bug, write it down in the prose; do not fix it.`,
         `- JSON with keys in a stable order and two-space indent. These files are reviewed as diffs.`,
@@ -260,14 +260,14 @@ export const packageBrief = (input: PackageBriefInput): string => {
         `## Where this package sits`,
         component === undefined
             ? `The map did not assign this package to a component. Say what it belongs with, in one sentence, and ` +
-              `move on — do not redraw the map.`
-            : `It belongs to the **${component.name}** component — ${component.oneLiner}\n\nUse accent slot ` +
+              `move on, and do not redraw the map.`
+            : `It belongs to the **${component.name}** component: ${component.oneLiner}\n\nUse accent slot ` +
               `"${component.accent ?? `neutral`}" for this component in every figure you draw, so the set's diagrams ` +
               `agree with each other.`,
         components.length === 0
             ? undefined
             : `The other components, so you can point at neighbours by their real names:\n\n${components
-                  .map((other) => `- **${other.name}** — ${other.oneLiner}`)
+                  .map((other) => `- **${other.name}**: ${other.oneLiner}`)
                   .join(`\n`)}`,
         glossary.length === 0
             ? undefined
@@ -275,17 +275,17 @@ export const packageBrief = (input: PackageBriefInput): string => {
                   .map((term) => `- **${term.term}** — ${term.means}`)
                   .join(`\n`)}`,
         [`## Start from the facts`, ``, `    intentic-docs facts${repoFlag}`].join(`\n`),
-        `Find \`${dir}\` in the output: its size, whether it has tests, and — more useful than either — which ` +
+        `Find \`${dir}\` in the output: its size, whether it has tests, and which ` +
             `packages it depends on and which depend on it. Those edges are what tells you whether this is a leaf ` +
             `everything uses or an entry point that uses everything. Do not restate numbers from reading; take them ` +
             `from here.`,
         `Then read enough to know what it is FOR. \`iq outline ${dir}\` is worth more per token than opening files. ` +
-            `Long comments at the top of a file are usually the author explaining the design — read those before the ` +
+            `Long comments at the top of a file are usually the author explaining the design. Read those before the ` +
             `code under them. If the package already has a README, you are REVISING it, not replacing it: keep what ` +
             `is still true and fix what is not.`,
         `## Write exactly one file`,
         [
-            `**${stagingPath(repo, packagePageTail(dir))}** — the package's README, which IS its documentation page.`,
+            `**${stagingPath(repo, packagePageTail(dir))}**: the package's README, which IS its documentation page.`,
             `There is no JSON sidecar: everything the app needs that is not prose gets read back out of this file.`,
             ``,
             `Two things are required, because a tool parses them:`,
@@ -297,7 +297,7 @@ export const packageBrief = (input: PackageBriefInput): string => {
             ``,
             `    ## Key files`,
             ``,
-            `    - [src/index.ts](src/index.ts) — why this file is worth opening.`,
+            `    - [src/index.ts](src/index.ts): why this file is worth opening.`,
             ``,
             `\`## Key files\` is three to six entries. Link targets are relative to the PACKAGE directory (so the ` +
                 `links work on GitHub and in the file tree) and must exist. Append \`#L42\` to a target for a line number.`,
@@ -311,11 +311,11 @@ export const packageBrief = (input: PackageBriefInput): string => {
             `## Rules`,
             ``,
             `- Write ONLY this one file, under \`${stagingDir(repo)}\`. Another agent is documenting each other ` +
-                `package right now, and \`${REPO_DOC_TAIL}\` belongs to the map — editing either is how a run corrupts ` +
+                `package right now, and \`${REPO_DOC_TAIL}\` belongs to the map. Editing either is how a run corrupts ` +
                 `itself.`,
             `- Do not modify the code you are documenting. Finding a defect is worth writing down; fixing it is ` + `someone else's turn.`,
-            `- There is no provenance to write. The page's date is the commit that lands it, and how far the code ` +
-                `has run ahead of it is a commit count — both computed, neither authored.`,
+            `- There is no provenance to write. The page's date is the commit that carries it, and how far the code ` +
+                `has run ahead of it is a commit count. Both are computed, neither authored.`,
         ].join(`\n`),
         validateRule(repoFlag),
     ];

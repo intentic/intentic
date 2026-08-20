@@ -274,10 +274,10 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         [
             `## Repository: ${diff.repo}`,
             diff.subjects.length > 0
-                ? `Recent commit subjects here — copy their vocabulary and scope names, not their format:\n${diff.subjects.join(`\n`)}`
+                ? `Recent commit subjects here. Copy their vocabulary and scope names, not their format:\n${diff.subjects.join(`\n`)}`
                 : undefined,
             diff.summary === `` ? undefined : `Files this commit will record:\n${diff.summary}`,
-            diff.blocks.length === 0 ? `(no textual diff — see the file list above)` : `Diff:\n${renderBlocks(diff.blocks, budget)}`,
+            diff.blocks.length === 0 ? `(no textual diff; see the file list above)` : `Diff:\n${renderBlocks(diff.blocks, budget)}`,
         ]
             .filter((section) => section !== undefined)
             .join(`\n\n`),
@@ -301,7 +301,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
          * this unprompted — it summarises, because summarising is what it is for — so the demand is explicit.
          * It carries more weight now than it used to: the subject is the ONLY line describing the change, so
          * every identifier that does not fit in it is one this history cannot be searched by. */
-        `- NAME THINGS. Use the real identifiers from the diff — function, component, route, setting, package`,
+        `- NAME THINGS. Use the real identifiers from the diff: function, component, route, setting, package`,
         `  and option names, spelled as the code spells them. These are what someone searching this history`,
         `  later will search for, and a message without them is unfindable.`,
         /* ONE LINE, and the ban is stated before anything else can invite a second. The body used to be up to
@@ -331,10 +331,10 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
         // know the ceiling writes past it and gets cut mid-word, which is worse than the shorter sentence it
         // would have written had it been asked for one.
         wantsNote
-            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it. ONE sentence, at most ${MAX_NOTE_LENGTH} characters — anything past that is cut off.`
+            ? `- That sentence is for users, not developers: say what they can now do or what no longer goes wrong, in their words, with no file, symbol or internal name in it. ONE sentence, at most ${MAX_NOTE_LENGTH} characters. Anything past that is cut off.`
             : undefined,
         wantsNote
-            ? `- OMIT the Release-Note line entirely for anything a user would never see — refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
+            ? `- OMIT the Release-Note line entirely for anything a user would never see: refactors, tests, build and CI work, dependency bumps, internal cleanup. Most commits get no note, and that is the expected answer.`
             : undefined,
         /* THE BREAKING NOTE is rarer still, and the bar is stated as removal rather than change: the cheap rung
          * told to flag "changes" flags every diff, because every diff changes something. What it is asked for is
@@ -342,7 +342,7 @@ export const commitMessagePrompt = (diffs: readonly RepoDiff[], wantsNote = fals
          * — and the "!" demand beside it is what ties the sentence to the major version bump the release
          * tooling derives from the type. */
         wantsNote && removedSurfaces.length === 0
-            ? `- If (and only if) this change REMOVES or breaks something users already rely on — a feature gone, a command renamed, a file format no longer read — add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
+            ? `- If (and only if) this change REMOVES or breaks something users already rely on (a feature gone, a command renamed, a file format no longer read), add a line spelled exactly: Breaking-Note: <what stops working and what to do instead, one plain sentence of at most ${MAX_NOTE_LENGTH} characters>, and mark the type with "!" (e.g. feat!:). This is rare; when in doubt, omit it.`
             : undefined,
         /* THE FORCED CASE, replacing the judgment call above whenever the detector already knows the answer
          * (git/contract-shrink.ts): this commit removes named wire surfaces, so whether it breaks something is
@@ -474,6 +474,6 @@ export const markSubjectBreaking = (subject: string): string => subject.replace(
  * before filing, where it can still be reworded. Clipped to the same ceiling every note answers to. */
 export const fallbackBreakingNote = (removedSurfaces: readonly string[]): string => {
     const names = [...new Set(removedSurfaces.map((surface) => surface.split(`.`)[0]))].join(`, `);
-    const sentence = `The wire contract no longer offers what it did under ${names} — anything reading those surfaces must stop relying on them.`;
+    const sentence = `The wire contract no longer offers what it did under ${names}. Anything reading those surfaces must stop relying on them.`;
     return sentence.length <= MAX_NOTE_LENGTH ? sentence : `${sentence.slice(0, MAX_NOTE_LENGTH - 1)}…`;
 };

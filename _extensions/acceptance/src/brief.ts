@@ -47,8 +47,8 @@ export interface BriefInput {
 const HEADER = [
     `You are running an ACCEPTANCE TEST of one user story against a running application.`,
     ``,
-    `You are a TESTER, not a developer. Do not modify the application's source. Do not fix defects you find — ` +
-        `finding them is the deliverable, and a fixed defect is one the report can no longer describe. The only ` +
+    `You are a TESTER, not a developer. Do not modify the application's source. Do not fix defects you find. ` +
+        `Finding them is the deliverable, and a fixed defect is one the report can no longer describe. The only ` +
         `files you write are your own report and screenshots, in the run directory named below.`,
 ].join(`\n`);
 
@@ -73,7 +73,7 @@ const criteria = (list: readonly string[]): string =>
               ``,
               ...list.map((text, index) => `${index + 1}. ${text}`),
               ``,
-              `Your result file must carry exactly these ${list.length}, in this order, one verdict each — quote each ` +
+              `Your result file must carry exactly these ${list.length}, in this order, one verdict each. Quote each ` +
                   `criterion verbatim. Do not merge them, do not reword them, and do not add your own to the list: ` +
                   `anything else you find belongs in \`defects\`, which is where an unpromised problem is still worth reporting.`,
           ].join(`\n`);
@@ -82,10 +82,10 @@ const method = (baseUrl: string): string =>
     [
         `## Method`,
         ``,
-        `1. Put the criteria above into a checklist (ToolSearch \`select:TaskCreate,TaskUpdate,TaskList\`), one task per criterion. Keep it current — it is how the run is watched.`,
+        `1. Put the criteria above into a checklist (ToolSearch \`select:TaskCreate,TaskUpdate,TaskList\`), one task per criterion. Keep it current; it is how the run is watched.`,
         `2. Open ${baseUrl} and screenshot the entry point before touching anything.`,
-        `3. Walk each criterion the way a user would: act, take a snapshot to see the result, screenshot it, and judge it against what the story says should happen. Prefer \`browser_snapshot\` over screenshots for READING the page — it is text, and it is what you click by.`,
-        `4. Then go off-script, because a criteria list is a floor and not a ceiling: empty and invalid input, submitting twice, the back button, a reload mid-flow, a narrow viewport (\`browser_resize\`). Record what you tried even when nothing broke — "tried, held up" is a finding.`,
+        `3. Walk each criterion the way a user would: act, take a snapshot to see the result, screenshot it, and judge it against what the story says should happen. Prefer \`browser_snapshot\` over screenshots for READING the page because it is text and it is what you click by.`,
+        `4. Then go off-script, because a criteria list is a floor and not a ceiling: empty and invalid input, submitting twice, the back button, a reload mid-flow, a narrow viewport (\`browser_resize\`). Record what you tried even when nothing broke. "Tried, held up" is a finding.`,
         `5. If the app is broken UPSTREAM of this story (it will not start, you cannot sign in, the page 500s), stop and record \`blocked\` with the exact wall you hit. Do not test around it and do not repair it.`,
     ].join(`\n`);
 
@@ -100,16 +100,16 @@ const tooling = (shots: string): string =>
         `The owner can watch this browser live and take control of it, so drive it as if someone is looking over your ` +
             `shoulder: one deliberate action at a time, and leave the page on whatever you last looked at.`,
         ``,
-        `Console errors and failed requests are evidence — check \`browser_console_messages\` and ` +
+        `Console errors and failed requests are evidence. Check \`browser_console_messages\` and ` +
             `\`browser_network_requests\` when something looks wrong, and quote them in the defect.`,
         ``,
-        `### Screenshots — read this before you take the first one`,
+        `### Screenshots: read this before you take the first one`,
         ``,
         `Every screenshot lands in \`${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser\` whatever filename you pass; the harness rewrites ` +
             `it and that directory is SHARED with the other tests running right now. So:`,
         ``,
-        `- Name each shot \`${"<NN>"}-${"<short-step>"}.png\` — \`01-signin-form.png\`, \`02-validation-error.png\`. Numbers in the order you took them.`,
-        `- Immediately after each shot, copy it into your own directory: \`cp ${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end — after the fact you cannot tell which step a file belonged to.`,
+        `- Name each shot \`${"<NN>"}-${"<short-step>"}.png\`, e.g. \`01-signin-form.png\`, \`02-validation-error.png\`. Numbers in the order you took them.`,
+        `- Immediately after each shot, copy it into your own directory: \`cp ${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/${"<name>"}.png ${shots}/${"<name>"}.png\`. Do it per shot, not in a batch at the end, because after the fact you cannot tell which step a file belonged to.`,
         `- Reference shots in your report by the path relative to your report file: \`![](shots/01-signin-form.png)\`.`,
     ].join(`\n`);
 
@@ -125,13 +125,13 @@ const output = (params: {
         `## What you leave behind`,
         ``,
         `Your run directory is \`${params.dir}\` (create it, plus \`shots/\`). Two files, both required, both written ` +
-            `even when the verdict is \`fail\` or \`blocked\` — an absent report is indistinguishable from a crashed test.`,
+            `even when the verdict is \`fail\` or \`blocked\`. An absent report is indistinguishable from a crashed test.`,
         ``,
-        `**\`${params.report}\`** — the walkthrough a human reads. Open with the verdict and one sentence of why. Then ` +
+        `**\`${params.report}\`**: the walkthrough a human reads. Open with the verdict and one sentence of why. Then ` +
             `the steps in order as prose, each with its screenshot inline. Then the defects, worst first. Write what you ` +
             `SAW, not what you expected to see.`,
         ``,
-        `**\`${params.result}\`** — the same run as data, in exactly this shape:`,
+        `**\`${params.result}\`**: the same run as data, in exactly this shape:`,
         ``,
         `\`\`\`json`,
         JSON.stringify(
@@ -155,7 +155,7 @@ const output = (params: {
         `\`\`\``,
         ``,
         `\`verdict\` is \`pass\` only if every criterion passed. \`blocked\` means you could not exercise the story at ` +
-            `all. \`defects\` is \`[]\` when there are none — omit nothing.`,
+            `all. \`defects\` is \`[]\` when there are none. Omit nothing.`,
     ].join(`\n`);
 
 export const briefFor = (input: BriefInput): string => {
@@ -165,7 +165,7 @@ export const briefFor = (input: BriefInput): string => {
         [
             `## The story`,
             ``,
-            `From \`${input.story.path}\` in the \`${input.story.repo}\` repository. Test what it says, not what the code does — ` +
+            `From \`${input.story.path}\` in the \`${input.story.repo}\` repository. Test what it says, not what the code does. ` +
                 `if the two disagree, that disagreement is the finding.`,
             ``,
             `---`,
