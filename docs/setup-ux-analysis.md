@@ -254,9 +254,16 @@ The first attempt at those drawings was rejected on sight, and rightly. It was c
 thick rounded strokes around washed-in fills, a sticker-illustration language this product
 speaks nowhere else. Every icon in the app is Remix's line set — a 24 grid, hollow shapes,
 a thin even band, sharp geometry, small solid details. The drawings are now the same hand
-at five times the size, and two of them are literally the app's own `cloud-line` and
-`flashlight-line` silhouettes scaled up, which is the cheapest guarantee that they cannot
-drift from the icon set.
+at five times the size, and the bolt is literally the app's own `flashlight-line`
+silhouette scaled up, which is the cheapest guarantee it cannot drift from the icon set.
+
+The cloud is the one shape drawn fresh, and it took a second pass to get right. Scaling up
+`cloud-line` looked like the safe move, but that glyph is nearly square on its grid — which
+nobody reads at 16px and everybody reads at 100px. Sat beside a monitor and a rack that are
+both plainly landscape, a square cloud stops looking like a cloud and starts looking like a
+lump. It is now drawn wide, about 1.75:1, in the same band and the same arcs-only geometry
+as the set it lives in. A drawing scaled past the size it was designed for is worth
+re-checking against its neighbours, not just against its source.
 
 One thing to know if these are edited: the artwork's opacities are SVG attributes, not
 utility classes. The first version dimmed its fills with a class used nowhere else in the

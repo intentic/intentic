@@ -11,8 +11,8 @@
      product does not speak anywhere else. Every icon in the app is Remix's LINE set (ui/src/icons) — a 24 grid,
      hollow shapes, a thin even band, sharp geometry, small solid details. So these are the same drawings, in
      the same band, at five times the size: 2px on a 132×76 stage, hollow, with one solid accent apiece. The
-     cloud and the bolt are literally `ri:cloud-line` and `ri:flashlight-line`'s own silhouettes, scaled — a
-     drawing that shares the icon set's outline cannot drift from it.
+     bolt is literally `ri:flashlight-line`'s own silhouette; the cloud is the one shape drawn fresh, and the
+     comment on it says why a scaled-up `ri:cloud-line` had to be given up.
 
      OPACITY IS AN SVG ATTRIBUTE HERE, NEVER A UTILITY CLASS. The first version dimmed its fills with
      `opacity-[0.07]`, a value used nowhere else in the app — so the class existed only in this file, a file the
@@ -42,11 +42,18 @@ const { kind, selected = false } = defineProps<{ kind: "hosted" | "mine" | "clou
 const edgeClass = (): string => (selected ? `text-muted` : `text-subtle`);
 const popClass = (): string => (selected ? `text-link` : `text-muted`);
 
-/* The app's own cloud, from `ri:cloud-line` — its OUTER contour only. Remix draws its line icons as filled
- * paths carrying both contours, which is how a 2px band is made at 24px; blown up five times that band becomes
- * a 10px stripe. Stroking the outline instead keeps the silhouette exactly and lets the band stay thin, which
- * is the whole trick to a line icon that grows. */
-const CLOUD = `M12 2a7 7 0 0 1 6.992 7.339A6 6 0 0 1 17 21H7A6 6 0 0 1 5.008 9.339A7 7 0 0 1 12 2`;
+/* THE CLOUD IS DRAWN WIDE, and that is the one place these scenes part from the icon set on purpose.
+ *
+ * It started as `ri:cloud-line`'s own outer contour, scaled up — the safest possible match. But that shape is
+ * 22×19 on its grid, which is very nearly SQUARE, and at 16px nobody reads a bounding box. At 100px they do:
+ * beside a monitor and a rack that are both plainly landscape, a square blob stops reading as a cloud and
+ * starts reading as a lump. So this is a cloud built for the size it is shown at — flat base, three puffs,
+ * roughly 1.75:1 — while everything that makes it belong here is unchanged: one uniform band, arcs only, the
+ * same geometry the line set is drawn with.
+ *
+ * Every arc's chord is kept inside its own diameter; an arc asked to span further than it can silently swells
+ * its radius, which is how a hand-written cloud ends up with one bump fatter than its neighbours. */
+const CLOUD = `M36 66h56a14 14 0 0 0 4-27.5a22 22 0 0 0-40-12a15 15 0 0 0-22 11a15 15 0 0 0 2 28.5z`;
 // …and `ri:flashlight-line`'s bolt, solid rather than hollow: at this size the accent is a mark, not an object,
 // and Remix fills its own small details (the LEDs on `ri:server-line`) exactly this way.
 const BOLT = `M13 9h8L11 24v-9H4l9-15z`;
@@ -74,11 +81,11 @@ const BAND = 2;
             <path
                 :class="edgeClass()"
                 :d="CLOUD"
-                transform="translate(21,-5.1) scale(3.75)"
+                transform="translate(-14,-13.6) scale(1.229)"
                 stroke="currentColor"
-                :stroke-width="BAND / 3.75"
+                :stroke-width="BAND / 1.229"
             />
-            <path :class="popClass()" :d="BOLT" transform="translate(48.5,24.2) scale(1.4)" fill="currentColor" />
+            <path :class="popClass()" :d="BOLT" transform="translate(49.4,29) scale(1.25)" fill="currentColor" />
         </template>
 
         <!-- THE READER'S OWN: a monitor on a stand, with work on the screen. The one scene here that is a thing
