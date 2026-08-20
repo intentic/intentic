@@ -4,7 +4,8 @@ import { errorMessage } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { formatCredits as n, installsFor, resetsAtLocal } from "../../composables/membership/creditMeter";
+import MembershipOffer from "../../components/MembershipOffer.vue";
+import { formatCredits as n, installsFor, joinLabel, resetsAtLocal } from "../../composables/membership/creditMeter";
 import { useMembership } from "../../composables/membership/useMembership";
 import { apiClient } from "../../composables/useApi";
 import { environment } from "../../environments/environment";
@@ -85,13 +86,10 @@ onMounted(() => {
 });
 
 // ---- the published figures, and what they come to -------------------------------------------------------
+// The OFFER's figures (price, share, what a day buys) live in MembershipOffer.vue with the pitch that quotes
+// them. What stays here is what only the member branch reads.
 
-const priceUsd = computed(() => membership.value?.priceUsd ?? 0);
 const sharePercent = computed(() => Math.round((membership.value?.creatorShare ?? 0) * 100));
-const platformPercent = computed(() => 100 - sharePercent.value);
-
-// What a day's allowance buys, in the one unit every reader of this page already understands.
-const installsPerDay = computed(() => installsFor(dailyCredits.value, donationCredits.value));
 
 const renewsOn = computed(() => {
     const stamp = membership.value?.renewsAt;
@@ -133,9 +131,8 @@ const returning = computed(() => membership.value?.member === false && membershi
 // one word that costs somebody money they didn't expect to spend.
 const onTrial = computed(() => membership.value?.status === `trialing`);
 
-// The action's own name. "Rejoin" for somebody who has been here before — the button is the last thing read
-// before a decision, and it should know which decision it is.
-const joinLabel = computed(() => `${returning.value ? `Rejoin` : `Join`} for $${n(priceUsd.value)}/month`);
+// The action's own name, phrased in creditMeter.ts so /join says it identically.
+const buyLabel = computed(() => joinLabel(membership.value, returning.value));
 
 // The public ledger, served by the platform for anyone — members are exactly who should read it.
 const transparencyUrl = `${environment.api.url}/pool/transparency`;
@@ -147,31 +144,13 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
     working.value = true;
     actionError.value = undefined;
     try {
-        const { url } = await (door === `checkout` ? apiClient.pool.checkout() : apiClient.pool.portal());
+        const { url } = await (door === `checkout` ? apiClient.pool.checkout({ returnTo: `settings` }) : apiClient.pool.portal());
         window.location.href = url;
     } catch (err) {
         actionError.value = errorMessage(err, `Couldn't open the payment page.`);
         working.value = false;
     }
 };
-
-/* The reassurances, as data. All four are answers to questions a reader asks silently at the button, and
- * they are the same four whether they are read before joining or after — so they are declared once and
- * rendered in both branches rather than written twice and allowed to drift. */
-const assurances = computed(() => [
-    { icon: `eye-slash` as const, title: `Nothing is metered`, body: `No usage counting anywhere in the product, and none asked for.` },
-    {
-        icon: `shield` as const,
-        title: `You can't overspend`,
-        body: `${n(dailyCredits.value)} credits a day is the ceiling, not a starting balance. Nothing bills on top of the membership.`,
-    },
-    { icon: `undo` as const, title: `A failed run costs nothing`, body: `If a service doesn't answer, its credits come straight back to you.` },
-    {
-        icon: `credit-card` as const,
-        title: `Cancel any time`,
-        body: `One click in Stripe's own portal. Card details never touch this platform.`,
-    },
-]);
 </script>
 
 <template>
@@ -290,102 +269,11 @@ const assurances = computed(() => [
                 }"
             />
 
-            <!-- The hero. Accent-tinted rather than another plain card: this is the one thing on the page a
-                 first-time reader must land on, and a settings hub is a stack of identical rectangles.
-
-                 THE PRICE IS ITS OWN BOX, on the side the eye finishes on. Laid out down the card instead, the
-                 promise and the price were the same column and the money read as a footnote to the sentence
-                 above it — and the right half of a 60rem card was empty while it did. -->
-            <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
-                <div class="flex flex-col gap-5 @2xl:flex-row @2xl:items-center @2xl:gap-8">
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                            <Icon name="star" class="text-base text-link" />
-                            <span class="text-2xs font-semibold uppercase tracking-wider text-link">Membership</span>
-                        </div>
-                        <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">Unlock every premium extension.</h2>
-                        <p class="mt-2 text-sm text-muted">
-                            One membership, {{ n(dailyCredits) }} credits a day, and {{ sharePercent }}% of every credit you spend paid straight to
-                            whoever built the thing you used.
-                        </p>
-                    </div>
-
-                    <div class="shrink-0 rounded-lg border border-line bg-card p-4 @2xl:w-64">
-                        <div class="flex items-baseline gap-1.5">
-                            <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ n(priceUsd) }}</span>
-                            <span class="text-sm text-muted">/month</span>
-                        </div>
-                        <Button :label="joinLabel" :loading="working" class="ui-button-loud mt-3 w-full" @click="open(`checkout`)" />
-                        <p class="mt-2 text-center text-2xs text-subtle">Paid through Stripe · cancel any time</p>
-                    </div>
-                </div>
-            </Card>
-
-            <!-- What the money actually buys, in figures rather than adjectives. Three, because there are
-                 exactly three things a credit can be: an install, a run, and somebody's income. -->
-            <div class="grid grid-cols-1 gap-3 @xl:grid-cols-3">
-                <Card class="flex flex-col gap-1">
-                    <span class="flex size-7 items-center justify-center rounded-md bg-primary-fill/12 text-link"><Icon name="box" /></span>
-                    <p class="mt-1.5 text-lg font-semibold leading-tight text-content">
-                        {{ n(installsPerDay) }} premium {{ installsPerDay === 1 ? `install` : `installs` }} a day
-                    </p>
-                    <p class="text-xs text-muted">
-                        {{ n(donationCredits) }} credits each, the same figure for every extension in the catalogue. Once it's installed, using it is
-                        free forever.
-                    </p>
-                </Card>
-
-                <Card class="flex flex-col gap-1">
-                    <span class="flex size-7 items-center justify-center rounded-md bg-primary-fill/12 text-link"><Icon name="bolt" /></span>
-                    <p class="mt-1.5 text-lg font-semibold leading-tight text-content">{{ n(dailyCredits) }} service credits a day</p>
-                    <p class="text-xs text-muted">
-                        For the runs that cost real money — paid data, real compute. Your agent quotes the price before each one and waits for your
-                        yes.
-                    </p>
-                </Card>
-
-                <Card class="flex flex-col gap-1">
-                    <span class="flex size-7 items-center justify-center rounded-md bg-primary-fill/12 text-link"><Icon name="users" /></span>
-                    <p class="mt-1.5 text-lg font-semibold leading-tight text-content">{{ sharePercent }}% reaches the creator</p>
-                    <!-- The split, drawn. It is the one claim on this page a reader is entitled to disbelieve,
-                         so it gets a picture and a link to the ledger it is settled on. -->
-                    <div class="mt-1 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
-                        <div class="h-full rounded-full bg-primary-fill" :style="{ width: `${sharePercent}%` }" />
-                        <div class="h-full rounded-full bg-content/15" :style="{ width: `${platformPercent}%` }" />
-                    </div>
-                    <p class="text-xs text-muted">
-                        Of every credit you spend. The other {{ platformPercent }}% runs the platform, and every split is published on a
-                        <a :href="transparencyUrl" target="_blank" rel="noopener" class="text-link hover:underline">public ledger</a>.
-                    </p>
-                </Card>
-            </div>
-
-            <!-- The four questions asked at the button. Answered here, next to it, rather than in a help page
-                 the reader would have to leave the decision to find. -->
-            <Card>
-                <div class="grid grid-cols-1 gap-x-6 gap-y-3 @lg:grid-cols-2">
-                    <div v-for="item in assurances" :key="item.title" class="flex gap-2.5">
-                        <Icon :name="item.icon" class="mt-0.5 shrink-0 text-sm text-success" />
-                        <div class="min-w-0">
-                            <p class="text-xs font-semibold text-content">{{ item.title }}</p>
-                            <p class="text-xs text-muted">{{ item.body }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- The action, and the one way out that is not "leave". A reader who wants to see what is
-                     behind the gate before paying for it should be sent to look, not talked past: Discover
-                     badges every premium listing, and a catalogue nobody can see is not a reason to buy. -->
-                <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-line pt-4">
-                    <Button :label="joinLabel" :loading="working" class="ui-button-loud" @click="open(`checkout`)" />
-                    <RouterLink :to="{ name: `sandbox`, params: { tab: `discover` } }" class="text-xs text-link hover:underline">
-                        See what's premium first
-                    </RouterLink>
-                    <p class="w-full text-xs text-muted">
-                        Credits you never spend pay nobody — the membership is what you'd like to give, not a bill for what you took.
-                    </p>
-                </div>
-            </Card>
+            <!-- The pitch itself lives in components/MembershipOffer.vue, shared with /join — the buying
+                 surface for somebody who arrived from a terminal and has no sandbox to put a settings tab in.
+                 One copy, because two would drift about what a membership is, on the one page where being
+                 wrong costs trust rather than a rerender. -->
+            <MembershipOffer :return-to="`settings`" :join-label="buyLabel" :working="working" browsable @checkout="open(`checkout`)" />
         </template>
 
         <!-- ══ THE WAIT ════════════════════════════════════════════════════════════════════════════════════

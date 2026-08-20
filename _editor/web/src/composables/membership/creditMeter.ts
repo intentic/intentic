@@ -42,6 +42,17 @@ export const formatCredits = (value: number): string => value.toLocaleString();
  * configuration a self-hosted platform is allowed to have — and which would otherwise divide by it. */
 export const installsFor = (credits: number, donationCredits: number): number => (donationCredits > 0 ? Math.floor(credits / donationCredits) : 0);
 
+/* THE BUY BUTTON'S OWN NAME. The button is the last thing read before a decision, so it says which decision
+ * this is — "Rejoin" for somebody who has been a member before. Here rather than on a page because there are
+ * two buying surfaces now (the settings tab, and /join for somebody who arrived from a terminal with no
+ * sandbox), and a price phrased two ways is the kind of difference readers notice and distrust. */
+export const joinLabel = (state: MembershipState | undefined, returning: boolean): string =>
+    `${returning ? `Rejoin` : `Join`} for $${formatCredits(state?.priceUsd ?? 0)}/month`;
+
+/* Whether this account has been a member before. A lapsed or cancelled membership leaves a `status` behind
+ * while `member` is false — the same shape a never-member has, minus that trace. */
+export const hasReturned = (state: MembershipState | undefined): boolean => state?.member === false && state.status !== undefined;
+
 /* The meter, or nothing. Absent for a non-member and on a platform that sells no membership: neither has an
  * allowance, and a zeroed bar would claim they had one and had spent it. */
 export const creditMeter = (state: MembershipState | undefined): CreditMeter | undefined => {

@@ -4,14 +4,17 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import { z } from "zod";
+import type { Auth } from "../auth.js";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
-import { LIVE_STATUSES, type ServiceStatus } from "./pool-admission.js";
-import { creditStatus, refundCredits, spendCredits } from "./pool-credits.js";
+import { LIVE_STATUSES } from "./pool-admission.js";
+import { fileServiceWant, normalizedWant, readServiceCatalog, WANT_MAX, WANT_MIN, WANTS_PER_DAY } from "./pool-catalog.js";
+import { refundCredits, spendCredits } from "./pool-credits.js";
 import { DEMO_SLUG, demoRespond, parseDemoRequest } from "./pool-demo.js";
 import { buildLedger } from "./pool-ledger.js";
 import { applySubscription, poolEnabled, premiumOf } from "./pool-membership.js";
-import { forwardToService, verifyServiceSignature } from "./pool-services.js";
+import { refusalResponse, runMeteredService } from "./pool-run.js";
+import { verifyServiceSignature } from "./pool-services.js";
 import { applyAccountEvent } from "../creator/creator-payouts.js";
 import { countsOf } from "../creator/creator-services.js";
 import { accountFromEvent, type StripeGateway, stripeGateway, subscriptionFromEvent, verifyStripeSignature } from "./pool-stripe.js";
@@ -31,25 +34,20 @@ const EXTENSION_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,120}$/;
 
 const DonateSchema = z.object({ extensionId: z.string().regex(EXTENSION_ID_RE) });
 
-/* The wanted list's bounds. Short enough to stay a capability description rather than a task dump (the
- * skill tells agents exactly that), long enough to say "watermark-free PDF invoice extraction with line
- * items". The daily cap bounds one noisy sandbox; the public aggregate counts distinct owners for the same
- * reason. */
+// The write's own bounds live with the write (pool-catalog.ts). These two are the PUBLIC READ's: how far back
+// the aggregate looks, and how many asks it shows.
 const WantSchema = z.object({ text: z.string() });
-const WANT_MIN = 8;
-const WANT_MAX = 200;
-const WANTS_PER_DAY = 5;
 const WANT_WINDOW_DAYS = 90;
 const WANT_TOP = 50;
-
-// The grouping key: "PDF invoices" and "pdf  invoices" are one ask, not two rows on the public list.
-const normalizedWant = (text: string): string => text.trim().toLowerCase().replace(/\s+/g, ` `);
 
 const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
 
 export interface PoolDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
+    /* Better Auth, for the SECOND principal these routes answer to. Optional so every existing construction
+     * site (and every test) keeps working unchanged and simply never resolves a bearer. */
+    readonly auth?: Auth;
     // Injectable so tests drive checkout/webhook flows without Stripe, like the trial pool's fetchFn.
     readonly gateway?: StripeGateway;
     // Injectable so tests drive the service forward without a network — the trial pool's pattern.
@@ -57,21 +55,41 @@ export interface PoolDeps {
     readonly now?: () => Date;
 }
 
-export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now = () => new Date() }: PoolDeps) => {
+export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch, now = () => new Date() }: PoolDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
     // Lazy: built on the first webhook that needs it, so mounting the sub-app on a pool-less platform (every
     // test config, most self-hosted ones) constructs nothing Stripe-shaped.
     const stripe = (): StripeGateway => gateway ?? stripeGateway(config.pool.stripeSecretKey, fetch, now);
 
-    // 404-not-401 for an unknown token, the trial's reasoning verbatim: neither a probe nor a disabled pool
-    // should teach a caller which part was wrong.
-    const ownerOf = async (c: { req: { header: (name: string) => string | undefined } }): Promise<string | undefined> => {
+    /* WHOSE MEMBERSHIP PAYS — resolved from either of the two credentials that can name an account without a
+     * browser session, because these routes serve two different kinds of caller.
+     *
+     * A SANDBOX presents its connect token. That was the only principal for as long as the pool existed, and
+     * it quietly made "owns a machine" a precondition for buying and spending a membership — which it never
+     * was. A membership is an account's, the meter is an account's, the catalog is the platform's.
+     *
+     * An MCP CLIENT (Claude Code, through the `intentic` plugin) presents an OAuth bearer this platform issued
+     * (auth.ts `mcp`). It names a user and nothing else: no machine, no daemon, no tunnel. Everything below
+     * this function is unchanged by which one arrived, because `ownerId` is all any of it ever wanted.
+     *
+     * Order matters only for cost: the connect token is one indexed lookup, so it answers first.
+     *
+     * 404-not-401 for an unknown credential, the trial's reasoning verbatim: neither a probe nor a disabled
+     * pool should teach a caller which part was wrong. */
+    const ownerOf = async (c: { req: { header: (name: string) => string | undefined; raw?: Request } }): Promise<string | undefined> => {
         const token = c.req.header(`x-intentic-connect`);
-        if (token === undefined || token === ``) {
+        if (token !== undefined && token !== ``) {
+            const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { ownerId: true } });
+            return sandbox?.ownerId;
+        }
+        const bearer = c.req.header(`authorization`);
+        if (auth === undefined || bearer === undefined || !bearer.toLowerCase().startsWith(`bearer `)) {
             return undefined;
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { ownerId: true } });
-        return sandbox?.ownerId;
+        // Better Auth's own reader — it checks the token's expiry as well as its existence, and keeping that
+        // check on its side is what stops this from drifting away from how it issues them.
+        const session = await auth.api.getMcpSession({ headers: new Headers({ authorization: bearer }) }).catch(() => null);
+        return session?.userId ?? undefined;
     };
 
     /* THE INSTALL DONATION — how a non-service premium extension gets paid, and the platform's ONLY signal
@@ -153,21 +171,7 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        const [rows, member] = await Promise.all([
-            prisma.service.findMany({
-                where: { status: { in: [...LIVE_STATUSES] } },
-                select: { slug: true, publisher: true, name: true, description: true, creditsPerRun: true, status: true, sampleRequest: true },
-                orderBy: { slug: `asc` },
-            }),
-            premiumOf(prisma, config, ownerId),
-        ]);
-        /* `probation` is flattened to one boolean here rather than leaking the status vocabulary to every
-         * reader: what a member's card needs to say is "this listing is new", and what an agent needs to know
-         * is nothing at all. `sampleRequest` rides along because an agent composing a request body with a
-         * worked example in front of it writes a better one — it is the listing's own documentation. */
-        const services = rows.map(({ status, ...service }) => ({ ...service, probation: status === `probation` }));
-        const credits = member ? await creditStatus(prisma, config, ownerId, now()) : undefined;
-        return c.json({ member, services, ...(credits !== undefined ? { credits } : {}) });
+        return c.json(await readServiceCatalog(prisma, config, ownerId, now()));
     });
 
     /* THE WANTED LIST's write — an agent that read the catalog and found nothing that answers files what it
@@ -193,19 +197,13 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (!parsed.success) {
             return c.json({ error: `malformed want` }, 400);
         }
-        const text = parsed.data.text.trim();
-        if (text.length < WANT_MIN || text.length > WANT_MAX) {
-            return c.json(
-                { error: `A want is one plain line describing the capability, ${WANT_MIN}–${WANT_MAX} characters.` },
-                400,
-            );
+        const filed = await fileServiceWant(prisma, ownerId, parsed.data.text, now());
+        if (filed.kind === `malformed`) {
+            return c.json({ error: `A want is one plain line describing the capability, ${WANT_MIN}–${WANT_MAX} characters.` }, 400);
         }
-        const at = now();
-        const today = await prisma.serviceWant.count({ where: { userId: ownerId, createdAt: { gte: new Date(`${utcDay(at)}T00:00:00.000Z`) } } });
-        if (today >= WANTS_PER_DAY) {
+        if (filed.kind === `rate_limited`) {
             return c.json({ error: `That's ${WANTS_PER_DAY} wants filed today — the daily bound. The list resets at UTC midnight.` }, 429);
         }
-        await prisma.serviceWant.create({ data: { userId: ownerId, text, normalized: normalizedWant(text) } });
         return c.json({ recorded: true });
     });
 
@@ -226,82 +224,53 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        const service = await prisma.service.findUnique({ where: { slug: c.req.param(`slug`) } });
-        if (service === null || !LIVE_STATUSES.includes(service.status as ServiceStatus)) {
-            return c.json({ error: `no such service` }, 404);
+        const logger = c.get(`logger`);
+        const run = await runMeteredService(
+            {
+                config,
+                prisma,
+                fetchFn,
+                now,
+                demoDispatch: (async (url: string | URL | Request, init?: RequestInit) =>
+                    app.request(new URL(String(url)).pathname.replace(/^\/pool/, ``), init)) as typeof fetch,
+                warn: (message, service) => logger?.warn({ service }, message),
+            },
+            { ownerId, slug: c.req.param(`slug`), body: await c.req.text() },
+        );
+        if (run.kind === `refused`) {
+            const { status, json } = refusalResponse(run.refusal);
+            return c.json(json, status);
         }
-        if (!(await premiumOf(prisma, config, ownerId))) {
-            return c.json({ error: { type: `membership_required`, message: `Running ${service.name} needs an intentic membership.` } }, 403);
-        }
-        const body = await c.req.text();
-        if (body.length > 1_000_000) {
-            return c.json({ error: `request too large` }, 413);
-        }
-        const at = now();
-        const spend = await spendCredits(prisma, config, ownerId, service.creditsPerRun, at);
-        if (!spend.allowed) {
-            await refundCredits(prisma, ownerId, service.creditsPerRun, at);
-            return c.json(
-                {
-                    error: {
-                        type: `insufficient_credits`,
-                        message: `This run costs ${service.creditsPerRun} credits and ${spend.remaining} are left today. The allowance resets at ${spend.resetsAt}.`,
-                    },
-                    credits: { allowance: spend.allowance, remaining: spend.remaining, resetsAt: spend.resetsAt },
-                },
-                429,
-            );
-        }
-        /* The demo's upstream is this very app, so its forward dispatches in-process instead of over a
-         * socket — same signing, same verification, same stream validation, minus the network hop back to
-         * ourselves. Not an optimization: the platform's own https address is not reliably reachable FROM the
-         * platform (dev's minted certificate fails Bun's TLS stack outright; prod would loop out through the
-         * proxy), and a demo that refunds every run wherever the loopback is awkward demonstrates nothing. */
-        const dispatch =
-            service.slug === DEMO_SLUG
-                ? ((async (url: string | URL | Request, init?: RequestInit) =>
-                      app.request(new URL(String(url)).pathname.replace(/^\/pool/, ``), init)) as typeof fetch)
-                : fetchFn;
-        const forward = await forwardToService(service.upstreamUrl, decryptSecret(config, service.secret), body, dispatch, () => at);
-        if (forward.kind === `failed`) {
-            await prisma.serviceRun.create({
-                data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `refunded` },
-            });
-            await refundCredits(prisma, ownerId, service.creditsPerRun, at);
-            c.get(`logger`)?.warn({ service: service.slug }, `pool: service did not serve — run refunded`);
+        if (run.kind === `failed`) {
             return c.json(
                 {
                     error: {
                         type: `service_unavailable`,
-                        message: `${service.name} did not answer — nothing was charged. Please try again shortly.`,
+                        message: `${run.service.name} did not answer — nothing was charged. Please try again shortly.`,
                     },
                 },
                 502,
             );
         }
-        if (forward.kind === `answered`) {
+        if (run.kind === `answered`) {
             // The provider's own refusal (a 4xx) — a complete, PAID answer, relayed verbatim as ever.
-            await prisma.serviceRun.create({
-                data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: `ok` },
-            });
-            return c.newResponse(forward.body, forward.status as 200, {
-                "content-type": forward.contentType,
+            return c.newResponse(run.body, run.status as 200, {
+                "content-type": run.contentType,
                 // Advisory, like the trial's remaining-count header: any UI can show the meter without a second call.
-                "x-intentic-credits-remaining": String(spend.remaining),
+                "x-intentic-credits-remaining": String(run.remaining),
             });
         }
         /* The stream: every validated provider event relayed the moment it arrives, then the LEDGER's own last
          * word — a `receipt` trailer this handler appends after the stream settles, because whether the run
          * served (and so whether the charge stood or was reversed) is only knowable at the end, when the
          * response's status line is long gone. The trailer is the platform speaking, never the provider. */
-        const logger = c.get(`logger`);
         const encoder = new TextEncoder();
         const relayed = new ReadableStream<Uint8Array>({
             async start(controller) {
                 let served = false;
                 try {
                     while (true) {
-                        const next = await forward.events.next();
+                        const next = await run.events.next();
                         if (next.done) {
                             served = next.value;
                             break;
@@ -311,22 +280,12 @@ export const poolHttpRoutes = ({ config, prisma, gateway, fetchFn = fetch, now =
                 } catch {
                     served = false;
                 }
-                try {
-                    await prisma.serviceRun.create({
-                        data: { userId: ownerId, serviceId: service.id, credits: service.creditsPerRun, status: served ? `ok` : `refunded` },
-                    });
-                    if (!served) {
-                        await refundCredits(prisma, ownerId, service.creditsPerRun, at);
-                        logger?.warn({ service: service.slug }, `pool: service stream ended without a result — run refunded`);
-                    }
-                } catch (error) {
-                    logger?.error({ service: service.slug, error }, `pool: failed to record a streamed run`);
-                }
+                await run.settle(served);
                 const receipt: ServiceRunReceipt = {
                     event: `receipt`,
                     outcome: served ? `ok` : `refunded`,
-                    credits: service.creditsPerRun,
-                    ...(served ? { remaining: spend.remaining } : {}),
+                    credits: run.credits,
+                    ...(served ? { remaining: run.remaining } : {}),
                 };
                 controller.enqueue(encoder.encode(`${JSON.stringify(receipt)}\n`));
                 controller.close();

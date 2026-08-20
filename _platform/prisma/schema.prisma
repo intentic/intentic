@@ -41,6 +41,10 @@ model User {
     payouts          CreatorPayout[]
     wallets          Wallet[]
     pushDevices      PushDevice[]
+    oauthApps        OauthApplication[]
+    oauthTokens      OauthAccessToken[]
+    oauthConsents    OauthConsent[]
+    serviceOffers    ServiceOffer[]
 
     @@map("user")
 }
@@ -120,6 +124,94 @@ model Verification {
     updatedAt  DateTime @updatedAt
 
     @@map("verification")
+}
+
+/* ---------------------------------------------------------------------------
+ * OAuth 2.1 as an AUTHORIZATION SERVER — the three tables Better Auth's `mcp`
+ * plugin owns (auth.ts). The platform issues tokens here rather than only
+ * consuming Google's, because an MCP client (Claude Code) is a piece of
+ * software the user installs, not a browser holding our session cookie: it
+ * discovers `/.well-known/oauth-authorization-server`, registers itself
+ * dynamically, and carries a bearer that names a USER and no sandbox.
+ *
+ * That last part is the whole reason these exist. Every metered route used to
+ * authenticate by a sandbox's connect token, which meant a person without a
+ * machine could not buy or spend anything. A bearer minted here is the second
+ * principal class — same `userId`, no sandbox — and pool.routes.ts `ownerOf`
+ * accepts either.
+ *
+ * Written and read only by Better Auth; shapes mirror its oidc-provider schema
+ * exactly, so `npx @better-auth/cli generate` stays the source of truth for
+ * them. Everything cascades with the user, like every other account-owned row.
+ *
+ * THE CASING IS LOAD-BEARING and cost an hour: Better Auth's Prisma adapter
+ * resolves a model by indexing the client with its OWN model name —
+ * `prisma.oauthAccessToken` — so `OAuthAccessToken` here (whose accessor is
+ * `oAuthAccessToken`) makes every lookup throw "model does not exist" at
+ * runtime, with nothing failing at compile time to warn you. `Oauth…` it is.
+ * --------------------------------------------------------------------------- */
+
+// One registered MCP client. Created by dynamic client registration (RFC 7591) the first time a Claude Code
+// install points at this platform — `userId` is null for those, because nobody owns a client that registered
+// itself. `redirectUrls` is a comma-separated list, Better Auth's own encoding.
+model OauthApplication {
+    id           String             @id @default(cuid())
+    name         String
+    icon         String?
+    metadata     String?
+    clientId     String             @unique
+    clientSecret String?
+    redirectUrls String
+    type         String
+    disabled     Boolean            @default(false)
+    userId       String?
+    user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt    DateTime           @default(now())
+    updatedAt    DateTime           @updatedAt
+    tokens       OauthAccessToken[]
+    consents     OauthConsent[]
+
+    @@index([userId])
+    @@map("oauth_application")
+}
+
+// One issued bearer (plus its refresh token). This is what a Claude Code session presents on /mcp, and the
+// row `ownerOf` resolves to a userId through.
+model OauthAccessToken {
+    id                      String           @id @default(cuid())
+    accessToken             String           @unique
+    refreshToken            String           @unique
+    accessTokenExpiresAt    DateTime
+    refreshTokenExpiresAt   DateTime
+    clientId                String
+    client                  OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+    userId                  String?
+    user                    User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+    scopes                  String
+    createdAt               DateTime         @default(now())
+    updatedAt               DateTime         @updatedAt
+
+    @@index([clientId])
+    @@index([userId])
+    @@map("oauth_access_token")
+}
+
+// "This user already said yes to this client's scopes" — what keeps the consent screen from reappearing on
+// every reconnect.
+model OauthConsent {
+    id           String           @id @default(cuid())
+    clientId     String
+    client       OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+    userId       String
+    user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+    scopes       String
+    consentGiven Boolean
+    createdAt    DateTime         @default(now())
+    updatedAt    DateTime         @updatedAt
+
+    @@index([clientId])
+    @@index([userId])
+    @@map("oauth_consent")
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +524,7 @@ model Service {
     updatedAt     DateTime      @updatedAt
     runs          ServiceRun[]
     probes        ServiceProbe[]
+    offers        ServiceOffer[]
 
     // The catalog reads live rows; the watch scans by owner.
     @@index([status])
@@ -493,6 +586,46 @@ model ServiceRun {
     @@index([userId])
     @@index([createdAt])
     @@map("service_run")
+}
+
+/* THE SPEND GATE, WRITTEN DOWN — one row per "an agent asked to run a paid service and the owner has not
+ * answered yet". The sandbox's version of this gate lives in memory (sandbox platform/service-offer.ts): the
+ * CLI call parks on the daemon while a card sits in the owner's live conversation, and the held connection
+ * IS the waiter. Off-sandbox there is no daemon, no conversation and no held connection — an MCP client
+ * opens a URL, the browser lands somewhere else entirely, and the tool call is retried later, possibly by a
+ * different process. So the offer has to be a row, and the row is the grant.
+ *
+ * WHAT MAKES IT A GATE RATHER THAN A PROMPT: `status` moves to `approved` only from the approval page, under
+ * the owner's own browser session (pool.orpc.ts settleOffer) — never from anything the MCP client says. The
+ * client's elicitation answer is not consent and is not read as consent; the run re-reads THIS row. So an
+ * `Elicitation` hook that auto-answers the dialog buys nothing, which is the one property the port had to
+ * keep. `approved` → `spent` is a conditional update, so one approval can release exactly one run even if
+ * the tool call is retried twice.
+ *
+ * `credits` is stamped at offer time: the card, the page and the charge all quote the same number even if the
+ * listing is repriced while the owner is deciding. `request` is the agent's body verbatim — the page shows it,
+ * because "what is about to be sent" is half of what consent means. Rows are disposable; retention sweeps them. */
+model ServiceOffer {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    serviceId String
+    service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+    // Price snapshot, in credits, as the catalog stated it when the offer went up.
+    credits   Int
+    // The provider's request body, exactly as the agent composed it.
+    request   String
+    // The agent's one line of "why this helps", capped at the route. Absent when it offered none.
+    why       String?
+    // pending → approved → spent, or pending → declined, or pending → expired.
+    status    String   @default("pending")
+    createdAt DateTime @default(now())
+    expiresAt DateTime
+    decidedAt DateTime?
+
+    @@index([userId, createdAt])
+    @@index([expiresAt])
+    @@map("service_offer")
 }
 
 /* ONE "THE CATALOG HAD NOTHING FOR THIS" — the platform's only demand signal, filed by an agent that read

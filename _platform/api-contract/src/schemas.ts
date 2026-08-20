@@ -388,6 +388,43 @@ export const MembershipStateSchema = z.object({
 });
 export type MembershipState = z.infer<typeof MembershipStateSchema>;
 
+/* THE APPROVAL CARD, as a page rather than a chat frame — what an agent outside a sandbox parks on while it
+ * waits for its owner to release one metered run (api mcp/mcp-offer.ts).
+ *
+ * Every field is read back off the offer row rather than recomputed, which is the whole point: `credits` was
+ * stamped when the ask went up, so a listing repriced while somebody is deciding cannot change what they
+ * agreed to, and nothing the calling agent typed can reach this card except `request` and `why` — the two
+ * fields the page labels as the agent's own words. */
+export const ServiceOfferStatusSchema = z.enum([`pending`, `approved`, `declined`, `spent`, `expired`]);
+
+export const ServiceOfferCardSchema = z.object({
+    id: z.string(),
+    status: ServiceOfferStatusSchema,
+    slug: z.string(),
+    name: z.string(),
+    publisher: z.string(),
+    description: z.string(),
+    credits: z.number(),
+    // True while the listing is still in open admission's probation — live, price-capped, badged `new`.
+    probation: z.boolean(),
+    // The body the agent composed, verbatim. Shown because "what is about to be sent" is half of consent.
+    request: z.string(),
+    why: z.string().optional(),
+    expiresAt: z.iso.datetime(),
+    // The owner's meter, so the page can state the price against what is actually left — absent when the
+    // account has no membership, which the page turns into a join prompt rather than a dead button.
+    credits_remaining: z.number().optional(),
+    allowance: z.number().optional(),
+});
+export type ServiceOfferCard = z.infer<typeof ServiceOfferCardSchema>;
+
+// What the click did. `already_settled` and `expired` are ordinary answers, not errors — two tabs racing, or
+// a card left open past its ten minutes.
+export const ServiceOfferSettledSchema = z.object({
+    outcome: z.enum([`approved`, `declined`, `already_settled`, `expired`]),
+});
+export type ServiceOfferSettled = z.infer<typeof ServiceOfferSettledSchema>;
+
 // Avatars and sandbox logos are stored inline as small data URLs (client-side canvas downscale) — this caps
 // what the API will persist (~110 kB decoded; a 128px webp/jpeg is ~5-10 kB) so no multi-megabyte string
 // lands in a row. Enforced by sandbox.update's input and the auth user.update hook.

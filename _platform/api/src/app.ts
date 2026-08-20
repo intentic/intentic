@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic-app/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
+import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
@@ -17,6 +18,7 @@ import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
+import { mcpHttpRoutes } from "./mcp/mcp.routes.js";
 import { poolHttpRoutes } from "./pool/pool.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
@@ -145,6 +147,18 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // Better Auth owns everything under /api/auth (sign-in, OAuth callback, session, sign-out).
     app.on([`POST`, `GET`], `/api/auth/**`, (c: Context) => auth.handler(c.req.raw));
+
+    /* OAUTH DISCOVERY AT THE ROOT, where an MCP client actually looks. Better Auth serves both documents under
+     * its own base path, and the 401 from /mcp points at them there — but RFC 8414 and RFC 9728 put them at the
+     * ORIGIN root, and clients probe there first. Two aliases cost nothing and are the difference between
+     * "Claude Code offers a sign-in" and "Claude Code says the server failed to connect".
+     *
+     * Public and CORS-open by design (the helpers set the headers): discovery metadata describes where to
+     * authenticate, which is not a secret and is useless to anyone who cannot then complete the flow. */
+    app.get(`/.well-known/oauth-authorization-server`, (c: Context) => oAuthDiscoveryMetadata(auth)(c.req.raw));
+    app.get(`/.well-known/oauth-protected-resource`, (c: Context) => oAuthProtectedResourceMetadata(auth)(c.req.raw));
+    // Same document, addressed by the resource path — what a client derives when the resource is /mcp.
+    app.get(`/.well-known/oauth-protected-resource/mcp`, (c: Context) => oAuthProtectedResourceMetadata(auth)(c.req.raw));
 
     app.get(`/health`, async (c) => {
         try {
@@ -380,7 +394,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * and the public transparency read (see pool/pool.routes.ts). Off unless POOL_STRIPE_SECRET_KEY +
      * POOL_STRIPE_PRICE_ID are set, the trial's pattern: unset, everything under here 404s and no surface
      * anywhere offers a membership. */
-    app.route(`/pool`, poolHttpRoutes({ config, prisma }));
+    app.route(`/pool`, poolHttpRoutes({ config, prisma, auth }));
 
     /* The agent wallet's signer — a sandbox's two connect-token routes (see wallet/wallet.routes.ts): make
      * this member's wallet, and mint one EIP-712 signature over one fully-specified USDC transfer, with the
@@ -388,6 +402,24 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
      * WALLET_CUSTODY_URL + WALLET_CUSTODY_KEY are set, the pool's pattern: unset, everything under here
      * 404s, no key material exists anywhere, and a sandbox's wallet card stays pending and says so. */
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
+
+    /* THE MCP DOOR — the same services catalog, reached by a coding agent that has no sandbox (see
+     * mcp/mcp.routes.ts). Authenticated by an OAuth bearer this platform issued rather than by a connect
+     * token, which is what lets somebody buy and spend a membership without owning a machine. Same pool
+     * switch: no Stripe price, no door.
+     *
+     * `demoDispatch` is the same in-process forward the pool route uses for the demo service, for the same
+     * reason: the platform's own https address is not reliably reachable from the platform. */
+    app.route(
+        `/mcp`,
+        mcpHttpRoutes({
+            config,
+            prisma,
+            auth,
+            demoDispatch: (async (url: string | URL | Request, init?: RequestInit) =>
+                app.request(new URL(String(url)).pathname, init)) as typeof fetch,
+        }),
+    );
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {

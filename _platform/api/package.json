@@ -20,6 +20,7 @@
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
+        "@modelcontextprotocol/sdk": "catalog:",
         "@opentelemetry/api": "catalog:",
         "@opentelemetry/context-async-hooks": "catalog:",
         "@opentelemetry/core": "catalog:",

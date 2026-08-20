@@ -6,6 +6,11 @@
             "name": "iq",
             "description": "Teach a coding agent to use the iq CLI (agent-native workspace search) by default over grep/find/Glob. Ships the iq skill + a SessionStart nudge. Requires the iq binary: `npm i -g @intentic/iq`.",
             "source": "./_search/iq/plugin"
+        },
+        {
+            "name": "intentic",
+            "description": "Run intentic's paid services (research, data, heavy compute) from Claude Code. Priced in membership credits; every run is approved by you on a page intentic renders, and refunded if the service doesn't answer. No sandbox needed — sign in with /mcp.",
+            "source": "./_platform/claude-plugin"
         }
     ]
 }

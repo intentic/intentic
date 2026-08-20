@@ -79,6 +79,9 @@ catalogs:
     '@iconify/vue':
       specifier: 5.0.1
       version: 5.0.1
+    '@modelcontextprotocol/sdk':
+      specifier: 1.30.0
+      version: 1.30.0
     '@openai/codex-sdk':
       specifier: 0.147.0
       version: 0.147.0
@@ -1989,6 +1992,9 @@ importers:
       '@intentic/sandbox-run':
         specifier: workspace:*
         version: link:../../_sandbox/sandbox-run
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.30.0(supports-color@10.2.2)(zod@4.4.3)
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.1

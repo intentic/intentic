@@ -28,6 +28,8 @@ import {
     PushSentSchema,
     SandboxSummarySchema,
     ServiceListingInputSchema,
+    ServiceOfferCardSchema,
+    ServiceOfferSettledSchema,
     ServiceProbeResultSchema,
     SetupCodeSchema,
     UserSchema,
@@ -217,8 +219,34 @@ export const desktopContract = {
 // under /pool, not part of this contract, because no browser session could authenticate them.
 export const poolContract = {
     membership: oc.route({ method: "GET", path: "/pool/membership" }).output(MembershipStateSchema),
-    checkout: oc.route({ method: "POST", path: "/pool/checkout" }).output(z.object({ url: z.url() })),
+    /* `returnTo` names WHICH buying surface asked, because there are two now and they are not the same journey.
+     * `settings` is somebody already inside the product; `join` is somebody who arrived from a terminal with no
+     * sandbox and must not be dropped into a workspace shell that would bounce them to setup.
+     *
+     * An enum rather than a URL, deliberately: a caller-supplied return address on a payment redirect is an
+     * open redirect waiting to be found, and there are exactly two lanes to name. */
+    checkout: oc
+        .route({ method: "POST", path: "/pool/checkout" })
+        .input(z.object({ returnTo: z.enum([`settings`, `join`]).optional() }))
+        .output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/pool/portal" }).output(z.object({ url: z.url() })),
+
+    /* THE SPEND GATE'S BROWSER HALF — the two calls behind the approval page an agent outside a sandbox sends
+     * its owner to (api mcp/mcp-offer.ts). In a sandbox this pair is a card frame and a click inside the
+     * conversation; here it has to be a page, because a Claude Code session has no conversation of ours to
+     * draw in and no held connection to wait on.
+     *
+     * These are the ONLY door from `pending` to `approved`, and they live on the browser contract rather than
+     * beside the MCP routes for exactly that reason: a session cookie is the one credential the calling agent
+     * cannot obtain, hold, or forge. The agent's own claim that its user consented is never read anywhere. */
+    offer: oc
+        .route({ method: "GET", path: "/pool/offers/{id}" })
+        .input(z.object({ id: z.string() }))
+        .output(ServiceOfferCardSchema),
+    settleOffer: oc
+        .route({ method: "POST", path: "/pool/offers/{id}/settle" })
+        .input(z.object({ id: z.string(), approve: z.boolean() }))
+        .output(ServiceOfferSettledSchema),
 };
 
 /* THE CREATOR'S SIDE of the same pool: proving a publisher name is yours, and connecting somewhere to be paid.

@@ -1,4 +1,5 @@
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
+import { expireOffers } from "./mcp/mcp-offer.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
@@ -36,7 +37,20 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
         // Wanted-list rows go far sooner than the ledgers: the public aggregate reads 90 days, and a want is
         // a lead rather than a record anyone disputes — double the read window is all the history it needs.
         prisma.serviceWant.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * DAY_MS) } } }),
+        /* Approval offers are ephemera, not a ledger — the CHARGE is recorded as a service run, which the
+         * window above keeps. What an offer holds is the request body an agent composed, which can carry
+         * anything the task was about, so it goes on the shortest window here: a day is far past the ten
+         * minutes it could ever be acted on, and long enough that "what did my agent ask for this morning"
+         * is still answerable. */
+        prisma.serviceOffer.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - DAY_MS) } } }),
+        // OAuth access tokens Better Auth issued to MCP clients, once even their refresh token is dead. The
+        // library never prunes them; without this, every reconnect leaves a row behind forever.
+        prisma.oauthAccessToken.deleteMany({ where: { refreshTokenExpiresAt: { lt: now } } }),
     ]);
+    /* Offers nobody answered, marked before the delete above eventually takes them. Not a correctness
+     * requirement — every reader already treats a lapsed row as expired — but a `pending` row that can never
+     * be clicked is a table lying at rest, and this is the one statement that stops it. */
+    await expireOffers(prisma, now);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },
         select: { id: true, email: true },

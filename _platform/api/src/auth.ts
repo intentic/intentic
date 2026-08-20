@@ -3,7 +3,7 @@ import { LEGAL_VERSION } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
-import { oneTap, oneTimeToken } from "better-auth/plugins";
+import { mcp, oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
 import type { PrismaClient } from "@intentic-app/prisma";
@@ -103,5 +103,25 @@ export const createAuth = (config: Config, prisma: PrismaClient) =>
              * CONSUMER of that credential, never its issuer. The redirect flow stays as the fallback for any
              * browser that cannot mint one. */
             oneTap(),
+            /* THIS PLATFORM AS AN OAUTH AUTHORIZATION SERVER — what lets a piece of software the user installed
+             * (Claude Code, through the `intentic` plugin) act for them without holding a browser cookie, and
+             * without a sandbox.
+             *
+             * Every metered route until now authenticated by a sandbox's connect token, which quietly made
+             * "owns a machine" a precondition for buying and spending a membership. It never was one: a
+             * membership is an account's, the credit meter is an account's, and the services catalog is the
+             * platform's. This plugin adds the missing principal — a bearer that names a user and nothing else
+             * — and pool.routes.ts `ownerOf` accepts it beside the connect token.
+             *
+             * The plugin serves the whole discovery contract an MCP client expects
+             * (/.well-known/oauth-authorization-server, protected-resource metadata, dynamic client
+             * registration), so there is nothing for a user to paste and no secret in a config file anywhere.
+             *
+             * `loginPage` is where an unauthenticated authorize lands. NOT /login: that page's job is to open a
+             * workspace, and it ends by pushing into the shell, which a person with no sandbox is bounced out
+             * of. /connect is the same Google sign-in wearing the right sentence — "connect Claude Code to
+             * intentic" — and it hands the browser straight back to the authorize URL it came from. For most
+             * people who arrive this way it is the first intentic screen they ever see. */
+            mcp({ loginPage: `${config.webOrigin}/connect` }),
         ],
     });

@@ -1,0 +1,10 @@
+{
+    "name": "intentic",
+    "description": "Run intentic's paid services (research, data, heavy compute) from Claude Code. Priced in membership credits; every run is approved by you on a page intentic renders, and refunded if the service doesn't answer.",
+    "version": "1.0.0",
+    "author": { "name": "intentic", "url": "https://intentic.dev" },
+    "homepage": "https://intentic.dev",
+    "repository": "https://github.com/intentic/intentic",
+    "license": "Apache-2.0",
+    "keywords": ["services", "marketplace", "payments", "research", "mcp"]
+}

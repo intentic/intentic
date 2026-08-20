@@ -267,6 +267,44 @@ const routes: RouteRecordRaw[] = [
         meta: { title: `Accept invite` },
         component: () => import(`../pages/AcceptInvite.vue`),
     },
+
+    /* ══ THE THREE SANDBOX-FREE SURFACES ══════════════════════════════════════════════════════════════════
+     *
+     * All three belong to somebody who reached this platform from a terminal on their own laptop and owns no
+     * sandbox: their coding agent asked for a paid service, and these are sign-in, payment and approval.
+     *
+     * DELIBERATELY OUTSIDE THE SHELL, and that placement is the entire point rather than a layout preference.
+     * Every route under `/` is guarded by requireSetup, which redirects anyone whose sandboxes have never
+     * phoned home to /setup — so the membership tab, the only buying surface this product had, was unreachable
+     * by exactly the people most likely to want to buy one. A membership was always an account's rather than a
+     * machine's; this is where that stops being a claim.
+     *
+     * `requireAuth` is not used on any of them either, for the same reason: it hydrates a workspace's query
+     * cache and then bounces to /login, whose own success path pushes into the shell. Each page resolves the
+     * session itself and drives its own Google sign-in, returning to its own full path. */
+    {
+        // Where Better Auth's OAuth authorize sends an unauthenticated MCP client's owner (api auth.ts).
+        path: `/connect`,
+        name: `connect`,
+        meta: { title: `Connect to intentic` },
+        component: () => import(`../pages/Connect.vue`),
+    },
+    {
+        // Buying a membership with no sandbox anywhere in the story. Stripe returns here, not to settings.
+        path: `/join`,
+        name: `join`,
+        meta: { title: `Join intentic` },
+        component: () => import(`../pages/Join.vue`),
+    },
+    {
+        /* The spend gate's wall. The ONLY place a parked service run becomes an approved one — and the reason
+         * an agent outside a sandbox can be handed a spending catalogue at all, since nothing it says about
+         * consent is read anywhere and the run re-reads what this page wrote. */
+        path: `/approve/:id`,
+        name: `approve`,
+        meta: { title: `Approve a run` },
+        component: () => import(`../pages/ApproveRun.vue`),
+    },
     /* THE KIT, ON ONE PAGE — dev only, and unguarded on purpose: it needs no session, no sandbox and no
      * repository, so it opens in any state the app can be in. `import.meta.env.DEV` is a compile-time constant,
      * so the route and its whole component graph vanish from a production build rather than shipping behind a
