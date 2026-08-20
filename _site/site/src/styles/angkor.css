@@ -32,7 +32,7 @@
  *                       headings, the step numerals. This is where the contrast pays.
  *   Baloo 2           — the wordmark, the bar, and the titling tier from 13 to 24px: card headings,
  *                       list labels, menu rows. See below.
- *   Inter             — running copy, all small print, AND EVERY BUTTON LABEL. See below.
+ *   Mukta             — running copy, all small print, AND EVERY BUTTON LABEL. See below.
  *
  * If a new element is between 13 and 24px, it is `--a-font-mark`. That is the whole rule.
  *
@@ -47,8 +47,8 @@
  * BUTTONS ARE SANS, and that is a deliberate exception to the band above. A button label is not
  * titling — it is an instruction, read at a glance, in a box the eye has already decided to look at.
  * Set in a titling face they read as ornament rather than as something to press, and the reference art
- * sets them in a sans for exactly that reason. So: `--font-sans`, medium weight, a touch of tracking to
- * hold the small caps-height open.
+ * sets them in a sans for exactly that reason. So: `--a-font-text`, medium weight, a touch of tracking
+ * to hold the small caps-height open.
  *
  * THE WORDMARK IS THIS FACE FIRST, because a wordmark is a drawing rather than a setting. Baloo 2 is the
  * rounded geometric with the cut terminals and the angled `t` the brand art uses — a serif version of
@@ -118,11 +118,88 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* THE RUNNING COPY, AND WHY IT IS NOT THE SITE'S OWN SANS.
+ *
+ * The rest of intentic.dev sets its body text in Inter, and this page did too until it was pointed out
+ * that Inter is the single most over-fitted typeface on the web right now: it is what Stripe, Linear and
+ * Vercel standardised on, which means it is what every template and every generated landing page reaches
+ * for by default. On a page whose entire argument is that it was made deliberately, the one face doing
+ * the most reading is the worst place to look generic.
+ *
+ * Mukta, by Ek Type — the same foundry as the Baloo 2 above. That is the reason it was chosen over a
+ * dozen equally competent grotesques: the titling face and the reading face are drawn by one team to the
+ * same Latin proportions, so they set together rather than merely coexisting, and the page gains a
+ * second face without gaining a second accent. It is a humanist sans with open counters and a tall
+ * x-height, which is what small warm-grey type on a near-black ground needs; Inter's neutrality read
+ * cold against this palette in a way a humanist does not.
+ *
+ * Three static weights, and no more: 400 sets the body, 500 the control labels, 600 the small caps
+ * labels. Those are the only three the page asks for — measured, not guessed — and a weight nothing
+ * sets is a download nobody needs. SCOPED TO `.a-page`: the other sixty-six pages of this site keep
+ * `--font-sans`, and nothing here reaches out and restyles them. */
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/mukta-400-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/fonts/mukta-400-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/mukta-500-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/mukta-500-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/mukta-600-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Mukta";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/mukta-600-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 .a-page {
     /* Named by the job rather than by the typeface, so a call site says which TIER it belongs to and the
      * fence above is enforced by which variable it reaches for. */
     --a-font-display: "Playfair Display", Georgia, "Times New Roman", serif;
     --a-font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
+    /* The reading tier. Falls back to the platform's own UI face rather than to another webfont — if
+     * Mukta fails to arrive, native type is a better answer than a second guess. */
+    --a-font-text: "Mukta", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
     /* ── The metals ──────────────────────────────────────
      * Two of them, and the page is built on the difference. GOLD is structure: every rule, frame,
@@ -145,7 +222,14 @@
     /* Ink. Cream rather than white: white on this plate reads as a hole cut in it. */
     --a-cream: #efe3cd;
     --a-muted: #b7a68d;
-    --a-subtle: #8e7f69;
+    /* THE SMALL PRINT NEEDS HEADROOM, NOT JUST A PASS. This was #8e7f69, which measures 4.83:1 on the
+     * canvas — over the line, by a third of a point. But almost nothing on this page sits on the bare
+     * canvas: footnotes, captions and command notes sit on the plate, on a card wash, or on the lit
+     * band of the wall, all of which are lighter than the value the ratio was computed against. A tone
+     * that only passes against the darkest thing on the page fails against most of what it is actually
+     * printed on. At 6.0:1 on the canvas it keeps a real margin wherever it lands, and it is still a
+     * clear step below `--a-muted` (8.4:1), so the three-tone hierarchy is unchanged. */
+    --a-subtle: #9c8b73;
 
     /* Ground. Warm near-black — the plate's own darkest value, so a section with no plate behind it
      * still belongs to the same wall as one that has. */
@@ -187,7 +271,7 @@
 
     background: var(--a-canvas);
     color: var(--a-cream);
-    font-family: var(--font-sans);
+    font-family: var(--a-font-text);
 }
 
 /* The page owns the document's background too, so an overscroll bounce or a short viewport shows warm
@@ -450,7 +534,7 @@ body:has(.a-page) {
     gap: 0.55rem;
     padding: 0.85rem 1.6rem;
 
-    font-family: var(--font-sans);
+    font-family: var(--a-font-text);
     font-size: 0.9375rem;
     font-weight: 500;
     letter-spacing: 0.015em;

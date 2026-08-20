@@ -154,6 +154,7 @@ const GITHUB_MARK =
     title={`${content.meta.title} · Angkor`}
     description={content.meta.description}
     noindex={true}
+    preloadFont="/fonts/mukta-400-latin.woff2"
 >
     <div class="a-page flex flex-1 flex-col">
         <AngkorNav />
@@ -938,8 +939,16 @@ const GITHUB_MARK =
        they read as one phrase that happens to have wrapped, and the ember stops lose their beat.
        Playfair's ascenders and descenders are long, which is what makes 1.04 look tight here where it
        would look right on a face with shorter extenders. */
+    /* THE FAMILY IS DECLARED ON THE <h1> ITSELF, not only on the spans that carry the stone texture.
+       Visually this changes nothing — each beat is already wrapped in `.a-display`, which sets the same
+       face. It matters because the h1 is the element every outside reader of this page inspects: search
+       previews, reader modes and audit tools all ask the HEADING what it is set in, and they got the
+       inherited body sans, because the only thing directly inside the h1 was a wrapper span. The page
+       was reported as "hero set in Inter" while every visible letter of it was Playfair. Declaring the
+       tier on the element that owns the words makes the markup say what the page actually does. */
     .a-page .a-headline {
         margin: 0;
+        font-family: var(--a-font-display);
         font-size: clamp(2.55rem, 5.6vw, 4.6rem);
         line-height: 1.16;
         font-weight: 600;
@@ -1506,7 +1515,7 @@ const GITHUB_MARK =
     .a-page .a-trust-stat span {
         display: block;
         margin-top: 0.25rem;
-        font-family: var(--font-sans);
+        font-family: var(--a-font-text);
         font-size: 0.75rem;
         font-weight: 400;
         color: var(--a-subtle);

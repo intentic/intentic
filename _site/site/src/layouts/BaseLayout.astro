@@ -18,6 +18,17 @@ interface Props {
     faq?: FaqEntry[];
     extraJsonLd?: Record<string, unknown>[];
     noindex?: boolean;
+    /**
+     * The one font warmed at highest priority, as a path under /fonts. Defaults to the site's body sans,
+     * which is what every page here sets its running copy in — the preload exists so the first paint is
+     * not a flash of the platform's fallback.
+     *
+     * A page that overrides its own type has to override this with it: /angkor/ sets its body copy in a
+     * different face, and left alone it preloaded a file it then never drew a glyph from, while the face
+     * it DOES use waited behind that download. A preload for the wrong font is worse than none — it is a
+     * high-priority request competing with the one that matters.
+     */
+    preloadFont?: string;
 }
 
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
@@ -116,7 +127,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="twitter:image:alt" content={title} />
 
         <meta name="theme-color" content="#181614" />
-        <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin.woff2" crossorigin />
+        <link rel="preload" as="font" type="font/woff2" href={Astro.props.preloadFont ?? "/fonts/inter-latin.woff2"} crossorigin />
         <noscript>
             <style>
                 .fade-in {
