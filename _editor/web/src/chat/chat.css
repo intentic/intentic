@@ -316,6 +316,21 @@
         --chat-gutter: 2.25rem;
     }
 }
+/* THE SCROLLER RESERVES ITS SCROLLBAR ON BOTH EDGES, so the column re-centres in the width the reader
+   actually sees. This one box holds the transcript AND the composer, and everything in it is centred or
+   symmetrically padded (.chat-turns' gutter, the composer's mx-auto cap) — measured from the scroller's
+   CONTENT box. A vertical scrollbar is carved out of that content box on the inline-end alone, so the whole
+   column — every bubble and the composer under it — sat shifted towards the start by a scrollbar's width:
+   in the docked panel the left margin came up a scrollbar narrower than the right, which is the unevenness
+   the centring exists to prevent. `both-edges` reserves the same strip on the start edge too — empty, the
+   scrollbar draws in the end one — so the content box is symmetric within the panel again and the two
+   margins match. `stable` alone (the .scrollbar-stable utility) reserves only the end edge and keeps the
+   very offset this fixes, which is why the gutter is set here rather than borrowed from that class. The
+   reserved width tracks the thin scrollbar (`scrollbar-width: thin`, or the 6px `::-webkit-scrollbar`), so
+   it is a few pixels each side, not the classic bar's strip. */
+.chat-scroller {
+    scrollbar-gutter: stable both-edges;
+}
 /* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands.
 
    Narrow, it sits on the end of its own line, and that line is as tall as the mark: the transcript has no room
