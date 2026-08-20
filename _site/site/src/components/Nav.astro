@@ -391,19 +391,69 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         padding: 0;
         list-style: none;
     }
+    /* ── A ROW UNDER THE POINTER IS BEING CARVED AND LIT ─────────────────────────────────────────────
+     *
+     * It was a grey block and a left-hand bar: the hover every framework ships, and the one gesture in
+     * this bar that could have come off any site. What replaces it is made of the two things this whole
+     * page is made of — a lozenge and an incised rule — and it happens as ONE movement rather than three
+     * effects fired at once.
+     *
+     * The lozenge is stamped into the margin: it arrives rotated 45°, which is the shape at rest, and it
+     * overshoots very slightly on the way in, the way a punch bites and settles. Its space is reserved
+     * whether or not it is showing, so nothing on the row moves — a menu that shifts its labels under the
+     * pointer is a menu you misclick.
+     *
+     * The rule is incised left to right. A carved line is cut from one end, so it is drawn from one end:
+     * `scaleX` off its left edge, gold at the start and running out to nothing before the right margin,
+     * so it reads as a chisel stroke rather than as a border switching on.
+     *
+     * And the ground is RAKING LIGHT, not a fill. A flat translucent block is a highlight; a warm wash
+     * that is strongest at the left and gone by two thirds across is light falling on stone from the side,
+     * which is the one light this entire page is lit by. */
     .menu-item {
+        position: relative;
         display: block;
-        padding: 0.45rem 0.6rem;
-        border-left: 1px solid transparent;
+        padding: 0.45rem 0.6rem 0.45rem 1.4rem;
         text-decoration: none;
-        transition:
-            background-color 0.16s ease,
-            border-color 0.16s ease;
+        transition: background-color 0.24s ease;
+    }
+    /* The stamped lozenge. */
+    .menu-item::before {
+        content: "";
+        position: absolute;
+        top: 0.85rem;
+        left: 0.5rem;
+        width: 0.32rem;
+        height: 0.32rem;
+        background: var(--color-primary-500);
+        box-shadow: 0 0 0.5rem rgba(224, 123, 39, 0.55);
+        transform: rotate(45deg) scale(0);
+        transition: transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    }
+    /* The incised rule. */
+    .menu-item::after {
+        content: "";
+        position: absolute;
+        right: 0.6rem;
+        bottom: 0.1rem;
+        left: 0.5rem;
+        height: 1px;
+        background: linear-gradient(90deg, var(--color-gold), rgba(201, 160, 92, 0.25) 62%, transparent 100%);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .menu-item:hover,
     .menu-item.current {
-        background: rgba(224, 123, 39, 0.09);
-        border-left-color: var(--color-primary-500);
+        background: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
+    }
+    .menu-item:hover::before,
+    .menu-item.current::before {
+        transform: rotate(45deg) scale(1);
+    }
+    .menu-item:hover::after,
+    .menu-item.current::after {
+        transform: scaleX(1);
     }
     .menu-item-label {
         display: block;
@@ -551,6 +601,12 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
     @media (prefers-reduced-motion: reduce) {
         .menu-panel {
+            transition: none;
+        }
+        /* The mark and the rule still ARRIVE — they are what says which row the pointer is on — they just
+           stop being stamped and cut, and appear at their finished size. */
+        .menu-item::before,
+        .menu-item::after {
             transition: none;
         }
         .bar[data-cta-managed] .bar-cta {

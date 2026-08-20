@@ -28,6 +28,8 @@ The public website at intentic.dev — an Astro build, all copy imported rather 
   between one page and the next.
 - [src/components/ornaments.ts](src/components/ornaments.ts) — the four drawn shapes (lotus, lozenge, corner,
   divider) every flourish here is one of, as strings so markup and CSS `background-image` share one definition.
+  `scripts/icons.mjs` reads the lotus out of it to build every favicon, so the mark in the bar and the mark in
+  a browser tab cannot become two drawings.
 - [src/pages/docs](src/pages/docs) — the documentation pages.
 - [src/components/DocsLayout.astro](src/components/DocsLayout.astro) — every docs page's shell, and the one place
   that sees a page's whole rendered body: it anchors the headings, builds the section list, and checks a page's

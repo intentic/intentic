@@ -904,6 +904,7 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 12, insertions: 412, deletions: 96 },
+            adjudicated: true,
         });
         await registry.finish("c1", 2_000);
         expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
@@ -978,6 +979,7 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
+            adjudicated: true,
             conflicts,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
@@ -987,6 +989,57 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 3, insertions: 10, deletions: 1 },
+            adjudicated: true,
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
+    });
+
+    /* THE DEAD END THIS PREVENTS, which shipped and stranded a session for an afternoon.
+     *
+     * A `measure` land settles an ended turn's books and never touches the main tree, so it reaches no
+     * conflict gate and reports nothing. Read as a verdict, that "nothing" deleted the last real refusal — and
+     * every surface that explains a conflict hangs off the stored report: the standing that reddens the card,
+     * the review's re-derived report, and "Have the agent resolve it", which refused with "Nothing left for
+     * the agent to rebase" while a land pressed one second later still said "Landing hit a conflict".
+     *
+     * Nothing about the tree had changed. The only thing that had was the record of what the land found. */
+    it("a measure land settles the books without retiring the last refusal", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 2 }];
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 3, insertions: 10, deletions: 1 },
+            adjudicated: true,
+            conflicts,
+        });
+
+        // The turn is stopped or its question dismissed: the books are settled, the delta stays on the branch.
+        await registry.recordLanded("c1", {
+            landed: false,
+            held: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 4, insertions: 12, deletions: 1 },
+            adjudicated: false,
+        });
+        const settled = store.saved().find((entry) => entry.id === "c1");
+        expect(settled?.conflicts).toEqual(conflicts);
+        // Everything a measure land IS for still lands: the refreshed diffstat proves the pass ran.
+        expect(settled?.diffFiles).toBe(4);
+
+        // And a real land still has the last word, in both directions.
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
+            diff: { files: 4, insertions: 12, deletions: 1 },
+            adjudicated: true,
         });
         expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
     });
@@ -1176,6 +1229,7 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "b1", landedTip: "t1", landedHead: "h1", landedAt: 3_000 }],
             diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
         });
 
         // A mark computed against shas the entry does not carry — a stale scan racing a newer land — is a no-op.
@@ -1204,6 +1258,7 @@ describe("agents registry", () => {
             changed: true,
             repos: [{ repo: "root", base: "b1", landedTip: "t2", landedHead: "h2", landedAt: 5_000 }],
             diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
         });
         expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
     });

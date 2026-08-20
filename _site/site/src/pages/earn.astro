@@ -236,8 +236,10 @@ const rules = [
 
         {/* The member's side first: the ring below splits a pool "by the credits members spend", and this is
             where a reader learns what spending one even looks like. */}
-        <section class="relative overflow-hidden border-b border-line" aria-labelledby="credits-heading">
-            <div class="absolute inset-0 bg-linear-to-b from-primary-600/8 via-canvas to-canvas" aria-hidden="true"></div>
+        {/* No wash of its own. It carried an ember-to-canvas gradient across the whole band, which over
+            the temple behind every page cut a hard line straight across the stone — see `.plinth` in
+            global.css. The wall texture and the rule under the band say the same thing without it. */}
+        <section class="relative overflow-hidden border-b band-rule" aria-labelledby="credits-heading">
             <div class="wall"></div>
             <div class="relative mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
@@ -360,7 +362,7 @@ const rules = [
         {/* The service lane, demonstrated: the one place on the site a visitor SEES the flow the cards above
             describe. Copy sits on the left and the conversation on the right. The conversation carries the argument, so the
             copy stays short. */}
-        <section class="border-b border-line" aria-labelledby="chat-heading">
+        <section class="border-b band-rule" aria-labelledby="chat-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
                     <div>
@@ -406,7 +408,7 @@ const rules = [
         </section>
 
         {/* The creator's side: the same money, seen from the other end of the month. */}
-        <section class="border-b border-line" aria-labelledby="pool-heading">
+        <section class="border-b band-rule" aria-labelledby="pool-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14">
                     <div class="relative order-last overflow-hidden border border-line bg-canvas/60 lg:order-first">
@@ -527,7 +529,7 @@ const rules = [
             Both artifacts, one slot each. The hierarchy stays in the primary and in the sentence rather than
             in whether a door exists at all: most people should build a free extension, and the reader who
             cannot is told so in words instead of being left to infer it from a missing button. */}
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto max-w-7xl px-6 py-14 text-center">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Choose what you want to publish.</h2>
                 <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">

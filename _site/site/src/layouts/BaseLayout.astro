@@ -93,12 +93,14 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             content={Astro.props.noindex ? "noindex,follow" : "max-snippet:-1, max-image-preview:large, max-video-preview:-1"}
         />
 
-        <!-- The .ico is first and unsized so it stays the fallback: it is the file crawlers and feed readers
-             request at /favicon.ico by convention rather than by reading this tag. The PNG is what a modern
-             browser actually paints, being the larger and the sharper of the two. -->
+        <!-- All three are the same drawing — the lotus in the bar's top-left corner, on the site's own warm
+             ground — built by `scripts/icons.mjs` from the one definition in `components/ornaments.ts`.
+             The .ico is first and unsized so it stays the fallback: it is the file crawlers and feed
+             readers request at /favicon.ico by convention rather than by reading these tags. The SVG is
+             what a modern browser picks, at whatever size it happens to want. -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
-        <link rel="apple-touch-icon" href="/assets/intentic-logo-sized.png" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="canonical" href={canonicalURL.href} />
         <link rel="sitemap" href="/sitemap-index.xml" />

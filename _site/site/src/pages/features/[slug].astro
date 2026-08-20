@@ -140,7 +140,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
         <!-- The question underneath the surface. It sits ABOVE the next-surface rail on purpose: the rail
              walks the shelf, and this steps off it, to the page written for somebody who has the problem but
              not yet the vocabulary this page is written in. -->
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto max-w-7xl px-6 py-12">
                 <a href={guidesHref(page.guide.slug)} class="group card block max-w-3xl p-6 transition-colors hover:border-primary-600/40">
                     <div class="eyebrow">Guide</div>
@@ -153,7 +153,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
         </section>
 
         <!-- Next surface + CTA -->
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <a href={productHref(next.slug)} class="group">
                     <div class="eyebrow">Next</div>

@@ -185,9 +185,11 @@ import ExternalIcon from "./ExternalIcon.astro";
             border-color 0.15s;
     }
 
+    /* The raking light the desktop panel's rows take, at a phone's scale: strongest where the row starts
+       and gone before it ends, so it reads as light falling across stone rather than as a grey block. */
     .mobile-nav-link:hover {
         color: var(--color-primary-400);
-        background: rgba(224, 123, 39, 0.09);
+        background: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
         border-left-color: var(--color-primary-500);
     }
 

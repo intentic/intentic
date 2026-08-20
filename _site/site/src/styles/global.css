@@ -870,6 +870,61 @@
         border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 22%, var(--color-line-strong) 78%, transparent) 1;
     }
 
+    /* THE SAME RULE, ON A SECTION THAT NAMES ITS OWN EDGE. `.band + .band` can only draw between two
+     * bands that are siblings; a page whose sections carry their own `border-t` or `border-b` says which
+     * edge it wants, and this supplies the fade for whichever one has a width.
+     *
+     * IT IS A FADE RATHER THAN A HAIRLINE because of what is behind it now. A flat `border-line` rule is
+     * a wall-to-wall line at 0.16 alpha, which over the temple is either invisible or a scratch across
+     * the stone depending on what it crosses. Fading out at both ends, and a touch stronger in the middle
+     * where the page's own column is, it reads as a carved division either way. */
+    .band-rule {
+        border-color: transparent;
+        border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 22%, var(--color-line-strong) 78%, transparent) 1;
+    }
+
+    /* ══ THE PLINTH ═════════════════════════════════════════════════════════════════════════════════
+     * A short full-bleed strip that is not prose — a row of measured figures, a ledger line — and has to
+     * read as its own register rather than as more page.
+     *
+     * IT IS MARKED WITH RULES AND A FEATHERED WASH, NOT A TINT, and that is the whole point of the
+     * recipe. Three bands on this site used to say "a section starts here" by laying a flat translucent
+     * colour across their whole box: `bg-overlay/15`, `bg-canvas/60`, an ember gradient. That works on a
+     * flat canvas and fails completely over a photograph, which is what every page now opens on — the
+     * wash cuts a hard horizontal line across the temple and the picture reads as half-coloured, like a
+     * printing plate that slipped.
+     *
+     * So the ground swells in the middle of the strip and dies to nothing at both edges. There is no line
+     * for it to cut, at any height, over any part of the art. What draws the boundary instead is the pair
+     * of gold rules — the same fading hairline the bands upstairs are divided by, which is how the rest
+     * of this site has always said "a new thing starts here". */
+    .plinth {
+        position: relative;
+        background: linear-gradient(
+            180deg,
+            transparent 0%,
+            rgba(31, 23, 16, 0.5) 42%,
+            rgba(31, 23, 16, 0.5) 58%,
+            transparent 100%
+        );
+    }
+    .plinth::before,
+    .plinth::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        left: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--color-line-strong) 22%, var(--color-line-strong) 78%, transparent);
+        pointer-events: none;
+    }
+    .plinth::before {
+        top: 0;
+    }
+    .plinth::after {
+        bottom: 0;
+    }
+
     /* A translucent tint chip: a squared cartouche rather than a pill, because a pill is the one shape
      * this vocabulary does not have. */
     .chip {

@@ -1135,14 +1135,21 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             // The land answers a pending ask along with clearing the old conflict report, a request chip that
             // outlived the land it asked for would read as a second, phantom ask.
-            const { conflicts: _cleared, landRequested: _answered, ...carried } = entry;
+            const { conflicts: cleared, landRequested: _answered, ...carried } = entry;
+            /* ONLY A VERDICT MAY REPLACE A VERDICT. A `measure` land settles the books and never touches the
+             * main tree, so it reaches no conflict gate and reports none — read as "nothing refuses anymore"
+             * that silently deleted the last real refusal, and with it the premise the conflict standing, the
+             * review's report and "Have the agent resolve it" all hang off (see LandOutcome.adjudicated).
+             * It carries the stored report across instead; the derived layers retire it on their own terms the
+             * moment the delta stops being outstanding. */
+            const verdict = outcome.adjudicated ? outcome.conflicts : (outcome.conflicts ?? cleared);
             replace({
                 ...carried,
                 repos: [...outcome.repos],
                 diffFiles: outcome.diff.files,
                 diffInsertions: outcome.diff.insertions,
                 diffDeletions: outcome.diff.deletions,
-                ...(outcome.conflicts !== undefined ? { conflicts: [...outcome.conflicts] } : {}),
+                ...(verdict !== undefined ? { conflicts: [...verdict] } : {}),
             });
             await persist();
             // The landedTips just moved, which is half the anchor every standing is measured from.

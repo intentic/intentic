@@ -71,7 +71,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 
         <div class="mx-auto max-w-7xl px-6">
             <!-- The answer, in one or two lines, before anything that could read as a scorecard -->
-            <section class="border-b border-line py-14 lg:py-16">
+            <section class="border-b band-rule py-14 lg:py-16">
                 <div class="eyebrow">The short answer</div>
                 <div class="mt-4 space-y-3">
                     {page.verdict.map((paragraph) => <p class="max-w-copy text-lg leading-relaxed text-content sm:text-xl">{paragraph}</p>)}
@@ -81,7 +81,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
             <!-- Head to head: the centrepiece. Only the rows that go the other way are marked: a scorecard
                  with a tick on every row is one nobody believes. The "where you agree" line rides above it so
                  the concession is read before the contrast. -->
-            <section class="fade-in border-b border-line py-14 lg:py-16">
+            <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
                     <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
                     <p class="text-2xs text-subtle">
@@ -118,7 +118,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 
             <!-- What it comes down to: the one or two distinctions that survive the table. Compact by design,
                  the table already carried the detail, this is the thing to remember. -->
-            <section class="fade-in border-b border-line py-14 lg:py-16">
+            <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What it comes down to</h2>
                 <div class:list={["mt-6 grid gap-4", page.differences.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"]}>
                     {
@@ -135,7 +135,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
 
             {
                 page.together && (
-                    <section class="fade-in border-b border-line py-14 lg:py-16">
+                    <section class="fade-in border-b band-rule py-14 lg:py-16">
                         <div class="card border-primary-600/30 bg-primary-500/6 p-7 lg:p-9">
                             <div class="eyebrow text-primary-400">Not either/or</div>
                             <h2 class="mt-2 text-xl font-semibold tracking-tight text-content">{page.together.title}</h2>
@@ -155,7 +155,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                  which is not a date and ages into a claim nobody can test. This states the day the vendor's own
                  documents were last opened and links each one, so a reader can check any row here against the
                  source it came from, and can see for themselves how old that check is. -->
-            <section class="border-t border-line py-10">
+            <section class="border-t band-rule py-10">
                 <h2 class="text-sm font-semibold tracking-tight text-content">How this was checked</h2>
                 <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
                     Every claim about {page.name} on this page is drawn from its own documentation, last read on{" "}
@@ -193,7 +193,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
         </div>
 
         <!-- Next comparison + CTA -->
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <a href={compareHref(next.slug)} class="group">
                     <div class="eyebrow">Next comparison</div>

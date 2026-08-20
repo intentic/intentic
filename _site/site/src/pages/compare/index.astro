@@ -50,7 +50,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
         </section>
 
         <!-- The frame. Two factual axes, not a quadrant: they are the same two the landing page argues. -->
-        <section class="border-b border-line">
+        <section class="border-b band-rule">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <h2 class="display max-w-2xl text-2xl font-semibold">{compareIndex.axes.heading}</h2>
                 <div class="mt-8 grid gap-6 lg:grid-cols-2">
@@ -122,7 +122,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
         </section>
 
         <!-- Corrections. A comparison page that invites its own contradiction is the only kind worth trusting. -->
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 class="text-base font-medium text-content">{compareIndex.correction.title}</h2>

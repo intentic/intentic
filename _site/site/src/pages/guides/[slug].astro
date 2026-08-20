@@ -67,7 +67,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
         <div class="mx-auto max-w-7xl px-6">
             <!-- The checkable part. Specifics with numbers and names, because a page with nothing falsifiable
                  in it has nothing anyone can cite. -->
-            <section class="border-b border-line py-14 lg:py-16">
+            <section class="border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What is true regardless of what you pick</h2>
                 <ul class="mt-6 grid gap-x-10 gap-y-4 md:grid-cols-2">
                     {
@@ -83,7 +83,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
 
             <!-- Every approach, including the ones that are not this product, each with where it stops
                  working. This is the section that earns the verdict below it. -->
-            <section class="fade-in border-b border-line py-14 lg:py-16">
+            <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Your options, and where each one stops</h2>
                 <table class="opts mt-7 w-full">
                     <thead>
@@ -114,7 +114,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
             </section>
 
             <!-- The recommendation, after the alternatives have been given their due. -->
-            <section class="fade-in border-b border-line py-14 lg:py-16">
+            <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What to actually do</h2>
                 <div class="mt-5 space-y-4">
                     {page.verdict.map((paragraph) => <p class="max-w-copy text-base leading-relaxed text-content">{paragraph}</p>)}
@@ -125,7 +125,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                  so a section survives being read on its own. -->
             {
                 page.sections.map((section) => (
-                    <section class="fade-in border-b border-line py-14 lg:py-16">
+                    <section class="fade-in border-b band-rule py-14 lg:py-16">
                         <h2 class="max-w-3xl text-xl font-semibold tracking-tight text-content">{section.heading}</h2>
                         <div class="mt-5 space-y-4">
                             {section.body.map((paragraph) => (
@@ -148,7 +148,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
 
             <!-- The same question, asked the other nineteen ways. Each answer stands alone because each one
                  is separately quotable, and each carries an id so it can be linked on its own. -->
-            <section class="fade-in border-b border-line py-14 lg:py-16">
+            <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Related questions</h2>
                 <div class="mt-7 space-y-7">
                     {
@@ -189,7 +189,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
             </section>
         </div>
 
-        <section class="border-t border-line">
+        <section class="border-t band-rule">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-14 sm:flex-row sm:items-center sm:justify-between">
                 <a href={guidesHref(next.slug)} class="group">
                     <div class="eyebrow">Next guide</div>
