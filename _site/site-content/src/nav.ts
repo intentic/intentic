@@ -69,12 +69,18 @@ export type NavEntry =
  * preview rail beside it: a visitor who has installed nothing seeing the real surfaces, and Automate carries
  * no shot because it is diagram-led (no captured automations screen), so its row has no preview. */
 const productItems = (): MenuItem[] =>
-    productPages.map((page) => ({
-        label: page.navLabel,
-        href: productHref(page.slug),
-        description: page.menuBlurb,
-        ...(page.hero ? { shot: { name: page.hero.name, alt: page.hero.alt } } : {}),
-    }));
+    productPages.map((page) => {
+        /* The row's own preview where it has one, the page hero otherwise. A hero is framed for a page column
+         * and the rail is a 16:10 box, so two of the five pages carry a capture shot for the box instead —
+         * see `menuShot` in product.ts for which, and why the other three don't need one. */
+        const shot = page.menuShot ?? (page.hero && { name: page.hero.name, alt: page.hero.alt });
+        return {
+            label: page.navLabel,
+            href: productHref(page.slug),
+            description: page.menuBlurb,
+            ...(shot ? { shot } : {}),
+        };
+    });
 
 export const navEntries: NavEntry[] = [
     {

@@ -366,6 +366,60 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         dpr: DENSE_DPR,
     },
+    /* ── THE MEGA-MENU'S PREVIEW RAIL ────────────────────────────────────────────────────────────────────
+     *
+     * The Features menu previews the row you are hovering in a 16:10 box 544px wide (Nav.astro). Every row
+     * with a picture previewed its PAGE HERO there, and a hero is framed for a different job: it is printed a
+     * column wide, so it is a wide strip of a surface (the board at 2.4:1) or a tall column of one (the chat
+     * at 1:2). Dropped into a 16:10 box, a strip left a third of the box empty and a column showed its top
+     * inch blown up past legibility — the row's picture was of no particular thing.
+     *
+     * So two rows get their own captures, and their ONE rule is the shape of the box they are for: a `stopAt`
+     * of 0.625 × the clipped area's width, which is 16:10 exactly.
+     *
+     * The windows are NARROWER than the shared desktop, and that is about legibility rather than shape. A
+     * 16:10 frame fills the rail at any width — but the rail is 544px, so a frame taken off the usual 1270px
+     * area is painted at 43% and the app's own text stops being text. Shot at 800, the same frame paints at
+     * 68%: file names and line counts read, which is the entire job of a preview.
+     *
+     * `stopAt` rather than `fullHeight`, deliberately: a cap can only ever cut a surface short, never print
+     * canvas the content did not reach — and printing canvas is precisely what left the empty third. Should
+     * one of these grow, the frame stays 16:10; should one shrink below its cap, it comes back trimmed and the
+     * rail's `object-fit: cover` finishes the job. Neither failure mode puts a grey band back in the box.
+     *
+     * They are still whole surfaces, shot from the live demo like every other shot here. What is chosen is the
+     * MOMENT, not a crop: the one screen where the row's promise is legible at a glance. */
+    {
+        /* "It proposes, you approve, and nothing is merged unread" — so: the change itself, open in the review
+         * pane, file list beside it and nothing committed yet. The hero (`chat-plan`) is the same promise
+         * mid-sentence — a chat still thinking, its Approve buttons below the fold and off the bottom of the
+         * rail — and the agent's own review screen, which carries the better badge ("Ready to land", over an
+         * unpressed Land button), cannot be had at this shape: its four-file diff only grows tall enough to
+         * fill a 16:10 frame in a window narrow enough to lap the file name over the "not landed" pill.
+         *
+         * So the surface that IS this dense at full width gets the row, and the trade is a caption's worth of
+         * badge for a frame full of the actual reading. */
+        name: "menu-review",
+        path: "/workspace",
+        waitFor: 'button:has-text("Changes")',
+        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        settleMs: 1800,
+        clip: "area",
+        viewport: { width: 1290, height: 900 },
+        stopAt: 500,
+    },
+    {
+        /* "Run the sandbox on a server you control" — the box's own hub: named, online, its version and its
+         * URL, over the list of everything that lives inside it. Same surface as the hero, framed for the box
+         * rather than for a page column. */
+        name: "menu-host",
+        path: "/sandbox",
+        waitFor: "text=Installed version",
+        settleMs: 1200,
+        clip: "area",
+        viewport: { width: 1380, height: 900 },
+        stopAt: 556,
+    },
 ];
 
 const TYPES: Record<string, string> = {

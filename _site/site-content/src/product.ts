@@ -70,6 +70,22 @@ export interface ProductPage {
      */
     hero?: ProductShot;
     heroFigure?: ProductFigure;
+    /* THE PICTURE THE MEGA-MENU PREVIEWS, where the hero is the wrong picture for that box.
+     *
+     * The menu previews a row in a 16:10 frame 544px wide; a hero is framed for a page column, so it is a wide
+     * strip of a surface or a tall column of one. Run and Connect survive the difference — their heroes are
+     * near enough to the box that its crop still lands on lanes and tiles. Review and Host did not: one was a
+     * chat shot 1:2 tall, previewing as a blown-up inch of its own header, and the other a 2.5:1 strip that
+     * left a third of the frame empty.
+     *
+     * So those two name their own capture, shot to the frame (`_tools/e2e/shots/capture.mts`, "menu-*"). Same
+     * demo, same rule as every other shot here: a real surface, not a mockup.
+     *
+     * Connect was given one too and had it taken away again, which is worth writing down: the narrow window
+     * that makes these frames legible is also the width at which the capabilities catalog folds its category
+     * list into a dropdown, so the tighter shot bought bigger tiles by losing the shelf of kinds that is the
+     * actual point of that screen. Its hero, cropped, says more. */
+    menuShot?: ShotImage;
     facts: ProductFact[];
     blocks: ProductBlock[];
     /* THE GUIDE THIS SURFACE ANSWERS. A feature page presupposes intentic: it says what this product's
@@ -256,6 +272,10 @@ export const productPages: ProductPage[] = [
         menuBlurb: "It proposes, you approve, and nothing is merged unread",
         heading: "It proposes. You approve. Nothing is merged until you read the diff.",
         sub: "Every agent plans first, then waits. Review each file before you accept the change.",
+        menuShot: {
+            name: "menu-review",
+            alt: "The workspace Changes tab: five uncommitted files across two repos with their added and removed line counts, nothing staged, and the largest of them open in a side-by-side diff.",
+        },
         hero: {
             name: "chat-plan",
             alt: "The docked chat: the agent's thinking block, a Read tool call, a four-step plan for adding Stripe checkout, and two buttons: approve, or keep planning.",
@@ -320,6 +340,10 @@ export const productPages: ProductPage[] = [
         menuBlurb: "Run the sandbox on a server you control",
         heading: "Host the work. Keep control.",
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
+        menuShot: {
+            name: "menu-host",
+            alt: "The sandbox hub: the acme-shop box online with its installed version and its own URL, over the list of what it holds — environment, secrets, agent account, extensions, access, personas and computers.",
+        },
         hero: {
             name: "sandbox-overview",
             alt: "The sandbox hub: the acme-shop sandbox shown online with its installed version and its own URL, beside the list of everything it holds: environment, secrets, agent account, extensions, access, personas and computers.",

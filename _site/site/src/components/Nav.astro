@@ -100,14 +100,16 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                         <div class="menu-preview">
                                             {preview.map(({ href, shot }, i) => (
                                                 /* A fixed 34rem box: the menu only exists from lg up, so
-                                                   this is one width, not a viewport formula. The rail asks
-                                                   for 170% below, but Tailwind's `img { max-width: 100% }`
-                                                   holds it to the box, and `sizes` follows what paints. */
+                                                   this is one width, not a viewport formula. The rail COVERS
+                                                   below, so a shot wider than the box paints wider than it
+                                                   too — 340px of box against a 16:9-ish capture is ~810 CSS
+                                                   px of image — and `sizes` follows what paints, not what
+                                                   the box measures, or every wide shot arrives soft. */
                                                 <Image
                                                     src={shotAsset(shot.name)}
                                                     alt={shot.alt}
                                                     widths={SHOT_WIDTHS}
-                                                    sizes="544px"
+                                                    sizes="832px"
                                                     loading="lazy"
                                                     decoding="async"
                                                     class:list={["menu-preview-shot", { current: i === 0 }]}
@@ -420,15 +422,22 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         aspect-ratio: 16 / 10;
     }
 
-    /* Zoomed to its top-left corner rather than fitted: a whole surface scaled to fit the rail is a grey
-       rectangle, while its first lanes are recognisably the screen the row leads to. 170% of a 34rem rail is
-       ~925px of a 1072px-wide shot: near enough to native that the lane headers and card titles read. */
+    /* Filled from its top-left corner rather than fitted: a whole surface scaled to fit the rail is a grey
+       rectangle, while its first lanes are recognisably the screen the row leads to.
+
+       COVER, not a width multiplier. This rule used to say `width: 170%` and lean on the overflow to fill the
+       box — except Tailwind's `img { max-width: 100% }` clamps exactly that, so the zoom never happened and
+       every shot wider than 16:10 painted a short strip with the rail's own card colour under it: a third of
+       the box empty on Run and Host, which is the "grey area at the bottom" the menu was shipping. Cover makes
+       filling the box the rule instead of a side effect, so it holds for ANY shot's aspect — the wide board
+       crops at the sides, a portrait capture crops at the foot, and neither can leave a gap again. */
     .menu-preview-shot {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 170%;
-        height: auto;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: left top;
         opacity: 0;
         transition: opacity 0.18s ease;
     }
