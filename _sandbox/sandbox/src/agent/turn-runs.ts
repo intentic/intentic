@@ -356,6 +356,17 @@ export function soleLiveConversation(): string | undefined {
     return found;
 }
 
+/* Every conversation with a turn still running, with the moment it started. `turnRunOf` answers for one
+ * conversation and `soleLiveConversation` refuses to guess between two; this is the whole set, for the two
+ * readers that have to compare it against a SECOND record of the same fact — the journal on disk and the fleet
+ * registry's own `running` flags (invariants/). `startedAt` rides along because both of those records are
+ * written asynchronously, so a comparison that did not know a run's age would report every turn younger than
+ * its own first write as a violation. */
+export function liveTurnConversations(): readonly { readonly conversationId: string; readonly startedAt: number }[] {
+    sweep();
+    return [...runs].filter(([, run]) => !run.done).map(([conversationId, run]) => ({ conversationId, startedAt: run.startedAt }));
+}
+
 export const turnRunMetrics = (): Readonly<Record<string, number>> => {
     sweep();
     let live = 0;

@@ -58,7 +58,7 @@ export interface DaemonRoots {
     readonly historyRoot: string;
 }
 
-interface ContainerClaim extends DaemonRoots {
+export interface ContainerClaim extends DaemonRoots {
     readonly pid: number;
 }
 
@@ -78,6 +78,12 @@ const readClaim = (home: string): ContainerClaim | undefined => {
         return undefined;
     }
 };
+
+/* Who holds the container RIGHT NOW, for anyone re-asking the question after boot. `claimContainer` answers it
+ * once, at the only moment it can act on the answer; the invariant companion (platform/invariant.ts) re-reads
+ * it, because a claim taken from under a running daemon leaves that daemon converging HOME and sweeping
+ * processes on somebody else's behalf, with nothing in the log to say so. */
+export const claimHolder = (home: string = homedir()): ContainerClaim | undefined => readClaim(home);
 
 const sameRoots = (a: DaemonRoots, b: DaemonRoots): boolean => a.workspaceRoot === b.workspaceRoot && a.historyRoot === b.historyRoot;
 

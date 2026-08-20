@@ -35,6 +35,8 @@ import {
     politeGit,
 } from "@intentic/scaffold";
 import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
+import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
+import { registerDaemonInvariants } from "./invariants/register.js";
 import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
@@ -241,6 +243,10 @@ export interface Services {
     // `converged` promise, and /events streams its progress so the browser can WAIT VISIBLY instead of firing
     // a workspace's worth of reads at a daemon that will only park them (see platform/boot.ts).
     readonly boot: BootTracker;
+    // The promises this daemon makes to itself, checked while it runs — one companion per subsystem, reported
+    // and never thrown (see invariants/invariants.ts). main.ts drives the moments; nothing else reads it except
+    // the diagnostics surface and the tests.
+    readonly invariants: InvariantRegistry;
     // The platform registration, same split as `boot`: main starts/stops it, /health reports its state — the
     // one setup link nothing outside the container can probe (see platform/announce.ts).
     readonly announcer: Announcer;
@@ -795,6 +801,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
     const perf = createPerfTracker(logger);
 
+    /* Hoisted for the same reason the perf tracker is: the invariant companions registered at the end of this
+     * function observe the very instances built here, and a second journal would let a check read a directory
+     * the turn path never writes to — a diagnostic that agrees with itself and with nothing else. */
+    const turnJournal = fileTurnJournal(join(config.historyRoot, "turns"));
+    const invariants = createInvariantRegistry(logger);
+
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
     // same runner, so both must share one instance (and its `visible` gate).
     const terminalRun = createTerminalRunner();
@@ -1072,7 +1084,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
         drafts: fileDraftsStore(statePath(workspace.root, ".intentic/config/drafts/")),
-        turnJournal: fileTurnJournal(join(config.historyRoot, "turns")),
+        turnJournal,
+        invariants,
         // The same instance the transcript reader holds — two would answer a read from a file the other had
         // already moved past, exactly the argument the chores store above makes.
         turnAnchors,
@@ -1219,5 +1232,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         auth,
     };
     servicesHolder.current = services;
+    /* Arm the checks over the instances built above. Registration only — nothing runs until main.ts drives a
+     * moment, so a composition used by a test or the host-internal preview carries the companions without ever
+     * paying for them. The container-claim companion is not here: its subject is the role main.ts learns after
+     * this returns (invariants/register.ts). */
+    registerDaemonInvariants(invariants, {
+        turnJournal,
+        agents,
+        manifest: capabilityManifest,
+        connectors: secretFieldConnectors,
+    });
     return services;
 };

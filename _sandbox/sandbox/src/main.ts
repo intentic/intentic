@@ -57,12 +57,13 @@ import { linkClaudeState } from "./sessions/session-store.js";
 import type { BootTracker } from "./platform/boot.js";
 import { claimBootMarker } from "./platform/boot-marker.js";
 import { claimContainer } from "./platform/container-owner.js";
+import { checks as containerChecks, owner as containerOwner } from "./platform/invariant.js";
 import { listenHost, profileTraits, requireLocalContract } from "./platform/profile.js";
 import { startLoopWatchdog } from "./platform/loop-watchdog.js";
 import { startIdleStop } from "./system/idle-stop.js";
 import { startResourceMetrics } from "./platform/resource-metrics.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
-import { turnRunMetrics } from "./agent/turn-runs.js";
+import { onTurnSettled, turnRunMetrics } from "./agent/turn-runs.js";
 import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
@@ -230,6 +231,10 @@ const main = async (): Promise<void> => {
     const role = traits.convergeHome
         ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
         : { container: false, roots: true };
+    /* The last invariant companion, wired here rather than in composition because its subject is the answer just
+     * computed: everything downstream trusts this role forever, and the claim it rests on is a file a second
+     * daemon's boot overwrites (platform/invariant.ts). */
+    services.invariants.register(containerOwner, containerChecks({ role, roots: { workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot } }));
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
@@ -238,6 +243,9 @@ const main = async (): Promise<void> => {
             turnRuns: turnRunMetrics(),
             browserSessions: browserSessionMetrics(),
             reaper: services.reaper.metrics(),
+            // The one place a broken promise is visible without reading the log: the durable resource series
+            // already runs every minute and is already where "what is this daemon holding" is answered.
+            invariants: { violations: services.invariants.violations().length },
         }),
     });
     shutdown.push(() => resourceMetrics.stop());
@@ -725,6 +733,19 @@ const main = async (): Promise<void> => {
     // The state the data routes serve is converged — open the gate. Everything below is background machinery
     // that no queued request depends on.
     boot.finish();
+
+    /* THE PROMISES THIS DAEMON MAKES TO ITSELF (invariants/), driven from here because this is the file that
+     * knows the moments. Detached and never awaited: a check is a diagnostic, and a boot that waited on one
+     * would have made the diagnostic capable of causing the outage it exists to describe.
+     *
+     * The `boot` pass runs AFTER the gate opens, on purpose — the boot steps are what establish several of these
+     * relationships (the vault sweep, the registry load), so a pass before them would report the state they were
+     * about to fix. The sweep interval is the standing patrol for everything nothing in particular disturbs;
+     * `turn-settled` catches the two records of a turn disagreeing at the moment one of them changes. */
+    void services.invariants.run("boot");
+    const invariantSweep = setInterval(() => void services.invariants.run("sweep"), 300_000);
+    shutdown.push(() => clearInterval(invariantSweep));
+    shutdown.push(onTurnSettled(() => void services.invariants.run("turn-settled")));
 
     /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
      * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per
