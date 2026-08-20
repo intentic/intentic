@@ -76,13 +76,24 @@ describe(`<Markdown> with figures`, () => {
      * rendering below it is DagGraph's, which the app already relies on elsewhere. */
     // Awaited, unlike every other figure kind here: the dag is the one branch MarkdownFigure imports lazily, so
     // it arrives a microtask after mount rather than with it (see DagFigure.vue for what that buys).
+    //
+    // The budget bounds a HANG; it does not measure that latency, which is a single SFC arriving off the module
+    // graph. `vi.waitFor` defaults to 1s — an idle machine's number, and the same one markdownMermaid.test.ts
+    // already had to raise for its own lazy import: a full run loads this package's 298 files while every other
+    // package's vitest runs beside it, and an import with every core busy costs roughly ten times its idle self.
+    // This assertion duly passed alone and lost the race in the suite. Kept under `testTimeout` (vitest.config.ts)
+    // so a genuine hang still fails on the assertion below, which names the selector that never arrived, rather
+    // than as a bare test timeout.
     it(`renders a dag figure as a captioned, explicitly sized graph frame`, async () => {
         const host = render(
             `\`\`\`dag\n{ "title": "The wire", "nodes": [{ "id": "web", "label": "Browser app", "note": "Vue" }, { "id": "daemon", "label": "Daemon" }], "edges": [{ "from": "web", "to": "daemon" }] }\n\`\`\``,
         );
-        await vi.waitFor(() => {
-            expect(host.querySelector(`figure`)).not.toBeNull();
-        });
+        await vi.waitFor(
+            () => {
+                expect(host.querySelector(`figure`)).not.toBeNull();
+            },
+            { timeout: 10_000 },
+        );
         const figure = host.querySelector(`figure`);
         expect(figure?.querySelector(`figcaption`)?.textContent).toBe(`The wire`);
         // The frame carries its own height because prose cannot host a canvas of unknown height.
