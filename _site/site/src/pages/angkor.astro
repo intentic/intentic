@@ -86,6 +86,14 @@ const subheadLead = `${content.hero.subhead.split(/(?<=\.)\s+/u)[0] ?? content.h
  * hero, by the "what it costs" band, and by the closing line. So the button names the thing it does. */
 const [leadVerb, ...verbCards] = content.verbs.items;
 
+/* THE GETTING-STARTED BEATS, SORTED BY WHERE THEY HAPPEN rather than by their number. Everything up to
+ * the last one is done in a browser on our side; the last is the line you paste into a terminal on your
+ * own machine, which is the only one that touches your hardware. Taken from the end rather than at a
+ * fixed index so an extra browser-side beat upstream widens the left zone instead of being mistaken for
+ * the machine one. See the block that renders these for why the section is a boundary and not a list. */
+const browserSteps = content.connect.steps.slice(0, -1);
+const machineStep = content.connect.steps.at(-1)!;
+
 /* The one number on this page that would rot: every land changes it, so it is MEASURED from git during
  * the build rather than authored. When git cannot answer (a shallow CI clone, a tarball) `gitStats()`
  * returns null and the card falls back to its sentence with no figure — it never renders a zero, which
@@ -542,26 +550,59 @@ const GITHUB_MARK =
                     <h2 class="a-h2 a-display">{content.connect.heading}</h2>
                     <p class="a-lede">{content.connect.sub}</p>
 
-                    <div class="a-steps">
-                        {
-                            content.connect.steps.map((step, i) => (
-                                <div class="a-step">
-                                    <div class="a-step-num a-display" aria-hidden="true">
-                                        0{i + 1}
-                                    </div>
-                                    <h3>{step.title}</h3>
-                                    <p>{step.body}</p>
-                                </div>
-                            ))
-                        }
-                    </div>
+                    {/* THE STEPS ARE A PLAN OF THE SYSTEM, NOT A COUNT OF THEM.
+                        What stood here was 01 / 02 / 03 in three columns — the shape every landing page
+                        uses, and the shape that carries no information: the reader already knows a list
+                        is ordered, so the numerals only restate the order and take a display face's worth
+                        of room to do it. Worse, on this page they were actively misleading. "Your sandbox
+                        is waiting" is not a step anybody performs; it is something that has already
+                        happened by the time you read it, and numbering it 02 dressed a fact as a chore.
 
-                    <div class="a-frame a-command">
-                        <Corners />
-                        <div class="a-command-head"><span class="a-eyebrow">Step 3 · your machine</span></div>
-                        <pre><code><span class="a-prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                        The one thing those three beats DO have that a list cannot show is a place. Two of
+                        them happen in a browser on our side; the third happens in a terminal on yours,
+                        and the whole product argument — the code and the keys never leave your hardware —
+                        is that boundary. So the section draws the boundary and hangs the beats off it: a
+                        seam down the middle, our side to the left, yours to the right, with the command
+                        sitting on your side because that is where it runs.
+                        The split is taken from the END of the list rather than by index, so a fourth
+                        browser-side beat added upstream lands in the left zone instead of silently
+                        becoming the machine one. */}
+                    <div class="a-flow">
+                        <div class="a-flow-zone">
+                            <div class="a-flow-where">in your browser</div>
+                            {
+                                browserSteps.map((step) => (
+                                    <div class="a-station">
+                                        <span class="a-station-mark" aria-hidden="true">
+                                            <Lotus />
+                                        </span>
+                                        <h3>{step.title}</h3>
+                                        <p>{step.body}</p>
+                                    </div>
+                                ))
+                            }
+                        </div>
+
+                        <div class="a-flow-seam" aria-hidden="true"></div>
+
+                        <div class="a-flow-zone">
+                            <div class="a-flow-where">on your machine</div>
+                            <div class="a-station">
+                                <span class="a-station-mark" aria-hidden="true">
+                                    <Lotus />
+                                </span>
+                                <h3>{machineStep.title}</h3>
+                                <p>{machineStep.body}</p>
+                            </div>
+
+                            <div class="a-frame a-command">
+                                <Corners />
+                                <div class="a-command-head"><span class="a-command-where">your terminal</span></div>
+                                <pre><code><span class="a-prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                            </div>
+                            <p class="a-command-note">{content.connect.commandNote}</p>
+                        </div>
                     </div>
-                    <p class="a-command-note">{content.connect.commandNote}</p>
 
                     <div class="a-card a-desktop">
                         <Corners set="diag" />
@@ -587,9 +628,17 @@ const GITHUB_MARK =
             <section class="a-band" id="faq">
                 <div class="a-wall" aria-hidden="true"></div>
                 <div class="a-shell a-reveal">
+                    {/* THE HEADING NO LONGER CONGRATULATES ITSELF. It read "Questions, answered plainly."
+                        over "Including the honest ones: …", which is a page telling the reader how to
+                        feel about copy it has not shown them yet. Both phrasings are also the house style
+                        of every generated landing page on the web — "plainly", "honest", "no fluff" — so
+                        they cost the page the exact credibility they were reaching for. Prose earns
+                        plainness by being plain; it cannot claim it in advance. What is left says only
+                        what the section is for, and the second line keeps the three specifics the old one
+                        buried behind its preamble. */}
                     <div class="a-eyebrow">FAQ</div>
-                    <h2 class="a-h2 a-display">Questions, answered plainly.</h2>
-                    <p class="a-lede">Including the honest ones: what's free, what's stored where, what isn't ready yet.</p>
+                    <h2 class="a-h2 a-display">Before you install it.</h2>
+                    <p class="a-lede">What it costs, where your code sits, and what is not built yet.</p>
 
                     <div class="a-faq">
                         {
@@ -602,9 +651,15 @@ const GITHUB_MARK =
                                     <div class="a-faq-list">
                                         {group.items.map((item) => (
                                             <details name={`angkor-${group.id}`}>
+                                                {/* The mark LEADS the line rather than trailing it. On the
+                                                    right it was a disclosure chevron in lozenge clothing,
+                                                    sat in its own column doing nothing until clicked; on
+                                                    the left it is the tick a register carries in its
+                                                    margin, and it puts the answer's indent and the
+                                                    question's own mark on one axis. */}
                                                 <summary>
-                                                    <span>{item.question}</span>
                                                     <span class="a-faq-mark" aria-hidden="true" set:html={LOZENGE} />
+                                                    <span>{item.question}</span>
                                                 </summary>
                                                 <div class="a-faq-answer">
                                                     {item.answer.map((paragraph) => (
@@ -1526,48 +1581,110 @@ const GITHUB_MARK =
         font-size: 0.875rem;
     }
 
-    /* ── 6 · Getting started ─────────────────────────────── */
-    .a-page .a-steps {
+    /* ── 6 · Getting started ─────────────────────────────────
+       TWO PLACES AND THE SEAM BETWEEN THEM. The band is a plan rather than a list: the left zone is what
+       happens in a browser on our side, the right is what happens on the reader's own machine, and the
+       rule down the middle is the boundary the whole product argument rests on. See the note on the
+       markup for why the numerals went. Stacked below 60rem, where a vertical seam has no width to
+       divide and each zone's own ruled heading does the separating instead. */
+    .a-page .a-flow {
         display: grid;
         gap: 2.5rem;
         margin-top: 3rem;
     }
-    @media (min-width: 48rem) {
-        .a-page .a-steps {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 2rem;
+    @media (min-width: 60rem) {
+        .a-page .a-flow {
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 0;
+            align-items: start;
         }
     }
-    /* Lining figures: these are step markers, so 01/02/03 should sit on one line at one height. The
-       display face's default old-style figures drop the 3 below the baseline, which on a counter reads
-       as a typo rather than as a style. */
-    .a-page .a-step-num {
-        font-size: 3.25rem;
-        line-height: 1;
-        font-weight: 700;
-        font-variant-numeric: lining-nums;
-        opacity: 0.32;
+    /* The zone's name, and it is SENTENCE CASE on a page whose every other label is spaced capitals.
+       That is deliberate: these two read as annotations on a drawing — the hand-lettered "here" and
+       "there" on an elevation — and small caps would make them section eyebrows, of which this band
+       already has one twelve rem above. */
+    .a-page .a-flow-where {
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.7rem;
+        border-bottom: 1px solid var(--a-line-mid);
+        font-family: var(--a-font-mark);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--a-gold-bright);
     }
-    .a-page .a-step h3 {
-        margin: 0.75rem 0 0;
+    /* THE BOUNDARY. A single rule, and a lozenge cut into it at the crossing point — the one place on
+       this page where something passes from our side to the reader's. It stretches to the taller zone,
+       so the seam is always as deep as the drawing it divides. */
+    .a-page .a-flow-seam {
+        position: relative;
+        align-self: stretch;
+        width: 1px;
+        margin: 0 3rem;
+        background: var(--a-line-mid);
+    }
+    @media (max-width: 60rem) {
+        .a-page .a-flow-seam {
+            display: none;
+        }
+    }
+    .a-page .a-flow-seam::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0.5rem;
+        height: 0.5rem;
+        transform: translate(-50%, -50%) rotate(45deg);
+        background: var(--a-canvas);
+        border: 1px solid var(--a-line-strong);
+    }
+    /* A station on the plan: a lotus in the margin where the numeral used to be, and the beat hung off
+       it. The marker is the same one the page sets every bullet with, so a step reads as one more item
+       in the page's own vocabulary rather than as a counter with a typeface of its own. */
+    .a-page .a-station {
+        position: relative;
+        padding-left: 1.7rem;
+    }
+    .a-page .a-station + .a-station {
+        margin-top: 1.7rem;
+    }
+    .a-page .a-station-mark {
+        position: absolute;
+        top: 0.15rem;
+        left: 0;
+        display: block;
+        width: 0.85rem;
+        height: 0.85rem;
+    }
+    .a-page .a-station h3 {
+        margin: 0;
         font-family: var(--a-font-mark);
         font-size: 1.0625rem;
         font-weight: 600;
         color: var(--a-cream);
     }
-    .a-page .a-step p {
-        margin: 0.5rem 0 0;
+    .a-page .a-station p {
+        margin: 0.45rem 0 0;
         font-size: 0.9375rem;
         line-height: 1.65;
         color: var(--a-muted);
     }
     .a-page .a-command {
-        margin-top: 2.75rem;
+        margin-top: 1.7rem;
         background: rgba(8, 6, 4, 0.72);
     }
     .a-page .a-command-head {
         border-bottom: 1px solid var(--a-line);
         padding: 0.7rem 1.2rem;
+    }
+    /* The surface the line is typed into, named in the same hand as the zone above it — the zone says
+       whose machine, this says where on it. It used to read "STEP 3 · YOUR MACHINE", which now says the
+       zone's job twice and counts a step the drawing no longer numbers. */
+    .a-page .a-command-where {
+        font-family: var(--a-font-mark);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--a-gold-bright);
     }
     .a-page .a-command pre {
         margin: 0;
@@ -1614,11 +1731,19 @@ const GITHUB_MARK =
         color: var(--a-muted);
     }
 
-    /* ── 7 · FAQ ─────────────────────────────────────────── */
+    /* ── 7 · FAQ ─────────────────────────────────────────────
+       A REGISTER, NOT A STACK OF PANELS. The three bands used to run down a 44rem column with their
+       labels sitting on top of their own questions, which made the section a column of accordions with
+       the right half of the band empty beside it — and left a reader who wanted the privacy answers
+       scrolling past two bands of questions to find out where the third began.
+       The labels now stand in the margin, where a codex puts its rubric: the three subjects are legible
+       in one glance down the left, each question block hangs off a spine to their right, and the section
+       uses the width the band always had. Below 62rem the margin has nowhere to stand, so the label goes
+       back above its questions and the spine is dropped — the same content, one column. */
     .a-page .a-faq {
         display: grid;
-        gap: 2.75rem;
-        max-width: 44rem;
+        gap: 3.25rem;
+        max-width: 66rem;
         margin-top: 2.75rem;
     }
     .a-page .a-faq-group-head {
@@ -1626,6 +1751,29 @@ const GITHUB_MARK =
         flex-wrap: wrap;
         align-items: baseline;
         gap: 0.25rem 0.85rem;
+    }
+    @media (min-width: 62rem) {
+        .a-page .a-faq-group {
+            display: grid;
+            grid-template-columns: 15rem minmax(0, 1fr);
+        }
+        /* In the margin the two parts stack: a rubric is a heading with its gloss under it, not a
+           heading with a sentence run on beside it. */
+        .a-page .a-faq-group-head {
+            display: block;
+            padding: 0.9rem 2.25rem 0 0;
+        }
+        .a-page .a-faq-group-head p {
+            margin-top: 0.45rem;
+            line-height: 1.6;
+        }
+        /* THE SPINE. One rule, the page's lightest, running the full height of whichever side is taller —
+           so it reads as the edge of the register rather than as a border around the questions. */
+        .a-page .a-faq-list {
+            margin-top: 0;
+            border-left: 1px solid var(--a-line);
+            padding-left: 2.5rem;
+        }
     }
     .a-page .a-faq-group-head h3 {
         margin: 0;
@@ -1649,8 +1797,7 @@ const GITHUB_MARK =
     .a-page .a-faq summary {
         display: flex;
         align-items: flex-start;
-        justify-content: space-between;
-        gap: 1rem;
+        gap: 0.85rem;
         cursor: pointer;
         list-style: none;
         padding: 1rem 0;
@@ -1685,8 +1832,11 @@ const GITHUB_MARK =
         transform: rotate(90deg) scale(1.15);
         color: var(--a-ember);
     }
+    /* The answer hangs under its question rather than under the mark: indented by the mark's width plus
+       its gap, so the first word of the answer starts on the same axis as the first word of the question
+       and the margin tick belongs to the pair rather than to the line above it. */
     .a-page .a-faq-answer {
-        padding-bottom: 1.25rem;
+        padding: 0 0 1.25rem 1.45rem;
     }
     .a-page .a-faq-answer p {
         margin: 0 0 0.7rem;
