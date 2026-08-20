@@ -215,11 +215,6 @@
      * scrollbar's width (100vw counts it; the plate does not). 85 ÷ 1600 = 5.3125vw. */
     --a-plate-band: clamp(3.4rem, 5.3125vw, 7.1rem);
 
-    /* THE WIDTH THE FIRST SCREEN IS DRAWN AT. Above it the whole band is scaled rather than re-laid —
-     * see `.a-hero` in angkor.astro. Named here because the plate, the bar and the hero all have to
-     * agree on which width is the design's. */
-    --a-design-w: 90rem;
-
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
      * `--a-plate-scrim` the flat wash of canvas laid over whatever did.
@@ -490,8 +485,10 @@ body:has(.a-page) {
     --a-cut-in2: calc(var(--a-cut) - 1.172px);
 
     --a-rule: rgba(201, 160, 92, 0.5);
-    --a-face: rgba(23, 18, 12, 0.72);
+    --a-face: #17120c;
     --a-lip: rgba(235, 187, 96, 0.12);
+    /* Stone with no lamp on it. The grain still runs. */
+    --a-glow: radial-gradient(125% 150% at 50% 116%, rgba(201, 160, 92, 0.1) 0%, rgba(201, 160, 92, 0.03) 44%, transparent 74%);
 
     position: relative;
     display: inline-flex;
@@ -529,13 +526,53 @@ body:has(.a-page) {
     z-index: 0;
 }
 
-/* THE FACE. One pixel in from the rule on every side, including the diagonals. */
+/* THE FACE. One pixel in from the rule on every side, including the diagonals, and three layers deep.
+ *
+ * ── WHY THERE IS A TEXTURE UNDER THE LIGHT ──
+ *
+ * A lit control needs a gradient — a face with no falloff across it is a swatch, and this page's whole
+ * argument is that its surfaces are carved out of something. But a gradient ALONE is the tell: two stops
+ * of orange over black is the same three lines of CSS every dark landing page ships, and the eye reads it
+ * as a filter laid over a rectangle rather than as light falling on a face.
+ *
+ * What separates the two in the real world is grain. Sandstone scatters; a screen gradient does not. So
+ * the light is laid over a fractal noise generated in the browser by an SVG filter — about 300 bytes,
+ * tiling at 160px, so no repeat is findable at a button's size.
+ *
+ * THE BLEND IS `overlay`, AND `soft-light` IS THE TRAP. Both leave a mid-grey neutral, so on paper either
+ * would do. They part company over a dark base: soft-light pulls a dark value towards its square root, so
+ * a face at 8% lightness comes back at 28% — the first cut of this looked like a warm black button had
+ * been dusted with ash, and measured #473d2c where the CSS says #1a140d. Overlay multiplies instead, so
+ * the grain's swing is proportional to what is already there: invisible in the shadowed top of the face,
+ * clearest across the lit bottom, which is what a grain does on a real surface.
+ *
+ * The dial is `feComponentTransfer`: `slope` is how far the grain swings, `intercept` is what it swings
+ * around. Keep them summing to 0.65 so the swing stays centred on neutral grey.
+ *
+ * AND THE FACE IS OPAQUE, which is a requirement of the blend rather than a look. Blending a layer onto a
+ * background-colour that carries alpha runs the whole operation through unpremultiplied channels, and the
+ * lift that comes back out is nothing like the one the numbers predict: the same grain over a face at 78%
+ * opacity measured #4a3f31 where the CSS said #17120c, and the control read as grey plastic. Solid
+ * colours only under a blended layer. The face is sampled off the plate anyway, so nothing is lost by not
+ * letting the plate show through it.
+ *
+ * `--a-glow` is the light itself: a radial rising from below the bottom edge, so the brightest part of
+ * the face is its lower middle and the falloff runs up and out. That is a lamp on the floor of a temple,
+ * which is where every light in the plate behind this page comes from. The unfilled control sets it to
+ * `transparent` and keeps only the grain. */
 .a-page .a-btn::before {
     content: "";
     position: absolute;
     inset: 1px;
     background-color: var(--a-face);
-    /* The lamp is above, as it is everywhere else on this page. */
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.3' intercept='0.35'/%3E%3CfeFuncG type='linear' slope='0.3' intercept='0.35'/%3E%3CfeFuncB type='linear' slope='0.3' intercept='0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E"),
+        var(--a-glow, none);
+    background-size:
+        160px 160px,
+        auto;
+    background-blend-mode: overlay, normal;
+    /* The lamp is above too, and this is the cut edge catching it. */
     box-shadow:
         inset 0 1px 0 var(--a-lip),
         inset 0 -1px 0 rgba(0, 0, 0, 0.5);
@@ -556,8 +593,9 @@ body:has(.a-page) {
 
 .a-page .a-btn:hover {
     --a-rule: rgba(226, 186, 120, 0.85);
-    --a-face: rgba(38, 28, 18, 0.86);
+    --a-face: #241a11;
     --a-lip: rgba(235, 187, 96, 0.2);
+    --a-glow: radial-gradient(125% 150% at 50% 116%, rgba(224, 180, 110, 0.2) 0%, rgba(224, 180, 110, 0.07) 46%, transparent 76%);
     color: #fff6e6;
 }
 
@@ -565,7 +603,7 @@ body:has(.a-page) {
  * is what a focus ring has to be when it cannot be drawn outside the button. */
 .a-page .a-btn:focus-visible {
     --a-rule: rgba(243, 212, 152, 0.95);
-    --a-face: rgba(38, 28, 18, 0.86);
+    --a-face: #241a11;
     color: #fff6e6;
 }
 .a-page .a-btn:focus-visible::before {
@@ -590,25 +628,31 @@ body:has(.a-page) {
     flex: none;
 }
 
-/* THE ONE FILLED THING ON THE PAGE. Its face is the lit stone off the foot of the plate rather than the
- * wall between the figures, its rule is a warmer gold, and its label is the only ember on a control. That
- * is the whole difference: same block, cut from a warmer piece. */
+/* THE ONE FILLED THING ON THE PAGE, and the one with a lamp under it.
+ *
+ * The ember here is the PLATE'S, not the brand's: the hottest pixel anywhere in the temple art measures
+ * #a95f1a, and a control lit past that reads as a sticker sitting on the picture rather than as something
+ * standing in it. So the glow is mixed from that burnt orange and it stops well short of the label, which
+ * keeps the brightest ember on the page where it belongs — on the words. */
 .a-page .a-btn-primary {
-    --a-rule: rgba(224, 180, 110, 0.78);
-    --a-face: rgba(48, 30, 15, 0.92);
-    --a-lip: rgba(238, 198, 124, 0.2);
-    color: #f0bd7d;
+    --a-rule: rgba(224, 180, 110, 0.8);
+    --a-face: #2a1a0d;
+    --a-lip: rgba(238, 198, 124, 0.22);
+    --a-glow: radial-gradient(125% 150% at 50% 116%, rgba(198, 106, 34, 0.55) 0%, rgba(176, 92, 28, 0.24) 42%, rgba(150, 78, 24, 0.07) 66%, transparent 84%);
+    color: #f4c68b;
 }
 .a-page .a-btn-primary:hover {
-    --a-rule: rgba(242, 210, 150, 0.95);
-    --a-face: rgba(62, 39, 18, 0.95);
-    --a-lip: rgba(245, 212, 148, 0.28);
-    color: #ffd6a1;
+    --a-rule: rgba(244, 212, 152, 0.95);
+    --a-face: #35200f;
+    --a-lip: rgba(245, 212, 148, 0.3);
+    --a-glow: radial-gradient(125% 150% at 50% 116%, rgba(224, 128, 44, 0.7) 0%, rgba(198, 106, 34, 0.32) 44%, rgba(168, 88, 26, 0.1) 68%, transparent 86%);
+    color: #ffdcae;
 }
 .a-page .a-btn-primary:focus-visible {
     --a-rule: rgba(248, 220, 165, 1);
-    --a-face: rgba(62, 39, 18, 0.95);
-    color: #ffd6a1;
+    --a-face: #35200f;
+    --a-glow: radial-gradient(125% 150% at 50% 116%, rgba(224, 128, 44, 0.7) 0%, rgba(198, 106, 34, 0.32) 44%, rgba(168, 88, 26, 0.1) 68%, transparent 86%);
+    color: #ffdcae;
 }
 
 .a-page .a-btn-icon {

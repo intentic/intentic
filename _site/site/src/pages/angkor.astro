@@ -61,14 +61,17 @@ const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image:
  * on a 4-second beat is a fair share of the time — it reads as two pictures printed over each other. So
  * the chat wing takes the first of the same shared list the live hero cycles, and holds it. */
 const chatStill = shotAsset(content.hero.screens.chat[0]!.name);
-/* THREE FRAMES ON ONE AXIS, so three measures. The centre window is the wide one and the two wings lean
- * in over its edges at roughly two fifths of it; each screen is then drawn at more than 100% of its own
- * frame (see `.a-screen-*`) because these are crops of a legible top-left corner, not whole screenshots
- * shrunk to fit. The numbers below are the RENDERED pixel widths of the images, crop included, so the
- * browser fetches the rung it will actually paint rather than the one the frame is wide. */
-const appSizes = "(min-width: 80rem) 940px, (min-width: 64rem) 760px, (min-width: 48rem) 660px, calc((100vw - 2.5rem) * 1.75)";
-const chatSizes = "(min-width: 80rem) 500px, (min-width: 64rem) 400px, (min-width: 48rem) 350px, calc((100vw - 2.5rem) * 1.05)";
-const planSizes = "(min-width: 80rem) 460px, (min-width: 64rem) 370px, (min-width: 48rem) 320px, calc((100vw - 2.5rem) * 1.05)";
+/* THREE FRAMES ON ONE AXIS, so three measures, and all of them in `vw` because the frames take their
+ * width from the window rather than from a capped shell (see `.a-hero-grid`).
+ *
+ * Each number is the frame's share of the window MULTIPLIED BY the crop: these are top-left crops drawn
+ * larger than the frame that shows them, not whole screenshots shrunk to fit, so the pixels the browser
+ * has to fetch are the drawn width and not the frame's. The centre takes 62% of the band at 112% =
+ * 70vw; the plan wing 21% at 135% = 29vw; the chat wing 21% at 222% = 47vw. The middle stop covers the
+ * tablet layout, where the centre widens and the wings with it. */
+const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
+const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
+const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
 /* THE SUBHEAD, FIRST CLAUSE ONLY. The shared line is two sentences — what the product is, then a claim
  * about visibility — and this treatment keeps the first. The second is carried here by the picture
@@ -865,26 +868,10 @@ const GITHUB_MARK =
         font-weight: 500;
     }
 
-    /* ── 1 · The first screen ─────────────────────────────
-       THE FIRST SCREEN IS A POSTER, AND ABOVE 90rem IT IS ENLARGED RATHER THAN RE-LAID.
-       Everything else on this page is a column that fills the window and caps its measure. This band
-       cannot be, because it is a picture with copy standing in it: the plate is a plaque with a figure in
-       each outer third, and where those figures land is decided by the plate's width alone. Let the plate
-       track the window while the copy stops at 84rem and the two drift apart — at 2560 the figures are
-       out at the far edges with an acre of empty wall between them and the product frames nowhere near.
-       Capping the plate instead keeps the arrangement but leaves bare canvas down both sides, which is a
-       letterbox on a picture that is meant to be the wall.
-       `zoom` is the third answer and the right one: the band lays itself out at 90rem and is then scaled
-       to fill the window. Every proportion inside it — the figures against the frames, the headline
-       against the plaque's carved border, the gap under the buttons — is the one it was drawn at, at
-       every width, and the art still runs edge to edge. Only above 90rem: below it, the band already
-       fills the window and scaling down would shrink the type.
-       The bar is not inside this band, so it does not scale with it. It does not need to: the script at
-       the foot of this file measures the plate as PAINTED and fits the bar's height to that. */
+    /* ── 1 · The first screen ────────────────────────────── */
     .a-page .a-hero {
         position: relative;
         overflow: hidden;
-        zoom: max(1, calc(100vw / var(--a-design-w)));
     }
     /* ONE AXIS, and the picture is why. The plate behind this band is a framed plaque with a figure
        standing in each outer third and a deliberately empty middle; the copy sits on that middle and the
@@ -892,11 +879,19 @@ const GITHUB_MARK =
        headline in the left third, which on this art is a devata's shoulder.
        The padding lands the whole band — frame, copy and product — inside about one screen of a laptop.
        Pushing the plaque's bottom rail below the fold turns a framed wall into a wall that runs out. */
+    /* THE ONLY BAND ON THE PAGE WITH NO MEASURE OF ITS OWN, and the picture behind it is why.
+       Every other band stops at 84rem because a column of words has a width past which it stops being
+       readable. This one is not a column of words: it is a plaque with two figures standing in its outer
+       thirds, and where those figures land is decided by the plate's width — which is the window's. Cap
+       the band and the product frames stay put while the figures walk outwards, until on a wide screen
+       they are out at the edges with an acre of empty wall between them.
+       So the frames below take their width from the window, exactly as the plate does, and the two track
+       each other at 1440, at 1920 and at 2560 with nothing to restate. The COPY still has a measure —
+       44rem, set on `.a-hero-copy` — because that part of the band really is a column of words, and its
+       type stays the size it is everywhere else on the page. */
     .a-page .a-hero-grid {
         position: relative;
-        max-width: 84rem;
-        margin: 0 auto;
-        padding: 7rem 1.5rem 3rem;
+        padding: 7rem 2rem 3rem;
     }
     /* 44rem, and the headline sets it: three beats, one sentence to a line, and this is the widest the
        column can be before the shortest of them stops filling its line. */
