@@ -14,19 +14,6 @@ import type { WorkspaceTab } from "./workspaceTabs";
 // The globals a mounted workspace component reads at import time, plus the one this file is about: jsdom
 // implements no scrollIntoView at all, so it is installed as the recorder the assertions read.
 const { reveals } = vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     const recorded: { tab: string; inline: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({

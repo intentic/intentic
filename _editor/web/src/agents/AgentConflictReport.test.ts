@@ -5,30 +5,13 @@
 // report and the file list below it name a cause in ONE vocabulary (REASON_COPY, shared), and that every path
 // it prints is a control that hands its ROW back rather than a string the user has to match by eye.
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 import { REASON_COPY } from "../composables/agents/conflictResolution";
 
 // The component's import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
-// before the imports evaluate. matches:false keeps the device DESKTOP, where the report's ladder is complete.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env), stood up for the
+// package by vitest.setup.ts before this file is loaded. matches:false keeps the device DESKTOP, where the report's ladder is complete.
 
 const { default: AgentConflictReport } = await import("./AgentConflictReport.vue");
 

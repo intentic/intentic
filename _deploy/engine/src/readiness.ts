@@ -38,6 +38,33 @@ export class ReadinessTimeoutError extends Error {
     }
 }
 
+/* THE ONE WAITING LOOP. Every "is it up yet" in the engine and the providers is the same three lines — probe,
+ * give up at a deadline, sleep between tries — and each of the ten used to spell them out again, which is how
+ * they drifted apart on the edges (one gave up at `>` its deadline where the rest used `>=`).
+ *
+ * Always probes once before consulting the clock, so a wait is never skipped by a deadline that has already
+ * passed. Answers whether `ready` passed and leaves what a failure MEANS to the caller — most throw with a
+ * message naming the thing they were waiting for, but a DNS wait is allowed to shrug and carry on. `onRetry`
+ * runs only when another attempt is coming, so a caller that narrates the wait says nothing extra on the last
+ * one. A probe that throws propagates: some waits (a forwarder whose process already exited) must fail fast
+ * rather than burn the whole deadline. */
+export const pollUntil = async (
+    ready: () => Promise<boolean>,
+    options: { readonly timeoutMs: number; readonly intervalMs: number; readonly onRetry?: () => void },
+): Promise<boolean> => {
+    const deadline = Date.now() + options.timeoutMs;
+    for (;;) {
+        if (await ready()) {
+            return true;
+        }
+        if (Date.now() >= deadline) {
+            return false;
+        }
+        options.onRetry?.();
+        await sleep(options.intervalMs);
+    }
+};
+
 // Poll `probe` until it succeeds or the timeout elapses; throws ReadinessTimeoutError on timeout. The
 // probe is injected so tests never hit the network.
 export const waitReady = async (
@@ -49,14 +76,7 @@ export const waitReady = async (
 ): Promise<void> => {
     const expected = options.status ?? 200;
     const limit = options.timeout !== undefined ? parseDuration(options.timeout) : 60000;
-    const deadline = Date.now() + limit;
-    for (;;) {
-        if (await probe(url, expected)) {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            throw new ReadinessTimeoutError(id, url, limit);
-        }
-        await sleep(intervalMs);
+    if (!(await pollUntil(() => probe(url, expected), { timeoutMs: limit, intervalMs }))) {
+        throw new ReadinessTimeoutError(id, url, limit);
     }
 };

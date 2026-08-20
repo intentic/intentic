@@ -63,10 +63,7 @@ const settle = async (): Promise<void> => {
 
 it(`completes the navigation before the chunk arrives, reveals the outline only past the delay, and swaps on landing`, async () => {
     let land!: (module: { default: Component }) => void;
-    const view = asyncView(
-        () => new Promise((resolve) => (land = resolve)),
-        defineComponent({ render: () => h(`div`, { "data-outline": `` }) }),
-    );
+    const view = asyncView(() => new Promise((resolve) => (land = resolve)), defineComponent({ render: () => h(`div`, { "data-outline": `` }) }));
     const { router, el } = await mountAt(view);
 
     await router.push(`/target`);
@@ -123,9 +120,7 @@ it(`answers a dead chunk with one reload landed on the destination — and a not
 it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, async () => {
     let broken = true;
     const load = vi.fn(() =>
-        broken
-            ? Promise.reject(new Error(`boom`))
-            : Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }),
+        broken ? Promise.reject(new Error(`boom`)) : Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }),
     );
     const { router, el } = await mountAt(asyncView(load));
     await router.push(`/target`);

@@ -1,5 +1,5 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { HOST_STATE_ROOT } from "@intentic/constants";
+import { pollUntil } from "@intentic/engine";
 import type { SshSession } from "./ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -115,15 +115,8 @@ export const restampBacking = async (session: SshSession, kind: string, oldId: s
 
 // Poll `probe` (a host-side command returning code 0 when ready) until it passes or the deadline elapses.
 export const waitReady = async (session: SshSession, kind: string, id: string, probe: string, timeoutMs: number): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-        const result = await session.exec(probe);
-        if (result.code === 0) {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`${kind} "${id}" did not become ready within ${timeoutMs}ms`);
-        }
-        await sleep(3_000);
+    const ready = await pollUntil(async () => (await session.exec(probe)).code === 0, { timeoutMs, intervalMs: 3_000 });
+    if (!ready) {
+        throw new Error(`${kind} "${id}" did not become ready within ${timeoutMs}ms`);
     }
 };

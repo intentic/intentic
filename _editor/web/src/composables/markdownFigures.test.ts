@@ -9,31 +9,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
-/* Two jsdom gaps, filled in `vi.hoisted` so they land BEFORE the imports below rather than in a beforeAll that
- * would run too late. Both are the environment's fault rather than the code's, and left unstubbed they fail at
- * import or mount time in a way that reads as a figure bug.
+/* Two jsdom gaps this file depends on, both filled for the whole package by vitest.setup.ts — which runs before
+ * this file is loaded, where a beforeAll would run too late. Both are the environment's fault rather than the
+ * code's, and left unstubbed they fail at import or mount time in a way that reads as a figure bug.
  *
  * `matchMedia`: the design-system barrel has import-time side effects (useDevice's `track` calls it while Picker's
  * module body evaluates) — which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
  * component, so it pays the barrel's cost.
  * `ResizeObserver`: Vue Flow measures its container on mount, reached here through DagGraph. */
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    } as unknown as typeof ResizeObserver;
-});
 
 import { Markdown } from "@intentic/ui";
 

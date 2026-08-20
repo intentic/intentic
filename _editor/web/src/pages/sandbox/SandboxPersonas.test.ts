@@ -12,22 +12,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     // The folder picker's panel is an <AnchoredOverlay>, which watches its own box to stay put. jsdom ships no
     // ResizeObserver, and without one the overlay throws on open — off the assertion path, as an unhandled
     // rejection, which fails the run without failing a test.
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    } as unknown as typeof globalThis.ResizeObserver;
 });
 
 const personas = ref<Persona[]>([]);

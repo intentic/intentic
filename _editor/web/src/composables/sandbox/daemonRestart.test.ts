@@ -3,23 +3,6 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // The stream router's import chain reaches the app's environment read at module eval; jsdom plus this is the
 // whole of what it wants (see useChat.test.ts, which cuts the same edge).
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 // The same edges useAgents.test.ts cuts, for the same reason: the fleet store sits behind the app shell, and
 // this file's subject is one wire between the stream router and that store — nothing here wants a browser.

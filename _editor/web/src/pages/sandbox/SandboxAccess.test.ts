@@ -13,23 +13,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval — the app's environment (the API client) and a media
 // query (the UI barrel's useDevice), exactly as DesktopSyncCard.test.ts cuts the same edge.
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const sandboxJson = vi.fn(async () => ({ members: [] }));
 vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));

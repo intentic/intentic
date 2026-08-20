@@ -12,19 +12,6 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 const tokenized = vi.hoisted(() => {
     const lines: string[] = [];
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     return lines;
 });
 

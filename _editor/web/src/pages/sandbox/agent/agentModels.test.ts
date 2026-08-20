@@ -15,23 +15,6 @@ import { type App, createApp, defineComponent, h, ref } from "vue";
 
 // Same import-time browser globals the sibling suite stands in for (@intentic/ui's useDevice reads
 // window.matchMedia; environment.ts reads window.env).
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = vi.fn((fields: Partial<SandboxSettings>) => {

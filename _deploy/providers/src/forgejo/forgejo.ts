@@ -1,6 +1,5 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
 import { guardedUpdate } from "../core/guarded-update.js";
@@ -73,15 +72,8 @@ const persisted = async (session: SshSession, file: string): Promise<string> => 
 };
 
 const waitHealthy = async (session: SshSession): Promise<void> => {
-    const deadline = Date.now() + READY_TIMEOUT_MS;
-    for (;;) {
-        if (await healthy(session)) {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`forgejo did not become healthy within ${READY_TIMEOUT_MS}ms`);
-        }
-        await sleep(READY_INTERVAL_MS);
+    if (!(await pollUntil(() => healthy(session), { timeoutMs: READY_TIMEOUT_MS, intervalMs: READY_INTERVAL_MS }))) {
+        throw new Error(`forgejo did not become healthy within ${READY_TIMEOUT_MS}ms`);
     }
 };
 

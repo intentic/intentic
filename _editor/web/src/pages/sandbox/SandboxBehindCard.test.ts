@@ -11,17 +11,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "../../composables/sandbox/useDaemonRoutes";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
-
 // The one thing the card asks the daemon for: which sandbox it is looking at, so the command it prints names
 // that one rather than leaving a dev machine running several to guess.
 vi.mock(`../../composables/sandbox/useEnvironment`, () => ({

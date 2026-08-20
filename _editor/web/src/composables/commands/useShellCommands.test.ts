@@ -1,27 +1,9 @@
 // @vitest-environment jsdom
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 // The import-time globals this graph reads at module scope — environment.ts's window.env and ui's useDevice
-// media queries — installed above every import the way the other mounted suites do it: vi.hoisted runs first in
-// the transformed module, which is exactly what it is for.
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+// media queries — are in place before this file loads: vitest.setup.ts installs them for the whole package.
 import { useChatPopout } from "../chat/useChatPopout";
 import { boundCommand, commands, commandShortcut } from "./useCommands";
 import { useShellCommands } from "./useShellCommands";

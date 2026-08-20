@@ -3,35 +3,16 @@
 // jsdom because the subject is the app's real key builders, and reaching them pulls in composables that touch
 // browser globals at import time. The rule itself is one predicate; what is worth pinning is that the three
 // heavy reads actually carry the mark, which can only be asserted against the builders themselves.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mirrors, UNPERSISTED } from "./queryPersistence";
 // Statically imported, not awaited inside a hook: these builders' graph is app-wide, and compiling it cold on a
 // runner with every core busy takes longer than a hook is allowed to (vitest's hookTimeout) — the same work at
-// import time is simply the file's load, paid during collection. The globals below still land first; vi.hoisted
-// runs above every import in the transformed module, which is exactly what it is for.
+// import time is simply the file's load, paid during collection. The browser globals that graph reads at module
+// scope (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env) are already in
+// place — vitest.setup.ts installs them for the package, before any test file is loaded.
 import { agentTranscriptKey } from "./chat/agentTranscript";
 import { agentFileDiffKey } from "./agents/useAgentChanges";
 import { changesKey, fileDiffKey } from "./workspace/useChanges";
-
-// The key builders' import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 /* THE STORAGE RULE, ASSERTED.
  *

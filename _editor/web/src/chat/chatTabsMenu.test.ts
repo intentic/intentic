@@ -15,8 +15,8 @@ import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 // Statically imported, not awaited inside the hook: this graph is the whole app's — PrimeVue, the router, the
 // chat store — and compiling it cold takes longer than a hook is allowed to (vitest's hookTimeout), where the
-// same work at import time is simply the file's load. The globals below still land first; vi.hoisted runs
-// above every import in the transformed module, which is exactly what it is for.
+// same work at import time is simply the file's load. The browser globals that graph reads are already in
+// place: vitest.setup.ts installs them for the package, before any test file is loaded.
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -41,26 +41,6 @@ const { open } = vi.hoisted(() => {
     // The strip scrolls its focused tab back into view on every focus write, and jsdom implements no
     // scrollIntoView — without this stub every tab switch below ends in an unhandled rejection.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     const openWindow = vi.fn(() => null);
     globalThis.window.open = openWindow;
     return { open: openWindow };

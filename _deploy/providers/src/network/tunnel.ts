@@ -1,5 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
-import type { Provider, ProviderContext, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ProviderContext, type ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import type { SshExecutor, SshSession } from "../core/ssh.js";
@@ -84,17 +83,22 @@ const checkConnector = async (
 const CONNECT_TIMEOUT_MS = 120_000;
 const CONNECT_INTERVAL_MS = 3_000;
 const waitConnected = async (api: CloudflareApi, parsed: TunnelInputs, tunnelId: string, log: (message: string) => void): Promise<void> => {
-    const deadline = Date.now() + CONNECT_TIMEOUT_MS;
-    for (;;) {
-        const status = await api.getTunnelStatus({ accountId: parsed.accountId, apiToken: parsed.apiToken, tunnelId });
-        if (status === "healthy" || status === "degraded") {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`cloudflared connector did not register with Cloudflare within ${CONNECT_TIMEOUT_MS}ms (tunnel status "${status}")`);
-        }
-        log(`tunnel "${parsed.name}": waiting for the connector to register with Cloudflare (status "${status}")…`);
-        await sleep(CONNECT_INTERVAL_MS);
+    // The last status seen, so the give-up message names what the edge was actually reporting rather than
+    // "not healthy".
+    let status = "unknown";
+    const connected = await pollUntil(
+        async () => {
+            status = await api.getTunnelStatus({ accountId: parsed.accountId, apiToken: parsed.apiToken, tunnelId });
+            return status === "healthy" || status === "degraded";
+        },
+        {
+            timeoutMs: CONNECT_TIMEOUT_MS,
+            intervalMs: CONNECT_INTERVAL_MS,
+            onRetry: () => log(`tunnel "${parsed.name}": waiting for the connector to register with Cloudflare (status "${status}")…`),
+        },
+    );
+    if (!connected) {
+        throw new Error(`cloudflared connector did not register with Cloudflare within ${CONNECT_TIMEOUT_MS}ms (tunnel status "${status}")`);
     }
 };
 

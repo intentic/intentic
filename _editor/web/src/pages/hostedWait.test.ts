@@ -102,8 +102,7 @@ describe(`hostedWaitView`, () => {
     });
 
     it(`names the download on a built-to-order machine's first step, and only there`, () => {
-        const label = (input: HostedWaitInput): string | undefined =>
-            hostedWaitView(input).steps.find((step) => step.key === `machine`)?.label;
+        const label = (input: HostedWaitInput): string | undefined => hostedWaitView(input).steps.find((step) => step.key === `machine`)?.label;
         expect(label(wait({ warm: false }))).toContain(`downloading your sandbox`);
         expect(label(wait({ warm: true }))).toBe(`Starting the machine`);
         expect(label(wait())).toBe(`Starting the machine`);

@@ -11,17 +11,6 @@ import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import type { ConnectionState } from "../pages/capabilities/connections";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
-
 // The row reaches for a router only through the rebuild hand-off, which none of these cases takes.
 vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: () => undefined }), RouterLink: { template: `<a><slot /></a>` } }));
 

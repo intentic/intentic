@@ -7,35 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The component's import chain pulls in app-wide singletons that read browser/runtime globals at import time
-// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). vi.hoisted runs
-// before the imports evaluate, mirroring what the real page has in place by then.
+// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env), stood up for the
+// package by vitest.setup.ts before this file is loaded — what the real page has in place by then.
 vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     // jsdom's own object URLs are opaque uuids, so nothing downstream could tell which blob an <img> is
     // showing. Named by byte length instead — that is the assertion each pane is holding ITS OWN side's bytes.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
     // Each pane's ImageView watches its own size to keep a fitted image fitted; jsdom ships no ResizeObserver,
     // and it never lays anything out to report anyway. A no-op leaves the render — which is what is asserted.
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
 });
 
 // The daemon fetch, stubbed at the seam the viewer uses — the test is about rendering bytes, not about auth.

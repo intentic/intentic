@@ -1,21 +1,11 @@
 // @vitest-environment jsdom
 import type { WorkspaceSearchHit } from "@intentic-app/api-contract";
 import { useHighlighter } from "@intentic/ui";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { snippetPieces, snippetWindow } from "./searchSnippet";
 
-// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
-// hence jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+// The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence
+// jsdom, and the stub vitest.setup.ts installs for every suite in the package. Nothing under test touches the DOM.
 
 // Colour is asserted against the REAL TypeScript grammar — the point of going through Shiki is that the spans
 // are the tokenizer's, so a hand-rolled fake would be testing nothing. tokenizeLine is what the component

@@ -9,17 +9,6 @@ import PrimeVue from "primevue/config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
-
 const personas = ref<Persona[]>([]);
 const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
 

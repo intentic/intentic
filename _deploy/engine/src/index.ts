@@ -2,7 +2,7 @@ export type { DiffResult, ListedResource, Observed, Provider, ProviderContext, P
 export type { FakeWorld } from "./providers/fake.js";
 export { createFakeProviders } from "./providers/fake.js";
 export type { ReadinessProbe } from "./readiness.js";
-export { httpProbe, parseDuration, ReadinessTimeoutError, waitReady } from "./readiness.js";
+export { httpProbe, parseDuration, pollUntil, ReadinessTimeoutError, waitReady } from "./readiness.js";
 export { apply } from "./reconcile/apply.js";
 export { applyMoves, rewriteGraphForMoves } from "./reconcile/moves.js";
 export { collectOrphans } from "./reconcile/orphans.js";

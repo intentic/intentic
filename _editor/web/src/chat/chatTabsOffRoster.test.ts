@@ -29,26 +29,6 @@ import ChatTabList from "./ChatTabList.vue";
 
 // The import-time globals a mounted chat component needs — the same set chatTabsReveal.test.ts installs.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 

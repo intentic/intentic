@@ -6,21 +6,8 @@
 //
 // Mounted with plain Vue rather than @vue/test-utils, as ReviewStat.test.ts and markdownFigures.test.ts do.
 import { BrandMark } from "@intentic/ui";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
-
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-});
 
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;
 

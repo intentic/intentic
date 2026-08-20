@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { effectScope, nextTick, ref } from "vue";
 import { useRailMemory } from "@intentic/ui";
 
@@ -8,16 +8,6 @@ import { useRailMemory } from "@intentic/ui";
  * longer exists, or quietly re-narrowing a scope the reader had deliberately widened.
  *
  * The barrel reaches window.matchMedia (useDevice) at import — hence jsdom. */
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const KEY = `intentic.rail.test.scope`;
 

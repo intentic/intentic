@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useHighlighter } from "@intentic/ui";
 import { LANGS } from "@intentic/ui/langs";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { codeLangForPath } from "../pages/workspace/fileType";
 
 /* The grammar table's two silent-failure modes, neither of which the compiler can see.
@@ -12,20 +12,8 @@ import { codeLangForPath } from "../pages/workspace/fileType";
  * check is whether an id's dynamic import still RESOLVES: a renamed or dropped @shikijs/langs entry type-checks
  * perfectly and degrades to exactly the same plain text. Hence the load-everything test below.
  *
- * The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import —
- * hence jsdom plus the stub jsdom itself doesn't ship. Nothing under test touches the DOM. */
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-        addListener: () => {},
-        removeListener: () => {},
-    })) as typeof globalThis.matchMedia;
-});
+ * The @intentic/ui barrel that carries useHighlighter reaches window.matchMedia (useDevice) at import — hence jsdom,
+ * and the stub vitest.setup.ts installs for every suite in the package. Nothing under test touches the DOM. */
 
 // Every grammar we ship, imported and compiled from cold in one test — `ensureLang` tokenizes a warm-up line
 // per language precisely so the rules compile off the render path, and that work all lands here. Seconds of

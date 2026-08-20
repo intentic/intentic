@@ -11,16 +11,6 @@ import UsageRing from "./UsageRing.vue";
 
 // The @intentic/ui barrel this component reaches for (the ring, the placement) calls window.matchMedia at
 // import time, through useDevice — and jsdom ships no such thing.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const CARD = { width: 240, height: 180 };
 // jsdom lays nothing out, so both boxes are handed the rects they would have had on screen: the ring where the

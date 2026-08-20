@@ -18,21 +18,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     // xterm measures glyphs against a canvas jsdom does not implement; the pane is mocked, but the strip's
     // PrimeVue overlays still touch it.
     globalThis.HTMLCanvasElement.prototype.getContext ??= (() => null) as never;

@@ -14,7 +14,7 @@ The stateless **reconcile engine**. It walks a `DesiredStateGraph` in dependency
 
 - [src/reconcile/apply.ts](src/reconcile/apply.ts) / [src/reconcile/plan.ts](src/reconcile/plan.ts) / [src/reconcile/reconcile-loop.ts](src/reconcile/reconcile-loop.ts) — the converge/dry-run/loop logic.
 - [src/provider.ts](src/provider.ts) / [src/types.ts](src/types.ts) — the SPI and engine types (`Provider`, `DiffResult`, `EngineConfig`, `Step`, `Orphan`).
-- [src/readiness.ts](src/readiness.ts) — `httpProbe` / `waitReady` (readiness gates).
+- [src/readiness.ts](src/readiness.ts) — `httpProbe` / `waitReady` (readiness gates), and `pollUntil`, the one waiting loop every "is it up yet" in the engine and the providers is written on.
 - [src/resolve-inputs.ts](src/resolve-inputs.ts) — resolve refs/secrets into concrete provider inputs.
 - [src/reconcile/orphans.ts](src/reconcile/orphans.ts) / [src/reconcile/prune.ts](src/reconcile/prune.ts) — drift cleanup; [src/providers](src/providers) — `createFakeProviders` (in-memory SPI for tests).
 

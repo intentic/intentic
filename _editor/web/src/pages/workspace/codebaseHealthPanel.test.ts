@@ -11,25 +11,18 @@ import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic-app/api-contract";
 import CodebaseHealth from "./CodebaseHealth.vue";
 
-/* The mocks' state is hoisted alongside the globals rather than declared below the imports, so the component
- * can be imported statically: a vi.mock factory runs at the mocked module's first import, and with a static
- * import of the panel that happens while a module-scope `const` is still in its temporal dead zone. Held here
- * it is initialised first, and the panel's whole subtree loads during collection instead of inside a hook,
- * where it was ~1s of a hook budget (see vitest.config.ts).
+/* The mocks' state is hoisted rather than declared below the imports, so the component can be imported
+ * statically: a vi.mock factory runs at the mocked module's first import, and with a static import of the panel
+ * that happens while a module-scope `const` is still in its temporal dead zone. Held here it is initialised
+ * first, and the panel's whole subtree loads during collection instead of inside a hook, where it was ~1s of a
+ * hook budget (see vitest.config.ts).
  *
- * `matchMedia`: ui's useDevice reads it at module scope, and matches:false keeps the device DESKTOP, where the
- * refactor action is hover-revealed. `started` is every prompt a press handed to the fleet — the action itself
+ * `matchMedia` comes from vitest.setup.ts: ui's useDevice reads it at module scope, and its matches:false keeps
+ * the device DESKTOP, where the refactor action is hover-revealed. `started` is every prompt a press handed to
+ * the fleet — the action itself
  * is covered in agentActions.test.ts, so the seam is mocked and this test says nothing about turns. One repo,
  * so the header renders its name rather than the Picker (a PrimeVue overlay this test has no use for). */
 const mocked = vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     return { started: [] as string[], health: { value: undefined as WorkspaceHealth | undefined } };
 });
 const { started, health } = mocked;

@@ -11,23 +11,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // What this component's import chain reads at module eval — the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice), exactly as SandboxComputers.test.ts cuts the same edge.
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const syncingPath = ref<string | undefined>(`/home/ada/intentic/work`);
 const disable = vi.fn(async () => {});

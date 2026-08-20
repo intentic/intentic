@@ -9,23 +9,6 @@ import { createApp, defineComponent, h } from "vue";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui's useDevice reads matchMedia at module
 // scope, environment.ts reads window.env and throws without it.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 // The one fact that decides this: whether the app has marked this webview as its own.
 const version = { value: undefined as string | undefined };

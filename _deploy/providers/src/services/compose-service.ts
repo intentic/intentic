@@ -1,6 +1,5 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { envLine, shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
@@ -96,15 +95,9 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
     };
 
     const waitHealthy = async (session: SshSession, parsed: z.infer<S>): Promise<void> => {
-        const deadline = Date.now() + readyTimeoutMs;
-        for (;;) {
-            if (await healthy(session, parsed)) {
-                return;
-            }
-            if (Date.now() >= deadline) {
-                throw new Error(`${spec.kind} did not become healthy within ${readyTimeoutMs}ms`);
-            }
-            await sleep(READY_INTERVAL_MS);
+        const up = await pollUntil(() => healthy(session, parsed), { timeoutMs: readyTimeoutMs, intervalMs: READY_INTERVAL_MS });
+        if (!up) {
+            throw new Error(`${spec.kind} did not become healthy within ${readyTimeoutMs}ms`);
         }
     };
 

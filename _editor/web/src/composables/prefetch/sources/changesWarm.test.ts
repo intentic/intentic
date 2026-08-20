@@ -14,24 +14,6 @@ import { ref } from "vue";
  * is exactly what the reading-ahead exists to prevent. It sat in `work` once, behind the whole agents board, which
  * meant a turn ending on the board emptied this and then re-read it last. */
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
-
 const route = ref<{ name: string }>({ name: `workspace` });
 const sidebarPanel = ref(`changes`);
 const sidebarCollapsed = ref(false);

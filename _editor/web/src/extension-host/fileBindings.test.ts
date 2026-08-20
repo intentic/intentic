@@ -2,31 +2,14 @@ import { STATE_DIR } from "@intentic/constants";
 // @vitest-environment jsdom
 import type { FileContribution } from "@intentic/extension-manifest";
 import { staleQueryKeys } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { contributedFileBindings, registerFileBindings } from "./fileBindings";
 
 /* The browser half of the file→view table: the registry the host writes activated extensions' `contributes.files`
  * into, and the union systemEvents feeds every `workspaceChanged` frame through. */
 
 // Same reason as builtins.test.ts: the builtins list's import chain pulls app-wide singletons that read browser
-// globals at module scope, so the stubs must be installed before the dynamic import below.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
+// globals at module scope — hence jsdom, and the globals vitest.setup.ts installs for the package.
 
 const { builtinModules } = await import("./builtins");
 

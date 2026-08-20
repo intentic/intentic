@@ -27,26 +27,6 @@ import AgentsView from "./AgentsView.vue";
 // same reasons: matchMedia keeps the device desktop, the unreported ResizeObserver leaves the board on three
 // columns, environment.ts reads window.env, and jsdom has no scrollIntoView at all.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

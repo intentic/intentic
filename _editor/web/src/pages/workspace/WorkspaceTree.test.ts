@@ -16,26 +16,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // jsdom implements no scrolling at all — which is the reveal's other half, so it is a spy rather than a stub.
 const scrolled = vi.hoisted(() => {
     const calls: string[] = [];
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     return calls;
 });
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element): void {

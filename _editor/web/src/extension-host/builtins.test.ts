@@ -11,7 +11,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
 import * as memory from "@intentic/ext-memory";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 /* Exercises each compiled-in extension package the way loadBuiltins does — activate() against a minimal fake
  * IntenticApi — WITHOUT the app singletons createExtensionApi pulls in. Proves the packages register a working
@@ -19,28 +19,11 @@ import { describe, expect, it, vi } from "vitest";
 
 // The builtins list's import chain pulls every extension package, and theirs pulls app-wide singletons that read
 // browser globals at module scope (@intentic/ui's useDevice reads window.matchMedia, environment.ts reads
-// window.env) — hence jsdom plus the stubs, and the dynamic import below so they are installed first.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
+// window.env) — hence jsdom; vitest.setup.ts stands both up before this file loads.
 
 const { builtinModules } = await import("./builtins");
 // The core views register outside builtinModules but land in the SAME rail column, so the glyph check below has
-// to see both. Imported the same deferred way, for the same reason: after the stubs above are installed.
+// to see both.
 const { coreViews } = await import("../core-views/coreViews");
 
 /* A fake host that accepts every registration an extension can make and records what it was handed. It has to

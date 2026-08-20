@@ -16,17 +16,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
-
 // The page's whole world: a settings read that has landed (so nothing renders the blocked notice) and a sandbox
 // that answers. What this file is about is the strip above them, not what any group does with the object.
 vi.mock(`../../composables/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));

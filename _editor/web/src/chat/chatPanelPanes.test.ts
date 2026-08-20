@@ -37,31 +37,11 @@ import ChatPanel from "./ChatPanel.vue";
 // module scope (matches:false keeps the device DESKTOP, the only form factor with panes), environment.ts reads
 // window.env, and jsdom implements neither observer nor scrollIntoView.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
         disconnect(): void {}
     } as unknown as typeof globalThis.IntersectionObserver;
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

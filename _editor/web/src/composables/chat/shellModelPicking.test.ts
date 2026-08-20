@@ -17,24 +17,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "v
  * extension over a console filling with "vue-query hooks can only be used inside setup()", behind an
  * ever-growing pile of pollers for one settings object. */
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
-
 const { useAgentRunPick } = await import("@intentic/ui");
 const { queryClient } = await import("../queryPersistence");
 const { SANDBOX_SETTINGS } = await import("../queryKeys");

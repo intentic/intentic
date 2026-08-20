@@ -1,19 +1,12 @@
 // @vitest-environment jsdom
 import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
-/* The arithmetic under test is pure, but it reaches dagre through `@intentic/ui`'s index — and that module
- * graph includes components whose `useDevice` reads `window.matchMedia` as they load, which jsdom does not
- * implement. Stubbed rather than `vi.mock`ed away, because the LAYOUT is the thing being tested: mocking the
- * module out would leave these assertions checking a stand-in's idea of where the columns are.
+/* The arithmetic under test is pure, but it reaches dagre through `@intentic/ui`'s index — hence jsdom, and
+ * hence the globals vitest.setup.ts stands up before this file loads. Real modules rather than `vi.mock`ed
+ * stand-ins, because the LAYOUT is the thing being tested: mocking the graph out would leave these assertions
+ * checking a stand-in's idea of where the columns are.
  */
-vi.hoisted(() => {
-    Object.defineProperty(globalThis, `matchMedia`, {
-        writable: true,
-        value: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
-    });
-});
-
 import { modeForSessions, paneShowsRun, runOnFocus, runToFollow, showingRunGraph } from "./chatRun";
 import { runColumns } from "./runColumns";
 

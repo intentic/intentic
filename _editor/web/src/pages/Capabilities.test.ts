@@ -10,23 +10,6 @@ import type { ForticlientConnection } from "@intentic/sandbox-contract";
 
 // The import-time globals a mounted view needs (see startAgent.test.ts): ui's useDevice reads matchMedia at
 // module scope, environment.ts reads window.env and throws without it.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 // The page is URL-driven; the vpn card is what this file is about, so the route names it and nothing navigates.
 // The empty `query` is not padding — the rail's slice and the grid's filter are read off it, so a route without

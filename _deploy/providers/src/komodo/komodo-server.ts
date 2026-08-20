@@ -1,5 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { parseInputs, sshSchema } from "../core/inputs.js";
 import { overSsh } from "../core/over-ssh.js";
@@ -48,21 +47,21 @@ export const createKomodoServerProvider = (api: KomodoApi = komodoApi, executor:
         const parsed = parse(inputs);
         return overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
             // Poll until Periphery's outbound connection registers the server in Core.
-            const deadline = Date.now() + POLL_TIMEOUT_MS;
-            for (;;) {
-                const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
-                const servers = await api.listServers({ baseUrl, jwt });
-                if (servers.some((s) => s.name === parsed.serverName)) {
-                    return { serverName: parsed.serverName };
-                }
-                if (Date.now() >= deadline) {
-                    throw new Error(
-                        `komodo-server "${parsed.serverName}": Periphery did not register within ${POLL_TIMEOUT_MS}ms; ` +
-                            "check that the periphery container on the worker host can reach Core's public deploy route",
-                    );
-                }
-                await sleep(POLL_INTERVAL_MS);
+            const registered = await pollUntil(
+                async () => {
+                    const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+                    const servers = await api.listServers({ baseUrl, jwt });
+                    return servers.some((s) => s.name === parsed.serverName);
+                },
+                { timeoutMs: POLL_TIMEOUT_MS, intervalMs: POLL_INTERVAL_MS },
+            );
+            if (!registered) {
+                throw new Error(
+                    `komodo-server "${parsed.serverName}": Periphery did not register within ${POLL_TIMEOUT_MS}ms; ` +
+                        "check that the periphery container on the worker host can reach Core's public deploy route",
+                );
             }
+            return { serverName: parsed.serverName };
         });
     },
     delete: async (inputs, ctx) => {

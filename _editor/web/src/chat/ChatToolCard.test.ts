@@ -4,32 +4,15 @@
 // own tool calls and thinking UNDER the card (ChatToolCard renders itself recursively), so the run reads as one
 // unit instead of a flat sibling list with a lone spinner stranded above it. Recursion that fails to resolve
 // draws nothing and throws nothing — only a mounted render catches it.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 import type { ChatSurface } from "./chatSurface";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
 // @intentic/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts
-// reads window.env (set by env.js before the app in the real page). jsdom provides neither, so both are stood up
-// in vi.hoisted — which runs before the imports evaluate — mirroring what the real page sets up.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
+// reads window.env (set by env.js before the app in the real page). jsdom provides neither, so vitest.setup.ts
+// stands both up before this file loads, mirroring what the real page sets up.
 
 const { default: ChatToolCard } = await import("./ChatToolCard.vue");
 const { CHAT_SURFACE } = await import("./chatSurface");

@@ -3,7 +3,7 @@
 // jsdom because these assertions are about rendered GEOMETRY — the percentages, the stack order, the rounded
 // data-end — which is exactly the class of thing a chart gets wrong silently. A NaN width or an inverted stack
 // throws nothing and fails no type check; it just draws a lie.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, h } from "vue";
 import { BarChart } from "@intentic/ui";
 import UsageColumnChart from "./UsageColumnChart.vue";
@@ -11,18 +11,8 @@ import UsageSparkline from "./UsageSparkline.vue";
 import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";
 
 // The ranked bars render through the design system's <BarChart>, so importing it brings the barrel — and with
-// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method.
-// vi.hoisted runs above every import in the transformed module, which is exactly what it is for.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+// it `useDevice`, which reads window.matchMedia at module scope. jsdom ships `window` but not that method —
+// vitest.setup.ts does, for every suite in the package.
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
     costUsd: 0,

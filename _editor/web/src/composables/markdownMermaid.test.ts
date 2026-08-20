@@ -12,9 +12,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
-/* jsdom gaps, filled in `vi.hoisted` so they land BEFORE the imports below rather than in a beforeAll that would
- * run too late. None of them is the code's fault, and each one left unstubbed fails in a way that reads as a
- * figure bug.
+/* jsdom gaps. None of them is the code's fault, and each one left unstubbed fails in a way that reads as a
+ * figure bug. The first two are filled for the whole package by vitest.setup.ts, which runs before this file is
+ * loaded, where a beforeAll would run too late; the rest are this file's own, below.
  *
  * `matchMedia`: the design-system barrel has import-time side effects (useDevice reads it while Picker's module
  * body evaluates) — which is exactly why the markdown ENGINE ships on its own subpath. This file needs the
@@ -25,23 +25,6 @@ import { createApp, h } from "vue";
  * path. The boxes are fictional, which is fine: what is asserted below is that a diagram is DRAWN, never where
  * anything landed. `getContext` is stubbed to null (jsdom's own answer, minus the "not implemented" noise) —
  * that is the no-canvas path in mermaidTheme.ts, where mermaid's built-in palette stands in for the app's. */
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    } as unknown as typeof ResizeObserver;
-});
 
 import { Markdown } from "@intentic/ui";
 

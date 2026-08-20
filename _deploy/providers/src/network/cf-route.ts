@@ -1,5 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { formatStamp, parseStamp, STAMP_KEY } from "@intentic/graph";
 import { z } from "zod";
 import { parseInputs } from "../core/inputs.js";
@@ -39,16 +38,8 @@ const dohResolves = async (hostname: string): Promise<boolean> => {
 };
 
 const waitForDnsPropagation: DnsPropagationWait = async (hostname, log) => {
-    const deadline = Date.now() + 90_000;
-    for (;;) {
-        if (await dohResolves(hostname)) {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            log(`cf-route: ${hostname} not yet observable via DoH after 90s; proceeding (downstream calls may need a retry)`);
-            return;
-        }
-        await sleep(2000);
+    if (!(await pollUntil(() => dohResolves(hostname), { timeoutMs: 90_000, intervalMs: 2000 }))) {
+        log(`cf-route: ${hostname} not yet observable via DoH after 90s; proceeding (downstream calls may need a retry)`);
     }
 };
 

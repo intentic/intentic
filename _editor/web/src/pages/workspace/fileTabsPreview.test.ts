@@ -10,19 +10,6 @@ import type { WorkspaceTab } from "./workspaceTabs";
 
 // The globals a mounted workspace component reads at import time; jsdom has none of them.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

@@ -19,14 +19,6 @@ const markdown = vi.hoisted(() => ({
 }));
 
 vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     /* The prompt bubble watches its own box twice — a ResizeObserver for whether the clamp is doing anything, an
      * IntersectionObserver for whether it has stuck to the top of the scroller. jsdom has layout for neither.
      * Stubs that never fire leave both flags at their defaults, which is exactly what the component shows before
@@ -36,15 +28,7 @@ vi.hoisted(() => {
         unobserve(): void {}
         disconnect(): void {}
     };
-    globalThis.ResizeObserver ??= idle;
     globalThis.IntersectionObserver ??= idle as unknown as typeof globalThis.IntersectionObserver;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
 });
 
 // Taken as a namespace rather than destructured: this file already imports `h` and `defineComponent` at the top,

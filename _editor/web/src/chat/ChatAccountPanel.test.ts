@@ -11,16 +11,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
 // matches:false keeps the device DESKTOP — the one form factor where the board and this gate share a screen.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const connected = ref(false);
 const accountsLoaded = ref(true);

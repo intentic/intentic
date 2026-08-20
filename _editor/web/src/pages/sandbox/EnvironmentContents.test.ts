@@ -18,29 +18,9 @@ import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentCont
 // is also what an offline sandbox does — every mark then paints the tier underneath, and nothing here is waiting
 // on a network round trip.
 vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
     // The clamped install block watches its own width to know whether it has anything left to show; jsdom
     // ships no ResizeObserver, and nothing measured is what this suite is about.
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    } as unknown as typeof globalThis.ResizeObserver;
 });
 
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");

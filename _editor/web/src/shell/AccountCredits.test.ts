@@ -9,19 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApp, h, type VNode } from "vue";
 
 // The @intentic/ui barrel reaches a component that tracks media queries at import time, and jsdom has no
-// matchMedia. Installed before any of it loads, as ReviewStat.test does.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-});
+// matchMedia — vitest.setup.ts stands one up for the package, before any of this loads.
 
 // Hoisted so the mock factory below never reads it in its temporal dead zone (see vitest.config.ts).
 const shared = vi.hoisted(() => ({ current: undefined as MembershipState | undefined }));

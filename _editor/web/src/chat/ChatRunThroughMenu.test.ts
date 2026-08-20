@@ -8,16 +8,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const loops = ref<LoopDesign[]>([]);
 const workflows = ref<Workflow[]>([]);

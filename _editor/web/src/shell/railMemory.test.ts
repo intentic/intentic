@@ -5,15 +5,6 @@ import { type RailSeat, useRailMemory } from "./railMemory";
 
 // The environment read this module's import chain reaches (via useSandbox) at module eval — the same edge
 // daemonRestart.test.ts cuts, and jsdom plus this is the whole of what it wants.
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 /* The rail's memory, exercised through the composable itself rather than a pure helper: the rules worth pinning
  * are both about WHEN it acts — hold a seat until the run is complete, write only when the seats themselves

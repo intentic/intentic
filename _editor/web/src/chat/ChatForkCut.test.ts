@@ -26,22 +26,7 @@ const opened = vi.hoisted(() => ({ ids: [] as string[] }));
 const shown = vi.hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));
 
 vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     // The fleet read below reaches the environment chain, which every component test has to stand up.
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
 });
 
 vi.mock("@intentic/ui", async () => {

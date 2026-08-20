@@ -6,28 +6,10 @@
 // the other's state is the failure worth a test: the newcomer offered only a file upload (what this replaced),
 // or a working developer greeted by a get-started pitch every time they close their last tab.
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
 import { queryClient } from "../../composables/queryPersistence";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
-
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 const mount = (empty: boolean): HTMLElement => {
     const el = document.createElement(`div`);

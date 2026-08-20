@@ -13,23 +13,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // What this component's import chain reads at module eval: the app's environment (the daemon client) and a media
 // query (the UI barrel's useDevice). jsdom plus these two is the whole of it — see daemonRestart.test.ts, which
 // cuts the same edge.
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const computers = ref<Computer[]>([]);
 // The FIRST read, not the ten-second poll. Every test below is about a list that has already arrived, so this

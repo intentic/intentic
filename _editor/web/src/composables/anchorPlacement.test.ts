@@ -1,19 +1,9 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { placeAnchored } from "@intentic/ui";
 
-// The barrel reaches window.matchMedia (useDevice) at import — hence jsdom plus the stub jsdom itself doesn't
-// ship. The geometry under test is pure arithmetic and touches no DOM.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+// The barrel reaches window.matchMedia (useDevice) at import — hence jsdom, and the
+// stub vitest.setup.ts installs for every suite in the package. The geometry under test is pure arithmetic and touches no DOM.
 
 /* The geometry behind every anchored panel in a POPPABLE panel (the composer's model/mode pickers, the tab
  * strip's history menu). It lives in @intentic/ui, which carries no test runner of its own — so it is

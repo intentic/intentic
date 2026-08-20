@@ -10,8 +10,10 @@
 // timer before admitting a failure that was certain from the first frame.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+// A configured client id, overriding vitest.setup.ts's empty default — the refusal asserted below has to be
+// the posture rule talking, never "no client id was set". Assigned, not `??=`: the setup file ran first.
 vi.hoisted(() => {
-    globalThis.window.env ??= {
+    globalThis.window.env = {
         production: false,
         api: { url: `http://localhost` },
         auth: { googleClientId: `client-id` },

@@ -3,23 +3,6 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // The stream router's import chain reaches the app's environment read at module eval; jsdom plus this is the
 // whole of what it wants (the same edge daemonRestart.test.ts cuts, for the same reason).
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));

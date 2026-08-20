@@ -20,28 +20,8 @@ import { router } from "../router";
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
 // the device DESKTOP — the form factor where the list and the diff are on screen together.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
     // jsdom implements no scrolling at all, and selecting a row keeps it on screen.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
 });
 
 // The only stand-ins: the two viewers, which the panel mounts for whichever file is selected. Monaco is a real

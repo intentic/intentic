@@ -3,24 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AnchoredOverlay } from "@intentic/ui";
 import { createApp, defineComponent, h, ref } from "vue";
 
-// The barrel reaches window.matchMedia (useDevice) at import — hence jsdom plus the stub jsdom itself doesn't
-// ship. ResizeObserver is the other one: the overlay re-places on the panel's own resize, and nothing here
+// The barrel reaches window.matchMedia (useDevice) at import — hence jsdom, and the
+// stub vitest.setup.ts installs for every suite in the package. ResizeObserver is the other one: the overlay re-places on the panel's own resize, and nothing here
 // resizes, so observing is a no-op.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    } as unknown as typeof globalThis.ResizeObserver;
-});
 
 /* THE OTHER HALF OF anchorPlacement.test.ts, and pinned here for the same reason: @intentic/ui carries no
  * test runner of its own, and the surfaces that break without this (the composer's model and mode pickers, the

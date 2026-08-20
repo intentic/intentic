@@ -3,18 +3,8 @@
 // The strip is what the workspace comes back as. Until it was persisted, a reload kept only the URL's one
 // active file and dropped every other tab the session had opened — so this pins both halves: what a reload
 // restores, and what a diff (the one kind too big and too stale to store) does to the focus that named it.
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { nextTick } from "vue";
-
-vi.hoisted(() => {
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 // Both are read when the modules below load: the active sandbox keys the strip, and the strip is the state.
 const SANDBOX = `sb1`;

@@ -14,26 +14,9 @@ import { type App, createApp, defineComponent, h } from "vue";
 import type { PendingAction } from "../composables/agents/laneDrop";
 import type { FleetAgent } from "../composables/agents/useAgents";
 
-// The card's import chain pulls in app-wide singletons that read browser globals at import time
-// (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env). matches:false keeps
-// the device DESKTOP, which is the form factor that renders the drill-in affordance beside the button.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
+// The card's import chain pulls in app-wide singletons that read browser globals at import time, stood up
+// for the package by vitest.setup.ts — whose matches:false keeps the device DESKTOP, the form factor that
+// renders the drill-in affordance beside the button.
 
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../router");

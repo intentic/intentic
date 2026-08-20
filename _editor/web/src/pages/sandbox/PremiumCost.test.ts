@@ -9,19 +9,6 @@ import type { MembershipState } from "@intentic-app/api-contract";
 import { describe, expect, it, vi } from "vitest";
 import { createApp, h, type VNode } from "vue";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-});
-
 const shared = vi.hoisted(() => ({ current: undefined as MembershipState | undefined }));
 
 vi.mock(`../../composables/membership/useMembership`, async () => {

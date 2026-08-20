@@ -24,23 +24,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // These components' import chain pulls in app-wide singletons that read browser globals at import time
 // (@intentic/ui's useDevice reads window.matchMedia; environment.ts reads window.env).
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-        auth: { googleClientId: `` },
-    };
-});
 
 // A row's mark is fetched from an icon CDN (<BrandMark>), which a test has no business reaching. Answered as a
 // miss, which is the same path an offline sandbox takes — the glyph tier underneath.

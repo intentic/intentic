@@ -30,27 +30,7 @@ import ChatTabList from "./ChatTabList.vue";
 // list): useDevice reads matchMedia at module scope, environment.ts reads window.env, and jsdom implements
 // neither ResizeObserver nor the scrollIntoView the list asks for on every focus.
 vi.hoisted(() => {
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
 });
 
 let app: App | undefined;

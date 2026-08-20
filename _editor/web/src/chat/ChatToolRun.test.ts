@@ -3,29 +3,12 @@
 // jsdom because what this component IS is what it renders: a turn's whole run of tool calls reduced to one
 // mark, and the same rows the shown mode draws once that mark is opened. Both halves are render decisions —
 // neither throws when it goes wrong, it just draws the wrong thing.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 
 // Same runtime globals ChatToolCard's suite stands up, and for the same reason: the import chain reads
 // window.matchMedia and window.env at module load, and jsdom provides neither.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 const { default: ChatToolRun } = await import("./ChatToolRun.vue");
 

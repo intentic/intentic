@@ -22,26 +22,6 @@ import AgentsView from "./AgentsView.vue";
 vi.hoisted(() => {
     // Focusing a tab makes the strip scroll it into view, which jsdom does not implement.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    globalThis.ResizeObserver ??= class {
-        observe(): void {}
-        unobserve(): void {}
-        disconnect(): void {}
-    };
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
 });
 
 // A bare mount with the app-level registrations the real app makes (the global Icon component and PrimeVue's

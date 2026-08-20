@@ -9,28 +9,11 @@
 //   2. a refusal the daemon had attributed to ONE account was drawn over the provider heading all of them —
 //      "Claude Code refused its credential" above three accounts, two of which had never refused anything.
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The panel's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
 const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../../composables/chat/providerAccounts");

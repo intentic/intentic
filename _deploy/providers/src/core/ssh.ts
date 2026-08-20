@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { createServer, connect as tcpConnect } from "node:net";
 import type { Readable } from "node:stream";
+import { pollUntil } from "@intentic/engine";
 import { Client } from "ssh2";
 
 export interface SshResult {
@@ -129,21 +130,21 @@ const tcpProbe = (port: number): Promise<boolean> =>
         });
     });
 
-// Poll a loopback port until it accepts; fail fast if cloudflared exited first (reported via `failure`).
+// Poll a loopback port until it accepts; fail fast if cloudflared exited first (reported via `failure`) —
+// the probe throws, which ends the wait then and there rather than after the whole deadline.
 const waitForPort = async (port: number, failure: () => string | undefined, timeoutMs = 20000): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-        const reason = failure();
-        if (reason !== undefined) {
-            throw new Error(`cloudflared access exited before its local forwarder came up: ${reason}`);
-        }
-        if (await tcpProbe(port)) {
-            return;
-        }
-        if (Date.now() > deadline) {
-            throw new Error(`cloudflared local forwarder on 127.0.0.1:${port} did not come up within ${timeoutMs}ms`);
-        }
-        await delay(150);
+    const up = await pollUntil(
+        async () => {
+            const reason = failure();
+            if (reason !== undefined) {
+                throw new Error(`cloudflared access exited before its local forwarder came up: ${reason}`);
+            }
+            return tcpProbe(port);
+        },
+        { timeoutMs, intervalMs: 150 },
+    );
+    if (!up) {
+        throw new Error(`cloudflared local forwarder on 127.0.0.1:${port} did not come up within ${timeoutMs}ms`);
     }
 };
 

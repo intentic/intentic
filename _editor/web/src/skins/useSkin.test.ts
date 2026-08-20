@@ -5,18 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // `useSkin` reaches `useTheme` through the design system's barrel, which pulls in app-wide singletons that read
-// browser globals at import time (useDevice reads window.matchMedia). vi.hoisted runs above every import in the
-// transformed module, which is what puts the shim in place before that happens.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
+// browser globals at import time (useDevice reads window.matchMedia) — stood up for the package by
+// vitest.setup.ts, which runs before this file is loaded.
 
 const load = () => import("./useSkin");
 const root = () => document.documentElement;

@@ -5,26 +5,8 @@
 // down until the name is both different and legal, and what leaves is the trimmed name — the daemon refuses a
 // stray space, and it should never get the chance to.
 import PrimeVue from "primevue/config";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
-
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 const { default: CapabilityRenameDialog } = await import("./CapabilityRenameDialog.vue");
 

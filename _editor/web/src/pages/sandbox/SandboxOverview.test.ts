@@ -9,17 +9,6 @@ import type { SandboxSummary } from "@intentic-app/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
-
 // The sandbox singletons are the component's whole world (identity, reachability, the write), and the version
 // card + update prompt below the header are separate surfaces with their own daemon calls — stubbed so this
 // mounts the identity block and nothing else.

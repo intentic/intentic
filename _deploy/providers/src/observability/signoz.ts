@@ -1,6 +1,5 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { pollUntil, type Provider, type ResolvedInputs } from "@intentic/engine";
 import { HASH_KEY } from "@intentic/graph";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -375,15 +374,9 @@ const healthy = async (session: SshSession, parsed: SignozInputs): Promise<boole
 };
 
 const waitHealthy = async (session: SshSession, parsed: SignozInputs): Promise<void> => {
-    const deadline = Date.now() + READY_TIMEOUT_MS;
-    for (;;) {
-        if (await healthy(session, parsed)) {
-            return;
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`signoz did not become healthy within ${READY_TIMEOUT_MS}ms`);
-        }
-        await sleep(READY_INTERVAL_MS);
+    const up = await pollUntil(() => healthy(session, parsed), { timeoutMs: READY_TIMEOUT_MS, intervalMs: READY_INTERVAL_MS });
+    if (!up) {
+        throw new Error(`signoz did not become healthy within ${READY_TIMEOUT_MS}ms`);
     }
 };
 

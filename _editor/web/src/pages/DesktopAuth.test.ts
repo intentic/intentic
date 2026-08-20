@@ -11,23 +11,6 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // The import-time globals a mounted view needs (see Setup.test.ts): ui reads matchMedia at module scope, and
 // environment.ts reads window.env and throws without it.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-    globalThis.window.env ??= {
-        production: false,
-        api: { url: `http://localhost` },
-        auth: { googleClientId: `` },
-        analytics: { posthogKey: ``, posthogHost: `` },
-        afterSignOut: ``,
-    };
-});
 
 // The link the app opened, carrying the two values the handoff is tied to.
 const query = ref<Record<string, string>>({ state: `nonce-1`, challenge: `chal-1` });

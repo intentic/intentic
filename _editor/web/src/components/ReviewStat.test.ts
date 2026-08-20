@@ -3,21 +3,8 @@
 // The badge's job is to always state a number and to be honest about which reading it is, so what is asserted
 // here is WHICH reading it prints in each state — not its markup, beyond the one class that marks a count as
 // still provisional. Mounted with plain Vue, as markdownFigures.test does, rather than adding @vue/test-utils.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
-
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof matchMedia;
-});
 
 import ReviewStat from "./ReviewStat.vue";
 import { useLayout } from "../composables/useLayout";
