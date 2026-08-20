@@ -1,0 +1,30 @@
+---
+/* THE TEMPLE, BEHIND EVERY PAGE'S FIRST SCREEN.
+ *
+ * The home page's hero always had the plate behind it; nothing else did, so the bar was a transparent
+ * strip over carved stone on one page and a flat dark band on the next — the one piece of furniture a
+ * reader carries between pages, changing under them. This is the same plate, the same file, at the same
+ * scale, on every other page, so the bar has the same thing behind it wherever you are and its carved
+ * band lines up with `--bar-height` by construction rather than by matching.
+ *
+ * IT IS THE WHOLE PLATE, NOT A CROP OF IT. A strip cut to the bar was tried and thrown away: it had to be
+ * re-encoded, so its carving came out a shade crisper than the real thing one page earlier, and it needed
+ * its own copy of the scrim to sit at the same brightness. The art fades itself out at the foot (see
+ * `.plate-img::after` in global.css), so using all of it costs nothing a crop would have saved.
+ *
+ * THE HEIGHT IS THE HOME PAGE'S HERO, in `vw`, and that is not arbitrary. The scrim over the plate is a
+ * set of gradients sized to their own box, so the same art under a shorter box is darkened differently —
+ * and the top ninety units of it, which is exactly what shows behind the bar, is the part that would
+ * differ. Matching the box matches the bar.
+ */
+---
+
+<div class="page-backdrop" aria-hidden="true">
+    <div class="plate">
+        <div class="plate-img"></div>
+    </div>
+    {/* The veil. See `.page-backdrop-veil` in global.css: it starts exactly where the bar ends, so the
+        carved band the bar sits in is untouched and everything a page actually reads on is calmed. */}
+    <div class="page-backdrop-veil"></div>
+    <div class="plate-fade"></div>
+</div>

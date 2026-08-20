@@ -26,18 +26,6 @@ import DiscordIcon from "./DiscordIcon.astro";
 import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
-interface Props {
-    /**
-     * The bar starts with no ground of its own and takes one on the first scroll. Only a page whose first
-     * band carries the plate asks for this — the home page — because there the temple's carved top border
-     * IS the bar's. On a page that starts in prose a transparent bar is a row of labels floating on
-     * nothing. It is a prop rather than something the page's script sets, so the first paint is already
-     * right and the two scripts cannot race.
-     */
-    transparent?: boolean;
-}
-
-const { transparent = false } = Astro.props;
 const currentPath = Astro.url.pathname;
 
 function isActive(entry: NavEntry): boolean {
@@ -55,7 +43,7 @@ const bare = (path: string): string => path.replace(/\/+$/u, "");
 const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath);
 ---
 
-<header class="bar" id="site-bar" data-transparent={transparent ? "" : undefined}>
+<header class="bar" id="site-bar">
     <div class="bar-inner">
         <a href="/" class="brand" aria-label="intentic">
             <Lotus size="lg" class="brand-mark" />
@@ -176,12 +164,12 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         if (event.key === "Escape") menus.forEach(close);
     });
 
-    /* The lift. A page whose first band carries the plate asks for a transparent bar by setting
-       `data-transparent` on it (the home page does, from the layout); everywhere else the bar is lifted
-       from the first paint, because a transparent bar over a page that starts in prose is a row of labels
-       floating on nothing. */
+    /* The lift. Every page opens with the plate behind the bar, so the bar starts with no ground of its
+       own and lets the carved band show through; once the page has scrolled the plate has moved out from
+       behind it and the bar takes a ground. With this blocked the bar simply stays transparent, which is
+       correct at the top of the page and merely thin further down. */
     const bar = document.getElementById("site-bar");
-    if (bar?.hasAttribute("data-transparent")) {
+    if (bar) {
         const lift = () => bar.toggleAttribute("data-lifted", window.scrollY > 40);
         lift();
         window.addEventListener("scroll", lift, { passive: true });
@@ -200,96 +188,38 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 </script>
 
 <style>
-    /* ── THE BAR IS A CARVED LINTEL, ON EVERY PAGE ───────────────────────────────────────────────────
+    /* ── THE BAR IS THE SAME BAR ON EVERY PAGE ───────────────────────────────────────────────────────
      *
-     * It used to be two different objects: a transparent strip over the temple on the home page, and a
-     * flat dark band with a hairline everywhere else. Same links, same height give or take, but they did
-     * not read as the same bar — which is the one piece of furniture a reader carries from page to page,
-     * so it is the last thing that should change under them.
+     * It used to be two objects: a transparent strip over the temple on the home page, and a flat dark
+     * band with a hairline everywhere else — different ground, different height. The bar is the one piece
+     * of furniture a reader carries from page to page, so it is the last thing that should move.
      *
-     * Only the home page has the whole plate behind it. Every other page gets the top of that same plate
-     * and nothing more: `lintel-*.avif`, cut in `scripts/angkor-plate.mjs` from the same master at the
-     * same 90-unit height the bar is derived from. 6 KB at the narrow rung against the full plate's 100.
+     * IT IS TRANSPARENT, EVERYWHERE, and what sits behind it is the plate. Every page paints the same art
+     * at the same scale under its first screen (`PageBackdrop`, and the home page's own hero), so the bar
+     * has the carved top band behind it wherever you are. Its height is `--bar-height` in global.css: the
+     * band's own 90 units of the art, which is a stylesheet value rather than a measurement, so it cannot
+     * differ by a pixel between one page and the next.
      *
-     * THE SCRIM IS THE PLATE'S OWN, SIZED TO THE PLATE. On the home page the band is read through the
-     * four layers `.plate::after` lays over the art, so a strip without them would be visibly lighter
-     * than the same band one page earlier. Rather than approximate them, the same four layers are drawn
-     * here at the PLATE'S box height — `56.25vw`, which is 9/16 of the full width — and anchored to the
-     * top. Each gradient then renders exactly the slice it renders on the home page. */
+     * The ground below only arrives once the plate has scrolled out from behind it. */
     .bar {
         position: fixed;
         top: 0;
         right: 0;
         left: 0;
         z-index: 100;
-        background: var(--color-canvas);
-    }
-    /* The art. `cover` through the range where the bar's height IS the band's painted height — which is
-       every ordinary window, and there `cover` paints it 1:1 with nothing cropped either way. Outside that
-       range the clamp holds the bar still while the art keeps scaling with the width, and the two ends
-       want opposite things: narrow, the bar is taller than the band, so scaling by height and letting the
-       ornate corners crop off the sides beats stretching the carving into a smear; wide, the band is
-       taller than the bar, so the art is squashed to fit rather than cropped, because what would crop off
-       the bottom is the inner gold rule the whole bar is built on. */
-    .bar::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: url("/assets/angkor/lintel-1600.avif") top center / cover no-repeat;
-    }
-    /* Where the clamp's ceiling takes over from the width. */
-    @media (min-width: 126rem) {
-        .bar::before {
-            background-size: 100% 100%;
-        }
-    }
-    .bar::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background:
-            radial-gradient(58% 46% at 50% 30%, rgba(9, 6, 4, 0.74) 0%, rgba(9, 6, 4, 0.6) 42%, rgba(9, 6, 4, 0.28) 72%, transparent 100%),
-            linear-gradient(0deg, rgba(9, 6, 4, 0.72) 0%, rgba(9, 6, 4, 0.42) 18%, rgba(9, 6, 4, 0.12) 38%, transparent 58%),
-            radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
-            linear-gradient(rgba(12, 9, 7, 0.12), rgba(12, 9, 7, 0.12));
-        background-size: 100% 56.25vw;
-        background-position: top center;
-        background-repeat: no-repeat;
-    }
-    /* The plate's own three rungs, switched at the plate's own two widths (see `.plate-img` in
-       global.css). Same source, same bitrate, same breakpoint: whatever the home page's first screen is
-       painting behind a transparent bar, this is painting the top of. */
-    @media (max-width: 48rem) {
-        .bar::before {
-            background-image: url("/assets/angkor/lintel-900.avif");
-        }
-    }
-    @media (min-width: 100rem) {
-        .bar::before {
-            background-image: url("/assets/angkor/lintel-2400.avif");
-        }
-    }
-
-    /* THE HOME PAGE'S FIRST SCREEN IS THE ONE EXCEPTION, and it is an exception about depth rather than
-       about looks. There the real plate is directly behind the bar, running on down the page, so the bar
-       gets out of its way and lets the wall be continuous — which is what the reference art has. The
-       moment the page scrolls the plate's own band has moved out from behind the bar, so the lintel takes
-       over and the bar is the same object it is everywhere else. */
-    .bar[data-transparent]:not([data-lifted]) {
         background: transparent;
+        border-bottom: 1px solid transparent;
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
     }
-    .bar[data-transparent]:not([data-lifted])::before,
-    .bar[data-transparent]:not([data-lifted])::after {
-        opacity: 0;
-    }
-    .bar[data-transparent]::before,
-    .bar[data-transparent]::after {
-        transition: opacity 0.3s ease;
+    .bar[data-lifted] {
+        background: rgba(10, 7, 5, 0.86);
+        border-bottom-color: var(--color-line);
+        backdrop-filter: blur(14px);
     }
 
-    /* The bar's own furniture sits above both layers. */
     .bar-inner {
-        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;

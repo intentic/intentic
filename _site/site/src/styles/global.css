@@ -847,32 +847,11 @@
     /* THE PAGE HEAD — every page but the home page opens the same way: an eyebrow, a carved heading, a
      * line of lede and sometimes two controls. What sits BEHIND them was, until this class existed, the
      * same absolutely-positioned gradient div pasted into twelve pages, each one naming the same three
-     * colour stops. It is now two pseudo-elements on the section itself: the warm grid the home page's
-     * bands carry, and one low glow at the top where the plate's own light would be if the page had one.
-     *
-     * The section's own children need `position: relative` to sit above these, which is what every one of
-     * those twelve already sets on its inner wrapper. */
+     * colour stops; then it was a glow and a grid drawn here. It is neither now: the temple itself is
+     * behind it, from `PageBackdrop`, which is what makes the bar the same bar on every page. All this
+     * class still owes the band is a containing block for whatever it positions inside itself. */
     .page-hero {
         position: relative;
-        overflow: hidden;
-        border-bottom: 1px solid var(--color-line);
-    }
-    .page-hero::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: radial-gradient(ellipse 70% 100% at 22% 0%, rgba(224, 123, 39, 0.09) 0%, transparent 68%);
-    }
-    .page-hero::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image:
-            linear-gradient(rgba(201, 160, 92, 0.032) 1px, transparent 1px), linear-gradient(90deg, rgba(201, 160, 92, 0.032) 1px, transparent 1px);
-        background-size: 84px 84px;
-        mask-image: radial-gradient(ellipse 85% 90% at 50% 0%, rgba(0, 0, 0, 0.9), transparent 78%);
     }
 
     /* A section of the page. IT MUST BE POSITIONED, and that is not a detail: the wall texture and the
@@ -1330,6 +1309,50 @@
         radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
         rgba(12, 9, 7, var(--plate-scrim));
 }
+/* THE BAND EVERY PAGE OPENS ON. `PageBackdrop` renders this at the top of the document, behind
+ * everything, so the plate is under the bar on every page rather than only on the home page's hero.
+ *
+ * `z-index: -1` puts it behind the page's own content while staying inside the body's stacking context,
+ * which is what keeps it above the document's background rather than under it. It never takes a pointer:
+ * it is scenery, and the links it sits behind are the page's. */
+.page-backdrop {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    /* The home page hero's own height, so the scrim's gradients — which are sized to their box — darken
+     * the art the same way here as they do there. The art itself runs out at 56.25vw (its own 16:9) and
+     * fades; the rest of this box is scrim over canvas, which costs nothing and paints nothing. */
+    height: 77vw;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* THE VEIL, AND WHY IT STARTS WHERE THE BAR ENDS.
+ *
+ * The home page's hero is composed against this art: the copy sits in the plaque's deliberately empty
+ * middle, the product frames cover its lower half, and the two devatas are left alone in the outer
+ * thirds because they are the picture. No other page is composed against anything — a docs page is a
+ * rail of links down the left and prose down the middle, and both of those land straight on a devata.
+ *
+ * So the art is kept for the one place it is doing structural work — the carved band the bar lives in —
+ * and veiled everywhere below it. The first stop is `--bar-height` exactly, so not one pixel of what the
+ * bar shows is touched and the bar stays identical to the home page's. Under that it ramps over about a
+ * bar's worth of distance and holds: the temple is still there, as depth rather than as subject. */
+.page-backdrop-veil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        transparent 0,
+        transparent var(--bar-height),
+        rgba(12, 9, 7, 0.62) calc(var(--bar-height) + 5rem),
+        rgba(12, 9, 7, 0.82) calc(var(--bar-height) + 14rem),
+        rgba(12, 9, 7, 0.82) 100%
+    );
+}
+
 /* The seam at the foot of a plated band: the photograph does not stop, it dissolves into the canvas.
  * Shallow and late, because the bottom eighth of the plate is where its temple and its carved lower
  * border are — a fade tall enough to be comfortable erased the one part of the art the first screen is

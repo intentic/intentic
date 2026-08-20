@@ -82,11 +82,12 @@ const browserSteps = content.connect.steps.slice(0, -1);
 const machineStep = content.connect.steps.at(-1)!;
 ---
 
-<BaseLayout title={content.meta.title} description={content.meta.description} faq={faq} extraJsonLd={[buildSoftwareAppSchema()]}>
+<BaseLayout title={content.meta.title} description={content.meta.description} faq={faq} extraJsonLd={[buildSoftwareAppSchema()]} backdrop={false}>
     <div class="home flex flex-1 flex-col">
         {/* The bar is transparent over the plate until the first screen is behind you — the temple's own
-            carved top border becomes the bar's, exactly as the reference art has it. */}
-        <Nav transparent />
+            carved top border becomes the bar's, exactly as the reference art has it. Every other page
+            gets the same picture from `PageBackdrop`, so the bar never changes under a reader. */}
+        <Nav />
 
         <main class="flex-1">
             <!-- ═══ 1 · The first screen ═══════════════════════════════════════════════════════════
