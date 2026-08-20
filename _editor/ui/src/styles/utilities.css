@@ -70,9 +70,14 @@
      * only INSIDE the media query would be worse: a control that gains a containing block only on phones is
      * a control whose absolutely-positioned children (a badge, a dropdown caret) move between form factors.
      *
-     * Not for a control that is ALREADY thumb-sized — a 48px row, a full-width button — where the overlay
-     * would reach past the row's own edge into its neighbour. Use it on the dense ones. */
-    .touch-target {
+     * BUT IT MUST NEVER BE THE THING THAT DECIDES WHERE THE CONTROL SITS, hence `:where()` and its zero
+     * specificity. This sheet is imported after Tailwind's, so in the same layer at equal specificity this
+     * rule won — and every `absolute` control that adopted the class was quietly moved. The chat's fork mark
+     * is the case that caught it: hung in the transcript's right margin (`absolute` + `bottom-0`), it came out
+     * relatively positioned, which drops an element back into the flow — so the mark left the margin and
+     * appeared UNDER the answer, in a zero-height strip it then overflowed. At zero specificity any position
+     * utility on the element wins, and a control with none still gets its containing block. */
+    :where(.touch-target) {
         position: relative;
     }
 
