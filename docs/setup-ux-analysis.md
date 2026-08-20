@@ -243,6 +243,27 @@ The two structural items shipped in the same session, after the wording:
   stuck-wait nudge gets a reader of its own, and the reference column drops its now
   duplicate download buttons.
 
+A third change followed from looking at the result: **the rungs are illustrated rather than
+iconed.** A 16px bolt beside "Start instantly" is a synonym for the word next to it, so the
+space it took said nothing twice. The cards now carry a drawing each — a cloud with a bolt
+in it, a monitor with work on the screen, a rack of three. Where the machine lives is the
+one thing on this page a newcomer cannot look up, and a picture answers it before the
+titles are read. That is what earns the height a glyph could not.
+
+The first attempt at those drawings was rejected on sight, and rightly. It was chunky:
+thick rounded strokes around washed-in fills, a sticker-illustration language this product
+speaks nowhere else. Every icon in the app is Remix's line set — a 24 grid, hollow shapes,
+a thin even band, sharp geometry, small solid details. The drawings are now the same hand
+at five times the size, and two of them are literally the app's own `cloud-line` and
+`flashlight-line` silhouettes scaled up, which is the cheapest guarantee that they cannot
+drift from the icon set.
+
+One thing to know if these are edited: the artwork's opacities are SVG attributes, not
+utility classes. The first version dimmed its fills with a class used nowhere else in the
+app, so the class was never generated for the running dev server and the drawings shipped
+at full strength — a solid white cloud and a solid orange monitor. Colour survived only
+because those classes existed elsewhere. A drawing's opacity belongs in the drawing.
+
 The Linux half is the one to watch. An AppImage asks more of a reader than an `.exe`
 does, and a Linux desktop user is likelier than most to have wanted the terminal anyway.
 If the funnel shows that rung converting worse on Linux than on Windows, narrow the

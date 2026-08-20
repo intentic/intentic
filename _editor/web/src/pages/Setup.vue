@@ -7,7 +7,6 @@ import {
     Code,
     commandLang,
     CopyButton,
-    type IconName,
     InfoHint,
     Notice,
     type NoticeModel,
@@ -37,6 +36,7 @@ import SetupCompose from "./SetupCompose.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
+import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
 import { cloudProviderMeta } from "./setupCloud";
 import type { ComposeArgs } from "./setupCompose";
@@ -454,9 +454,10 @@ const onProvisioned = (summary: SandboxSummary): void => {
  * What that leaves out lands where it is ACTED on rather than skimmed: the free machine's disk is described on
  * the card that creates it, next to the button, and "or don't use a terminal at all" sits under the whole row
  * as the fourth answer it is. `meta` is the badge, `note` the few words under it. */
+/* `value` doubles as the drawing's name (SetupRungArt): a rung and the picture of where its machine lives are
+ * the same fact, and an `icon` field beside them was a second place for that fact to be wrong. */
 interface MachineOption {
     readonly value: "hosted" | "mine" | "cloud";
-    readonly icon: IconName;
     readonly title: string;
     readonly meta: string;
     readonly note: string;
@@ -466,7 +467,6 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
         ? [
               {
                   value: `hosted` as const,
-                  icon: `bolt` as const,
                   /* Titles answer the reader's question — what do I do — never the topology's. This one read
                    * "We host it", which asks a newcomer to weigh hosting arrangements before they have seen
                    * the product. The note is where whose-machine-it-is moved: selling the speed without
@@ -495,7 +495,6 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
         ? [
               {
                   value: `mine` as const,
-                  icon: `desktop` as const,
                   title: `My own computer`,
                   meta: `Most power · no limits`,
                   note: `One pasted command`,
@@ -506,7 +505,6 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
         ? [
               {
                   value: `cloud` as const,
-                  icon: `cloud` as const,
                   /* WHOSE MACHINE IT IS BELONGS IN THE TITLE, and it is the only thing this rung has to say
                    * that the one above it doesn't: we host one too, and the difference is the account it
                    * lives in and the bill. It used to be "A new cloud machine" over "In your own cloud
@@ -2099,20 +2097,35 @@ watch(commandReady, (ready) => {
                                 "
                                 @click="chooseMachine(option.value)"
                             >
-                                <!-- The icon sits ON the title's line. Stacked above it, at 2xl, it bought a
-                                     row of its own plus the space around it — a third of the card's height for
-                                     a glyph — and three cards of mostly air is the same wasted screen the
-                                     paragraphs were, minus the words. Beside the title it still leads the eye
-                                     and costs nothing. -->
-                                <span class="flex items-center gap-2">
-                                    <Icon
-                                        :name="hostedBusy && option.value === `hosted` ? `spinner` : option.icon"
-                                        :spin="hostedBusy && option.value === `hosted`"
-                                        class="shrink-0 text-base"
-                                        :class="machine === option.value ? `text-link` : `text-muted`"
+                                <!-- A PICTURE, NOT A GLYPH (SetupRungArt carries the reasoning). This row used
+                                     to be a 16px icon beside the title, after a stacked 2xl glyph was pulled
+                                     for spending a third of the card on a bolt that only said "instantly"
+                                     again. What sits here now is a drawing of where the machine would live,
+                                     which is the one thing on this page a stranger cannot look up — so it
+                                     earns the height the synonym could not.
+                                     The spinner takes the drawing's PLACE rather than a corner of it: while a
+                                     machine is being started there is nothing to choose, and a spinner pinned
+                                     to a picture reads as an illustration that has broken. The two stack in one
+                                     grid cell and the drawing goes `invisible` rather than away, so the cell
+                                     keeps the artwork's exact height and the row cannot jump — the same trick
+                                     the name row above uses for its pencil and its Save pair, and for the same
+                                     reason. A hand-written height here would be a second copy of a number the
+                                     drawing already owns. -->
+                                <span class="mb-1 grid w-full grid-cols-1 grid-rows-1">
+                                    <SetupRungArt
+                                        :kind="option.value"
+                                        :selected="machine === option.value"
+                                        class="col-start-1 row-start-1"
+                                        :class="hostedBusy && option.value === `hosted` ? `invisible` : ``"
                                     />
-                                    <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
+                                    <span
+                                        v-if="hostedBusy && option.value === `hosted`"
+                                        class="col-start-1 row-start-1 flex items-center justify-center"
+                                    >
+                                        <Icon name="spinner" spin class="text-xl text-link" />
+                                    </span>
                                 </span>
+                                <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
                                 <span class="text-xs text-muted">{{ option.meta }}</span>
                                 <!-- Three or four words: what this rung asks of you, or where it puts the
                                      machine. The sentences that used to sit here are under the row now, for
