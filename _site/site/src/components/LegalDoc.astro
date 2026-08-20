@@ -22,7 +22,7 @@ const measure = doc.sections.some((section) => section.table !== undefined) ? "m
 <BaseLayout>
     <Nav />
     <main class="flex-1">
-        <section class:list={["mx-auto px-6 pt-32 pb-24 max-sm:pt-28", measure]}>
+        <section class:list={["below-bar mx-auto px-6 pb-24", measure]}>
             <div class="eyebrow">{eyebrow}</div>
             <h1 class="display mt-3 text-3xl font-semibold sm:text-4xl">{doc.title}</h1>
             <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{doc.intro}</p>

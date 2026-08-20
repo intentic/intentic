@@ -200,34 +200,96 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 </script>
 
 <style>
-    /* Transparent, so a plate behind the first band runs under it. It takes a ground once the page has
-       scrolled, which the script above flags with `data-lifted`. A page with no plate never asks for the
-       transparent state and so is lifted from the start. */
+    /* ── THE BAR IS A CARVED LINTEL, ON EVERY PAGE ───────────────────────────────────────────────────
+     *
+     * It used to be two different objects: a transparent strip over the temple on the home page, and a
+     * flat dark band with a hairline everywhere else. Same links, same height give or take, but they did
+     * not read as the same bar — which is the one piece of furniture a reader carries from page to page,
+     * so it is the last thing that should change under them.
+     *
+     * Only the home page has the whole plate behind it. Every other page gets the top of that same plate
+     * and nothing more: `lintel-*.avif`, cut in `scripts/angkor-plate.mjs` from the same master at the
+     * same 90-unit height the bar is derived from. 6 KB at the narrow rung against the full plate's 100.
+     *
+     * THE SCRIM IS THE PLATE'S OWN, SIZED TO THE PLATE. On the home page the band is read through the
+     * four layers `.plate::after` lays over the art, so a strip without them would be visibly lighter
+     * than the same band one page earlier. Rather than approximate them, the same four layers are drawn
+     * here at the PLATE'S box height — `56.25vw`, which is 9/16 of the full width — and anchored to the
+     * top. Each gradient then renders exactly the slice it renders on the home page. */
     .bar {
         position: fixed;
         top: 0;
         right: 0;
         left: 0;
         z-index: 100;
-        background: rgba(10, 7, 5, 0.86);
-        border-bottom: 1px solid var(--color-line);
-        backdrop-filter: blur(14px);
-        transition:
-            background-color 0.3s ease,
-            border-color 0.3s ease;
+        background: var(--color-canvas);
     }
-    .bar[data-transparent]:not([data-lifted]) {
-        background: transparent;
-        border-bottom-color: transparent;
-        backdrop-filter: none;
+    /* The art. `cover` through the range where the bar's height IS the band's painted height — which is
+       every ordinary window, and there `cover` paints it 1:1 with nothing cropped either way. Outside that
+       range the clamp holds the bar still while the art keeps scaling with the width, and the two ends
+       want opposite things: narrow, the bar is taller than the band, so scaling by height and letting the
+       ornate corners crop off the sides beats stretching the carving into a smear; wide, the band is
+       taller than the bar, so the art is squashed to fit rather than cropped, because what would crop off
+       the bottom is the inner gold rule the whole bar is built on. */
+    .bar::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url("/assets/angkor/lintel-1600.avif") top center / cover no-repeat;
+    }
+    /* Where the clamp's ceiling takes over from the width. */
+    @media (min-width: 126rem) {
+        .bar::before {
+            background-size: 100% 100%;
+        }
+    }
+    .bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(58% 46% at 50% 30%, rgba(9, 6, 4, 0.74) 0%, rgba(9, 6, 4, 0.6) 42%, rgba(9, 6, 4, 0.28) 72%, transparent 100%),
+            linear-gradient(0deg, rgba(9, 6, 4, 0.72) 0%, rgba(9, 6, 4, 0.42) 18%, rgba(9, 6, 4, 0.12) 38%, transparent 58%),
+            radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
+            linear-gradient(rgba(12, 9, 7, 0.12), rgba(12, 9, 7, 0.12));
+        background-size: 100% 56.25vw;
+        background-position: top center;
+        background-repeat: no-repeat;
+    }
+    /* The plate's own three rungs, switched at the plate's own two widths (see `.plate-img` in
+       global.css). Same source, same bitrate, same breakpoint: whatever the home page's first screen is
+       painting behind a transparent bar, this is painting the top of. */
+    @media (max-width: 48rem) {
+        .bar::before {
+            background-image: url("/assets/angkor/lintel-900.avif");
+        }
+    }
+    @media (min-width: 100rem) {
+        .bar::before {
+            background-image: url("/assets/angkor/lintel-2400.avif");
+        }
     }
 
-    /* THE BAR IS FURNITURE INSIDE A FRAME, so on the home page its height is the frame's rather than a
-       number picked for a bar: the plate's carved top band runs from its outer glow down to an inner rule,
-       and the bar's content has to sit on the middle of THAT or the nav floats in a border it is supposed
-       to be living in. `--bar-height` is that measurement, written by the home page's own script; the
-       default below is what every other page uses. */
+    /* THE HOME PAGE'S FIRST SCREEN IS THE ONE EXCEPTION, and it is an exception about depth rather than
+       about looks. There the real plate is directly behind the bar, running on down the page, so the bar
+       gets out of its way and lets the wall be continuous — which is what the reference art has. The
+       moment the page scrolls the plate's own band has moved out from behind the bar, so the lintel takes
+       over and the bar is the same object it is everywhere else. */
+    .bar[data-transparent]:not([data-lifted]) {
+        background: transparent;
+    }
+    .bar[data-transparent]:not([data-lifted])::before,
+    .bar[data-transparent]:not([data-lifted])::after {
+        opacity: 0;
+    }
+    .bar[data-transparent]::before,
+    .bar[data-transparent]::after {
+        transition: opacity 0.3s ease;
+    }
+
+    /* The bar's own furniture sits above both layers. */
     .bar-inner {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -235,7 +297,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         max-width: 84rem;
         margin: 0 auto;
         padding: 0 1.5rem;
-        min-height: var(--bar-height, 4.5rem);
+        min-height: var(--bar-height);
     }
 
     /* ── The brand ───────────────────────────────────────
@@ -524,12 +586,19 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             display: flex;
         }
     }
-    /* On a phone the bar is the brand and the one call, side by side, and "Create your workspace" is long
-       enough to push itself off the right edge at 390px. So both sides give a little: the marks go, the
-       wordmark drops a step, and the cartouche tightens. Shortening the words instead would mean the button
-       saying something different here than it says four inches lower down, which is the one thing a call to
-       action must not do. Padding stays vertically zero: the bar's height is `min-height`, and any vertical
-       padding here would add to it. */
+    /* ON A PHONE AND A SMALL TABLET THE BAR'S CALL COMES OFF, and the hamburger is why. "Create your
+       workspace" is a long call, and beside a menu button it leaves the wordmark about 90px at 390 — the
+       two overlapped outright. Shortening the words instead would mean the button saying something
+       different here than it says four inches lower down, which is the one thing a call to action must not
+       do. So it goes, and the phone overlay carries it at the foot of the menu it opens, where it has the
+       whole width to itself. What is left in the bar is the brand and the way into everything else. */
+    @media (max-width: 48rem) {
+        .bar-cta {
+            display: none;
+        }
+    }
+    /* Below this the marks go too, and the wordmark drops a step. Padding stays vertically zero: the bar's
+       height is `min-height`, and any vertical padding here would add to it. */
     @media (max-width: 30rem) {
         .bar-icon {
             display: none;
@@ -547,10 +616,6 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         }
         .bar-end {
             gap: 0.6rem;
-        }
-        .bar-end .btn-sm {
-            padding: 0.5rem 0.8rem;
-            font-size: 0.8125rem;
         }
     }
 

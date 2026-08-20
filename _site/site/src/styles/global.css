@@ -249,6 +249,30 @@
      * first row of every product frame. Matched, the ornament sits inside the ledge it belongs to and the
      * picture starts on a clean line. */
     --corner-size: 1.7rem;
+
+    /* ── THE BAR'S HEIGHT, AND WHY IT IS ONE NUMBER FOR THE WHOLE SITE ───────────────────────────────
+     *
+     * The navigation bar is furniture inside the plaque's carved top band. On the home page that band is
+     * really there — the plate is behind the bar — and on every other page it is the strip cut from the
+     * top of the same art (see `.bar` in Nav.astro). Either way the bar's content has to sit on the
+     * MIDDLE of that band, or the nav floats in a border it is supposed to be living in.
+     *
+     * Scanning the art's row luminance on a 1600×900 frame: the outer gold rule is a ridge at y=10, the
+     * ground runs flat to y≈70, and the inner rule is a ridge at y=74. The bar hangs from the plate's TOP
+     * rather than the band's, so for its content to land on the band it must be 90 art units tall — which
+     * clears the inner rule with a little wall under it.
+     *
+     * AND THE SCALE IS A SINGLE TERM, which is what lets this be a stylesheet value rather than something
+     * a script has to measure. The plate is laid across the full width at its own 16:9 ratio, so the art's
+     * scale is exactly `plateWidth / 1600` and nothing about a page's content height can move it:
+     * 90 ÷ 1600 = 5.625vw. (Under `cover` on a content-sized box it was `max(width/1600, height/900)`,
+     * which no stylesheet could name — hence the observer this replaced.)
+     *
+     * THE TWO STOPS ARE UI, NOT ARITHMETIC. Below ~970px the true band is under 55px, which is thinner
+     * than a touch target; above ~2020px it passes 114px, which is a bar tall enough to be furniture in
+     * the way. Outside the clamp the bar stops tracking the painted band, and that is the right trade:
+     * a bar that is the same on every page beats one that is exactly on a rule nobody is looking at. */
+    --bar-height: clamp(3.4rem, 5.625vw, 7.1rem);
 }
 
 @layer base {
@@ -805,6 +829,19 @@
             linear-gradient(rgba(201, 160, 92, 0.032) 1px, transparent 1px), linear-gradient(90deg, rgba(201, 160, 92, 0.032) 1px, transparent 1px);
         background-size: 84px 84px;
         mask-image: radial-gradient(ellipse 85% 62% at 50% 0%, rgba(0, 0, 0, 0.85), transparent 72%);
+    }
+
+    /* THE FIRST THING UNDER A FIXED BAR has to clear it, and the bar's height is a function of the window
+     * — so the clearance has to be too. Every page here used to open on a literal `pt-28`, which is 112px
+     * against a bar that passes 112px at about 1990px wide: on a wide monitor the first heading ran under
+     * the lintel. This is that padding, plus a breath, measured from the bar itself. */
+    .below-bar {
+        padding-top: calc(var(--bar-height) + 2.5rem);
+    }
+    @media (min-width: 64rem) {
+        .below-bar {
+            padding-top: calc(var(--bar-height) + 3.5rem);
+        }
     }
 
     /* THE PAGE HEAD — every page but the home page opens the same way: an eyebrow, a carved heading, a

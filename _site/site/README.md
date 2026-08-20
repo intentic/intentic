@@ -19,6 +19,10 @@ The public website at intentic.dev — an Astro build, all copy imported rather 
   gold; both are decided here.
 - [src/components/Window.astro](src/components/Window.astro) — the one frame every product screenshot on the
   site sits in, ledge and turned corners included.
+- [src/components/Nav.astro](src/components/Nav.astro) — the bar, which is the same carved lintel on every
+  page: the home page has the whole plate behind it, everything else gets `lintel-*.avif`, the top of that
+  same plate cut by `scripts/angkor-plate.mjs` on the plate's own ladder. Its height is `--bar-height` in
+  global.css — a stylesheet value, not a measurement, which is what lets every page share it.
 - [src/components/ornaments.ts](src/components/ornaments.ts) — the four drawn shapes (lotus, lozenge, corner,
   divider) every flourish here is one of, as strings so markup and CSS `background-image` share one definition.
 - [src/pages/docs](src/pages/docs) — the documentation pages.

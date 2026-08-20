@@ -557,46 +557,17 @@ const machineStep = content.connect.steps.at(-1)!;
     </div>
 
     <script>
-        /* Three behaviours, and none of them is load-bearing: the page is correct with the script removed,
-           only less exactly aligned at the top. The bar is fitted to the plate's carved band and asked to
-           be transparent, the bar's own call is held back while the hero's is on screen, and the centre
-           frame walks its three surfaces. */
+        /* Two behaviours, and neither is load-bearing: the page is correct with the script removed. The
+           bar's own call is held back while the hero's is on screen, and the centre frame walks its three
+           surfaces.
 
-        /* THE BAR IS FITTED TO THE FRAME IT SITS IN, and that can only be measured. `cover` scales the art
-           by `max(boxWidth/1600, boxHeight/900)`, the plate's box height is the hero's CONTENT height, and
-           so no stylesheet can name the scale. Here it is one line: measure the painted box, take the
-           larger term, and the bar's height is 90 art-units of it — twice the 45 at which the carved band's
-           centre sits, because the bar hangs from the plate's top rather than the band's.
-
-           Writing the answer back cannot disturb the measurement: the bar is `position: fixed`, so its
-           height is outside the flow that sets the hero's — no observer loop. The selector excludes the
-           closing band's plate deliberately; it paints the same art at a different size. */
-        const heroPlate = document.querySelector<HTMLElement>(".plate:not(.plate-foot) > .plate-img");
-        const page = document.querySelector<HTMLElement>(".home");
+           THE BAR'S HEIGHT USED TO BE MEASURED HERE and is now a stylesheet value — see `--bar-height` in
+           global.css. Pinning the plate to its own 16:9 ratio made the art's scale a single term
+           (`width / 1600`), which a stylesheet can name; the observer that stood here was left over from
+           when the plate was `cover`-ed onto a content-sized box and the scale genuinely could not be
+           written down. Losing it is what lets every other page have the same bar as this one rather than
+           one only this page can compute. */
         const bar = document.getElementById("site-bar");
-
-        if (heroPlate && page && "ResizeObserver" in window) {
-            /* AND ONLY WHILE THERE IS A FRAME TO SIT IN. Once the hero stacks, its box goes from wider than
-               the art to much taller, `cover` enlarges the art by half again, and the carved border stops
-               being a border: it becomes a hundred pixels of soft texture with no rule at the bottom of it.
-               Fitting the bar to that is measurably perfect and visibly wrong — a logo floating sixty pixels
-               down a black screen with nothing above it. So the fit is gated on the box still being roughly
-               the art's shape. Measured, the two regimes are far apart — 1.41 at the last unstacked width
-               against 0.80 at the first stacked one — so 1.2 is a gap, not a knife edge. */
-            const FRAMED_ASPECT = 1.2;
-            const fitBandToPlate = () => {
-                const { width, height } = heroPlate.getBoundingClientRect();
-                if (!width || !height) return;
-                if (width / height < FRAMED_ASPECT) {
-                    page.style.removeProperty("--bar-height");
-                    return;
-                }
-                const scale = Math.max(width / 1600, height / 900);
-                page.style.setProperty("--bar-height", `${(90 * scale).toFixed(2)}px`);
-            };
-            fitBandToPlate();
-            new ResizeObserver(fitBandToPlate).observe(heroPlate);
-        }
 
         /* THE BAR'S CALL TO ACTION, held back while the hero's own is on screen. The two say the same words,
            so showing both above the fold is one call printed twice; instead the bar keeps its copy hidden

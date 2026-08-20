@@ -121,10 +121,9 @@ import ExternalIcon from "./ExternalIcon.astro";
     .mobile-nav-overlay {
         position: fixed;
         inset: 0;
-        /* Hung from the bar, whatever height the bar happens to be: on the home page that is measured off
-           the plate's carved band, everywhere else it is the default. A literal 4rem here left a strip of
-           page showing above the overlay on the one page whose bar is taller than that. */
-        top: var(--bar-height, 4.5rem);
+        /* Hung from the bar, whatever height the carved band works out to at this width. A literal 4rem
+           here left a strip of page showing above the overlay at every width where the bar is taller. */
+        top: var(--bar-height);
         z-index: 99;
         /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque
            layer once the blur spreads it, and this overlay covers the whole viewport. */
@@ -152,7 +151,7 @@ import ExternalIcon from "./ExternalIcon.astro";
         padding: 1.5rem;
         display: flex;
         flex-direction: column;
-        min-height: calc(100dvh - var(--bar-height, 4.5rem));
+        min-height: calc(100dvh - var(--bar-height));
     }
 
     /* ── List ──────────────────────────────────────────── */

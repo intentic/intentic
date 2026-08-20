@@ -208,10 +208,18 @@ is in `about.ts` because `/about/` shares it.
    the preference turns off (`.screen` in global.css cuts instead of fading). If the script never runs
    at all, the first screen stands.
 
-   **The bar is furniture inside the plate's frame.** It is transparent until the first screen is
-   behind you, so the temple's own carved top border becomes the bar's, and its height is MEASURED
-   off the painted plate rather than picked — `--bar-height`, written by the page's script and read by
-   `Nav` and the phone overlay. Every other page on the site starts lifted and takes the default.
+   **The bar is furniture inside the plate's frame, and it is the SAME bar on every page.** On this
+   page's first screen it is transparent, so the temple's own carved top border becomes the bar's and
+   the wall runs on down the page unbroken. The moment you scroll — and on every other page of the
+   site — it paints `lintel-*.avif`, the top 90 units of that same plate cut on the same ladder at the
+   same bitrate, under the same four scrim layers `.plate::after` lays over the art. The two are within
+   2/255 of each other, measured, so a reader carries one piece of furniture from page to page rather
+   than meeting a temple-framed bar here and a flat dark strip everywhere else.
+
+   Its height is `--bar-height` in global.css: a stylesheet value (`clamp(3.4rem, 5.625vw, 7.1rem)`),
+   not something a script measures. Pinning the plate to its own 16:9 ratio made the art's scale a
+   single term — `width / 1600` — and 90 of those units is 5.625vw. That is the whole reason every page
+   can have this bar: there is nothing left for only this page to compute.
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,
