@@ -931,11 +931,17 @@ const GITHUB_MARK =
         height: 100%;
     }
 
-    /* Sized against the full width of the screen rather than a column, because on this layout it has one. */
+    /* Sized against the full width of the screen rather than a column, because on this layout it has one.
+       THE LEADING IS 1.16, NOT THE 1.04 A DISPLAY SETTING USUALLY WANTS, and the reason is that these are
+       three SENTENCES rather than three lines of one. Each ends on its own full stop and each is a
+       separate claim, so they need the air between them that a paragraph break would give — set solid
+       they read as one phrase that happens to have wrapped, and the ember stops lose their beat.
+       Playfair's ascenders and descenders are long, which is what makes 1.04 look tight here where it
+       would look right on a face with shorter extenders. */
     .a-page .a-headline {
         margin: 0;
         font-size: clamp(2.55rem, 5.6vw, 4.6rem);
-        line-height: 1.04;
+        line-height: 1.16;
         font-weight: 600;
     }
     .a-page .a-headline-line {
@@ -1104,12 +1110,15 @@ const GITHUB_MARK =
        What is left here is only what a button ON A PICTURE needs that one on the page does not: the whole
        frame is the target, so the anchor covers it, and hovering anywhere on the picture has to light the
        button even though the pointer is nowhere near it. */
+    .a-page .a-play:hover .a-btn::before,
+    .a-page .a-play:hover .a-btn::after,
+    .a-page .a-play:focus-visible .a-btn::before,
+    .a-page .a-play:focus-visible .a-btn::after {
+        opacity: 1;
+    }
     .a-page .a-play:hover .a-btn,
     .a-page .a-play:focus-visible .a-btn {
-        --a-rule: rgba(242, 210, 150, 0.95);
-        --a-face: rgba(38, 28, 18, 0.92);
-        --a-lip: rgba(245, 212, 148, 0.28);
-        color: #ffd6a1;
+        color: #fff6e6;
     }
 
     /* ── 2 · The verbs ───────────────────────────────────── */
