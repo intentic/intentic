@@ -1,6 +1,7 @@
 ---
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { GITHUB_MARK } from "../lib/marks";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 ---
@@ -96,11 +97,7 @@ import ExternalIcon from "./ExternalIcon.astro";
 
             <li>
                 <a href={githubUrl} target="_blank" rel="noopener" class="mobile-nav-link">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
-                        <path
-                            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
-                        />
-                    </svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d={GITHUB_MARK} /></svg>
                     GitHub
                 </a>
             </li>
@@ -115,7 +112,7 @@ import ExternalIcon from "./ExternalIcon.astro";
             </li>
         </ul>
 
-        <a class="btn btn-primary mobile-cta" href={APP_URL}>Get started free</a>
+        <a class="btn btn-primary mobile-cta" href={APP_URL}>Create your workspace</a>
     </div>
 </div>
 
@@ -124,7 +121,10 @@ import ExternalIcon from "./ExternalIcon.astro";
     .mobile-nav-overlay {
         position: fixed;
         inset: 0;
-        top: 4rem;
+        /* Hung from the bar, whatever height the bar happens to be: on the home page that is measured off
+           the plate's carved band, everywhere else it is the default. A literal 4rem here left a strip of
+           page showing above the overlay on the one page whose bar is taller than that. */
+        top: var(--bar-height, 4.5rem);
         z-index: 99;
         /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque
            layer once the blur spreads it, and this overlay covers the whole viewport. */
@@ -152,7 +152,7 @@ import ExternalIcon from "./ExternalIcon.astro";
         padding: 1.5rem;
         display: flex;
         flex-direction: column;
-        min-height: calc(100dvh - 4rem);
+        min-height: calc(100dvh - var(--bar-height, 4.5rem));
     }
 
     /* ── List ──────────────────────────────────────────── */
@@ -166,47 +166,49 @@ import ExternalIcon from "./ExternalIcon.astro";
     }
 
     /* ── Links ─────────────────────────────────────────── */
+    /* A row is a label, so it takes the brand face the bar's labels do, and lights ember rather than
+       filling with a grey block: this vocabulary marks a row with a rule down its left edge, the same way
+       the desktop panel does. */
     .mobile-nav-link {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 14px 16px;
-        font-size: 1rem;
-        font-weight: 500;
+        font-family: var(--font-mark);
+        font-size: 1.0625rem;
+        font-weight: 600;
         color: var(--color-muted);
-        border-radius: 10px;
+        border-left: 1px solid transparent;
         text-decoration: none;
         transition:
             color 0.15s,
-            background 0.15s;
+            background 0.15s,
+            border-color 0.15s;
     }
 
     .mobile-nav-link:hover {
-        color: var(--color-content);
-        background: var(--color-overlay);
+        color: var(--color-primary-400);
+        background: rgba(224, 123, 39, 0.09);
+        border-left-color: var(--color-primary-500);
     }
 
     .mobile-nav-link.sub {
-        font-size: 0.925rem;
+        font-size: 0.975rem;
         padding: 12px 16px 12px 28px;
         color: var(--color-subtle);
     }
 
-    .mobile-nav-link.sub:hover {
-        color: var(--color-content);
-    }
-
     .mobile-nav-link.sub.action {
-        color: var(--color-link);
+        color: var(--color-gold-bright);
     }
 
     .mobile-subnav-label {
         padding: 12px 16px 4px 28px;
-        font-size: 0.6875rem;
+        font-size: var(--text-2xs);
         font-weight: 600;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
-        color: var(--color-subtle);
+        color: var(--color-gold);
     }
 
     /* ── Accordion heading ─────────────────────────────── */
@@ -216,19 +218,18 @@ import ExternalIcon from "./ExternalIcon.astro";
         justify-content: space-between;
         width: 100%;
         padding: 14px 16px;
-        font-size: 1rem;
+        font-family: var(--font-mark);
+        font-size: 1.0625rem;
         font-weight: 600;
         color: var(--color-content);
         background: none;
         border: none;
-        border-radius: 10px;
         cursor: pointer;
-        font-family: inherit;
-        transition: background 0.15s;
+        transition: color 0.15s;
     }
 
     .mobile-nav-heading:hover {
-        background: var(--color-overlay);
+        color: var(--color-primary-400);
     }
 
     .mobile-chevron {
@@ -278,10 +279,11 @@ import ExternalIcon from "./ExternalIcon.astro";
         text-align: center;
     }
 
-    /* ── Only visible below the bar's breakpoint ───────── */
-    /* The same 64rem Nav uses, spelled the same way: the old pair (max-width: 48rem / min-width: 48.0625rem)
-       left one pixel at the boundary where the bar was hidden and this overlay was too. */
-    @media (width >= 64rem) {
+    /* ── Only visible below the bar's breakpoint ─────────
+       The same 68rem the bar hides its labels at, spelled the same way: an earlier pair (max-width: 48rem /
+       min-width: 48.0625rem) left one pixel at the boundary where the bar was hidden and this overlay was
+       too. */
+    @media (width > 68rem) {
         .mobile-nav-overlay {
             display: none;
         }

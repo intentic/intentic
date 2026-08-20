@@ -1,0 +1,13 @@
+---
+/* The site's full stop: a small diamond. The bullet of a list that is not a lotus list, the tick in a FAQ
+ * margin, the mark flanking a greeting. */
+import { LOZENGE } from "./ornaments";
+
+interface Props {
+    class?: string;
+}
+
+const { class: className = "" } = Astro.props;
+---
+
+<span class={`lozenge ${className}`} aria-hidden="true" set:html={LOZENGE} />

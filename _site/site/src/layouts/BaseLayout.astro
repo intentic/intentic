@@ -18,17 +18,6 @@ interface Props {
     faq?: FaqEntry[];
     extraJsonLd?: Record<string, unknown>[];
     noindex?: boolean;
-    /**
-     * The one font warmed at highest priority, as a path under /fonts. Defaults to the site's body sans,
-     * which is what every page here sets its running copy in — the preload exists so the first paint is
-     * not a flash of the platform's fallback.
-     *
-     * A page that overrides its own type has to override this with it: /angkor/ sets its body copy in a
-     * different face, and left alone it preloaded a file it then never drew a glyph from, while the face
-     * it DOES use waited behind that download. A preload for the wrong font is worse than none — it is a
-     * high-priority request competing with the one that matters.
-     */
-    preloadFont?: string;
 }
 
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
@@ -126,8 +115,10 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="twitter:image" content={ogImage.href} />
         <meta name="twitter:image:alt" content={title} />
 
-        <meta name="theme-color" content="#181614" />
-        <link rel="preload" as="font" type="font/woff2" href={Astro.props.preloadFont ?? "/fonts/inter-latin.woff2"} crossorigin />
+        <meta name="theme-color" content="#0c0907" />
+        {/* The one font warmed at highest priority: the reading face, which every page sets its running
+            copy in. The preload exists so the first paint is not a flash of the platform's fallback. */}
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/mukta-400-latin.woff2" crossorigin />
         <noscript>
             <style>
                 .fade-in {
@@ -151,5 +142,30 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
     </head>
     <body class="flex min-h-screen flex-col">
         <slot />
+
+        <script>
+            /* THE SCROLL REVEAL, ONCE FOR THE WHOLE SITE. Seven pages each shipped their own copy of this
+               observer — the same twelve lines, with the same threshold, watching the same class — which is
+               seven bundles to download and seven places to fix a behaviour that has one definition. A band
+               now only has to wear `.fade-in`; where it lives is not this script's business.
+               `unobserve` on the way out: a band that has arrived never leaves again, so keeping it under
+               observation is a callback per scroll for a class that is already set. */
+            const reveals = document.querySelectorAll(".fade-in");
+            if ("IntersectionObserver" in window) {
+                const observer = new IntersectionObserver(
+                    (entries) => {
+                        for (const entry of entries) {
+                            if (!entry.isIntersecting) continue;
+                            entry.target.classList.add("visible");
+                            observer.unobserve(entry.target);
+                        }
+                    },
+                    { threshold: 0.1 },
+                );
+                reveals.forEach((element) => observer.observe(element));
+            } else {
+                reveals.forEach((element) => element.classList.add("visible"));
+            }
+        </script>
     </body>
 </html>

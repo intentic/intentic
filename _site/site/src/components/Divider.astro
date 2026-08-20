@@ -1,0 +1,13 @@
+---
+/* The horizontal breath between a block of copy and the thing it leads to: a hairline out of nothing on
+ * both sides with a lozenge knotted in the middle. */
+import { DIVIDER } from "./ornaments";
+
+interface Props {
+    class?: string;
+}
+
+const { class: className = "" } = Astro.props;
+---
+
+<span class={`divider ${className}`} aria-hidden="true" set:html={DIVIDER} />

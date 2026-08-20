@@ -1,0 +1,18 @@
+---
+/* The four (or two) turned corners of a frame, as elements.
+ *
+ * `diag` draws only the top-left and bottom-right, which is what every card in a grid gets: four corners
+ * on eight cards at once stops reading as metalwork and starts reading as lace. Frames that stand alone —
+ * a product window, the closing cartouche, a button — take all four. */
+import { CORNER } from "./ornaments";
+
+interface Props {
+    /** "all" (default) or "diag" for the two corners that read on a card in a grid. */
+    set?: "all" | "diag";
+}
+
+const { set = "all" } = Astro.props;
+const positions = set === "diag" ? ["tl", "br"] : ["tl", "tr", "bl", "br"];
+---
+
+{positions.map((position) => <span class={`corner corner-${position}`} aria-hidden="true" set:html={CORNER} />)}

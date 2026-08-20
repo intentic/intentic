@@ -1,17 +1,18 @@
 // ponytail: standalone theme module (not inlined): reused by any code block, keeps pages clean.
 // Untyped literal: shiki is only a transitive dep (bundled by Astro's <Code>), so its types aren't
 // importable here: the <Code theme={...}> call site type-checks this object's shape instead.
-// Warm, low-chroma syntax theme keyed to the intentic palette (OKLch tokens approximated as hex).
+// Warm, low-chroma syntax theme keyed to the site palette: the neutrals are the cream, muted and subtle
+// inks from global.css, so a code block belongs to the same wall as the prose around it.
 // Keywords carry the single brand-orange signal; everything else is warm neutrals/tans: code reads
 // as "engineered terminal", not a rainbow. Background is transparent so the .code-window frame shows.
 export const intenticWarm = {
     name: "intentic-warm",
     type: "dark" as const,
     bg: "transparent",
-    fg: "#d6d1cb",
+    fg: "#e2d6c2",
     settings: [
-        { settings: { foreground: "#d6d1cb", background: "transparent" } },
-        { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#7c766f", fontStyle: "italic" } },
+        { settings: { foreground: "#e2d6c2", background: "transparent" } },
+        { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#8b7f6c", fontStyle: "italic" } },
         {
             scope: [
                 "keyword",
@@ -35,15 +36,15 @@ export const intenticWarm = {
             scope: ["entity.name.type", "support.type", "support.class", "entity.name.class", "entity.other.inherited-class"],
             settings: { foreground: "#e8b894" },
         },
-        { scope: ["entity.name.function", "support.function", "meta.function-call.generic"], settings: { foreground: "#faf9f7" } },
-        { scope: ["variable", "variable.other", "meta.definition.variable", "variable.parameter"], settings: { foreground: "#d6d1cb" } },
+        { scope: ["entity.name.function", "support.function", "meta.function-call.generic"], settings: { foreground: "#f6ecd9" } },
+        { scope: ["variable", "variable.other", "meta.definition.variable", "variable.parameter"], settings: { foreground: "#e2d6c2" } },
         {
             scope: ["meta.object-literal.key", "support.type.property-name", "variable.other.property", "entity.name.tag"],
-            settings: { foreground: "#a5a099" },
+            settings: { foreground: "#b0a28b" },
         },
         {
             scope: ["punctuation", "meta.brace", "keyword.operator", "punctuation.separator", "punctuation.terminator"],
-            settings: { foreground: "#7c766f" },
+            settings: { foreground: "#8b7f6c" },
         },
     ],
 };

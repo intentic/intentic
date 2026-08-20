@@ -1,356 +1,253 @@
 ---
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * THE HOME PAGE.
+ *
+ * A photographed temple wall behind the first screen, engraved display type with an ember full stop on
+ * each beat, gold rules and turned corners in place of hairline borders, and a lotus wherever a page
+ * would otherwise set a bullet dot. The vocabulary is the site's own — `styles/global.css` holds the
+ * metals, the type tiers, the cartouche button and the frame; what lives beside this file in
+ * `styles/home.css` is only THIS page's arrangement.
+ *
+ * Every word comes from the content modules (`landing.ts`, `about.ts`, `faq.ts`, `nav.ts`), so a copy
+ * change lands here without this file being opened.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic-dev/site-content/about";
 import { faqGroups } from "@intentic-dev/site-content/faq";
-import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, DEMO_PATH, discordUrl, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { landingContent } from "@intentic-dev/site-content/landing";
+import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 // The providers' own marks, the same five the app draws beside every session.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
-import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import CreatorLinks from "./CreatorLinks.astro";
-import DiscordIcon from "./DiscordIcon.astro";
+import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import Corners from "./Corners.astro";
+import Divider from "./Divider.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
+import Lotus from "./Lotus.astro";
+import Lozenge from "./Lozenge.astro";
 import Nav from "./Nav.astro";
-import ProductShotFigure from "./ProductShotFigure.astro";
 import TrustCards from "./TrustCards.astro";
+import Window from "./Window.astro";
+import "../styles/home.css";
 
-interface Props {
-    content: LandingContent;
-    noindex?: boolean;
-}
-
-const { content, noindex } = Astro.props;
+const content = landingContent;
 
 // FAQPage structured data is flat: the topic bands are a reading aid for the page, not part of the schema.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
-const icon = (paths: string) =>
-    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">${paths}</svg>`;
+/* THE HEADLINE, RE-BEATEN. The content ships two typeset lines ("You delegate. Agents work." and "You
+ * approve.") because they were written for a 32px setting in a 26rem column. This page sets the same words
+ * at three times that size, one sentence per line, with the full stop carrying the only ember on the
+ * screen — so the beats are re-split off the same strings rather than authored a second time here.
+ * Splitting on the sentence rather than on the line is what keeps this page and landing.ts one source. */
+const beats = content.hero.headlineLines
+    .flatMap((line) => line.split(/(?<=\.)\s+/u))
+    .map((beat) => beat.replace(/\.\s*$/u, ""))
+    .filter((beat) => beat.length > 0);
 
-const checkIcon = icon('<path d="M20 6 9 17l-5-5"/>');
-// Marks what the chat-box column does not give you, in the workspace comparison.
-const crossIcon = icon('<path d="M18 6 6 18M6 6l12 12"/>');
-// The FAQ disclosure marker. Both strokes are drawn; CSS rotates the vertical one away when open.
-const plusIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="16" height="16" aria-hidden="true"><path d="M5 12h14"/><path class="faq-marker-bar" d="M12 5v14"/></svg>`;
-
-/* THE HERO'S TWO WINDOWS. The workspace behind, the popped-out chat in front of its bottom corner — the
- * arrangement the product itself offers, and the only one that shows a workspace and a conversation at once
- * without shrinking either into illegibility.
- *
- * Each frame CROPS its screen rather than fitting it: the image is laid in at a multiple of the frame's own
- * width, anchored top-left, and the frame's aspect ratio decides where the picture stops. That is how three
- * captures of very different lengths (a board that ends after three cards, a CI list that runs past the fold)
- * share one frame without it changing shape under them — and it is what keeps the app's own 13px type
- * readable in a column this narrow, which fitting the whole 1270px-wide capture into ~500px could not.
- *
- * `sizes` says what the browser will actually paint, which is that same multiple of the column rather than the
- * column: without it every visitor fetches the widest rung of a 2540px screenshot to paint 600 of its pixels.
- */
 const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-const appSizes = "(min-width: 80rem) 1000px, (min-width: 64rem) 760px, (min-width: 40rem) 870px, calc((100vw - 3rem) * 1.94)";
-const chatSizes = "(min-width: 80rem) 700px, (min-width: 64rem) 560px, (min-width: 40rem) 500px, calc((100vw - 3rem) * 1.55)";
+/* THE WINGS HOLD STILLS. Only the centre frame walks its surfaces (see the script at the foot of this
+ * file): a cross-fade inside a 340px frame is a flicker at the edge of vision, and caught mid-fade — which
+ * on a four-second beat is a fair share of the time — it reads as two pictures printed over each other. So
+ * the chat wing takes the first of the same shared list and holds it. */
+const chatStill = shotAsset(content.hero.screens.chat[0]!.name);
+/* THREE FRAMES ON ONE AXIS, so three measures, and all of them in `vw` because the frames take their width
+ * from the window rather than from a capped shell (see `.hero-grid`).
+ *
+ * Each number is the frame's share of the window MULTIPLIED BY the crop: these are top-left crops drawn
+ * larger than the frame that shows them, not whole screenshots shrunk to fit, so the pixels the browser
+ * has to fetch are the drawn width and not the frame's. The centre takes 62% of the band at 112% = 70vw;
+ * the plan wing 21% at 135% = 29vw; the chat wing 21% at 222% = 47vw. */
+const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
+const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
+const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
-// The tour leads with the first verb (Orchestrate) at full width; the rest are the compact cards.
+/* THE SUBHEAD, FIRST CLAUSE ONLY. The shared line is two sentences — what the product is, then a claim
+ * about visibility — and this page keeps the first. The second is carried here by the picture beside it
+ * rather than by words: three live surfaces of the product, turning, in the same screenful. Sliced off the
+ * shared string rather than retyped, so a rewording upstream still lands here. */
+const subheadLead = `${content.hero.subhead.split(/(?<=\.)\s+/u)[0] ?? content.hero.subhead}`;
+
+/* THE LEAD VERB leads the section at full width; the other four are the compact cards below it. */
 const [leadVerb, ...verbCards] = content.verbs.items;
+
+/* THE GETTING-STARTED BEATS, SORTED BY WHERE THEY HAPPEN rather than by their number. Everything up to the
+ * last one is done in a browser on our side; the last is the line you paste into a terminal on your own
+ * machine, which is the only one that touches your hardware. Taken from the END rather than at a fixed
+ * index so an extra browser-side beat upstream widens the left zone instead of being mistaken for the
+ * machine one. */
+const browserSteps = content.connect.steps.slice(0, -1);
+const machineStep = content.connect.steps.at(-1)!;
 ---
 
-<BaseLayout
-    title={content.meta.title}
-    description={content.meta.description}
-    faq={faq}
-    extraJsonLd={[buildSoftwareAppSchema()]}
-    noindex={noindex}
->
-    <Nav />
-    <main class="flex-1">
-        <!-- 1 · Hero -->
-        <section class="relative overflow-hidden" id="hero">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
+<BaseLayout title={content.meta.title} description={content.meta.description} faq={faq} extraJsonLd={[buildSoftwareAppSchema()]}>
+    <div class="home flex flex-1 flex-col">
+        {/* The bar is transparent over the plate until the first screen is behind you — the temple's own
+            carved top border becomes the bar's, exactly as the reference art has it. */}
+        <Nav transparent />
 
-            <!-- Floating ambient orbs -->
-            <div class="hero-orbs" aria-hidden="true">
-                <svg width="0" height="0">
-                    <defs>
-                        <radialGradient id="orb-glow" cx="40%" cy="35%" r="50%">
-                            <stop offset="0%" stop-color="oklch(82% 0.14 55)" />
-                            <stop offset="60%" stop-color="oklch(72% 0.17 55)" />
-                            <stop offset="100%" stop-color="oklch(60% 0.16 55)" />
-                        </radialGradient>
-                    </defs>
-                </svg>
+        <main class="flex-1">
+            <!-- ═══ 1 · The first screen ═══════════════════════════════════════════════════════════
+                 SYMMETRIC, because the picture behind it is. The art is a framed plaque with a devata
+                 standing in each outer third and a deliberately empty middle; the copy sits in that
+                 middle, on the axis, and the product is spread underneath it in three frames — one wide
+                 one on the centre line and a narrower one leaning in from either side. -->
+            <section class="hero" id="hero">
+                <div class="plate" aria-hidden="true">
+                    <div class="plate-img"></div>
+                </div>
+                <div class="plate-fade" aria-hidden="true"></div>
 
-                {
-                    [1, 2, 3, 4, 5, 6, 7].map((n) => (
-                        <svg class={`orb orb-${n}`} viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
-                            <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
-                        </svg>
-                    ))
-                }
-            </div>
+                <div class="hero-grid">
+                    <div class="hero-copy">
+                        {/* The one line on this page that is a greeting rather than a claim. Flanked rather
+                            than underlined — the band eyebrows elsewhere trail a hairline to the right,
+                            which on a centred axis would tip the whole block sideways. */}
+                        <p class="hero-eyebrow">
+                            <Lozenge />
+                            <span>Welcome to {ORG_NAME}</span>
+                            <Lozenge />
+                        </p>
 
-            <div class="grid-overlay" aria-hidden="true"></div>
+                        <h1 class="headline">
+                            {
+                                beats.map((beat) => (
+                                    <span class="headline-line">
+                                        <span class="display">{beat}</span>
+                                        <span class="stop">.</span>
+                                    </span>
+                                ))
+                            }
+                        </h1>
 
-            {/* THE COLUMNS ARE NOT EVEN, and the wide one is the picture. A 50/50 split gave the copy 592px it
-                did not need — the paragraphs are capped at their own measure well short of it — and gave the
-                two windows the same 592px, which is where "the app is unreadable in the hero" came from. The
-                copy takes 26rem, which is wider than the measure it actually sets, and the rest is the
-                visual's. */}
-            <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-6 pt-32 pb-20 lg:grid-cols-[minmax(0,26rem)_1fr] lg:pt-40 lg:pb-28">
-                <div class="animate-fade-in-up">
-                    {/* One authored line per block, and each must sit on ONE typeset line on desktop: the
-                        first block is "You delegate. Agents work." and a reader seeing it break mid-line
-                        reads it as a line that ran out of room, not as the deliberate two-beat it is.
+                        <p class="hero-sub">{subheadLead}</p>
 
-                        So the size is set by that constraint. At 26rem the block is ~555px at the old 44px,
-                        and the column is 416; 32px is the largest step that fits it whole with a little slack,
-                        so that is the size — one uniform value, no per-breakpoint bump, because the column is
-                        the same 416px at every desktop width and a bigger size at any of them would wrap.
-                        Below the grid (phones) it is a single full-width column and the line wraps because no
-                        readable size fits 555px into ~340; `text-balance` splits it on its own full stop
-                        there rather than orphaning a word, which is the graceful version of the same line. */}
-                    <h1 class="text-[2rem] leading-tight font-semibold tracking-tight text-balance">
-                        {content.hero.headlineLines.map((line) => (
-                            <span class="block text-balance">{line}</span>
-                        ))}
-                    </h1>
-                    {/* BALANCED, like the heading above and for a sharper reason. This column is 26rem and
-                        this sentence is 26rem plus four words, so the natural break left "of sight." alone on
-                        a line under a full one — a two-word orphan directly under the brand line, which is the
-                        most looked-at inch of the page. Balancing splits it on its own full stop instead, one
-                        clause per line, and the summary under it stops breaking "git" away from "worktree".
-                        Browsers without `balance` wrap as they did before; nothing depends on it. */}
-                    <p class="mt-4 max-w-copy text-base leading-relaxed text-balance text-muted">
-                        {content.hero.subhead}
-                    </p>
-                    {/* The literal restatement. Quieter than the subhead on purpose: a reader who is already
-                        sold skims past it, and a reader who is not gets the mechanism in one sentence. It is
-                        ordinary crawlable prose in the first screen rather than a chip, because the concepts
-                        it carries (parallel agents, a container each, reviewing the diff) are phrases, and a
-                        phrase split across three bullets is not the phrase any more. */}
-                    <p class="mt-3 max-w-copy text-sm leading-relaxed text-balance text-subtle">
-                        {content.hero.summary}
-                    </p>
-
-                    {/* Three doors, one primary: the app, the repository, and an installer for the computer
-                        this is being read on. The download stays secondary because the invitation to begin is
-                        still the hosted one — it is the same product either way, and asking a stranger to run
-                        an installer first is a bigger ask than a sign-in. It wraps to its own line below the
-                        other two once the column narrows, which is where it belongs anyway. */}
-                    <div class="mt-8 flex flex-wrap gap-3">
-                        <a class="btn btn-primary" href={APP_URL}>Get started free</a>
-                        <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the source</a>
-                        <DownloadCta />
+                        {/* TWO PRESSES, and resist adding a third. On a centred axis three controls in a row
+                            read as a toolbar, and the claim above them drops to a caption on it. They are
+                            the two ways to START: the hosted workspace, and the same thing on the reader's
+                            own machine. The demo is a fourth thing a visitor might want and it is not a way
+                            to start, so it rides on the picture below instead — over the surface it is a
+                            recording of.
+                            `data-hero-cta` is watched by the script at the foot of the file: while this
+                            button is on screen the bar keeps its own copy of it hidden, so the page never
+                            shows the same call twice at once. */}
+                        <div class="hero-actions">
+                            <a class="btn btn-primary" href={APP_URL} data-hero-cta>Create your workspace</a>
+                            <DownloadCta />
+                        </div>
                     </div>
 
-                    <ul class="mt-8 flex flex-wrap gap-x-4 gap-y-2 text-xs text-subtle">
-                        {
-                            content.hero.chips.map((chip) => (
-                                <li class="flex items-center gap-1.5">
-                                    <span class="h-1 w-1 rounded-full bg-primary-500" />
-                                    {chip}
-                                </li>
-                            ))
-                        }
-                    </ul>
-                </div>
+                    <!-- THE PRODUCT, IN THREE FRAMES ON ONE AXIS. The workspace is the wide one on the
+                         centre line and the only one that cycles its surfaces; the plan and the chat lean in
+                         from the sides, overlapping its edges, at the size a thing in the middle distance
+                         would be. All three crop their screens from the top-left rather than fitting them,
+                         so a reader sees the legible top of a screen instead of a whole one shrunk past
+                         reading. -->
+                    <figure class="hero-visual">
+                        <div class="hero-stack">
+                            <Window class="window-plan" aria-hidden="true">
+                                <div class="window-crop window-crop-plan">
+                                    <Image src={shotAsset("chat-plan")} alt="" widths={SHOT_WIDTHS} sizes={planSizes} loading="lazy" decoding="async" class="screen screen-plan" />
+                                </div>
+                            </Window>
 
-                <!-- THE CLAIM, PROVEN IMMEDIATELY, in the shape the product actually has: the workspace in one
-                     window and the chat lifted out of it into another. Both frames cycle through real captures
-                     (hero-screens.ts drives them); both crop from the top-left, so what a reader gets is the
-                     legible top of a screen rather than a whole one shrunk past reading.
+                            {/* THE LEDGE IS EMPTY HERE, and that is the point of it. Elsewhere on the site a
+                                frame names the route its screenshot was taken on, because that reader has
+                                arrived on a page about one surface and wants to go open it. On the first
+                                screen the picture is the argument, not a specimen, and a caption over three
+                                cross-fading surfaces is a label that keeps changing under the eye. */}
+                            <Window class="window-app" finial>
+                                <div class="window-crop window-crop-app">
+                                    {
+                                        appScreens.map((screen, index) => (
+                                            <Image
+                                                src={screen.image}
+                                                alt={screen.alt}
+                                                widths={SHOT_WIDTHS}
+                                                sizes={appSizes}
+                                                loading={index === 0 ? "eager" : "lazy"}
+                                                fetchpriority={index === 0 ? "high" : undefined}
+                                                decoding="async"
+                                                class:list={["screen screen-app", index === 0 && "is-on"]}
+                                                data-screen="app"
+                                                aria-hidden={index > 0 ? "true" : undefined}
+                                            />
+                                        ))
+                                    }
+                                </div>
 
-                     The pair leans out of the hero's right column on large screens — the composition needs the
-                     width more than the gutter does, and the copy beside it is capped at its own measure
-                     anyway. It stays a single stacked block below that, where there is no column to lean out
-                     of and the chat window tucks into the app window's bottom corner instead. -->
-                <!-- It LEANS OUT of the container on the widest screens — `680px - 50vw` puts this column's
-                     right edge a 64px gutter short of the window's own, so the pair grows with the monitor
-                     instead of staying inside a 1232px measure that exists for prose. Sixty-four rather than
-                     the twenty-four it started at: the chat window is the rightmost thing on the page and it
-                     is a WINDOW, so parking its shadow against the edge of the screen read as a picture that
-                     had been cut off rather than as a panel floating over another one. Nothing to correct
-                     below 80rem, where that expression is zero or positive and the frame stops at the
-                     column. -->
-                <figure
-                    class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:w-auto lg:max-w-none xl:mr-[min(0px,calc(680px_-_50vw))]"
-                    style="animation-delay: 60ms"
-                >
-                    <!-- Padded at the foot and the right so the chat window's overhang and both shadows have
-                         somewhere to land: it is positioned OUTSIDE the app window's box, and a parent that
-                         fitted the app window alone would clip it. -->
-                    <div class="relative pr-3 pb-24 sm:pb-28 lg:pr-6 lg:pb-40">
-                        <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
-                            <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                                <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
-                                {
-                                    appScreens.map((screen, index) => (
-                                        <span
-                                            class="hero-label ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle"
-                                            data-hero-label="app"
-                                            data-index={index}
-                                            hidden={index > 0}
-                                        >
-                                            {screen.frameLabel}
-                                        </span>
-                                    ))
-                                }
-                            </div>
-                            <!-- The crop window. Each screen is laid in at a multiple of this box's width and
-                                 anchored top-left, so the box's aspect ratio is what decides where the picture
-                                 stops. The multiples widen as the column narrows, for the same reason the old
-                                 single hero shot did: on a phone this box is ~330px, and a whole 1270px-wide
-                                 workspace painted into it is a picture of nothing.
-
-                                 The press over it is a plain link to the demo's own page — the same on every
-                                 screen and the same as every other "open the workspace" call on the site. An
-                                 IDE needs a viewport, and this box is not one. -->
-                            <div class="relative aspect-5/4 overflow-hidden sm:aspect-16/10">
-                                {
-                                    appScreens.map((screen, index) => (
-                                        <Image
-                                            src={screen.image}
-                                            alt={screen.alt}
-                                            widths={SHOT_WIDTHS}
-                                            sizes={appSizes}
-                                            loading={index === 0 ? "eager" : "lazy"}
-                                            fetchpriority={index === 0 ? "high" : undefined}
-                                            decoding="async"
-                                            class:list={[
-                                                "hero-screen absolute top-0 left-0 w-[200%] max-w-none sm:w-[162%] lg:w-[150%] xl:w-[112%]",
-                                                index === 0 && "is-on",
-                                            ]}
-                                            data-hero-screen="app"
-                                            data-index={index}
-                                            aria-hidden={index > 0 ? "true" : undefined}
-                                        />
-                                    ))
-                                }
-                                <!-- The press sits in the TOP-RIGHT rather than dead centre. Centre is where a play
-                                     button belongs on a video and the one place it cannot go here: the chat
-                                     window covers this screen from its middle down, at every width, so a
-                                     centred pill is a call to action with another window through the middle of
-                                     it. The top strip is the only band all three surfaces leave clear, and the
-                                     right of it is the emptiest part of all three. -->
-                                <a
-                                    href={DEMO_PATH}
-                                    class="group absolute inset-0 flex items-start justify-end bg-canvas/10 p-3 transition hover:bg-canvas/35 focus-visible:bg-canvas/35 focus-visible:outline-none sm:p-4"
-                                >
-                                    <span
-                                        class="flex items-center gap-2 rounded-full border border-line bg-canvas/85 px-3.5 py-2 text-xs font-medium shadow-xl shadow-black/40 backdrop-blur transition group-hover:border-primary-500 group-hover:text-primary-500 sm:gap-2.5 sm:px-5 sm:py-2.5 sm:text-sm"
-                                    >
-                                        <svg viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 5v14l11-7z" /></svg>
-                                        {content.hero.demo.playLabel}
+                                {/* THE DEMO, ON THE SURFACE IT IS A RECORDING OF. Quiet at rest and lit when
+                                    the pointer or the keyboard reaches the frame, so it reads as a property
+                                    of the picture rather than as a third button competing with the two
+                                    above. Quiet, not hidden: a control that only exists on hover does not
+                                    exist on a touch screen. Top-right, because the wing on the left overlaps
+                                    this frame's other free corner. */}
+                                <a class="play" href={DEMO_PATH}>
+                                    <span class="btn btn-sm">
+                                        <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                                        <span>{content.hero.demo.playLabel}</span>
                                     </span>
                                 </a>
-                            </div>
-                        </div>
+                            </Window>
 
-                        <!-- The chat, in the window the product pops it out into. Absolutely placed over the app
-                             window's bottom-right corner, at 66% of the composition's width and in the app
-                             window's own proportions — it is a second WINDOW, and a strip two thirds as wide as
-                             it is tall reads as a cropped panel instead. Inert to the pointer: the press
-                             underneath is the page's one call, and a second target stacked on it would only
-                             make that one harder to hit. -->
-                        <!-- `lg:right-[1.4%]` slides the window a few px off the frame's right edge at the
-                             widest layouts, purely so its opaque left edge covers the pipelines run-row
-                             accent it would otherwise slice (see `.hero-chat-frame` in global.css). Below lg
-                             the window's edge lands on dark app, so it stays flush at right-0 and tucks into
-                             the corner. -->
-                        <div
-                            class="hero-chat-frame pointer-events-none absolute right-0 bottom-0 w-[66%] overflow-hidden rounded-lg border border-line bg-card lg:right-[1.4%]"
-                            aria-hidden="true"
-                        >
-                            <div class="flex items-center gap-1.5 border-b border-line bg-overlay/50 px-2.5 py-1.5">
-                                <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>
-                                <span class="h-1.5 w-1.5 rounded-full bg-line-strong"></span>
-                                {
-                                    chatScreens.map((screen, index) => (
-                                        <span class="hero-label ml-2 font-mono text-2xs text-subtle" data-hero-label="chat" data-index={index} hidden={index > 0}>
-                                            {screen.frameLabel}
-                                        </span>
-                                    ))
-                                }
-                            </div>
-                            <div class="relative aspect-4/3 overflow-hidden">
-                                {
-                                    chatScreens.map((screen, index) => (
-                                        <Image
-                                            src={screen.image}
-                                            alt=""
-                                            widths={SHOT_WIDTHS}
-                                            sizes={chatSizes}
-                                            loading="lazy"
-                                            decoding="async"
-                                            class:list={["hero-screen absolute top-0 left-0 w-[220%] max-w-none sm:w-[135%] lg:w-[155%] xl:w-[100%]", index === 0 && "is-on"]}
-                                            data-hero-screen="chat"
-                                            data-index={index}
-                                        />
-                                    ))
-                                }
-                            </div>
+                            <Window class="window-chat" aria-hidden="true">
+                                <div class="window-crop window-crop-chat">
+                                    <Image src={chatStill} alt="" widths={SHOT_WIDTHS} sizes={chatSizes} loading="lazy" decoding="async" class="screen screen-chat" />
+                                </div>
+                            </Window>
                         </div>
-                    </div>
-                    <figcaption class="mt-3 text-2xs leading-relaxed text-subtle/80">{content.hero.demo.note}</figcaption>
-                </figure>
-            </div>
-        </section>
-
-        <!-- 2 · What you do: the five verbs, said once.
-             The single telling of what the product does, in the same order as the Features menu, so the
-             home page and the feature pages read as one product. It replaces the old four-beat "loop" and
-             six-tile "extend" bands, which between them said the same powers three times over. Orchestrate
-             leads at full width because the board is the product's face; the other four are compact cards,
-             each a cropped real screen or, for Automate, its trigger list, because there is no honest
-             screenshot of an automations screen and a mockup would be the one lie on the page. -->
-        <section class="border-t border-line" id="verbs">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.verbs.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.verbs.heading}</h2>
-                <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{content.verbs.sub}</p>
-
-                <!-- The lead verb: the whole board, with its one line above it. -->
-                <div class="mt-12 lg:mt-14">
-                    <div class="flex max-w-3xl flex-wrap items-end justify-between gap-x-6 gap-y-3">
-                        <div class="max-w-2xl">
-                            <div class="eyebrow text-link">{leadVerb.verb}</div>
-                            <p class="mt-2 text-lg leading-relaxed text-balance text-content">{leadVerb.line}</p>
-                        </div>
-                        <a href={leadVerb.href} class="text-sm font-medium whitespace-nowrap text-link hover:underline">See it →</a>
-                    </div>
-                    {leadVerb.shot && (
-                        <ProductShotFigure
-                            shot={{ name: leadVerb.shot.name, alt: leadVerb.shot.alt, frame: "browser", label: leadVerb.shot.label }}
-                            sizes={COLUMN_SIZES}
-                            class="mt-6"
-                        />
-                    )}
+                    </figure>
                 </div>
+            </section>
 
-                <!-- The other four: compact cards, each a link to its page. A real screen shows as a cropped
-                     thumbnail so it reads as an interface rather than a shrunk-illegible one; Automate, which
-                     has no honest screen, shows the events it wakes on instead. -->
-                <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:mt-6">
-                    {
-                        verbCards.map((item) => (
-                            <a href={item.href} class="card group flex flex-col overflow-hidden transition-colors hover:border-line-strong">
-                                {item.shot ? (
-                                    <div>
-                                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
-                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong" />
-                                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">
-                                                {item.shot.label}
-                                            </span>
-                                        </div>
-                                        <div class="relative h-52 overflow-hidden border-b border-line">
+            <!-- ═══ 2 · What you do: the five verbs ═════════════════════════════════════════════ -->
+            <section class="band" id="verbs">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="eyebrow">{content.verbs.eyebrow}</div>
+                    <h2 class="h2 display">{content.verbs.heading}</h2>
+                    <p class="lede">{content.verbs.sub}</p>
+
+                    {/* THE LEAD VERB IS ONE OF THE FIVE, so it is titled like the other four rather than
+                        with a style of its own — the same lotus-and-title pair the trust cards use, one step
+                        up in size because this one leads. That also gives the block the <h3> its four
+                        siblings have, so the section has an outline a screen reader can walk. */}
+                    <div class="lead-verb">
+                        <div class="lead-verb-head">
+                            <div>
+                                <h3 class="lead-verb-name">
+                                    <Lotus />
+                                    {leadVerb.verb}
+                                </h3>
+                                <p class="lead-verb-line">{leadVerb.line}</p>
+                            </div>
+                            <a href={leadVerb.href} class="link see">See it →</a>
+                        </div>
+                        {
+                            leadVerb.shot && (
+                                <Window class="window-wide" finial>
+                                    <Image
+                                        src={shotAsset(leadVerb.shot.name)}
+                                        alt={leadVerb.shot.alt}
+                                        widths={SHOT_WIDTHS}
+                                        sizes={COLUMN_SIZES}
+                                        loading="lazy"
+                                        decoding="async"
+                                        class="window-full"
+                                    />
+                                </Window>
+                            )
+                        }
+                    </div>
+
+                    <div class="verb-grid">
+                        {
+                            verbCards.map((item) => (
+                                <Window class="verb-card" href={item.href}>
+                                    {item.shot ? (
+                                        <div class="verb-crop">
                                             <Image
                                                 src={shotAsset(item.shot.name)}
                                                 alt={item.shot.alt}
@@ -358,446 +255,385 @@ const [leadVerb, ...verbCards] = content.verbs.items;
                                                 sizes="(min-width: 64rem) 420px, (min-width: 40rem) 45vw, calc(100vw - 3rem)"
                                                 loading="lazy"
                                                 decoding="async"
-                                                class="absolute top-0 left-0 w-[150%] max-w-none"
                                             />
                                         </div>
-                                    </div>
-                                ) : (
-                                    // Automate has no honest screenshot, so its visual is the trigger→outcome it names.
-                                    // `flex-1` lets it grow to the height the screenshot cards set, and `justify-between`
-                                    // spreads the events to the top and the outcome to the bottom so the cell fills.
-                                    <div class="flex flex-1 flex-col justify-between border-b border-line bg-primary-600/[0.03] p-5">
-                                        <div>
-                                            <div class="eyebrow text-link">Wakes on</div>
-                                            <ul class="mt-3 grid grid-cols-2 gap-x-5 gap-y-2">
+                                    ) : (
+                                        /* Automate has no honest screenshot, so its picture is the events it
+                                           wakes on: a mocked-up automations screen would be the one lie here. */
+                                        <div class="triggers">
+                                            <div class="eyebrow">Wakes on</div>
+                                            <ul>
                                                 {item.triggers?.map((trigger) => (
-                                                    <li class="flex items-center gap-2 text-sm text-muted">
-                                                        <span class="h-1 w-1 shrink-0 rounded-full bg-primary-500" />
+                                                    <li>
+                                                        <Lozenge />
                                                         {trigger}
                                                     </li>
                                                 ))}
                                             </ul>
+                                            <p class="triggers-out">
+                                                <span aria-hidden="true">→</span> an optional command checks the event, then a new agent session starts and
+                                                appears on your board.
+                                            </p>
                                         </div>
-                                        <p class="mt-5 flex items-start gap-2 text-xs leading-relaxed text-subtle">
-                                            <span class="text-link" aria-hidden="true">→</span>
-                                            an optional command checks the event, then a new agent session starts and appears on your board.
-                                        </p>
+                                    )}
+                                    <div class="verb-body">
+                                        <h3>{item.verb}</h3>
+                                        <p>{item.line}</p>
                                     </div>
-                                )}
-                                <div class:list={["p-5", item.shot && "flex flex-1 flex-col"]}>
-                                    <h3 class="flex items-center gap-2 text-base font-semibold tracking-tight text-content">
-                                        {item.verb}
-                                        <span class="text-subtle opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
-                                            →
-                                        </span>
-                                    </h3>
-                                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{item.line}</p>
-                                </div>
-                            </a>
-                        ))
-                    }
-                </div>
-
-                <a href="/features/" class="mt-10 inline-block text-sm font-medium text-link hover:underline">{content.verbs.cta} →</a>
-            </div>
-        </section>
-
-        <!-- 3 · Why a workspace: the comparison.
-             This slot held the ownership ledger until 2026-08-15. That band answered "is my code safe"
-             a whole screenful before anyone had asked it, under a heading that was a slogan, and the
-             trust band below already made the same argument with its qualifier and its link. The slot
-             now answers the question the hero actually raises: it promises you approve everything, so
-             this shows what you approve WITH. Still a COMPARISON, so still two columns, nouns only, and
-             the asymmetry between the lists carries the whole argument. -->
-        <section class="border-t border-line" id="workspace">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.workspace.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.workspace.heading}</h2>
-                <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{content.workspace.sub}</p>
-
-                <!-- `items-start`, not stretch: each card ends where its own list ends, and the platform's
-                     card being visibly the shorter of the two is the argument made in silhouette. -->
-                <div class="mt-12 grid items-start gap-5 lg:grid-cols-2">
-                    <!-- The heavy side: solid card, brand-tinted, a filled dot per line. -->
-                    <div class="card border-primary-600/30 bg-primary-600/[0.03] p-6 sm:p-7">
-                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <h3 class="text-base font-semibold tracking-tight text-content">{content.workspace.comparison.ours.label}</h3>
-                            <span class="text-xs text-subtle">{content.workspace.comparison.ours.note}</span>
-                        </div>
-                        <ul class="mt-5 space-y-3">
-                            {
-                                content.workspace.comparison.ours.items.map((item) => (
-                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-content">
-                                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
-                                        {item}
-                                    </li>
-                                ))
-                            }
-                        </ul>
+                                </Window>
+                            ))
+                        }
                     </div>
 
-                    <!-- The light side: dashed, unfilled, and shorter than its neighbour, so the two read
-                         as different weights before a single word of either is read. -->
-                    <div class="rounded-2xl border border-dashed border-line-strong p-6 sm:p-7">
-                        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <h3 class="text-base font-semibold tracking-tight text-muted">{content.workspace.comparison.chat.label}</h3>
-                            <span class="text-xs text-subtle">{content.workspace.comparison.chat.note}</span>
-                        </div>
-                        <ul class="mt-5 space-y-3">
-                            {
-                                content.workspace.comparison.chat.items.map((item) => (
-                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-muted">
-                                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full border border-line-strong" />
-                                        {item}
-                                    </li>
-                                ))
-                            }
-                        </ul>
-                        <p class="mt-5 flex max-w-copy items-start gap-3 border-t border-line pt-5 text-sm leading-relaxed text-subtle">
-                            <span class="mt-0.5 shrink-0 text-subtle/70">
-                                <Fragment set:html={crossIcon} />
-                            </span>
-                            {content.workspace.comparison.chat.missing}
-                        </p>
-                    </div>
+                    <a href="/features/" class="link band-cta">{content.verbs.cta} →</a>
                 </div>
+            </section>
 
-                <div class="mt-6 flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
-                    <p class="max-w-copy text-xs leading-relaxed text-subtle">{content.workspace.comparison.footnote}</p>
-                    <a href="/features/review/" class="text-sm font-medium text-link hover:underline">How reviewing agent work works →</a>
-                </div>
-            </div>
-        </section>
+            <!-- ═══ 3 · Why a workspace: the comparison ═════════════════════════════════════════
+                 Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy
+                 side is a lit cartouche and the light one a dashed outline that ends early. -->
+            <section class="band" id="workspace">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="eyebrow">{content.workspace.eyebrow}</div>
+                    <h2 class="h2 display">{content.workspace.heading}</h2>
+                    <p class="lede">{content.workspace.sub}</p>
 
-        <!-- 4 · Economics: your subscriptions, your hardware, nothing to pay us -->
-        <section class="border-t border-line" id="economics">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.economics.eyebrow}</div>
-                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.economics.heading}</h2>
-                <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{content.economics.sub}</p>
-
-                <div class="mt-12 grid items-start gap-6 lg:grid-cols-2">
-                    <div class="card overflow-hidden">
-                        <div class="border-b border-line px-5 py-3">
-                            <span class="eyebrow">Your agent accounts</span>
-                        </div>
-                        <ul class="divide-y divide-line">
-                            {
-                                content.economics.accounts.map((account) => (
-                                    <li class="flex items-center gap-3 px-5 py-4">
-                                        {/* The provider's own mark, in place of the status dot that used to sit
-                                            here: the dot said "connected" about accounts the reader has not
-                                            connected yet, while the logo says which account the row means at a
-                                            glance. Drawn in currentColor at text size, exactly as the app draws it. */}
-                                        <svg
-                                            viewBox="0 0 24 24"
-                                            width="18"
-                                            height="18"
-                                            fill="currentColor"
-                                            class="shrink-0 text-content"
-                                            aria-hidden="true"
-                                        >
-                                            <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
-                                        </svg>
-                                        <div class="flex flex-1 flex-wrap items-baseline justify-between gap-x-3">
-                                            <h3 class="text-sm font-medium text-content">{account.name}</h3>
-                                            <span class="text-2xs text-subtle">{account.detail}</span>
-                                        </div>
-                                        <span class="chip bg-success/10 text-success">subscription</span>
-                                    </li>
-                                ))
-                            }
-                        </ul>
-                    </div>
-
-                    <div class="card p-5">
-                        <div class="eyebrow">Flat, not metered</div>
-                        <ul class="mt-4 space-y-3">
-                            {
-                                content.economics.points.map((point) => (
-                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-muted">
-                                        <span class="mt-0.5 shrink-0 text-link">
-                                            <Fragment set:html={checkIcon} />
-                                        </span>
-                                        {point}
-                                    </li>
-                                ))
-                            }
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-
-        <!-- 6 · About the creator: the last objection before the command.
-             The page has just asked a visitor to run a container on their own machine and hand it a
-             GitHub token and a database password. Its first card answers the architectural half of "can
-             I trust this" and is the only place on the page that does, now that the ownership band is
-             retired; the rest answers the human half, which until now existed only in the page's JSON-LD
-             told to Google and never to the reader.
-             Verifiability, not popularity: no logos, no testimonials, no counter that could render a
-             zero. The name, bio and cards come from about.ts so this band and /about/ cannot drift. -->
-        <section class="border-t border-line" id="trust">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="grid gap-10 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-14">
-                    <div>
-                        <div class="eyebrow">{content.trust.eyebrow}</div>
-                        <h2 class="mt-3 text-3xl font-semibold tracking-tight">{CREATOR_NAME}</h2>
-                        <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{creatorRole}</p>
-                        <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">{creatorBio}</p>
-                        <CreatorLinks class="mt-6" />
-                        <a href="/about/" class="mt-6 inline-block text-sm font-medium text-link hover:underline">{content.trust.cta} →</a>
-                    </div>
-
-                    <TrustCards />
-                </div>
-            </div>
-        </section>
-
-        <!-- 7 · Get connected: ghost-numeral steps, no boxes -->
-        <section class="border-t border-line" id="connect">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.connect.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.connect.heading}</h2>
-                <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{content.connect.sub}</p>
-
-                <div class="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
-                    {
-                        content.connect.steps.map((step, i) => (
-                            <div>
-                                <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
-                                    0{i + 1}
-                                </div>
-                                <h3 class="mt-3 text-sm font-medium text-content">{step.title}</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
+                    <div class="compare">
+                        <div class="card compare-ours">
+                            <Corners />
+                            <div class="compare-head">
+                                <h3>{content.workspace.comparison.ours.label}</h3>
+                                <span>{content.workspace.comparison.ours.note}</span>
                             </div>
-                        ))
-                    }
-                </div>
+                            <ul>
+                                {
+                                    content.workspace.comparison.ours.items.map((item) => (
+                                        <li>
+                                            <Lotus />
+                                            {item}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
 
-                <div class="code-window mt-10">
-                    <div class="flex items-center justify-between border-b border-line px-4 py-2">
-                        <span class="eyebrow">Step 3 · your machine</span>
-                    </div>
-                    <pre class="px-4 py-3 text-content"><code><span class="text-subtle">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
-                </div>
-                <p class="mt-3 text-xs text-subtle">{content.connect.commandNote}</p>
-
-                {/* The alternative to step 3, sitting under step 3 rather than in place of it. This band is
-                    where the page asks for a terminal, and a terminal is where it loses people. So the way
-                    out belongs here, at the moment the hesitation lands, as well as in the top bar.
-
-                    Secondary, and narrower than the code window above it: the app is a window around that same
-                    install, not a rival to it, and the hero already spends the page's one primary button. The
-                    width is the CONTENT's: a note at its readable measure, the button beside it because at
-                    the band's full 77rem the two sat half a metre apart with nothing between them. The
-                    platforms are named on the button because there is no macOS build: a reader on a Mac
-                    learns that here, with the one-liner that does work still on screen, not after a click. */}
-                <div
-                    class="mt-6 flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-line bg-card/40 px-5 py-4"
-                >
-                    <div class="min-w-64 flex-1">
-                        <p class="text-sm font-medium text-content">{content.connect.desktop.lead}</p>
-                        <p class="mt-1 max-w-copy text-xs leading-relaxed text-muted">{content.connect.desktop.note}</p>
-                    </div>
-                    <a class="btn btn-secondary shrink-0" href="/download/">{content.connect.desktop.cta}</a>
-                </div>
-            </div>
-        </section>
-
-        <!-- 8 · FAQ: collapsed disclosures in topic bands.
-             Open, thirteen answers were the longest thing on the page by a wide margin and a visitor had
-             to scroll past twelve of them to reach their own question. Collapsed, the whole FAQ is a list
-             of headlines you skim in one screen.
-
-             Native <details>, so this costs no JavaScript and keeps keyboard and screen-reader behaviour
-             for free. `name` groups each band into an exclusive accordion: opening one closes its
-             sibling, so the section never grows back into the wall it replaced. The answers are still in
-             the HTML, so the FAQPage schema above and in-page find both still see them. -->
-        <section class="border-t border-line" id="faq">
-            <div class="fade-in mx-auto max-w-7xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">FAQ</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Questions, answered plainly.</h2>
-                <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">Including the honest ones: what's free, what's stored where, what isn't ready yet.</p>
-
-                <div class="mt-10 max-w-2xl space-y-10">
-                    {
-                        faqGroups.map((group) => (
-                            <div id={group.id} class="scroll-mt-24">
-                                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                    <h3 class="text-sm font-semibold tracking-tight text-content">{group.label}</h3>
-                                    <p class="text-xs text-subtle">{group.blurb}</p>
-                                </div>
-
-                                <div class="mt-3 border-b border-line">
-                                    {group.items.map((item) => (
-                                        <details id={item.id} name={group.id} class="faq-item scroll-mt-24 border-t border-line">
-                                            <summary class="flex cursor-pointer list-none items-start gap-4 py-4 text-[0.9375rem] leading-snug font-medium text-content transition-colors hover:text-link">
-                                                {item.question}
-                                                {/* Rotates to a minus when open; drawn rather than a marker so it
-                                                    matches the 1.5-stroke motif the rest of the page uses. */}
-                                                <span class="faq-marker mt-0.5 ml-auto shrink-0 text-subtle transition-transform duration-200">
-                                                    <Fragment set:html={plusIcon} />
-                                                </span>
-                                            </summary>
-                                            <div class="pb-5">
-                                                {item.answer.map((paragraph) => (
-                                                    <p class="mt-0 mb-2.5 max-w-copy text-sm leading-relaxed text-muted last:mb-0">{paragraph}</p>
-                                                ))}
-                                                {item.more && (
-                                                    <a href={item.more.href} class="mt-3 inline-block text-sm font-medium text-link hover:underline">
-                                                        {item.more.label} →
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </details>
-                                    ))}
-                                </div>
+                        <div class="compare-chat">
+                            <div class="compare-head">
+                                <h3>{content.workspace.comparison.chat.label}</h3>
+                                <span>{content.workspace.comparison.chat.note}</span>
                             </div>
-                        ))
-                    }
-                </div>
+                            <ul>
+                                {
+                                    content.workspace.comparison.chat.items.map((item) => (
+                                        <li>
+                                            <Lozenge class="lozenge-quiet" />
+                                            {item}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                            <p class="compare-missing">{content.workspace.comparison.chat.missing}</p>
+                        </div>
+                    </div>
 
-                {/* The one place on this page a visitor is holding an unanswered question, so it is the one
-                    place the community belongs: not the hero and not the final CTA, where it would compete
-                    with the thing we actually want them to do. Two doors rather than one, because the reader
-                    who bounced off the FAQ has one of two problems and Issues only ever fitted the second:
-                    a question wants a person, a bug wants a record. Discord leads because it is the lighter
-                    of the two asks, and "still unanswered" is usually a question. */}
-                <div class="mt-10 max-w-2xl rounded-2xl border border-line bg-card/40 px-5 py-4">
-                    <p class="text-sm text-muted">Still unanswered? Ask in Discord if it's a question, open an issue if it's a bug. Both get a real reply.</p>
-                    <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-                        <a
-                            href={discordUrl}
-                            target="_blank"
-                            rel="noopener"
-                            class="inline-flex items-center gap-2 text-sm font-medium text-link hover:underline"
-                        >
-                            <DiscordIcon size={15} />
-                            Ask in Discord →
-                        </a>
-                        <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-sm font-medium text-link hover:underline">Open an issue →</a>
+                    <div class="compare-foot">
+                        <p>{content.workspace.comparison.footnote}</p>
+                        <a href="/features/review/" class="link">How reviewing agent work works →</a>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- 9 · Final CTA -->
-        <section class="relative overflow-hidden border-t border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="fade-in relative mx-auto max-w-7xl px-6 py-20 text-center lg:py-28">
-                <div class="eyebrow">Ready</div>
-                <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{content.finalCta.heading}</h2>
-                <p class="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted">{content.finalCta.sub}</p>
-                <div class="mt-8 flex justify-center gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
-                    <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the engine</a>
+            <!-- ═══ 4 · What it costs ═══════════════════════════════════════════════════════════ -->
+            <section class="band" id="economics">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="eyebrow">{content.economics.eyebrow}</div>
+                    <h2 class="h2 display">{content.economics.heading}</h2>
+                    <p class="lede">{content.economics.sub}</p>
+
+                    <div class="econ">
+                        <div class="card accounts">
+                            <Corners set="diag" />
+                            <div class="accounts-head"><span class="eyebrow">Your agent accounts</span></div>
+                            <ul>
+                                {
+                                    content.economics.accounts.map((account) => (
+                                        <li>
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                                <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                            </svg>
+                                            <span class="account-name">{account.name}</span>
+                                            <span class="account-detail">{account.detail}</span>
+                                            <span class="account-tag">subscription</span>
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
+
+                        <div class="card flat">
+                            <Corners set="diag" />
+                            <div class="eyebrow">Flat, not metered</div>
+                            <ul>
+                                {
+                                    content.economics.points.map((point) => (
+                                        <li>
+                                            <Lotus />
+                                            {point}
+                                        </li>
+                                    ))
+                                }
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </section>
-    </main>
+            </section>
 
-    <Footer />
+            <!-- ═══ 5 · Who builds it ═══════════════════════════════════════════════════════════ -->
+            <section class="band" id="trust">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="trust">
+                        <div>
+                            <div class="eyebrow">{content.trust.eyebrow}</div>
+                            <h2 class="h2 display">{CREATOR_NAME}</h2>
+                            <p class="lede">{creatorRole}</p>
+                            <p class="trust-bio">{creatorBio}</p>
+                            <a href="/about/" class="link band-cta">{content.trust.cta} →</a>
+                        </div>
+
+                        {/* The same four checkable claims /about/ carries, from the same module, with the
+                            commit figure measured from git at build time rather than authored. */}
+                        <TrustCards />
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 6 · Getting started ═════════════════════════════════════════════════════════ -->
+            <section class="band" id="connect">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="eyebrow">{content.connect.eyebrow}</div>
+                    <h2 class="h2 display">{content.connect.heading}</h2>
+                    <p class="lede">{content.connect.sub}</p>
+
+                    {/* THE STEPS ARE A PLAN OF THE SYSTEM, NOT A COUNT OF THEM. Two of the beats happen in a
+                        browser on our side; the third happens in a terminal on yours, and the whole product
+                        argument — the code and the keys never leave your hardware — is that boundary. So the
+                        section draws the boundary and hangs the beats off it: a seam down the middle, our
+                        side to the left, yours to the right, with the command sitting on your side because
+                        that is where it runs. See the note in home.css for what this replaced. */}
+                    <div class="flow">
+                        <div class="flow-zone">
+                            <div class="flow-where">in your browser</div>
+                            {
+                                browserSteps.map((step) => (
+                                    <div class="station">
+                                        <span class="station-mark" aria-hidden="true">
+                                            <Lotus />
+                                        </span>
+                                        <h3>{step.title}</h3>
+                                        <p>{step.body}</p>
+                                    </div>
+                                ))
+                            }
+                        </div>
+
+                        <div class="flow-seam" aria-hidden="true"></div>
+
+                        <div class="flow-zone">
+                            <div class="flow-where">on your machine</div>
+                            <div class="station">
+                                <span class="station-mark" aria-hidden="true">
+                                    <Lotus />
+                                </span>
+                                <h3>{machineStep.title}</h3>
+                                <p>{machineStep.body}</p>
+                            </div>
+
+                            <div class="frame command">
+                                <Corners />
+                                <div class="command-head"><span class="command-where">your terminal</span></div>
+                                <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                            </div>
+                            <p class="command-note">{content.connect.commandNote}</p>
+                        </div>
+                    </div>
+
+                    <div class="card desktop">
+                        <Corners set="diag" />
+                        <div>
+                            <p class="desktop-lead">{content.connect.desktop.lead}</p>
+                            <p class="desktop-note">{content.connect.desktop.note}</p>
+                        </div>
+                        {/* THE ONE DOWNLOAD ON THE PAGE, and it names the reader's own machine. It sits
+                            beside the install command because that is the question it answers: the same step,
+                            for someone who would rather not open a terminal. */}
+                        <DownloadCta class="btn-sm" label={content.connect.desktop.cta} icon={false} />
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 7 · FAQ ═════════════════════════════════════════════════════════════════════
+                 Native <details>, so the whole widget costs no JavaScript and keeps keyboard and
+                 screen-reader behaviour for free. `name` makes each band an exclusive accordion. -->
+            <section class="band" id="faq">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell fade-in">
+                    <div class="eyebrow">FAQ</div>
+                    <h2 class="h2 display">Before you install it.</h2>
+                    <p class="lede">What it costs, where your code sits, and what is not built yet.</p>
+
+                    <div class="faq">
+                        {
+                            faqGroups.map((group) => (
+                                <div class="faq-group" id={group.id}>
+                                    <div class="faq-group-head">
+                                        <h3>{group.label}</h3>
+                                        <p>{group.blurb}</p>
+                                    </div>
+                                    <div class="faq-list">
+                                        {group.items.map((item) => (
+                                            <details id={item.id} name={group.id} class="faq-item scroll-mt-28">
+                                                <summary>
+                                                    <Lozenge class="faq-mark" />
+                                                    <span>{item.question}</span>
+                                                </summary>
+                                                <div class="faq-answer">
+                                                    {item.answer.map((paragraph) => (
+                                                        <p>{paragraph}</p>
+                                                    ))}
+                                                    {item.more && (
+                                                        <a href={item.more.href} class="link">
+                                                            {item.more.label} →
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </details>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 8 · The closing cartouche ═══════════════════════════════════════════════════
+                 The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art,
+                 which is the half the first screen never shows because the windows cover it. -->
+            <section class="band final">
+                <div class="plate plate-foot" aria-hidden="true">
+                    <div class="plate-img"></div>
+                </div>
+                {/* THE ONE PLACE THIS PAGE AUTHORS ITS OWN WORDS. Everywhere else the copy is read from
+                    `landing.ts`, so the page can never make a claim the content modules do not — see the
+                    file header. The closing band is the exception, by request: it argues from the licence
+                    and the community rather than from the fleet, so it needs a sentence the modules do not
+                    have. If this ever stops being the closing argument, it belongs back in `landing.ts`
+                    with the rest. */}
+                <div class="shell fade-in final-inner">
+                    <Lotus size="lg" />
+                    <h2 class="h2 display final-heading">
+                        <span>Open-source and free</span>
+                        {/* The underline is drawn rather than `text-decoration`, which on a face this large
+                            sits too close and too thin, and cannot take the page's gold. */}
+                        <span class="final-forever">forever</span>
+                    </h2>
+                    <p class="lede final-sub">
+                        Contribute to our code, extend workspace<br />or offer services for others.
+                    </p>
+                    <Divider class="final-divider" />
+                    <div class="hero-actions">
+                        <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                        <a class="btn" href={githubUrl} target="_blank" rel="noopener">See the source</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <Footer />
+    </div>
 
     <script>
-        // Fade-in observer
-        const targets = document.querySelectorAll(".fade-in");
-        if ("IntersectionObserver" in window) {
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        if (entry.isIntersecting) {
-                            entry.target.classList.add("visible");
-                            observer.unobserve(entry.target);
-                        }
-                    }
-                },
-                { threshold: 0.12 },
-            );
-            targets.forEach((el) => observer.observe(el));
-        } else {
-            targets.forEach((el) => el.classList.add("visible"));
-        }
+        /* Three behaviours, and none of them is load-bearing: the page is correct with the script removed,
+           only less exactly aligned at the top. The bar is fitted to the plate's carved band and asked to
+           be transparent, the bar's own call is held back while the hero's is on screen, and the centre
+           frame walks its three surfaces. */
 
-        // Scroll-based depth parallax for hero orbs
-        const hero = document.getElementById("hero");
-        const orbsLayer = document.querySelector(".hero-orbs");
-        const gridOverlay = document.querySelector(".grid-overlay");
+        /* THE BAR IS FITTED TO THE FRAME IT SITS IN, and that can only be measured. `cover` scales the art
+           by `max(boxWidth/1600, boxHeight/900)`, the plate's box height is the hero's CONTENT height, and
+           so no stylesheet can name the scale. Here it is one line: measure the painted box, take the
+           larger term, and the bar's height is 90 art-units of it — twice the 45 at which the carved band's
+           centre sits, because the bar hangs from the plate's top rather than the band's.
 
-        if (hero && orbsLayer) {
-            let ticking = false;
-            window.addEventListener(
-                "scroll",
-                () => {
-                    if (!ticking) {
-                        requestAnimationFrame(() => {
-                            const y = window.scrollY;
-                            const limit = hero.offsetHeight;
-                            if (y < limit) {
-                                (orbsLayer as HTMLElement).style.transform = `translateY(${y * 0.3}px) scale(${1 + y * 0.0003})`;
-                                if (gridOverlay) {
-                                    (gridOverlay as HTMLElement).style.transform = `translateY(${y * 0.15}px)`;
-                                }
-                            }
-                            ticking = false;
-                        });
-                        ticking = true;
-                    }
-                },
-                { passive: true },
-            );
-        }
+           Writing the answer back cannot disturb the measurement: the bar is `position: fixed`, so its
+           height is outside the flow that sets the hero's — no observer loop. The selector excludes the
+           closing band's plate deliberately; it paints the same art at a different size. */
+        const heroPlate = document.querySelector<HTMLElement>(".plate:not(.plate-foot) > .plate-img");
+        const page = document.querySelector<HTMLElement>(".home");
+        const bar = document.getElementById("site-bar");
 
-        /* THE HERO'S TWO FRAMES, each walking its own screens in the order the content lists them.
-         *
-         * Two lists of different lengths (three surfaces behind, two conversations in front) on one clock, so
-         * the pair takes six steps to repeat rather than two — a visitor who watches for ten seconds sees five
-         * different pictures instead of the same two swapping.
-         *
-         * They advance on ALTERNATE ticks: both frames changing on the same beat reads as the page reloading
-         * under the reader, where one at a time reads as two windows being worked in.
-         *
-         * Nothing here decides what is visible on the first frame — the markup ships the first screen of each
-         * already on, so this is only ever a change to a picture that is already correct. If the script never
-         * runs, the hero is the still image it used to be.
-         */
-        const STEP_MS = 6000;
-        const frames = ["app", "chat"] as const;
-        const shown = { app: 0, chat: 0 };
-        const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
-        const labelsOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-label="${frame}"]`);
-
-        /* REDUCED MOTION CHANGES THE TRANSITION, NOT WHETHER THE FRAMES TURN.
-         *
-         * It used to skip the rotation outright, and that was the wrong reading of the preference twice over.
-         * What these frames carry is CONTENT — three surfaces of the product and two cuts of its chat, which
-         * exist nowhere else above the fold — so holding them still does not calm the page down, it hides two
-         * thirds of what the page is showing, and on a machine with the setting on the hero silently became a
-         * single screenshot with no way to tell it was meant to be more. The thing the preference is actually
-         * about is the animation, and that is the cross-fade: under reduced motion the CSS makes each change a
-         * cut instead (see `.hero-screen` in global.css), so nothing moves and everything is still seen. */
-        if (screensOf("app").length > 1) {
-            let tick = 0;
-            setInterval(() => {
-                const frame = frames[tick % frames.length]!;
-                tick += 1;
-                const screens = screensOf(frame);
-                if (screens.length < 2) {
+        if (heroPlate && page && "ResizeObserver" in window) {
+            /* AND ONLY WHILE THERE IS A FRAME TO SIT IN. Once the hero stacks, its box goes from wider than
+               the art to much taller, `cover` enlarges the art by half again, and the carved border stops
+               being a border: it becomes a hundred pixels of soft texture with no rule at the bottom of it.
+               Fitting the bar to that is measurably perfect and visibly wrong — a logo floating sixty pixels
+               down a black screen with nothing above it. So the fit is gated on the box still being roughly
+               the art's shape. Measured, the two regimes are far apart — 1.41 at the last unstacked width
+               against 0.80 at the first stacked one — so 1.2 is a gap, not a knife edge. */
+            const FRAMED_ASPECT = 1.2;
+            const fitBandToPlate = () => {
+                const { width, height } = heroPlate.getBoundingClientRect();
+                if (!width || !height) return;
+                if (width / height < FRAMED_ASPECT) {
+                    page.style.removeProperty("--bar-height");
                     return;
                 }
-                const next = (shown[frame] + 1) % screens.length;
-                shown[frame] = next;
+                const scale = Math.max(width / 1600, height / 900);
+                page.style.setProperty("--bar-height", `${(90 * scale).toFixed(2)}px`);
+            };
+            fitBandToPlate();
+            new ResizeObserver(fitBandToPlate).observe(heroPlate);
+        }
+
+        /* THE BAR'S CALL TO ACTION, held back while the hero's own is on screen. The two say the same words,
+           so showing both above the fold is one call printed twice; instead the bar keeps its copy hidden
+           until the hero button has scrolled off, then reveals it as the standing shortcut. Setting
+           `data-cta-managed` here — rather than in the markup — is what makes the no-JS fallback the safe
+           one: with the script blocked the attribute never lands and the button is simply always shown.
+           The negative top margin lets the reveal fire as the hero button slips under the fixed bar rather
+           than only once it is fully off the top. */
+        const heroCta = document.querySelector("[data-hero-cta]");
+        if (bar && heroCta && "IntersectionObserver" in window) {
+            bar.setAttribute("data-cta-managed", "");
+            const ctaObserver = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        bar.toggleAttribute("data-cta-shown", !entry.isIntersecting);
+                    }
+                },
+                { rootMargin: "-72px 0px 0px 0px", threshold: 0 },
+            );
+            ctaObserver.observe(heroCta);
+        }
+
+        /* ONE FRAME WALKS, and it is the middle one. The two wings hold stills: a cross-fade in a frame that
+           size is movement at the edge of vision with nothing to show for it, and the centre is where a
+           reader is already looking. Three surfaces, four seconds each. */
+        const screens = document.querySelectorAll<HTMLElement>('[data-screen="app"]');
+        if (screens.length > 1) {
+            let shown = 0;
+            setInterval(() => {
+                shown = (shown + 1) % screens.length;
                 screens.forEach((screen, index) => {
-                    screen.classList.toggle("is-on", index === next);
-                    // The frame's own alt text is the one on screen: a reader on a screen reader must not be
-                    // handed three descriptions of one picture.
-                    screen.setAttribute("aria-hidden", index === next ? "false" : "true");
+                    screen.classList.toggle("is-on", index === shown);
+                    // The alt text a screen reader gets is the one on screen: nobody should be handed three
+                    // descriptions of one picture.
+                    screen.setAttribute("aria-hidden", index === shown ? "false" : "true");
                 });
-                labelsOf(frame).forEach((label, index) => {
-                    label.hidden = index !== next;
-                });
-            }, STEP_MS / frames.length);
+            }, 4000);
         }
     </script>
 </BaseLayout>

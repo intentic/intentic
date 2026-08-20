@@ -1,14 +1,43 @@
 ---
+/* THE BAR.
+ *
+ * Transparent at the top of a page and lifted once you have scrolled past it, so on the home page the
+ * temple plate's own carved top border becomes the bar's — the reference art has it exactly that way.
+ * Everywhere else it simply starts lifted, because there is no plate for it to sit in.
+ *
+ * OPENING A MENU IS BOTH HOVER AND CLICK. Hover alone strands anyone on a touch screen or a keyboard —
+ * the trigger is a real <button> with `aria-expanded`, the script below toggles it, and CSS opens the
+ * panel on hover or focus-within as well. Escape closes, a click outside closes, and with no JavaScript
+ * at all hover and keyboard focus still work.
+ *
+ * THE PANEL DROPS THE SCREENSHOT RAIL the old bar carried. A lit photograph is the one thing that cannot
+ * be dressed as carved stone, and what the rail was decorating — eight labelled destinations with a line
+ * of scent each — is a menu already. Every label, row, href and panel action still comes from `nav.ts`,
+ * so the bar, the phone overlay and the footer can never name different pages.
+ *
+ * The wordmark, the bar's labels and the panel's rows are all set in the brand face: a rounded geometric
+ * with cut terminals and an angled `t`. See `--font-mark` in global.css.
+ */
 import type { NavEntry } from "@intentic-dev/site-content/nav";
 import { navEntries } from "@intentic-dev/site-content/nav";
-import { APP_URL, discordUrl, githubUrl, ORG_NAME } from "@intentic-dev/site-content/site";
-import { Image } from "astro:assets";
-import logo from "../assets/intentic-full.png";
-import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { GITHUB_MARK } from "../lib/marks";
 import DiscordIcon from "./DiscordIcon.astro";
-import ExternalIcon from "./ExternalIcon.astro";
+import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
 
+interface Props {
+    /**
+     * The bar starts with no ground of its own and takes one on the first scroll. Only a page whose first
+     * band carries the plate asks for this — the home page — because there the temple's carved top border
+     * IS the bar's. On a page that starts in prose a transparent bar is a row of labels floating on
+     * nothing. It is a prop rather than something the page's script sets, so the first paint is already
+     * right and the two scripts cannot race.
+     */
+    transparent?: boolean;
+}
+
+const { transparent = false } = Astro.props;
 const currentPath = Astro.url.pathname;
 
 function isActive(entry: NavEntry): boolean {
@@ -18,188 +47,450 @@ function isActive(entry: NavEntry): boolean {
     return currentPath.startsWith(entry.prefix);
 }
 
-/* A menu row points at ONE page, so it lights up only on that page. The trigger above matches a prefix because
- * a whole menu is "current"; a row must not: /docs/ is a prefix of every docs page, which made "Overview" the
- * current row everywhere under Docs, and "Extensions" current on each of its three children.
- * The trailing slash is "always" in a build and "ignore" in dev, so it is not part of the comparison. */
-const bare = (path: string): string => path.replace(/\/+$/, "");
+/* A menu row points at ONE page, so it lights up only on that page. The trigger above matches a prefix
+ * because a whole menu is "current"; a row must not: /docs/ is a prefix of every docs page, which made
+ * "Overview" the current row everywhere under Docs. The trailing slash is "always" in a build and
+ * "ignore" in dev, so it is not part of the comparison. */
+const bare = (path: string): string => path.replace(/\/+$/u, "");
 const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath);
 ---
 
-<nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
-    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        {/* The wordmark is what a phone paints largest before the hero image arrives, so it IS the LCP on
-            every page here: hence eager and fetchpriority=high, ahead of the stylesheet's other requests.
-            `shrink-0` because the links row does not wrap: without it a bar one link too full pays for the
-            overflow out of the BRAND, silently: the wordmark rendered at 50px of its 126 before this. */}
-        <a href="/" class="flex shrink-0 items-center no-underline">
-            <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} loading="eager" fetchpriority="high" class="h-6 w-auto" />
+<header class="bar" id="site-bar" data-transparent={transparent ? "" : undefined}>
+    <div class="bar-inner">
+        <a href="/" class="brand" aria-label="intentic">
+            <Lotus size="lg" class="brand-mark" />
+            <span class="wordmark">intentic</span>
         </a>
 
-        <button
-            class="hamburger flex-col gap-1.25 p-1"
-            id="mobile-nav-open"
-            aria-label="Toggle navigation"
-            aria-expanded="false"
-        >
-            <span></span><span></span><span></span>
-        </button>
-
-        {/* The bar swaps to the hamburger at 64rem, not the 48rem it used to: six links, the repo mark and the
-            CTA need ~900px of the 1280 this row ever gets, and at 48rem they had 768 to share with the
-            wordmark. A tablet gets the overlay: the same navigation, laid out for a width that can hold it.
-            Which of the two shows is decided ONLY by the media query in this file's <style> and the matching
-            one in MobileNav: an Astro scoped rule is unlayered and so outranks any Tailwind `max-lg:hidden`
-            here however specific that looks, and a second spelling of the breakpoint is a second answer at
-            the pixel where they disagree. */}
-        <ul class="links flex list-none items-center gap-0.5" id="nav-links">
+        <nav class="bar-links" aria-label="Main">
             {
-                navEntries.map((entry) => {
-                    if (entry.type === "menu") {
-                        const preview = entry.sections
-                            .flatMap((section) => section.items)
-                            .flatMap((item) => (item.shot === undefined ? [] : [{ href: item.href, shot: item.shot }]));
-                        return (
-                            <li class="nav-item has-menu">
-                                <button type="button" class:list={["nav-link", { active: isActive(entry) }]} aria-expanded="false">
-                                    {entry.label}
-                                    <svg class="chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
-                                        <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
-                                </button>
+                navEntries.map((entry, index) =>
+                    entry.type === "link" ? (
+                        <a href={entry.href} class:list={["bar-link", { active: isActive(entry) }]}>
+                            {entry.label}
+                        </a>
+                    ) : (
+                        <div class="menu" data-menu>
+                            <button
+                                type="button"
+                                class:list={["bar-link", "menu-trigger", { active: isActive(entry) }]}
+                                aria-expanded="false"
+                                aria-controls={`bar-menu-${index}`}
+                            >
+                                {entry.label}
+                                <svg class="chev" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+                                    <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
 
-                                {/* The panel. Its column count follows the section count, so Product reads as
-                                    its three shelves and Docs as one narrow column of destinations, and the
-                                    preview rail exists only where there are screenshots to preview. */}
-                                <div class:list={["menu-panel", { "has-preview": preview.length > 0 }]}>
-                                    <div class="menu-sections" style={`--menu-columns:${entry.sections.length}`}>
-                                        {entry.sections.map((section) => (
-                                            <div class="menu-section">
-                                                {section.label && <div class="menu-section-label">{section.label}</div>}
-                                                <ul>
-                                                    {section.items.map((item) => (
-                                                        <li>
-                                                            <a
-                                                                href={item.href}
-                                                                class:list={["menu-item", { active: isCurrentPage(item.href) }]}
-                                                                data-preview={item.shot === undefined ? undefined : item.href}
-                                                                target={item.external ? "_blank" : undefined}
-                                                                rel={item.external ? "noopener" : undefined}
-                                                            >
-                                                                <span class="menu-item-label">{item.label}</span>
-                                                                <span class="menu-item-blurb">{item.description}</span>
-                                                            </a>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {preview.length > 0 && (
-                                        <div class="menu-preview">
-                                            {preview.map(({ href, shot }, i) => (
-                                                /* A fixed 34rem box: the menu only exists from lg up, so
-                                                   this is one width, not a viewport formula. The rail COVERS
-                                                   below, so a shot wider than the box paints wider than it
-                                                   too — 340px of box against a 16:9-ish capture is ~810 CSS
-                                                   px of image — and `sizes` follows what paints, not what
-                                                   the box measures, or every wide shot arrives soft. */
-                                                <Image
-                                                    src={shotAsset(shot.name)}
-                                                    alt={shot.alt}
-                                                    widths={SHOT_WIDTHS}
-                                                    sizes="832px"
-                                                    loading="lazy"
-                                                    decoding="async"
-                                                    class:list={["menu-preview-shot", { current: i === 0 }]}
-                                                    data-preview-for={href}
-                                                />
-                                            ))}
+                            <div class="menu-panel" id={`bar-menu-${index}`}>
+                                <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
+                                    {entry.sections.map((section) => (
+                                        <div class="menu-section">
+                                            {section.label && <div class="eyebrow eyebrow-bare menu-section-label">{section.label}</div>}
+                                            <ul>
+                                                {section.items.map((item) => (
+                                                    <li>
+                                                        <a
+                                                            href={item.href}
+                                                            class:list={["menu-item", { current: isCurrentPage(item.href) }]}
+                                                            target={item.external ? "_blank" : undefined}
+                                                            rel={item.external ? "noopener" : undefined}
+                                                        >
+                                                            <span class="menu-item-label">{item.label}</span>
+                                                            <span class="menu-item-blurb">{item.description}</span>
+                                                        </a>
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
-                                    )}
-
-                                    {entry.action && (
-                                        <a
-                                            class="menu-action"
-                                            href={entry.action.href}
-                                            target={entry.action.external ? "_blank" : undefined}
-                                            rel={entry.action.external ? "noopener" : undefined}
-                                        >
-                                            {entry.action.label}{" "}
-                                            {entry.action.external ? <ExternalIcon /> : <span aria-hidden="true">→</span>}
-                                        </a>
-                                    )}
+                                    ))}
                                 </div>
-                            </li>
-                        );
-                    }
 
-                    if (entry.type === "link") {
-                        return (
-                            <li class="nav-item">
-                                <a
-                                    href={entry.href}
-                                    class:list={["nav-link", { active: isActive(entry) }]}
-                                    target={entry.external ? "_blank" : undefined}
-                                    rel={entry.external ? "noopener" : undefined}
-                                >
-                                    {entry.label}
-                                    {entry.external && <ExternalIcon />}
-                                </a>
-                            </li>
-                        );
-                    }
-                })
+                                {entry.action && (
+                                    <a
+                                        href={entry.action.href}
+                                        class="menu-action"
+                                        target={entry.action.external ? "_blank" : undefined}
+                                        rel={entry.action.external ? "noopener" : undefined}
+                                    >
+                                        <Lotus />
+                                        {entry.action.label}
+                                        <span aria-hidden="true">→</span>
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    ),
+                )
             }
+        </nav>
 
-            <li class="nav-item">
-                <a
-                    href={githubUrl}
-                    target="_blank"
-                    rel="noopener"
-                    class="nav-link icon"
-                    aria-label="GitHub repository"
-                    title="GitHub repository"
-                >
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
-                        <path
-                            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
-                        />
-                    </svg>
-                </a>
-            </li>
+        <div class="bar-end">
+            <a href={githubUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="GitHub repository" title="GitHub repository">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
+            </a>
+            <a href={discordUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="Discord community" title="Discord community">
+                <DiscordIcon size={17} />
+            </a>
+            <a href={APP_URL} class="btn btn-primary btn-sm bar-cta">Create your workspace</a>
 
-            {/* The community mark, beside the repo mark and before the CTA: code, then people, then act.
-                Icon-only for the same reason GitHub is: this bar is already six labels and a button wide, and
-                a seventh WORD is what pushes the wordmark into shrinking. An aria-label carries the meaning a
-                glyph cannot, and the title tooltip names it for the sighted reader who does not know the mark. */}
-            <li class="nav-item">
-                <a
-                    href={discordUrl}
-                    target="_blank"
-                    rel="noopener"
-                    class="nav-link icon"
-                    aria-label="Discord community"
-                    title="Discord community"
-                >
-                    <DiscordIcon />
-                </a>
-            </li>
-
-            <li>
-                <a class="btn btn-primary ml-2" href={APP_URL}>Get started free</a>
-            </li>
-        </ul>
+            <button class="hamburger" id="mobile-nav-open" aria-label="Toggle navigation" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
     </div>
-</nav>
+</header>
 
 <MobileNav />
 
+<script>
+    /* Three behaviours, and none of them is load-bearing: the bar is correct with the script removed, only
+       flat rather than lifted. Hover and keyboard focus open a panel through CSS (`.menu:hover` /
+       `:focus-within`), so a browser with this blocked still navigates. */
+    const menus = [...document.querySelectorAll<HTMLElement>("[data-menu]")];
+
+    const close = (menu: HTMLElement) => {
+        menu.removeAttribute("data-open");
+        menu.querySelector("[aria-expanded]")?.setAttribute("aria-expanded", "false");
+    };
+
+    for (const menu of menus) {
+        const trigger = menu.querySelector<HTMLButtonElement>(".menu-trigger");
+        trigger?.addEventListener("click", (event) => {
+            event.preventDefault();
+            const open = menu.hasAttribute("data-open");
+            // One panel at a time: two open menus overlap, and the second to open wins the pointer.
+            menus.forEach(close);
+            if (!open) {
+                menu.setAttribute("data-open", "");
+                trigger.setAttribute("aria-expanded", "true");
+            }
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        if (!(event.target as Element | null)?.closest("[data-menu]")) menus.forEach(close);
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") menus.forEach(close);
+    });
+
+    /* The lift. A page whose first band carries the plate asks for a transparent bar by setting
+       `data-transparent` on it (the home page does, from the layout); everywhere else the bar is lifted
+       from the first paint, because a transparent bar over a page that starts in prose is a row of labels
+       floating on nothing. */
+    const bar = document.getElementById("site-bar");
+    if (bar?.hasAttribute("data-transparent")) {
+        const lift = () => bar.toggleAttribute("data-lifted", window.scrollY > 40);
+        lift();
+        window.addEventListener("scroll", lift, { passive: true });
+    }
+
+    /* The hamburger. The overlay it opens owns everything that happens INSIDE it (its accordions, and
+       closing itself when a row is followed); this is only the press that opens it. */
+    const toggle = document.getElementById("mobile-nav-open");
+    const overlay = document.getElementById("mobile-nav-overlay");
+    toggle?.addEventListener("click", () => {
+        const open = overlay?.classList.toggle("open") ?? false;
+        toggle.classList.toggle("active", open);
+        toggle.setAttribute("aria-expanded", String(open));
+        document.body.style.overflow = open ? "hidden" : "";
+    });
+</script>
+
 <style>
-    /* ── Nav base ──────────────────────────────────────── */
+    /* Transparent, so a plate behind the first band runs under it. It takes a ground once the page has
+       scrolled, which the script above flags with `data-lifted`. A page with no plate never asks for the
+       transparent state and so is lifted from the start. */
+    .bar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 100;
+        background: rgba(10, 7, 5, 0.86);
+        border-bottom: 1px solid var(--color-line);
+        backdrop-filter: blur(14px);
+        transition:
+            background-color 0.3s ease,
+            border-color 0.3s ease;
+    }
+    .bar[data-transparent]:not([data-lifted]) {
+        background: transparent;
+        border-bottom-color: transparent;
+        backdrop-filter: none;
+    }
+
+    /* THE BAR IS FURNITURE INSIDE A FRAME, so on the home page its height is the frame's rather than a
+       number picked for a bar: the plate's carved top band runs from its outer glow down to an inner rule,
+       and the bar's content has to sit on the middle of THAT or the nav floats in a border it is supposed
+       to be living in. `--bar-height` is that measurement, written by the home page's own script; the
+       default below is what every other page uses. */
+    .bar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.25rem;
+        max-width: 84rem;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        min-height: var(--bar-height, 4.5rem);
+    }
+
+    /* ── The brand ───────────────────────────────────────
+       ALIGNED ON THE LETTERS, not on the boxes. Two things fight here: the flower is a square and the word
+       is a line box, and `align-items: center` lines up the two BOXES. Baloo 2 carries tall ascender and
+       descender metrics, so the word's ink sits high inside a box that reserves room for descenders the
+       word "intentic" does not have — which parks the flower visibly above the letters. The nudge is in
+       `rem` rather than `em` so it holds at every size the bar uses. */
+    .brand {
+        --mark-nudge: -0.125rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.62rem;
+        flex: none;
+        text-decoration: none;
+    }
+    /* `:global`, because the class is handed to a CHILD COMPONENT: Astro scopes this block to elements this
+       file renders, and the mark's span is rendered by Lotus.astro. */
+    .brand :global(.brand-mark) {
+        transform: translateY(var(--mark-nudge, 0));
+    }
+    .wordmark {
+        font-family: var(--font-mark);
+        font-size: 1.85rem;
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: 0.005em;
+        color: var(--color-primary-500);
+        text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
+    }
+
+    .bar-links {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    /* THE BRAND'S OWN FACE. Inter here read as another site's furniture bolted onto this one; a titling
+       serif read as something you have to look at twice. The bar is a logo and six words, so it takes the
+       logo's face: a rounded geometric, about as legible as small type gets. 16px rather than 15, because
+       this face runs a touch small for its point size. */
+    .bar-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.45rem 0.65rem;
+        border: 0;
+        background: none;
+        font-family: var(--font-mark);
+        font-weight: 600;
+        font-size: 1rem;
+        letter-spacing: 0.004em;
+        color: var(--color-content);
+        text-decoration: none;
+        opacity: 0.86;
+        cursor: pointer;
+        transition:
+            color 0.2s ease,
+            opacity 0.2s ease;
+    }
+    .bar-link:hover,
+    .bar-link.active,
+    .menu[data-open] .menu-trigger {
+        color: var(--color-primary-400);
+        opacity: 1;
+    }
+    .chev {
+        transition: transform 0.2s ease;
+    }
+    .menu[data-open] .chev,
+    .menu:hover .chev {
+        transform: rotate(180deg);
+    }
+
+    /* ── The panel ───────────────────────────────────────
+       A slab of the same carved vocabulary as the page: gold rule, warm cloth, a lozenge corner turned into
+       it. It hangs from the trigger and is held open by hover, by focus inside it, or by the script's
+       `data-open`. `top` leaves no dead space the pointer has to cross on its way in. */
+    .menu {
+        position: relative;
+    }
+    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE, and like the button it carries its face on its OWN
+       background rather than on a pseudo-element. That is not a style preference, it is the only order
+       that lets the double rule survive — see the note on the border below.
+       The shadow is a `filter` rather than a `box-shadow`: `clip-path` clips everything the element paints,
+       a box-shadow included, so the only way to cast one from a notched panel is to cast it from the
+       clipped result. It follows the octagon exactly, corners and all. */
+    .menu-panel {
+        --cut: 9px;
+
+        position: absolute;
+        top: calc(100% + 0.55rem);
+        left: 50%;
+        z-index: 10;
+        min-width: 22rem;
+        padding: 1.1rem 1.15rem 0.9rem;
+        /* THE CLOTH THE PANEL IS FACED IN. A dark warm linen rather than a fill: a woven ground reads as a
+           hanging stretched over the opening, and it is the one material this vocabulary did not already
+           own — the walls are stone, the frames are gold, the primary control is timber.
+           It is woven rather than photographed. Three turbulence fields in one tile: a slow cloud for the
+           fibre, then a warp and a weft — the same noise stretched hard along each axis, so one becomes
+           horizontal threads and the other vertical, and where they cross the eye reads a weave.
+           TILED, NOT STRETCHED, and that is the difference from the button's timber. A plank is cut to the
+           board, so its grain scales with it; cloth is woven at a fixed gauge and then cut, so the thread
+           count has to stay put whatever size the panel opens at. */
+        background-color: #1f1710;
+        background-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E"),
+            radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
+        background-repeat: repeat, no-repeat;
+        background-size: 200px 200px, cover;
+        /* THE SAME DOUBLE RULE THE BUTTONS WEAR, drawn the same way and for the same reason. The rule is
+           16px of inward image on a 1px border, which is what makes the pair of lines: the outer runs on
+           the border itself and the inner is drawn 5 units in, INSIDE the padding box. So anything opaque
+           covering the padding box covers the inner line and leaves a single hairline — which is exactly
+           what an `inset: 0` face on a pseudo-element did here, because `filter` makes this a stacking
+           context and a negative-z-index child paints AFTER the element's own border. Hence the face being
+           a background: backgrounds paint under the border, so the rule survives. */
+        border: 1px solid transparent;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
+        border-image-slice: 16;
+        border-image-width: 16px;
+        border-image-repeat: stretch;
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
+        opacity: 0;
+        visibility: hidden;
+        transform: translate(-50%, -0.4rem);
+        transition:
+            opacity 0.18s ease,
+            transform 0.18s ease,
+            visibility 0s linear 0.18s;
+    }
+    .menu:hover .menu-panel,
+    .menu:focus-within .menu-panel,
+    .menu[data-open] .menu-panel {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, 0);
+        transition-delay: 0s;
+    }
+
+    .menu-rows {
+        display: grid;
+        grid-template-columns: repeat(var(--menu-cols, 1), minmax(0, 1fr));
+        gap: 1.5rem;
+    }
+    .menu-section-label {
+        margin-bottom: 0.6rem;
+    }
+    .menu-section ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .menu-item {
+        display: block;
+        padding: 0.45rem 0.6rem;
+        border-left: 1px solid transparent;
+        text-decoration: none;
+        transition:
+            background-color 0.16s ease,
+            border-color 0.16s ease;
+    }
+    .menu-item:hover,
+    .menu-item.current {
+        background: rgba(224, 123, 39, 0.09);
+        border-left-color: var(--color-primary-500);
+    }
+    .menu-item-label {
+        display: block;
+        font-family: var(--font-mark);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--color-content);
+    }
+    .menu-item:hover .menu-item-label,
+    .menu-item.current .menu-item-label {
+        color: var(--color-primary-400);
+    }
+    .menu-item-blurb {
+        display: block;
+        margin-top: 0.1rem;
+        max-width: 34ch;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+    }
+
+    .menu-action {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.9rem;
+        border-top: 1px solid var(--color-line);
+        padding: 0.8rem 0.6rem 0.1rem;
+        font-size: 0.875rem;
+        color: var(--color-gold-bright);
+        text-decoration: none;
+        transition: color 0.16s ease;
+    }
+    .menu-action:hover {
+        color: var(--color-primary-400);
+    }
+
+    .bar-end {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex: none;
+    }
+    .bar-icon {
+        display: inline-flex;
+        color: var(--color-muted);
+        transition: color 0.2s ease;
+    }
+    .bar-icon:hover {
+        color: var(--color-primary-400);
+    }
+
+    /* THE BAR'S CALL IS A SECOND COPY of the home page hero's, so on that page it earns its place only once
+       the hero's own is gone: while the first screen is up the two would stack the same words four inches
+       apart. The home page's script flags the two states here (`data-cta-managed` turns the behaviour on,
+       `data-cta-shown` is the reveal). Its width is reserved even while hidden, so the reveal is a fade
+       rather than a jump that shoves the icons sideways. On every other page, and with no script anywhere,
+       the button is simply always shown: the fallback for a call to action is to be there. */
+    .bar[data-cta-managed] .bar-cta {
+        opacity: 0;
+        transform: translateY(-0.45rem);
+        pointer-events: none;
+        transition:
+            opacity 0.3s ease,
+            transform 0.3s ease;
+    }
+    .bar[data-cta-managed][data-cta-shown] .bar-cta {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+
+    /* ── The hamburger ───────────────────────────────────
+       Only below the bar's breakpoint, and it is the one control that swaps in for the six labels. */
     .hamburger {
         display: none;
+        flex-direction: column;
+        gap: 5px;
+        padding: 4px;
         background: none;
         border: none;
         cursor: pointer;
@@ -208,8 +499,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         display: block;
         width: 22px;
         height: 2px;
-        background: var(--color-muted);
-        border-radius: 2px;
+        background: var(--color-gold);
         transition:
             transform 0.3s,
             opacity 0.3s;
@@ -224,333 +514,53 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
         transform: translateY(-7px) rotate(-45deg);
     }
 
-    /* ── Nav items ─────────────────────────────────────── */
-    .nav-item {
-        position: relative;
-    }
-
-    .nav-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--color-muted);
-        padding: 8px 14px;
-        border-radius: 8px;
-        transition:
-            color 0.2s,
-            background 0.2s;
-        cursor: pointer;
-        background: none;
-        border: none;
-        font-family: inherit;
-        text-decoration: none;
-        white-space: nowrap;
-    }
-
-    /* The two marks are glyphs, not words, and a word's 14px of side padding around a 16px icon reads as a
-       gap rather than a button: at that padding the pair sits as far apart as two menu labels, which is how
-       GitHub and Discord stop looking like one cluster of marks and start looking like two orphaned links.
-       Tighter here, so the pair reads as a pair, and 20px of the bar's width comes back with it, which is
-       what keeps a seventh item affordable. Still 34×32, comfortably over the 24px target floor. */
-    .nav-link.icon {
-        padding: 8px 9px;
-    }
-
-    .nav-link.active {
-        color: var(--color-content);
-    }
-
-    .nav-link:hover {
-        color: var(--color-content);
-        background: var(--color-overlay);
-    }
-
-    /* ── Chevron ────────────────────────────────────────── */
-    .chevron {
-        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        margin-top: 1px;
-    }
-
-    .has-menu.open .chevron {
-        transform: rotate(180deg);
-    }
-
-    /* ── Mega-menu panel ───────────────────────────────────
-       One panel shape for both menus: a grid of labelled sections, an optional screenshot rail, and one
-       action at the foot. It is centred under its trigger and clamped to the viewport, so the Product panel
-       (wide, with a preview) and the Docs panel (four narrow shelves) both stay on screen at 1024px. */
-    .menu-panel {
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        transform: translateX(-50%) translateY(4px);
-        display: grid;
-        grid-template-areas: "sections" "action";
-        gap: 4px;
-        width: max-content;
-        max-width: min(94vw, 78rem);
-        /* Opaque, not "nearly": the panel sits over the hero's white 3xl heading, and on a canvas this dark
-           even 3% bleed lifts that text ~8/255, which the blur then spreads into a legible ghost across the
-           menu. The translucency belongs to the nav BAR, which content is meant to scroll under; a menu has
-           to be readable. Nothing behind it means backdrop-filter buys only a compositing layer. */
-        background: var(--color-canvas);
-        border: 1px solid var(--color-line);
-        border-top: 2px solid var(--color-link);
-        border-radius: 14px;
-        padding: 14px;
-        opacity: 0;
-        visibility: hidden;
-        transition:
-            opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-            visibility 0.22s,
-            transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-        box-shadow:
-            0 20px 60px rgba(0, 0, 0, 0.4),
-            0 0 0 1px color-mix(in srgb, var(--color-link) 8%, transparent),
-            0 0 40px color-mix(in srgb, var(--color-link) 4%, transparent);
-    }
-
-    .menu-panel.has-preview {
-        grid-template-areas:
-            "sections preview"
-            "action   preview";
-        grid-template-columns: minmax(0, 1fr) 34rem;
-        gap: 4px 18px;
-    }
-
-    /* Open is a class, never `:hover` or `:focus-within`. Two panels could be up at once while CSS decided
-       this on its own: a click left the trigger focused, :focus-within pinned that panel, and the next
-       hover opened its neighbour's. One class, set in one place, cannot say yes twice. */
-    .has-menu.open .menu-panel {
-        opacity: 1;
-        visibility: visible;
-        transform: translateX(-50%) translateY(0);
-    }
-
-    /* The open trigger keeps the hover look while the pointer is down inside the panel, so the menu on
-       screen always has exactly one lit label it belongs to. */
-    .has-menu.open > .nav-link {
-        color: var(--color-content);
-        background: var(--color-overlay);
-    }
-
-    .menu-sections {
-        grid-area: sections;
-        display: grid;
-        grid-template-columns: repeat(var(--menu-columns, 2), minmax(11rem, 1fr));
-        gap: 4px 10px;
-    }
-
-    /* Rows are spaced, not stacked flush: two of them are lit at once whenever the current page's row sits
-       next to the one under the pointer, and touching fills read as a single tall block with a seam in it.
-       2px is the same breath the docs sidebar puts between its rows. */
-    .menu-section > ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 2px;
-    }
-
-    .menu-section-label {
-        padding: 6px 12px;
-        font-size: 0.6875rem;
-        font-weight: 600;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--color-subtle);
-    }
-
-    .menu-item {
-        display: block;
-        padding: 8px 12px;
-        border-radius: 9px;
-        text-decoration: none;
-        transition:
-            background 0.15s,
-            color 0.15s;
-    }
-
-    .menu-item-label {
-        display: block;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--color-content);
-    }
-
-    .menu-item-blurb {
-        display: block;
-        margin-top: 2px;
-        max-width: 15rem;
-        font-size: 0.75rem;
-        line-height: 1.35;
-        color: var(--color-subtle);
-    }
-
-    .menu-item:hover,
-    .menu-item:focus-visible {
-        background: color-mix(in srgb, var(--color-link) 10%, transparent);
-        outline: none;
-    }
-
-    .menu-item:hover .menu-item-blurb,
-    .menu-item:focus-visible .menu-item-blurb {
-        color: var(--color-muted);
-    }
-
-    .menu-item.active {
-        background: color-mix(in srgb, var(--color-content) 6%, transparent);
-    }
-
-    .menu-item.active .menu-item-label {
-        color: var(--color-link);
-    }
-
-    /* The rail: every product shot stacked, one visible. Cropped to a wide strip: the panel is selling the
-       surface at a glance, and the whole 1240px-tall board would shrink to nothing here. It is 34rem because
-       the shots are 1072 CSS px of real interface: a rail much narrower than that renders the app's own text
-       too small to read, which is all a preview has to do. */
-    .menu-preview {
-        grid-area: preview;
-        position: relative;
-        overflow: hidden;
-        border: 1px solid var(--color-line);
-        border-radius: 10px;
-        background: var(--color-card);
-        aspect-ratio: 16 / 10;
-    }
-
-    /* Filled from its top-left corner rather than fitted: a whole surface scaled to fit the rail is a grey
-       rectangle, while its first lanes are recognisably the screen the row leads to.
-
-       COVER, not a width multiplier. This rule used to say `width: 170%` and lean on the overflow to fill the
-       box — except Tailwind's `img { max-width: 100% }` clamps exactly that, so the zoom never happened and
-       every shot wider than 16:10 painted a short strip with the rail's own card colour under it: a third of
-       the box empty on Run and Host, which is the "grey area at the bottom" the menu was shipping. Cover makes
-       filling the box the rule instead of a side effect, so it holds for ANY shot's aspect — the wide board
-       crops at the sides, a portrait capture crops at the foot, and neither can leave a gap again. */
-    .menu-preview-shot {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: left top;
-        opacity: 0;
-        transition: opacity 0.18s ease;
-    }
-
-    .menu-preview-shot.current {
-        opacity: 1;
-    }
-
-    .menu-action {
-        grid-area: action;
-        margin-top: 6px;
-        border-top: 1px solid var(--color-line);
-        padding: 12px 12px 4px;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--color-link);
-        text-decoration: none;
-    }
-
-    .menu-action:hover {
-        text-decoration: underline;
-    }
-
-    /* ── Responsive ────────────────────────────────────── */
-    @media (width < 64rem) {
+    /* The bar holds six labels, two marks and a cartouche; below 68rem it cannot, so the labels go and what
+       stays is the brand, the one call, and the way into the same six. */
+    @media (max-width: 68rem) {
+        .bar-links {
+            display: none;
+        }
         .hamburger {
             display: flex;
         }
-        .links {
+    }
+    /* On a phone the bar is the brand and the one call, side by side, and "Create your workspace" is long
+       enough to push itself off the right edge at 390px. So both sides give a little: the marks go, the
+       wordmark drops a step, and the cartouche tightens. Shortening the words instead would mean the button
+       saying something different here than it says four inches lower down, which is the one thing a call to
+       action must not do. Padding stays vertically zero: the bar's height is `min-height`, and any vertical
+       padding here would add to it. */
+    @media (max-width: 30rem) {
+        .bar-icon {
             display: none;
+        }
+        .wordmark {
+            font-size: 1.45rem;
+        }
+        .brand :global(.brand-mark) {
+            width: 1.9rem;
+            height: 1.9rem;
+        }
+        .bar-inner {
+            gap: 0.75rem;
+            padding: 0 1rem;
+        }
+        .bar-end {
+            gap: 0.6rem;
+        }
+        .bar-end .btn-sm {
+            padding: 0.5rem 0.8rem;
+            font-size: 0.8125rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .menu-panel {
+            transition: none;
+        }
+        .bar[data-cta-managed] .bar-cta {
+            transform: none;
+            transition: opacity 0.3s ease;
         }
     }
 </style>
-
-<script is:inline>
-    document.addEventListener("DOMContentLoaded", () => {
-        const toggle = document.getElementById("mobile-nav-open");
-        const overlay = document.getElementById("mobile-nav-overlay");
-
-        toggle?.addEventListener("click", () => {
-            const isOpen = overlay?.classList.toggle("open");
-            toggle.classList.toggle("active", isOpen);
-            toggle.setAttribute("aria-expanded", String(!!isOpen));
-            document.body.style.overflow = isOpen ? "hidden" : "";
-        });
-
-        // ── Mega-menus: one open, ever ─────────────────────
-        // Hover, click, keyboard and every way of dismissing all go through openMenu, which closes the
-        // others as it opens one. CSS deciding this by itself is what allowed two at a time.
-        const menuItems = [...document.querySelectorAll(".nav-item.has-menu")];
-
-        const openMenu = (item) => {
-            menuItems.forEach((menuItem) => {
-                const isOpen = menuItem === item;
-                menuItem.classList.toggle("open", isOpen);
-                menuItem.querySelector(".nav-link")?.setAttribute("aria-expanded", String(isOpen));
-            });
-        };
-
-        menuItems.forEach((item) => {
-            const trigger = item.querySelector(".nav-link");
-
-            // Touch has no hovering: a tap fires pointerenter and click together, which would open the
-            // panel and shut it again in one gesture. There the click below is the whole interaction.
-            item.addEventListener("pointerenter", (event) => {
-                if (event.pointerType !== "touch") openMenu(item);
-            });
-
-            // Leaving closes: unless the keyboard is inside the panel, in which case a stray mouse
-            // movement must not yank the rows out from under whoever is tabbing through them.
-            item.addEventListener("pointerleave", (event) => {
-                const keyboardInside = item.contains(document.activeElement) && document.activeElement !== trigger;
-                if (event.pointerType !== "touch" && !keyboardInside) openMenu(null);
-            });
-
-            // The trigger is a disclosure button: pressing it opens what is closed and closes what is open,
-            // which is also how a touch device gets rid of a panel it opened.
-            trigger?.addEventListener("click", () => {
-                openMenu(item.classList.contains("open") ? null : item);
-            });
-
-            // Tabbing past the last row closes the panel; moving between its own rows does not. Only an
-            // item that is itself open may close on this: pressing a trigger pulls focus off its
-            // neighbour, and a neighbour that closed the menu there would blink it shut under the press.
-            item.addEventListener("focusout", (event) => {
-                if (item.classList.contains("open") && !item.contains(event.relatedTarget)) openMenu(null);
-            });
-        });
-
-        document.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape") return;
-            const open = menuItems.find((item) => item.classList.contains("open"));
-            if (!open) return;
-            openMenu(null);
-            open.querySelector(".nav-link")?.focus();
-        });
-
-        // Anything pressed outside the menus, such as the page or a plain nav link, dismisses them.
-        document.addEventListener("pointerdown", (event) => {
-            if (!event.target?.closest?.(".nav-item.has-menu")) openMenu(null);
-        });
-
-        // The preview rail follows the hovered row. Pointer only: on a touch screen the panel opens on tap
-        // and the rail just shows the first shot, which is the one the panel is already about.
-        document.querySelectorAll(".menu-panel.has-preview").forEach((panel) => {
-            const shots = panel.querySelectorAll(".menu-preview-shot");
-            const show = (href) => {
-                shots.forEach((shot) => shot.classList.toggle("current", shot.dataset.previewFor === href));
-            };
-            panel.querySelectorAll("[data-preview]").forEach((item) => {
-                item.addEventListener("pointerenter", () => show(item.dataset.preview));
-                item.addEventListener("focus", () => show(item.dataset.preview));
-            });
-        });
-    });
-</script>

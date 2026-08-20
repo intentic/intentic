@@ -1,0 +1,957 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * THE HOME PAGE'S OWN LAYOUT.
+ *
+ * Everything the whole site shares — the metals, the type tiers, the cartouche button, the frame, the
+ * card, the plate — is in `global.css`. What is here is only the arrangement of THIS page: how wide the
+ * hero's three frames are, where its two wings hang, how the comparison and the getting-started plan are
+ * laid out. Every rule is under `.home`, so nothing here can reach the other sixty-odd pages.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── The shell every band shares ─────────────────────── */
+.home .shell {
+    position: relative;
+    max-width: 84rem;
+    margin: 0 auto;
+    padding: 5.5rem 1.5rem;
+}
+
+.home .h2 {
+    margin: 0.9rem 0 0;
+    max-width: 24ch;
+    font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+    /* 1.24, not the 1.16 this used to run. Playfair's content box is ~1.33em and its descenders are long,
+       so a heading set tighter than ~1.2 loses the tail of a "g" or "y" — and here it loses it outright
+       rather than just tightly, because `.display` paints the letters as a background clipped to their
+       shape, and a background stops at the element's box. */
+    line-height: 1.24;
+}
+.home .lede {
+    margin: 1rem 0 0;
+    max-width: 52ch;
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: var(--color-muted);
+}
+.home .band-cta {
+    display: inline-block;
+    margin-top: 2.5rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+/* ── 1 · The first screen ──────────────────────────────
+   SYMMETRIC, because the picture behind it is. The art is a framed plaque with a devata standing in each
+   outer third and a deliberately empty middle; the copy sits in that middle, on the axis, and the product
+   is spread underneath it in three frames — one wide one on the centre line and a narrower one leaning in
+   from either side. An off-centre column over this plate reads as a misprint. */
+.home .hero {
+    position: relative;
+    overflow: hidden;
+}
+/* THE ONLY BAND ON THE PAGE WITH NO MEASURE OF ITS OWN, and the picture behind it is why. Every other band
+   stops at 84rem because a column of words has a width past which it stops being readable. This one is not
+   a column of words: it is a plaque with two figures standing in its outer thirds, and where those figures
+   land is decided by the plate's width — which is the window's. Cap the band and the product frames stay
+   put while the figures walk outwards, until on a wide screen they are out at the edges with an acre of
+   empty wall between them.
+   The COPY still has a measure — 44rem — because that part of the band really is a column of words. */
+.home .hero-grid {
+    position: relative;
+    padding: 7rem 2rem 3rem;
+}
+.home .hero-copy {
+    position: relative;
+    z-index: 3;
+    max-width: 44rem;
+    margin: 0 auto;
+    text-align: center;
+}
+
+/* THE GREETING, FLANKED RATHER THAN UNDERLINED. Every other eyebrow trails a fading hairline to the right,
+   which opens a left-set band and tilts a centred one. Here the same lozenge stands on either side. */
+.home .hero-eyebrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    margin: 0 0 1.4rem;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-primary-500);
+}
+.home .hero-eyebrow .lozenge {
+    width: 0.58rem;
+    height: 0.58rem;
+    opacity: 0.9;
+}
+
+/* Sized against the full width of the screen rather than a column, because on this layout it has one.
+   THE LEADING IS 1.24, NOT THE 1.04 A DISPLAY SETTING USUALLY WANTS, for two reasons that pull the same
+   way. These are three SENTENCES rather than three lines of one: each ends on its own full stop and is a
+   separate claim, so they need the air between them that a paragraph break would give — set solid they
+   read as one phrase that happens to have wrapped, and the ember stops lose their beat. And the clipped
+   background fill means a too-short line box simply does not paint a descender.
+
+   THE FAMILY IS DECLARED ON THE <h1> ITSELF, not only on the spans that carry the stone texture. Visually
+   this changes nothing — each beat is already wrapped in `.display`. It matters because the h1 is the
+   element every outside reader inspects: search previews, reader modes and audit tools all ask the HEADING
+   what it is set in, and they got the inherited body sans, because the only thing directly inside the h1
+   was a wrapper span. */
+.home .headline {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(2.55rem, 5.6vw, 4.6rem);
+    line-height: 1.24;
+    font-weight: 600;
+}
+.home .headline-line {
+    display: block;
+    white-space: nowrap;
+}
+/* A little more air between the three beats than the line-height alone gives, set on the sibling join so
+   the first beat keeps its distance from the eyebrow and the last from the subhead. */
+.home .headline-line + .headline-line {
+    margin-top: 0.14em;
+}
+
+/* THE LINE UNDER THE HEADLINE. The colour is sampled off the reference art rather than picked: a
+   near-white here (#e4d3b6) reads as paper laid over stone on a wall this warm, while the amber below is
+   several steps warmer and one step darker, so it separates from the cream headline by TEMPERATURE as much
+   as by brightness. `balance` splits the sentence on its own clause rather than filling the measure. */
+.home .hero-sub {
+    margin: 1.4rem auto 0;
+    max-width: 36ch;
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: #c2a077;
+    text-wrap: balance;
+}
+
+/* One control row, used twice — here and in the closing band — and centred in both. */
+.home .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.9rem;
+}
+.home .hero-copy .hero-actions {
+    margin-top: 2.1rem;
+}
+
+/* ── The product, in three frames on one axis ─────────
+   The workspace sits on the centre line and a narrower surface leans in from either side, overlapping its
+   edges: one near thing in the middle, two at middle distance. Only the centre frame is in flow — it sets
+   the block's height — and the two wings hang off their own edges of the same span, so the composition
+   holds its proportions at every width without a media query per frame.
+   All three CROP their screenshot from the top-left rather than fitting it. A whole screen shrunk into a
+   370px wing is a grey rectangle; its top-left corner at full size is still a readable list. */
+.home .hero-visual {
+    position: relative;
+    margin: 2.6rem 0 0;
+}
+/* THE STACK TAKES A CEILING, so the three frames stop filling the whole window on a wide screen.
+   Uncapped, the workspace and its two wings grew with the viewport until they ran off both edges and
+   swamped the copy above them. The centre is 62% of this box and each wing a fifth of it, so capping the
+   box and centring it shrinks all three together and holds every overlap exactly as it was. */
+.home .hero-stack {
+    position: relative;
+    max-width: 74rem;
+    margin-inline: auto;
+}
+/* The centre frame is the only one in flow, so it sets the block's height, and it carries a deeper shadow
+   than the shared frame style gives it: it is standing ON the two wings rather than beside them, and that
+   is the one place on this page where a cast shadow has real work to do. */
+.home .window-app {
+    position: relative;
+    z-index: 2;
+    width: 62%;
+    margin: 0 auto;
+    box-shadow:
+        0 2px 0 rgba(201, 160, 92, 0.06),
+        0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6),
+        0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
+}
+/* THE WINGS RISE INTO THE FIGURES, and that is the point of them. Each stands in the outer third of the
+   plate, which is exactly where the art puts a devata, and each is pulled up until its top rail crosses
+   her lower body. That overlap is what binds the product to the wall: level with the centre frame the
+   three read as a row of thumbnails sitting ON a picture, climbing into it they read as one arrangement
+   standing IN it. They rise by different amounts so the pair is not a mirror.
+   BOTH SIT BEHIND THE CENTRE, and that is a layering decision rather than a stacking accident. One wing in
+   front and one behind reads as depth until you put a control on the middle frame: anything in that
+   frame's own corner is then paintable over by the wing above it, and the demo press ended up half under a
+   conversation panel. */
+.home .window-plan,
+.home .window-chat {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+}
+.home .window-plan {
+    top: -27%;
+    left: 0;
+    width: 21%;
+}
+.home .window-chat {
+    top: -21%;
+    right: 0;
+    width: 21%;
+}
+
+.home .window-crop {
+    position: relative;
+    overflow: hidden;
+}
+/* One crop shape per surface, each cut to end on a horizon in the screenshot rather than through the
+   middle of a row: the workspace on its table of runs, the plan on its checklist, the chat on a reply. */
+.home .window-crop-app {
+    aspect-ratio: 16 / 9;
+}
+/* The wings are PORTRAITS. They are half the centre's width and have to reach from a figure's waist down
+   to near the centre frame's foot, and a landscape crop that tall would be a letterbox with a margin.
+   Portrait also suits what is in them: a plan is a list and a conversation is a column. */
+.home .window-crop-plan {
+    aspect-ratio: 1 / 2;
+}
+.home .window-crop-chat {
+    aspect-ratio: 5 / 9;
+}
+.home .screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    max-width: none;
+}
+/* The centre frame is wide enough to hold its screenshot at close to true size; the two wings are not, so
+   they are drawn a third over and crop harder. A wing set at the centre's scale is a grey mosaic — the
+   point of a surface at middle distance is that you can still tell what it is. */
+.home .screen-app {
+    width: 112%;
+}
+/* Each wing is drawn wide enough to FILL its portrait crop, and the two need very different amounts. The
+   plan's source is already a tall column, so a third over is enough. The chat's is a landscape panel split
+   into a list and a conversation, and 222% is not a round number: it is the width that lands the crop's
+   right edge ON the seam between those two panes. */
+.home .screen-plan {
+    width: 135%;
+}
+.home .screen-chat {
+    width: 222%;
+}
+
+/* ── The press into the demo ──────────────────────────
+   It covers the whole centre frame so the whole picture is the target, and carries its own label in the
+   top-right corner. The scrim it lays down is nearly nothing at rest and a real veil under the pointer,
+   which is what makes the frame feel like something you can open rather than a picture of one.
+   `inset` starts below the ledge so the ornament and the label never share a corner. */
+.home .play {
+    position: absolute;
+    inset: var(--corner-size) 0 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 0.85rem;
+    background: rgba(10, 7, 5, 0.06);
+    transition: background-color 0.25s ease;
+}
+.home .play:hover,
+.home .play:focus-visible {
+    background: rgba(10, 7, 5, 0.42);
+}
+/* THE PRESS IS THE SITE'S OWN SMALL BUTTON, borrowed whole. What is left here is only what a button ON A
+   PICTURE needs that one on the page does not: the whole frame is the target, so the anchor covers it, and
+   hovering anywhere on the picture has to light the button even though the pointer is nowhere near it. */
+.home .play:hover .btn::before,
+.home .play:hover .btn::after,
+.home .play:focus-visible .btn::before,
+.home .play:focus-visible .btn::after {
+    opacity: 1;
+}
+.home .play:hover .btn,
+.home .play:focus-visible .btn {
+    color: #fff6e6;
+}
+
+/* ── 2 · The verbs ───────────────────────────────────── */
+.home .lead-verb {
+    margin-top: 3.5rem;
+}
+.home .lead-verb-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    max-width: 52rem;
+}
+/* THE LEAD VERB IS ONE OF THE FIVE, so it is titled like the other four rather than with a style of its
+   own — the same lotus-and-title pair the trust cards use, one step up in size because this one leads. */
+.home .lead-verb-name {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    font-size: 1.375rem;
+    color: var(--color-content);
+}
+.home .lead-verb-line {
+    margin: 0.6rem 0 0;
+    max-width: 46ch;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    color: var(--color-content);
+}
+.home .see {
+    white-space: nowrap;
+    font-size: 0.9375rem;
+}
+.home .window-wide {
+    margin-top: 1.8rem;
+}
+
+.home .verb-grid {
+    display: grid;
+    gap: 1.1rem;
+    margin-top: 1.1rem;
+}
+@media (min-width: 44rem) {
+    .home .verb-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+.home .verb-card {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+}
+.home .verb-crop {
+    position: relative;
+    height: 13rem;
+    overflow: hidden;
+    border-bottom: 1px solid var(--color-line);
+}
+.home .verb-crop img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 150%;
+    max-width: none;
+}
+.home .verb-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: 1.25rem;
+}
+.home .verb-body h3 {
+    margin: 0;
+    font-size: 1.1875rem;
+    color: var(--color-content);
+}
+.home .verb-body p {
+    margin: 0.5rem 0 0;
+    max-width: 52ch;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--color-muted);
+}
+.home .verb-card:hover .verb-body h3 {
+    color: var(--color-primary-400);
+}
+
+/* Automate has no honest screenshot, so its picture is the events it wakes on — a mocked-up automations
+   screen would be the one lie on this page. */
+.home .triggers {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--color-line);
+    background: rgba(224, 123, 39, 0.03);
+    padding: 1.4rem;
+}
+.home .triggers ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 1.25rem;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+.home .triggers li {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+}
+.home .triggers-out {
+    margin: 1.3rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.65;
+    color: var(--color-subtle);
+}
+
+/* ── 3 · The comparison ────────────────────────────────
+   Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy side is a lit
+   cartouche and the light one a dashed outline. */
+.home .compare {
+    display: grid;
+    align-items: start;
+    gap: 1.4rem;
+    margin-top: 3rem;
+}
+@media (min-width: 60rem) {
+    .home .compare {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+.home .compare-ours {
+    border-color: rgba(224, 123, 39, 0.3);
+    background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+    padding: 1.9rem;
+}
+.home .compare-chat {
+    border: 1px dashed var(--color-line-strong);
+    padding: 1.9rem;
+}
+.home .compare-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.85rem;
+}
+.home .compare-head h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--color-content);
+}
+.home .compare-chat .compare-head h3 {
+    color: var(--color-muted);
+}
+.home .compare-head span {
+    font-size: 0.8125rem;
+    color: var(--color-subtle);
+}
+.home .compare ul {
+    margin: 1.4rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.85rem;
+}
+.home .compare li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--color-content);
+}
+.home .compare li .lotus,
+.home .compare li .lozenge {
+    margin-top: 0.2rem;
+}
+.home .compare-chat li {
+    color: var(--color-muted);
+}
+.home .compare-missing {
+    margin: 1.4rem 0 0;
+    border-top: 1px solid var(--color-line);
+    padding-top: 1.3rem;
+    font-size: 0.9375rem;
+    color: var(--color-subtle);
+}
+.home .compare-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem 2rem;
+    margin-top: 1.5rem;
+}
+.home .compare-foot p {
+    margin: 0;
+    max-width: 60ch;
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    color: var(--color-subtle);
+}
+.home .compare-foot a {
+    font-size: 0.9375rem;
+}
+
+/* ── 4 · What it costs ───────────────────────────────── */
+.home .econ {
+    display: grid;
+    align-items: start;
+    gap: 1.4rem;
+    margin-top: 3rem;
+}
+@media (min-width: 60rem) {
+    .home .econ {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+.home .accounts-head {
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.9rem 1.3rem;
+}
+.home .accounts ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.home .accounts li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.85rem;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.95rem 1.3rem;
+    color: var(--color-content);
+}
+.home .accounts li:last-child {
+    border-bottom: 0;
+}
+.home .account-name {
+    font-family: var(--font-mark);
+    font-size: 1rem;
+    font-weight: 600;
+}
+.home .account-detail {
+    flex: 1;
+    min-width: 10rem;
+    font-size: 0.75rem;
+    color: var(--color-subtle);
+}
+/* Centre the caps in the bordered box. Left inline with the inherited 1.5 line-height, the tag's letters
+   sat visibly high — all-caps has no descenders, so the leading reserved below the baseline was empty and
+   pushed the word up. */
+.home .account-tag {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    border: 1px solid var(--color-line-strong);
+    padding: 0.28rem 0.6rem;
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-gold);
+}
+.home .flat {
+    padding: 1.5rem;
+}
+.home .flat ul {
+    display: grid;
+    gap: 0.9rem;
+    margin: 1.2rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+.home .flat li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--color-muted);
+}
+.home .flat li .lotus {
+    margin-top: 0.2rem;
+}
+
+/* ── 5 · Who builds it ───────────────────────────────── */
+.home .trust {
+    display: grid;
+    gap: 3rem;
+}
+@media (min-width: 64rem) {
+    .home .trust {
+        grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+        gap: 3.5rem;
+    }
+}
+.home .trust-bio {
+    margin: 0.9rem 0 0;
+    max-width: 52ch;
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    color: var(--color-subtle);
+}
+
+/* ── 6 · Getting started ─────────────────────────────────
+   TWO PLACES AND THE SEAM BETWEEN THEM. The band is a plan rather than a list: the left zone is what
+   happens in a browser on our side, the right is what happens on the reader's own machine, and the rule
+   down the middle is the boundary the whole product argument rests on.
+
+   What stood here was 01 / 02 / 03 in three columns — the shape every landing page uses, and the shape
+   that carries no information: the reader already knows a list is ordered. Worse, "Your sandbox is
+   waiting" is not a step anybody performs; it is something that has already happened by the time you read
+   it, and numbering it 02 dressed a fact as a chore.
+
+   Stacked below 60rem, where a vertical seam has no width to divide and each zone's own ruled heading does
+   the separating instead. */
+.home .flow {
+    display: grid;
+    gap: 2.5rem;
+    margin-top: 3rem;
+}
+@media (min-width: 60rem) {
+    .home .flow {
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 0;
+        align-items: start;
+    }
+}
+/* The zone's name, and it is SENTENCE CASE on a page whose every other label is spaced capitals. That is
+   deliberate: these two read as annotations on a drawing — the hand-lettered "here" and "there" on an
+   elevation — and small caps would make them section eyebrows, of which this band already has one. */
+.home .flow-where {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid var(--color-line-strong);
+    font-family: var(--font-mark);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-gold-bright);
+}
+/* THE BOUNDARY. A single rule, and a lozenge cut into it at the crossing point — the one place on this
+   page where something passes from our side to the reader's. It stretches to the taller zone. */
+.home .flow-seam {
+    position: relative;
+    align-self: stretch;
+    width: 1px;
+    margin: 0 3rem;
+    background: var(--color-line-strong);
+}
+@media (max-width: 60rem) {
+    .home .flow-seam {
+        display: none;
+    }
+}
+.home .flow-seam::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.5rem;
+    height: 0.5rem;
+    transform: translate(-50%, -50%) rotate(45deg);
+    background: var(--color-canvas);
+    border: 1px solid var(--color-line-bright);
+}
+/* A station on the plan: a lotus in the margin where the numeral used to be, and the beat hung off it. The
+   marker is the same one the page sets every bullet with, so a step reads as one more item in the page's
+   own vocabulary rather than as a counter with a typeface of its own. */
+.home .station {
+    position: relative;
+    padding-left: 1.7rem;
+}
+.home .station + .station {
+    margin-top: 1.7rem;
+}
+.home .station-mark {
+    position: absolute;
+    top: 0.15rem;
+    left: 0;
+    display: block;
+    width: 0.85rem;
+    height: 0.85rem;
+}
+.home .station h3 {
+    margin: 0;
+    font-size: 1.0625rem;
+    color: var(--color-content);
+}
+.home .station p {
+    margin: 0.45rem 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--color-muted);
+}
+.home .command {
+    margin-top: 1.7rem;
+    background: rgba(8, 6, 4, 0.72);
+}
+.home .command-head {
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.7rem 1.2rem;
+}
+/* The surface the line is typed into, named in the same hand as the zone above it — the zone says whose
+   machine, this says where on it. */
+.home .command-where {
+    font-family: var(--font-mark);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-gold-bright);
+}
+.home .command pre {
+    margin: 0;
+    overflow-x: auto;
+    padding: 0.9rem 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--color-content);
+}
+.home .prompt {
+    color: var(--color-primary-500);
+}
+.home .command-note {
+    margin: 0.9rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--color-subtle);
+}
+.home .desktop {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 2rem;
+    max-width: 52rem;
+    margin-top: 1.6rem;
+    padding: 1.2rem 1.4rem;
+}
+.home .desktop > div {
+    flex: 1;
+    min-width: 16rem;
+}
+.home .desktop-lead {
+    margin: 0;
+    font-family: var(--font-mark);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--color-content);
+}
+.home .desktop-note {
+    margin: 0.35rem 0 0;
+    max-width: 52ch;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--color-muted);
+}
+
+/* ── 7 · FAQ ─────────────────────────────────────────────
+   A REGISTER, NOT A STACK OF PANELS. The three bands used to run down a 44rem column with their labels
+   sitting on top of their own questions, which made the section a column of accordions with the right half
+   of the band empty beside it — and left a reader who wanted the privacy answers scrolling past two bands
+   of questions to find out where the third began.
+   The labels now stand in the margin, where a codex puts its rubric: the three subjects are legible in one
+   glance down the left, each question block hangs off a spine to their right, and the section uses the
+   width the band always had. Below 62rem the margin has nowhere to stand, so the label goes back above its
+   questions and the spine is dropped. */
+.home .faq {
+    display: grid;
+    gap: 3.25rem;
+    max-width: 66rem;
+    margin-top: 2.75rem;
+}
+.home .faq-group-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.85rem;
+}
+@media (min-width: 62rem) {
+    .home .faq-group {
+        display: grid;
+        grid-template-columns: 15rem minmax(0, 1fr);
+    }
+    /* In the margin the two parts stack: a rubric is a heading with its gloss under it, not a heading with
+       a sentence run on beside it. */
+    .home .faq-group-head {
+        display: block;
+        padding: 0.9rem 2.25rem 0 0;
+    }
+    .home .faq-group-head p {
+        margin-top: 0.45rem;
+        line-height: 1.6;
+    }
+    /* THE SPINE. One rule, the page's lightest, running the full height of whichever side is taller — so it
+       reads as the edge of the register rather than as a border around the questions. */
+    .home .faq-list {
+        margin-top: 0;
+        border-left: 1px solid var(--color-line);
+        padding-left: 2.5rem;
+    }
+}
+.home .faq-group-head h3 {
+    margin: 0;
+    font-size: 1.0625rem;
+    color: var(--color-content);
+}
+.home .faq-group-head p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--color-subtle);
+}
+.home .faq-list {
+    margin-top: 0.85rem;
+    border-bottom: 1px solid var(--color-line);
+}
+.home .faq details {
+    border-top: 1px solid var(--color-line);
+}
+.home .faq summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    cursor: pointer;
+    list-style: none;
+    padding: 1rem 0;
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    color: var(--color-content);
+    transition: color 0.2s ease;
+}
+.home .faq summary:hover {
+    color: var(--color-primary-400);
+}
+/* The answer hangs under its question rather than under the mark: indented by the mark's width plus its
+   gap, so the first word of the answer starts on the same axis as the first word of the question. */
+.home .faq-answer {
+    padding: 0 0 1.25rem 1.45rem;
+}
+.home .faq-answer p {
+    margin: 0 0 0.7rem;
+    max-width: 60ch;
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    color: var(--color-muted);
+}
+.home .faq-answer p:last-of-type {
+    margin-bottom: 0;
+}
+.home .faq-answer a {
+    display: inline-block;
+    margin-top: 0.8rem;
+    font-size: 0.875rem;
+}
+
+/* ── 8 · The closing cartouche ─────────────────────────
+   The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art, which is the
+   half the first screen never shows because the windows cover it. */
+.home .final {
+    border-top: 1px solid var(--color-line);
+}
+.home .plate-foot .plate-img {
+    background-position: 50% 100%;
+    background-size: 130% auto;
+}
+.home .plate-foot::after {
+    background:
+        linear-gradient(180deg, var(--color-canvas) 0%, rgba(10, 7, 5, 0.6) 34%, rgba(10, 7, 5, 0.42) 68%, rgba(10, 7, 5, 0.78) 100%),
+        rgba(12, 9, 7, 0.14);
+}
+.home .final-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-top: 6rem;
+    padding-bottom: 6.5rem;
+}
+.home .final-heading {
+    max-width: 20ch;
+    margin-top: 1.4rem;
+    font-size: clamp(2.1rem, 4vw, 3.25rem);
+}
+.home .final-heading span {
+    display: block;
+}
+/* The rule under "forever": its own element, so it can be gold, sit where a drawn underline sits rather
+   than where the font's metrics put one, and keep its weight when the heading scales. */
+.home .final-forever {
+    position: relative;
+    width: fit-content;
+    margin: 0 auto;
+    padding-bottom: 0.12em;
+}
+.home .final-forever::after {
+    content: "";
+    position: absolute;
+    right: 0.04em;
+    bottom: 0;
+    left: 0.04em;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(224, 123, 39, 0.9) 18%, rgba(224, 123, 39, 0.9) 82%, transparent);
+}
+.home .final-sub {
+    max-width: 46ch;
+}
+.home .final-divider {
+    margin: 2rem 0;
+}
+
+/* ── Below the columns break ─────────────────────────── */
+@media (max-width: 64rem) {
+    .home .hero-grid {
+        padding-top: 7rem;
+        padding-bottom: 3.5rem;
+    }
+    .home .headline-line {
+        white-space: normal;
+    }
+    .home .shell {
+        padding-top: 4rem;
+        padding-bottom: 4rem;
+    }
+    /* THE WINGS STOP CLIMBING HERE, and the reason is that the two things they are measured against shrink
+       at different rates. The plate is 16/9 of the window's width, so the figures on it rise as the window
+       narrows; the copy above is words, and words get TALLER as their column narrows. Below about a
+       thousand pixels the figures have already passed above the buttons, so a wing pulled up far enough to
+       reach them is a wing standing beside the call to action. It stays put instead.
+       They widen at the same time: a fifth of a narrow window is 180px, which is a thumbnail rather than a
+       surface, and the centre gives up the width to pay for it. */
+    .home .window-app {
+        width: 56%;
+    }
+    .home .window-plan {
+        top: -8%;
+        width: 25%;
+    }
+    .home .window-chat {
+        top: -4%;
+        width: 25%;
+    }
+    .home .screen-app {
+        width: 138%;
+    }
+}
+/* THE WINGS COME OFF ON A PHONE. Overlapped across 380px the three frames hide most of each other and none
+   of them is readable; the workspace alone, full width and cropped harder, carries the same point. Both
+   wings are decoration a screen reader never sees, so only the arrangement is lost. */
+@media (max-width: 48rem) {
+    .home .hero-visual {
+        margin-top: 2.75rem;
+    }
+    .home .window-plan,
+    .home .window-chat {
+        display: none;
+    }
+    .home .window-app {
+        width: 100%;
+    }
+    .home .window-crop-app {
+        aspect-ratio: 5 / 4;
+    }
+    .home .screen-app {
+        width: 175%;
+    }
+}
+@media (max-width: 40rem) {
+    .home .screen-app {
+        width: 205%;
+    }
+    .home .triggers ul {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .home .btn {
+        padding: 0.75rem 1.2rem;
+        font-size: 1rem;
+    }
+}

@@ -20,11 +20,10 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
     <Nav />
     <main class="flex-1">
         <!-- Hero + the jump strip: find your tool without reading anything -->
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="eyebrow">{compareIndex.eyebrow}</div>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{compareIndex.heading}</h1>
+                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{compareIndex.heading}</h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{compareIndex.sub}</p>
 
                 <div class="mt-8 border-t border-line pt-6">
@@ -34,7 +33,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                             comparePages.map((page) => (
                                 <a
                                     href={compareHref(page.slug)}
-                                    class="rounded-lg border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                    class="border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
                                 >
                                     {page.navLabel}
                                 </a>
@@ -44,7 +43,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                 </div>
 
                 <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                 </div>
             </div>
@@ -53,7 +52,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
         <!-- The frame. Two factual axes, not a quadrant: they are the same two the landing page argues. -->
         <section class="border-b border-line">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
-                <h2 class="max-w-2xl text-2xl font-semibold tracking-tight">{compareIndex.axes.heading}</h2>
+                <h2 class="display max-w-2xl text-2xl font-semibold">{compareIndex.axes.heading}</h2>
                 <div class="mt-8 grid gap-6 lg:grid-cols-2">
                     {
                         compareIndex.axes.items.map((item, i) => (
@@ -92,11 +91,11 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                                     {family.examples.map((name) => {
                                         const page = pageByName.get(name);
                                         return page === undefined ? (
-                                            <span class="rounded-md border border-line px-2 py-1 text-2xs text-subtle">{name}</span>
+                                            <span class="border border-line px-2 py-1 text-2xs text-subtle">{name}</span>
                                         ) : (
                                             <a
                                                 href={compareHref(page.slug)}
-                                                class="rounded-md border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                                class="border border-line px-2 py-1 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
                                             >
                                                 {name} →
                                             </a>
@@ -138,23 +137,4 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
 
     <Footer />
 
-    <script>
-        const targets = document.querySelectorAll(".fade-in");
-        if ("IntersectionObserver" in window) {
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        if (entry.isIntersecting) {
-                            entry.target.classList.add("visible");
-                            observer.unobserve(entry.target);
-                        }
-                    }
-                },
-                { threshold: 0.12 },
-            );
-            targets.forEach((el) => observer.observe(el));
-        } else {
-            targets.forEach((el) => el.classList.add("visible"));
-        }
-    </script>
 </BaseLayout>

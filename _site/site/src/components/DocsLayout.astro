@@ -85,7 +85,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     inside the thing you would have to open to reach it. */}
                 <div class="mb-4 flex items-center gap-2 lg:hidden">
                     <button
-                        class="flex items-center gap-2 rounded-lg border border-line bg-card px-3.5 py-2 text-sm text-muted"
+                        class="flex items-center gap-2 border border-line bg-card px-3.5 py-2 text-sm text-muted"
                         id="docs-sidebar-toggle"
                         aria-label="Toggle docs menu"
                         aria-expanded="false"
@@ -143,7 +143,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     {/* The book's own name is the fallback, so a page outside every shelf says "Docs" or "API"
                         rather than a generic word that belongs to neither. */}
                     <div class="eyebrow">{section?.label ?? book.label}</div>
-                    <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{heading}</h1>
+                    <h1 class="display mt-3 text-3xl font-semibold sm:text-4xl">{heading}</h1>
                     <p class="mt-4 text-base leading-relaxed text-muted">{lead}</p>
                 </header>
 

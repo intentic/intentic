@@ -3,7 +3,7 @@
  *
  * Run: `node scripts/angkor-plate.mjs`  (from _site/site)
  *
- * WHY A SCRIPT AND NOT `astro:assets`. The plate is a CSS `background-image` on `.a-plate-img`, chosen
+ * WHY A SCRIPT AND NOT `astro:assets`. The plate is a CSS `background-image` on `.plate-img`, chosen
  * by media query rather than by `srcset`, because it is scenery: it has no intrinsic place in the flow
  * and an `<img>` there would have to be absolutely positioned and `object-fit`ed back into exactly the
  * same thing. `astro:assets` only reaches files under `src/assets/` that are IMPORTED, so a background
@@ -31,7 +31,7 @@ const OUT_DIR = join(here, "../public/assets/angkor");
 
 /* The three rungs the stylesheet asks for by media query: phone, everything, and the wide desktop above
  * 100rem. 16:9 exactly — the master is 1672×941, which is 16:9 to within a twentieth of a percent, and
- * pinning it to the nominal ratio keeps the frame-rule arithmetic in angkor.css honest at every rung.
+ * pinning it to the nominal ratio keeps the frame-rule arithmetic in global.css honest at every rung.
  *
  * Quality rises as the rung shrinks: at 900 the whole plate is painted into a phone's width, so its
  * pixels are the ones a reader is closest to, while at 2400 each artefact is a third the angular size. */

@@ -113,13 +113,7 @@ export default defineConfig({
         sitemap({
             // The search index is an endpoint, not a page: it has no title, no content a reader could land on,
             // and a crawler that fetches it learns the whole corpus twice.
-            //
-            // /angkor/ is out for the opposite reason: it is the HOME PAGE, in an alternative dress. Every
-            // sentence on it comes from the same content modules the home page reads, so to a crawler it is a
-            // duplicate of "/" — the one thing a marketing site must never hand a search engine. The page
-            // carries `noindex` itself; this keeps it out of the sitemap that would otherwise advertise it.
-            filter: (page) =>
-                !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json") && !page.endsWith("/angkor/") && !page.endsWith("/angkor"),
+            filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json"),
             changefreq: "monthly",
             priority: 0.7,
             serialize(item) {

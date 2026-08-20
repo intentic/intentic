@@ -9,9 +9,9 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 
 // Cards render through set:html, so escape the trusted-but-ampersand-bearing data (e.g. "Payroll & approvals").
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const chip = (t: string) => `<span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 text-2xs text-muted">${esc(t)}</span>`;
+const chip = (t: string) => `<span class="border border-line bg-overlay/50 px-2 py-0.5 text-2xs text-muted">${esc(t)}</span>`;
 const sandboxCard = (c: { title: string; fns: string[] }) => `
-    <div class="rounded-xl border border-line bg-card p-4">
+    <div class="border border-line bg-card p-4">
         <div class="flex items-center gap-2">
             <span class="text-link">${cubeGlyph}</span>
             <span class="text-sm font-medium text-content">${esc(c.title)} <span class="font-normal text-subtle">Sandbox</span></span>
@@ -47,33 +47,33 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
         services</strong>: code, chat, docs, secrets. Nothing here is a new feature; it's the primitives you already have, wired together.
     </p>
 
-    <figure class="docs-embed my-8 space-y-5 rounded-2xl border border-line bg-canvas/40 p-5 sm:p-7">
+    <figure class="docs-embed my-8 space-y-5 border border-line bg-canvas/40 p-5 sm:p-7">
         <div class="flex justify-center">
-            <div class="rounded-lg border border-success/40 bg-success/10 px-4 py-2 text-center">
+            <div class="border border-success/40 bg-success/10 px-4 py-2 text-center">
                 <div class="text-sm font-medium text-content">intentic app</div>
                 <div class="text-2xs text-subtle">one browser UI · every sandbox · watch and steer</div>
             </div>
         </div>
 
-        <div class="eyebrow text-center">Human in the loop · how you supervise the fleet</div>
+        <div class="eyebrow eyebrow-bare flex justify-center">Human in the loop · how you supervise the fleet</div>
         <div class="grid gap-3" set:html={oversight.map(sandboxCard).join("")}></div>
 
-        <div class="eyebrow text-center">Role sandboxes · one per function</div>
+        <div class="eyebrow eyebrow-bare flex justify-center">Role sandboxes · one per function</div>
         <div class="grid gap-3 sm:grid-cols-3" set:html={business.map(sandboxCard).join("")}></div>
 
-        <div class="eyebrow text-center">Team sandboxes · one per team, per product, per customer</div>
+        <div class="eyebrow eyebrow-bare flex justify-center">Team sandboxes · one per team, per product, per customer</div>
         <div class="grid gap-3 sm:grid-cols-3" set:html={delivery.map(sandboxCard).join("")}></div>
 
         <div class="flex items-center justify-center gap-2 text-center text-2xs text-subtle">
             <span class="h-px w-8 bg-line-strong"></span>each sandbox connects out over its own tunnel · scoped via capabilities &amp; members, never an ambient bus<span aria-hidden="true">↓</span>
         </div>
 
-        <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4">
+        <div class="border border-primary-600/30 bg-primary-600/[0.05] p-4">
             <div class="eyebrow text-link">Shared services</div>
             <div class="mt-2 flex flex-wrap gap-2">
                 {
                     sharedServices.map((s) => (
-                        <span class="rounded-md border border-primary-600/30 bg-canvas/60 px-2.5 py-1 text-2xs text-content">{s}</span>
+                        <span class="border border-primary-600/30 bg-canvas/60 px-2.5 py-1 text-2xs text-content">{s}</span>
                     ))
                 }
             </div>
@@ -82,7 +82,7 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
         <div class="border-t border-line pt-4">
             <div class="eyebrow mb-2">Tools &amp; outputs the agents drive</div>
             <div class="flex flex-wrap gap-2">
-                {outputs.map((o) => <span class="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-2xs text-success">{o}</span>)}
+                {outputs.map((o) => <span class="border border-success/30 bg-success/10 px-2.5 py-1 text-2xs text-success">{o}</span>)}
             </div>
         </div>
     </figure>
@@ -104,7 +104,7 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
         </li>
     </ul>
 
-    <aside class="docs-embed my-6 rounded-2xl border border-line bg-card p-5">
+    <aside class="docs-embed my-6 border border-line bg-card p-5">
         <div class="eyebrow text-link">Honest about the seams</div>
         <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
             <li>

@@ -33,7 +33,7 @@ const dateline = (iso: string): string =>
     <main class="flex-1">
         <section class="mx-auto max-w-3xl px-6 pt-32 pb-12 max-sm:pt-28">
             <div class="eyebrow">Changelog</div>
-            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">What's new</h1>
+            <h1 class="display mt-3 text-3xl font-semibold sm:text-4xl">What's new</h1>
             <p class="mt-4 max-w-copy text-lg leading-relaxed text-muted">
                 Every release that changed something you'd notice, newest first. Releases that only moved things
                 around under the hood aren't listed: there are a lot of those, and none of them are news.
@@ -51,7 +51,7 @@ const dateline = (iso: string): string =>
         {
             unavailable && (
                 <section class="mx-auto max-w-3xl px-6 pb-16">
-                    <p class="rounded-lg border border-line p-4 text-sm leading-relaxed text-muted">
+                    <p class="border border-line p-4 text-sm leading-relaxed text-muted">
                         This list couldn't be loaded when the site was last built. The releases themselves are
                         always on{" "}
                         <a href={githubReleasesUrl} class="underline hover:text-content" rel="noopener" target="_blank">
@@ -68,7 +68,7 @@ const dateline = (iso: string): string =>
         {
             !unavailable && entries.length === 0 && (
                 <section class="mx-auto max-w-3xl px-6 pb-16">
-                    <p class="rounded-lg border border-line p-4 text-sm leading-relaxed text-muted">
+                    <p class="border border-line p-4 text-sm leading-relaxed text-muted">
                         Nothing here yet: the next release with a user-facing change will be the first entry.
                     </p>
                 </section>

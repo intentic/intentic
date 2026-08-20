@@ -41,13 +41,12 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
 <BaseLayout>
     <Nav />
     <main class="flex-1">
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-12 lg:pt-32">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14">
                     <div>
                         <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The catalog</div>
-                        <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every service, listed.</h1>
+                        <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">Every service, listed.</h1>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
                             These are the metered services a member's agent can ask to run — each run approved by its owner, priced in credits, and
                             refunded automatically if the service fails to answer.
@@ -61,8 +60,8 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
                     {/* The model, drawn. Fills the column the copy used to leave empty, and lets the shortened intro
                         stay short: the diagram carries the lifecycle the two paragraphs above used to spell out. */}
                     <figure class="w-full lg:justify-self-end">
-                        <div class="relative overflow-hidden rounded-2xl border border-line bg-canvas/60">
-                            <div class="grid-overlay"></div>
+                        <div class="relative overflow-hidden border border-line bg-canvas/60">
+                            <div class="wall"></div>
                             <div
                                 class="pointer-events-none absolute top-1/2 left-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full"
                                 style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 14%, transparent), transparent 70%)"

@@ -76,14 +76,13 @@ const claimIcons = [
     <main class="flex-1">
         {/* 1 · The hero the page never had: same shell as /earn/ and /extensions/, so About stops reading as a
             documentation sub-page. The right half, empty until now, is where the face goes. */}
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="grid-overlay"></div>
+        <section class="page-hero">
+            <div class="wall"></div>
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:gap-16">
                     <div>
                         <div class="eyebrow">{aboutHero.eyebrow}</div>
-                        <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{aboutHero.headline}</h1>
+                        <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{aboutHero.headline}</h1>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{aboutHero.lede}</p>
 
                         {/* The name, still prominent, but as the signature under the claim rather than as the
@@ -110,7 +109,7 @@ const claimIcons = [
                             aria-hidden="true"
                         >
                         </div>
-                        <div class="relative overflow-hidden rounded-2xl border border-line-strong shadow-2xl shadow-black/60">
+                        <div class="relative overflow-hidden border border-line-strong shadow-2xl shadow-black/60">
                             <Image
                                 src={portrait}
                                 alt={aboutHero.portraitAlt}
@@ -123,7 +122,7 @@ const claimIcons = [
                             />
                             <div class="absolute inset-0 bg-primary-500/12 mix-blend-multiply" aria-hidden="true"></div>
                             {/* An inner hairline, so the plate has an edge of its own against the frame. */}
-                            <div class="absolute inset-0 rounded-2xl ring-1 ring-black/20 ring-inset" aria-hidden="true"></div>
+                            <div class="absolute inset-0 ring-1 ring-black/20 ring-inset" aria-hidden="true"></div>
                         </div>
                     </figure>
                 </div>
@@ -167,7 +166,7 @@ const claimIcons = [
         {/* 3 · The three checkable claims, even-height, with the admission carrying the row underneath. */}
         <section class="mx-auto max-w-7xl px-6 py-16 lg:py-20" aria-labelledby="claims-heading">
             <div class="eyebrow text-link">Why trust any of this</div>
-            <h2 id="claims-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+            <h2 id="claims-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                 Three things you can check without asking me.
             </h2>
             <div class="mt-10 grid gap-4 md:grid-cols-3">
@@ -184,7 +183,7 @@ const claimIcons = [
                                 aria-hidden="true"
                             />
                             <div class="flex items-center gap-3">
-                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary-600/30 bg-primary-600/10 text-link transition-colors group-hover:bg-primary-600/20">
+                                <span class="flex h-9 w-9 shrink-0 items-center justify-center border border-primary-600/30 bg-primary-600/10 text-link transition-colors group-hover:bg-primary-600/20">
                                     <svg
                                         viewBox="0 0 24 24"
                                         class="h-4.5 w-4.5"
@@ -232,7 +231,7 @@ const claimIcons = [
                 <div class="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-16">
                     <div>
                         <div class="eyebrow text-link">Background</div>
-                        <h2 id="background-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                        <h2 id="background-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             Fifteen years before the first line of this.
                         </h2>
 
@@ -252,7 +251,7 @@ const claimIcons = [
 
                     {/* Pinned, because the spine beside it is five items tall and a short panel parked at the
                         top of that would leave exactly the dead half-page this rebuild set out to remove. */}
-                    <div class="relative overflow-hidden rounded-2xl border border-line bg-card/60 p-7 lg:sticky lg:top-28 lg:self-start sm:p-8">
+                    <div class="relative overflow-hidden border border-line bg-card/60 p-7 lg:sticky lg:top-28 lg:self-start sm:p-8">
                         <div
                             class="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full"
                             style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 14%, transparent), transparent 70%)"
@@ -285,7 +284,7 @@ const claimIcons = [
         <section class="border-t border-line" aria-labelledby="open-source-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="eyebrow text-link">Open source, before this</div>
-                <h2 id="open-source-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                <h2 id="open-source-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                     Libraries that shipped and got used on their own.
                 </h2>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -370,7 +369,7 @@ const claimIcons = [
                     own.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-center gap-3">
-                    <a class="btn btn-primary" href="/download/">Get started free</a>
+                    <a class="btn btn-primary" href="/download/">Create your workspace</a>
                     <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">Read the source</a>
                 </div>
             </div>

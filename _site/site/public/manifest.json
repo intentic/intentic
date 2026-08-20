@@ -4,8 +4,8 @@
     "description": "Specialized coding agents run on hardware you own. Each sandbox contains the libraries, developer tools, integrations and context its job needs.",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#181614",
-    "theme_color": "#181614",
+    "background_color": "#0c0907",
+    "theme_color": "#0c0907",
     "icons": [
         {
             "src": "/assets/intentic-logo-sized.png",

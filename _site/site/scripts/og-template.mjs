@@ -13,10 +13,14 @@ import { fileURLToPath } from "node:url";
 const REGULAR = fileURLToPath(new URL("./fonts/Inter-Regular.ttf", import.meta.url));
 const BOLD = fileURLToPath(new URL("./fonts/Inter-Bold.ttf", import.meta.url));
 
-const BG = "#181614";
-const FG = "#faf9f7";
-const MUTED = "#a5a099";
-const ACCENT = "#e77a22";
+/* The card's ink, taken from global.css: warm near-black, cream, the muted step under it, and ember for the
+ * two accents. The FACE stays Inter, and that is a constraint rather than a choice — satori reads ttf/otf/woff
+ * and the site's three faces are shipped as woff2 only, which it cannot parse. A card 1200px wide, seen at
+ * thumbnail size in a chat client, carries the brand in its colour far more than in its typeface. */
+const BG = "#0c0907";
+const FG = "#efe3cd";
+const MUTED = "#b7a68d";
+const ACCENT = "#e07b27";
 
 /**
  * The two Inter faces satori needs, or undefined when they are not on disk. The TTFs are not committed, so a

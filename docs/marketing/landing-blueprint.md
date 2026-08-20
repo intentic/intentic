@@ -120,13 +120,13 @@ this page.
   variants** — that system is retired.
 - Structure: `_site/site/src/components/Landing.astro` renders the `LandingContent`;
   `_site/site/src/pages/index.astro` is the single entry.
-- **Visual treatments are not variants.** `/angkor/` (`_site/site/src/pages/angkor.astro`) is this page in
-  a different dress — a photographed temple wall, engraved serif display type, gold rules and lotus
-  bullets — parked on its own URL so the look can be judged against the live one. It reads the SAME
-  content modules, so it can never make a different claim and a copy change lands on both; what is
-  forked is styling, all of it scoped under `.a-page` in `styles/angkor.css`. It is `noindex` and out of
-  the sitemap, because to a crawler it is a duplicate of `/`. That is the line: a second **look** is
-  allowed and lives on one extra URL; a second set of **words** is the thing that stays retired.
+- **The look is the whole site's, not this page's.** The carved-stone treatment — a photographed temple
+  wall behind the first screen, engraved serif display type, gold rules and turned corners, lotus
+  bullets — was tried out on its own URL first and is now the design system every page here is built
+  from: `_site/site/src/styles/global.css` holds the metals, the type tiers and the shared recipes, and
+  `styles/home.css` holds only this page's own arrangement. There is no second dress on a second URL any
+  more, and there is still **no `SITE_VARIANT`, no `/preview` route, and no a/b/c variants**. A second
+  set of **words** is the thing that stays retired.
 - Meta: title/description come from `_site/site-content/src/page-meta.ts` /
   `_site/site-content/src/site.ts` (ORG_DESCRIPTION) — one page, one set of strings.
 - Screenshots: `_site/site/src/assets/product/`, all written by one harness —
@@ -176,36 +176,42 @@ is in `about.ts` because `/about/` shares it.
    reader's *absence* ("close the browser", "come back to the diffs"), which argues against the
    co-piloted stance the headline sets one line earlier, and it is the trope every agent product
    is running at once. Ownership stays out of both lines for the standing reason (it answers a fear,
-   it does not create a want). CTAs, chips, and **two windows** — the workspace behind, the chat in
-   the window the product itself pops it out into, overlapping its bottom corner — with the play
-   button into the live demo in the app window's top-right corner, which is the one band all three
-   of its screens leave clear. (P1, P2, P6)
+   it does not create a want). Then the literal restatement, two CTAs, the three chips, and **three
+   frames on one axis** — the workspace wide on the centre line, a plan and a conversation leaning in
+   from either side and overlapping its edges — with the press into the live demo covering the centre
+   frame and labelled in its top-right corner, which is the one band all three of its screens leave
+   clear. (P1, P2, P6)
 
-   **Both frames cycle** (recorded decision 2026-08-19), roughly every six seconds and on alternate
-   beats, so the pair takes six steps to repeat rather than two. The lists are in `landing.ts`
-   (`hero.screens`): the app window walks `/agents` → `/workspace` (Changes, grouped by repository,
-   with a diff open) → `/pipelines`; the chat window walks its Agents cut → its Personas cut. Order
-   is editorial and the FIRST of each is what a stranger sees — the board, and the conversation its
-   cards lead to. Each frame **crops from the top-left** rather than fitting its screen, which is
-   what lets captures of very different lengths share one frame and what keeps the app's own 13px
-   type readable in a column this narrow.
+   **The band is symmetric, because the picture behind it is.** The plate is a framed plaque with a
+   devata standing in each outer third and a deliberately empty middle; the copy sits on that middle,
+   capped at 44rem, and the product is laid out UNDER it rather than beside it. An off-centre column
+   over this art reads as a misprint. The band itself takes no measure — the frames take their width
+   from the window exactly as the plate does, so the two track each other at every size — and the two
+   wings are pulled up until their top rails cross the figures, which is what binds the product to
+   the wall. Below 64rem they stop climbing; below 48rem they come off entirely and the workspace
+   stands alone, full width and cropped harder.
+
+   **Only the centre frame cycles.** A cross-fade inside a 340px wing is a flicker at the edge of
+   vision, and caught mid-fade it reads as two pictures printed over each other, so the wings hold
+   stills. The list is in `landing.ts` (`hero.screens.app`): `/agents` → `/workspace` (Changes,
+   grouped by repository, with a diff open) → `/pipelines`, four seconds each. Order is editorial and
+   the FIRST is what a stranger sees. The frame's ledge names the route the screen was taken on and
+   turns with it. Each frame **crops from the top-left** rather than fitting its screen, which is what
+   lets captures of very different lengths share one frame and what keeps the app's own 13px type
+   readable at this size.
 
    **`prefers-reduced-motion` changes the transition, not whether the frames turn.** It first skipped
    the rotation outright, and that was the wrong reading twice over: what the frames carry is content
    that exists nowhere else above the fold, so holding them still hid two thirds of the first screen
    rather than calming it — and on a machine with the setting on, the hero silently became a single
    screenshot with no sign it was meant to be more. The animation is the cross-fade, and that is what
-   the preference turns off (`.hero-screen` in global.css cuts instead of fading). If the script never
-   runs at all, the first screen of each frame stands.
+   the preference turns off (`.screen` in global.css cuts instead of fading). If the script never runs
+   at all, the first screen stands.
 
-   **The columns are uneven and the wide one is the picture** (2026-08-19). The hero was a 50/50 grid,
-   which gave the copy 592px it does not use — the paragraphs are capped at their own measure well
-   short of it — and gave the two windows the same 592px, which is where "the app is unreadable in the
-   hero" came from. The copy now takes 26rem and the visual the rest, leaning out of the container on
-   the widest screens to a 64px gutter at the window's edge. The brand line **wraps to three balanced
-   lines** at that width rather than dropping to 30px to stay on two: `text-balance` puts the break on
-   the full stop, so it reads as three short sentences. The buttons wrap to two rows, which is where
-   the download belonged anyway.
+   **The bar is furniture inside the plate's frame.** It is transparent until the first screen is
+   behind you, so the temple's own carved top border becomes the bar's, and its height is MEASURED
+   off the painted plate rather than picked — `--bar-height`, written by the page's script and read by
+   `Nav` and the phone overlay. Every other page on the site starts lifted and takes the default.
 2. **What you do — the five verbs (`#verbs`)** — the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,

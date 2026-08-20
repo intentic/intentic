@@ -5,6 +5,7 @@ import { Image } from "astro:assets";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import Window from "../../components/Window.astro";
 import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 
 /* The features index: every verb as a card, in the order the menu lists them. It is what the mega-menu is a
@@ -21,18 +22,17 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 >
     <Nav />
     <main class="flex-1">
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="eyebrow">Features</div>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
                     What you do with a fleet of agents.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
                     Run them, connect them, automate them, review their work and host them on your own machine.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                 </div>
             </div>
@@ -50,7 +50,7 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
                         const image = page.hero ? shotAsset(page.hero.name) : undefined;
                         const cap = image ? `${image.width / 2}px` : undefined;
                         return (
-                            <a href={productHref(page.slug)} class="card group overflow-hidden transition-colors hover:border-primary-600/40">
+                            <Window href={productHref(page.slug)} class="group flex flex-col overflow-hidden">
                                 {image && page.hero ? (
                                     <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
                                         <Image
@@ -67,19 +67,19 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
                                 ) : (
                                     <div class="flex aspect-16/10 items-center justify-center border-b border-line bg-canvas p-6">
                                         <div class="flex items-center gap-2 text-xs font-medium">
-                                            <span class="rounded-lg border border-line bg-overlay/40 px-3 py-2 text-content">Event</span>
-                                            <span class="text-link" aria-hidden="true">→</span>
-                                            <span class="rounded-lg border border-line bg-overlay/40 px-3 py-2 text-content">Check</span>
-                                            <span class="text-link" aria-hidden="true">→</span>
-                                            <span class="rounded-lg border border-primary-600/30 bg-primary-600/[0.05] px-3 py-2 text-link">Agent</span>
+                                            <span class="border border-line bg-overlay/40 px-3 py-2 text-content">Event</span>
+                                            <span class="text-gold" aria-hidden="true">→</span>
+                                            <span class="border border-line bg-overlay/40 px-3 py-2 text-content">Check</span>
+                                            <span class="text-gold" aria-hidden="true">→</span>
+                                            <span class="border border-primary-600/40 bg-primary-600/[0.06] px-3 py-2 text-primary-400">Agent</span>
                                         </div>
                                     </div>
                                 )}
                                 <div class="p-6">
-                                    <h3 class="text-base font-medium text-content group-hover:text-link">{page.navLabel}</h3>
+                                    <h3 class="text-[1.0625rem] text-content group-hover:text-primary-400">{page.navLabel}</h3>
                                     <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{page.menuBlurb}</p>
                                 </div>
-                            </a>
+                            </Window>
                         );
                     })
                 }

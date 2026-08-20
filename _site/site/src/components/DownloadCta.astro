@@ -17,11 +17,15 @@ import { DESKTOP_DOWNLOADS_PAGE, DESKTOP_GENERIC_ICON, desktopPlatforms } from "
  * that does not exist. */
 
 interface Props {
-    /** Appended to the button's own classes, for spacing at the call site. */
+    /** Appended to the button's own classes: `btn-sm` for a compact row, or spacing at the call site. */
     class?: string;
+    /** The resting label, before the script narrows it to the reader's platform. */
+    label?: string;
+    /** The tray glyph. Off where the control is already small and the row around it is words. */
+    icon?: boolean;
 }
 
-const { class: className } = Astro.props;
+const { class: className, label = "Download the app", icon = true } = Astro.props;
 
 // Name and link only: the glyph in the table is the download page's, and shipping it in an attribute here
 // would put a Windows logo in the hero's HTML for nobody to draw.
@@ -39,10 +43,12 @@ const targets = Object.fromEntries(
     {/* An arrow into a tray, on every platform. The button says which computer it means in words, and a
         16px monochrome glyph is a poor place to say it again: the marks that fit at that size are a flag and
         a bird, and one of the two platforms has no mark anybody recognises small. */}
-    <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current" aria-hidden="true">
-        <path d={DESKTOP_GENERIC_ICON}></path>
-    </svg>
-    <span data-download-label>Download the app</span>
+    {icon && (
+        <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true">
+            <path d={DESKTOP_GENERIC_ICON}></path>
+        </svg>
+    )}
+    <span data-download-label>{label}</span>
 </a>
 
 {/* An IIFE with nothing at top level, so a second button on the same page costs a second harmless run

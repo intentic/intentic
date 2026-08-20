@@ -45,14 +45,13 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
     <Nav />
     <main class="flex-1">
         <!-- Hero: the framing, then what they are in their own words -->
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32 lg:pb-16">
                 <div class="flex flex-wrap items-center gap-3">
                     <a href={compareHref("")} class="eyebrow transition-colors hover:text-link">Compare</a>
                     {family && <span class="chip bg-primary-500/12 text-primary-400">{family.label} · {family.verdict}</span>}
                 </div>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.heading}</h1>
+                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{page.heading}</h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{page.sub}</p>
 
                 <figure class="mt-7 border-l-2 border-line-strong pl-5">
@@ -64,7 +63,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 </figure>
 
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href="/features/">See the product</a>
                 </div>
             </div>
@@ -170,7 +169,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                             href={page.url}
                             target="_blank"
                             rel="noopener nofollow"
-                            class="rounded-lg border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                            class="border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
                         >
                             {page.name} · {host}
                         </a>
@@ -182,7 +181,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                                     href={source.url}
                                     target="_blank"
                                     rel="noopener nofollow"
-                                    class="rounded-lg border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                    class="border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
                                 >
                                     {source.label} · {new URL(source.url).host}
                                 </a>
@@ -202,7 +201,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                     <p class="mt-1 max-w-sm text-sm text-muted">{next.menuBlurb}</p>
                 </a>
                 <div class="flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href={compareHref("")}>All comparisons</a>
                 </div>
             </div>
@@ -304,23 +303,4 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
         }
     </style>
 
-    <script>
-        const targets = document.querySelectorAll(".fade-in");
-        if ("IntersectionObserver" in window) {
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        if (entry.isIntersecting) {
-                            entry.target.classList.add("visible");
-                            observer.unobserve(entry.target);
-                        }
-                    }
-                },
-                { threshold: 0.12 },
-            );
-            targets.forEach((el) => observer.observe(el));
-        } else {
-            targets.forEach((el) => el.classList.add("visible"));
-        }
-    </script>
 </BaseLayout>

@@ -204,11 +204,10 @@ const rules = [
 <BaseLayout>
     <Nav />
     <main class="flex-1">
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32">
                 <div class="eyebrow">Earn</div>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
                     Membership credits support creators.
                 </h1>
                 <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -239,12 +238,12 @@ const rules = [
             where a reader learns what spending one even looks like. */}
         <section class="relative overflow-hidden border-b border-line" aria-labelledby="credits-heading">
             <div class="absolute inset-0 bg-linear-to-b from-primary-600/8 via-canvas to-canvas" aria-hidden="true"></div>
-            <div class="grid-overlay"></div>
+            <div class="wall"></div>
             <div class="relative mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
                     <div>
                         <div class="eyebrow text-link">Credits</div>
-                        <h2 id="credits-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                        <h2 id="credits-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             One membership. Two ways to spend it.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -321,7 +320,7 @@ const rules = [
                                     <p class="mt-2 text-2xs text-subtle">{card.meterLabel}</p>
                                 </div>
 
-                                <div class="flex flex-col gap-2 rounded-lg border border-success/25 bg-success/8 px-3.5 py-3">
+                                <div class="flex flex-col gap-2 border border-success/25 bg-success/8 px-3.5 py-3">
                                     <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
                                         <svg
                                             class="mt-px h-3.5 w-3.5 shrink-0 text-success"
@@ -366,7 +365,7 @@ const rules = [
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-14">
                     <div>
                         <div class="eyebrow text-link">In practice</div>
-                        <h2 id="chat-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                        <h2 id="chat-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             What a run looks like in chat.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -410,8 +409,8 @@ const rules = [
         <section class="border-b border-line" aria-labelledby="pool-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14">
-                    <div class="relative order-last overflow-hidden rounded-2xl border border-line bg-canvas/60 lg:order-first">
-                        <div class="grid-overlay"></div>
+                    <div class="relative order-last overflow-hidden border border-line bg-canvas/60 lg:order-first">
+                        <div class="wall"></div>
                         <div
                             class="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full"
                             style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 16%, transparent), transparent 70%)"
@@ -454,7 +453,7 @@ const rules = [
                     </div>
                     <div>
                         <div class="eyebrow text-link">The pool</div>
-                        <h2 id="pool-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">
+                        <h2 id="pool-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             Split by what members choose. Renewed monthly.
                         </h2>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
@@ -486,12 +485,12 @@ const rules = [
             version lives at /earn/fine-print/, one click away, so this page stays graspable in a scroll. */}
         <section class="mx-auto max-w-7xl px-6 py-16 lg:py-20" aria-labelledby="rules-heading">
             <div class="eyebrow text-link">The rules</div>
-            <h2 id="rules-heading" class="mt-3 text-2xl font-semibold tracking-tight text-content sm:text-3xl">The whole deal, at a glance.</h2>
+            <h2 id="rules-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">The whole deal, at a glance.</h2>
             <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {
                     rules.map((rule) => (
                         <article class="card flex flex-col gap-3 p-6">
-                            <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-600/30 bg-primary-600/10 text-link">
+                            <span class="flex h-9 w-9 items-center justify-center border border-primary-600/30 bg-primary-600/10 text-link">
                                 <svg
                                     viewBox="0 0 24 24"
                                     class="h-4.5 w-4.5"

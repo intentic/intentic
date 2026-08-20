@@ -10,12 +10,17 @@ The public website at intentic.dev — an Astro build, all copy imported rather 
 
 ## Key files
 
-- [src/pages/index.astro](src/pages/index.astro) — the landing page, whose hero shot links to the demo.
-- [src/pages/angkor.astro](src/pages/angkor.astro) — the same landing page in an alternative dress, on its own
-  URL so the two can be looked at side by side. It reads the same content modules `index.astro` does, so it is a
-  SKIN and never a second set of claims; everything it adds is scoped under `.a-page` in
-  [src/styles/angkor.css](src/styles/angkor.css) and cannot reach the rest of the site. `noindex`, and filtered
-  out of the sitemap in `astro.config.mjs` — to a crawler it would otherwise be a duplicate of `/`.
+- [src/pages/index.astro](src/pages/index.astro) — the landing page, whose hero shot links to the demo. It is
+  three lines; the page itself is [src/components/Landing.astro](src/components/Landing.astro), with its own
+  arrangement in [src/styles/home.css](src/styles/home.css).
+- [src/styles/global.css](src/styles/global.css) — the design system, and the first file to read: the metals,
+  the three type tiers and the size band each is fenced to, and every shared recipe (`.btn`, `.card`,
+  `.window`, `.frame`, `.eyebrow`, `.display`, the plate). Nothing on this site is rounded and every rule is
+  gold; both are decided here.
+- [src/components/Window.astro](src/components/Window.astro) — the one frame every product screenshot on the
+  site sits in, ledge and turned corners included.
+- [src/components/ornaments.ts](src/components/ornaments.ts) — the four drawn shapes (lotus, lozenge, corner,
+  divider) every flourish here is one of, as strings so markup and CSS `background-image` share one definition.
 - [src/pages/docs](src/pages/docs) — the documentation pages.
 - [src/components/DocsLayout.astro](src/components/DocsLayout.astro) — every docs page's shell, and the one place
   that sees a page's whole rendered body: it anchors the headings, builds the section list, and checks a page's

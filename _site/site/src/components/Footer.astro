@@ -5,9 +5,10 @@ import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { APP_URL, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
-import { Image } from "astro:assets";
-import logo from "../assets/intentic-full.png";
+import { GITHUB_MARK } from "../lib/marks";
+import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
+import Lotus from "./Lotus.astro";
 
 const year = 2026;
 
@@ -113,23 +114,41 @@ const legalLinks = [
 ];
 ---
 
-<footer class="mt-auto border-t border-line pt-12 pb-10">
+{/* A ground a shade darker than the page, so the band reads as the END of it rather than as one more
+    section, with the same wall texture the bands upstairs carry. `mt-auto` keeps it at the bottom of a
+    short page. */}
+<footer class="relative mt-auto overflow-hidden border-t border-line bg-[#090706] pt-14 pb-10">
+    <div class="wall" aria-hidden="true"></div>
+
     {/* Six cells: the brand plus five columns, none taller than eight rows. The long tail that used to be a
         sixth column is the band below.
 
         One row of six only from xl, where 80rem gives each column ~178px and labels like "Earn & the creator
         pool" stay on one line. Below that the six split three and three rather than squeezing to 136px, which
         is the width that had five labels wrapping. Two even rows beat one row of ragged ones. */}
-    <div class="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 xl:grid-cols-6 xl:gap-8">
+    <div class="relative mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 xl:grid-cols-6 xl:gap-8">
         <div class="col-span-2 sm:col-span-1">
-            <Image src={logo} alt={ORG_NAME} width={126} height={24} densities={[2]} class="h-6 w-auto" />
+            {/* The wordmark is DRAWN rather than an image here, the same pair the bar sets: the flower and
+                the word, aligned on the letters. The nudge is the bar's, at this cell's size. */}
+            <div class="inline-flex items-center gap-2">
+                <Lotus size="md" class="-translate-y-[0.09rem]" />
+                <span class="font-mark text-[1.55rem] leading-none font-medium text-primary-500">intentic</span>
+            </div>
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}</p>
+            <div class="mt-4 flex gap-4">
+                <a href={githubUrl} target="_blank" rel="noopener" class="text-muted transition-colors hover:text-primary-400" aria-label="GitHub repository">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
+                </a>
+                <a href={discordUrl} target="_blank" rel="noopener" class="text-muted transition-colors hover:text-primary-400" aria-label="Discord community">
+                    <DiscordIcon size={17} />
+                </a>
+            </div>
         </div>
 
         {
             columns.map((column) => (
                 <div>
-                    <h3 class="eyebrow mb-3">{column.label}</h3>
+                    <h3 class="eyebrow eyebrow-bare mb-3">{column.label}</h3>
                     <ul class="space-y-2">
                         {column.links.map((link) => (
                             <li>
@@ -137,7 +156,7 @@ const legalLinks = [
                                     href={link.href}
                                     target={link.external ? "_blank" : undefined}
                                     rel={link.external ? "noopener" : undefined}
-                                    class="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-link"
+                                    class="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-primary-400"
                                 >
                                     {link.label}
                                     {link.external && <ExternalIcon />}
@@ -152,14 +171,15 @@ const legalLinks = [
 
     {/* The comparison band. Label on the left at lg so the row reads as one sentence of links rather than a
         headed block, and stacked below it on a phone where a 5rem label would leave the links a gutter. */}
-    <div class="mx-auto mt-12 max-w-7xl border-t border-line px-6 pt-7">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-baseline lg:gap-8">
-            <h3 class="eyebrow shrink-0">Compare</h3>
+    <div class="relative mx-auto mt-12 max-w-7xl px-6">
+        <div class="h-px bg-[linear-gradient(90deg,transparent,var(--color-line-strong)_20%,var(--color-line-strong)_80%,transparent)]" aria-hidden="true"></div>
+        <div class="flex flex-col gap-3 pt-7 lg:flex-row lg:items-baseline lg:gap-8">
+            <h3 class="eyebrow eyebrow-bare shrink-0">Compare</h3>
             <ul class="flex flex-wrap gap-x-5 gap-y-2">
                 {
                     compareLinks.map((link) => (
                         <li>
-                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
+                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-primary-400">
                                 {link.label}
                             </a>
                         </li>
@@ -172,12 +192,12 @@ const legalLinks = [
     {/* The legal bar sets its links in 12px type, which leaves a hit box a fingertip cannot land on: the one
         row of this site that failed the 24px target floor WCAG 2.2 and Lighthouse both use. The type stays
         12px and the wording is unchanged; each link just carries a 24px-high box under it. */}
-    <div class="mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row">
+    <div class="relative mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row">
         <span>© {year} {ORG_NAME}. Engine MIT licensed.</span>
-        <span class="flex items-center gap-4">
+        <span class="flex flex-wrap items-center justify-center gap-4">
             {
                 legalLinks.map((link) => (
-                    <a href={link.href} class="inline-flex min-h-6 items-center transition-colors hover:text-link">
+                    <a href={link.href} class="inline-flex min-h-6 items-center transition-colors hover:text-gold-bright">
                         {link.label}
                     </a>
                 ))
@@ -189,7 +209,7 @@ const legalLinks = [
                 href={githubUrl}
                 target="_blank"
                 rel="noopener"
-                class="inline-flex min-h-6 items-center gap-1 transition-colors hover:text-link"
+                class="inline-flex min-h-6 items-center gap-1 transition-colors hover:text-gold-bright"
             >
                 GitHub
                 <ExternalIcon />

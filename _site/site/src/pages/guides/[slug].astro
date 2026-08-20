@@ -47,11 +47,10 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
     <main class="flex-1">
         <!-- The question, then the answer. Nothing between them: whatever sits in that gap is what a model
              lifts instead of the answer. -->
-        <section class="relative overflow-hidden border-b border-line">
-            <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
+        <section class="page-hero">
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-14 lg:pt-32 lg:pb-16">
                 <a href={guidesHref("")} class="eyebrow transition-colors hover:text-link">Guides</a>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{page.question}</h1>
+                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{page.question}</h1>
 
                 <div class="mt-7 border-l-2 border-primary-600/50 pl-5 lg:pl-6">
                     <div class="eyebrow text-primary-400">The short answer</div>
@@ -59,7 +58,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 </div>
 
                 <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href="/features/">See the product</a>
                 </div>
             </div>
@@ -174,7 +173,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                         page.related.map((link) => (
                             <a
                                 href={link.href}
-                                class="rounded-lg border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                class="border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
                             >
                                 {link.label}
                             </a>
@@ -199,7 +198,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                     </div>
                 </a>
                 <div class="flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
                     <a class="btn btn-secondary" href={guidesHref("")}>All guides</a>
                 </div>
             </div>
@@ -286,23 +285,4 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
         }
     </style>
 
-    <script>
-        const targets = document.querySelectorAll(".fade-in");
-        if ("IntersectionObserver" in window) {
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    for (const entry of entries) {
-                        if (entry.isIntersecting) {
-                            entry.target.classList.add("visible");
-                            observer.unobserve(entry.target);
-                        }
-                    }
-                },
-                { threshold: 0.12 },
-            );
-            targets.forEach((el) => observer.observe(el));
-        } else {
-            targets.forEach((el) => el.classList.add("visible"));
-        }
-    </script>
 </BaseLayout>

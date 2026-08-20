@@ -79,7 +79,7 @@ const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5
         pop-out trio the app keeps on the right. Meta tier throughout — it is chrome above the transcript, and
         the app deliberately never lets it out-weigh a message. */}
     <header class="flex items-center gap-1 border-b border-line px-1.5 py-1.5">
-        <span class="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-2xs">
+        <span class="flex h-7 min-w-0 flex-1 items-center gap-1.5 px-2 text-2xs">
             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>
             <span class="min-w-0 truncate text-content">{title}</span>
             <span class="shrink-0 text-subtle [&>svg]:h-3 [&>svg]:w-3" set:html={chevronDown} />
@@ -103,7 +103,7 @@ const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5
                        top while its answer streams beneath. Extra air above and below is .chat-prompt's own. */
                     return (
                         <div class="flex flex-col items-end pt-3 pb-2">
-                            <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed text-content">{entry.text}</div>
+                            <div class="chat-surface max-w-[85%] px-3 py-2 text-xs leading-relaxed text-content">{entry.text}</div>
                         </div>
                     );
                 }
@@ -124,7 +124,7 @@ const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5
 
                 if (entry.role === "agent") {
                     // The rendered answer — full width, quieter border than the prompt, prose at the body tier.
-                    return <div class="chat-surface-assistant w-full rounded-lg px-3.5 py-2.5 text-xs leading-relaxed text-content">{entry.text}</div>;
+                    return <div class="chat-surface-assistant w-full px-3.5 py-2.5 text-xs leading-relaxed text-content">{entry.text}</div>;
                 }
 
                 /* THE SPEND GATE. One card on the transcript — header, body, buttons — not a card inside a
@@ -132,7 +132,7 @@ const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5
                    happened yet: the agent's own call sits parked on the daemon until a button here settles it. */
                 const { offer } = entry;
                 return (
-                    <div class="chat-surface w-full overflow-hidden rounded-xl">
+                    <div class="chat-surface w-full overflow-hidden">
                         <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                             <span class="shrink-0 text-primary-500 [&>svg]:h-3.5 [&>svg]:w-3.5" set:html={starGlyph} />
                             <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{offer.title}</span>
@@ -169,10 +169,10 @@ const sendGlyph = icon('<path d="M4.5 12 20 4.5 15 20l-3.5-5.5z"/><path d="m11.5
             /* THE COMPOSER, which in the app is a box floating over the transcript rather than a field at the
                foot of it: the message row, then the row of controls that decide what the next turn runs on. */
             <div class="px-3 pt-1 pb-3">
-                <div class="flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg">
+                <div class="flex flex-col border border-line-strong bg-overlay shadow-lg">
                     <div class="px-4 py-3 text-xs leading-relaxed text-subtle">{input}</div>
                     <div class="flex items-center gap-1 px-2.5 pb-2.5 text-subtle">
-                        <span class="flex h-7 items-center gap-1.5 rounded-lg px-2 text-2xs font-medium text-muted">
+                        <span class="flex h-7 items-center gap-1.5 px-2 text-2xs font-medium text-muted">
                             <span class="text-link [&>svg]:h-3 [&>svg]:w-3" set:html={sparkGlyph} />
                             Claude Opus 5
                             <span class="[&>svg]:h-3 [&>svg]:w-3" set:html={chevronDown} />
