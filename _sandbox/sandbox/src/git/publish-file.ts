@@ -72,12 +72,12 @@ export const publishFile = async (
     // Mid-sequence is checked first and refused rather than worked around: a partial commit is exactly what git
     // rejects while MERGE_HEAD exists, and it rejects it only after staging — so trying costs the user a moved
     // index for nothing (see changes.ts commitIndex, which was rewritten for the same reason).
-    const operation = await operationInProgress(dir, git);
+    const operation = await operationInProgress(dir);
     if (operation !== undefined) {
         return { ...idle, reason: `this repo is part-way through a ${operation} — finish or abort that first` };
     }
 
-    const state = await remoteState(dir, git);
+    const state = await remoteState(dir, {}, git);
     if (state.branch === undefined) {
         return { ...idle, reason: `this repo has no branch checked out` };
     }

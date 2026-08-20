@@ -266,6 +266,16 @@ export interface AgentsRegistry {
     // Takes the whole outcome rather than its pieces so the report cannot drift from the tips it belongs to —
     // an outcome with no conflicts CLEARS the stored one, which is what makes a resolved conflict resolve.
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
+    /* THE LANDING IS ABSORBED — history has taken every path it put in the tree, and the attribution scan that
+     * observed it says so once, here, instead of re-deriving it from git on every scan forever (see the
+     * `absorbed` field's note in agents-store.ts). `size` is the landing's applied-path count, kept because the
+     * presence reading is a fraction and a settled repo still counts in the denominator.
+     *
+     * The shas are the GUARD, not context: a newer land advances both, and a mark computed against the old pair
+     * must not stamp the new landing — so a row whose landedHead/landedTip no longer match is left alone. No
+     * broadcast: nothing user-visible moves (an absorbed landing reads exactly as it did — fully present, no
+     * chips), this only stops the re-derivation. Unknown id ⇒ no-op. */
+    readonly markLandingAbsorbed: (id: string, repo: string, landedHead: string, landedTip: string, size: number) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
     /* THE USER ENDED THIS TURN and the abort has landed — recorded NOW, ahead of the unwind.
@@ -1138,6 +1148,24 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // The landedTips just moved, which is half the anchor every standing is measured from.
             await reprobe();
             broadcast();
+        },
+        markLandingAbsorbed: async (id, repo, landedHead, landedTip, size) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return;
+            }
+            const row = entry.repos.find((composed) => composed.repo === repo);
+            // The guard: only the very landing the caller measured. A newer land wrote fresh shas (and with
+            // them a fresh, unmarked row), and an already-marked row has nothing left to record.
+            if (row === undefined || row.landedHead !== landedHead || row.landedTip !== landedTip || row.absorbed !== undefined) {
+                return;
+            }
+            // Copy-on-write, one row replaced: the entry array is shared with every reader that holds it, and
+            // mutating the row in place would move the mark under a scan already reading it.
+            const repos = [...entry.repos];
+            repos[entry.repos.indexOf(row)] = { ...row, absorbed: size };
+            replace({ ...entry, repos });
+            await persist();
         },
         setArchived: async (ids, now) => {
             const targets = new Set(ids);

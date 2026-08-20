@@ -194,22 +194,32 @@ export const createGitRoutes = (services: Services) => {
         services.perf.track("git.scan.repo", { repo }, async (): Promise<RepoChanges | undefined> => {
             try {
                 await healPointer(repo, dir);
-                // The change scan, the remote read and the agent attribution are independent (none touches
-                // the index) — one round-trip for all three. `remote` is what the panel's sync bar renders
-                // per repo; `landed` is which agent landed each path this repo has ever received.
-                const [{ branch, conflicted, staged, unstaged }, remote, landed, operation] = await Promise.all([
+                /* TWO WAVES, and which read is in which is chosen by what it costs.
+                 *
+                 * The status pass is the long pole and it already parses two facts the other readers would
+                 * otherwise re-ask git for: the checked-out branch and HEAD's sha. So the reads that WANT
+                 * those wait for it and spend a spawn less each (remoteState: 3 → 1; attribution: no
+                 * rev-parse), which on a scan that runs for every repo several times a second is the better
+                 * trade than starting them a few milliseconds earlier and paying the spawns forever.
+                 *
+                 * The halted-operation read spawns nothing at all — it stat()s marker files — so it rides
+                 * beside the status pass for free rather than queueing behind it. */
+                const [{ branch, head, conflicted, staged, unstaged }, operation] = await Promise.all([
                     services.git.changedFiles(dir),
-                    services.git.remoteState(dir),
+                    // The read that turns "these files are conflicted" into "a rebase stopped here".
+                    services.git.operationInProgress(dir),
+                ]);
+                // `remote` is what the panel's sync bar renders per repo; `landed` is which agent landed each
+                // path this repo has ever received. Independent of each other — neither touches the index.
+                const [remote, landed] = await Promise.all([
+                    services.git.remoteState(dir, { branch }),
                     // Attribution is the only part of this scan the panel can do without: it decorates the
                     // rows, it isn't the rows. A failure here degrades to "nobody landed anything" rather
                     // than joining the catch below and reporting the whole repo as unreadable.
-                    services.agentOrigins.forRepo(repo, dir).catch((error: unknown) => {
+                    services.agentOrigins.forRepo(repo, dir, head).catch((error: unknown) => {
                         services.logger.debug({ err: error, repo }, "git changes: origins unavailable");
                         return {};
                     }),
-                    // A few stat()s beside a `git status` — cheap enough to ride every scan, and this is
-                    // the read that turns "these files are conflicted" into "a rebase stopped here".
-                    services.git.operationInProgress(dir),
                 ]);
                 // A repo with a clean tree still belongs in the response whenever there is remote work to
                 // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no

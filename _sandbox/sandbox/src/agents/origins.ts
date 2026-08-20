@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import { headSha, materializedPaths } from "../git/changes.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import { landedMessageOf } from "./agents-store.js";
+import { type ExpiryTracker, pathWeight } from "./expiry.js";
 
 // WHO PUT THIS FILE IN MY WORKING TREE — the Changes panel's per-file attribution, DERIVED, not recorded.
 //
@@ -38,6 +39,8 @@ import { landedMessageOf } from "./agents-store.js";
 // still carries the agent's uncommitted lines and the credit is exact. Once the user commits that path the
 // agent's lines are in history — and a path that goes dirty again after that is the user's own work, so
 // continuing to name the agent would be a confident lie. Dropping to "unattributed" is the honest answer.
+// The expiry span is the one whose far end MOVES with every commit, so it is read through the shared
+// incremental tracker (agents/expiry.ts) — one diff per repo per head move instead of one per landing.
 //
 // The expiry keeps `landedHead` and must NOT be folded into the merge-base anchor above, tempting as the
 // symmetry looks. The anchor can sit OLDER than `landedHead` — main commits while an agent works, and the
@@ -60,7 +63,9 @@ const landingKey = (repo: string, head: string, tip: string): string => `${repo}
 
 export interface AgentOrigins {
     // path → agent ids that landed it, newest land first. Empty when nothing in this repo is attributable.
-    readonly forRepo: (repo: string, dir: string) => Promise<Record<string, string[]>>;
+    // `head` is the repo's current HEAD when the caller already holds it (the Changes scan reads it off the
+    // same status pass that produced the rows) — absent, it is read here, one spawn.
+    readonly forRepo: (repo: string, dir: string, head?: string) => Promise<Record<string, string[]>>;
     // Who those ids ARE, resolved here rather than in the client: attribution reads the whole registry
     // (archived entries included — see below), while the roster the client mirrors carries only the live half.
     readonly identify: (ids: Iterable<string>) => Record<string, OriginAgent>;
@@ -70,30 +75,23 @@ export interface AgentOrigins {
 }
 
 export const createAgentOrigins = (
-    options: { readonly agents: AgentsRegistry; readonly logger: Logger },
+    options: { readonly agents: AgentsRegistry; readonly logger: Logger; readonly expiry: ExpiryTracker },
     git: GitRunner = defaultGit,
 ): AgentOrigins => {
-    const { agents, logger } = options;
+    const { agents, logger, expiry } = options;
     // Every span in HERE is immutable — both ends are fixed shas — so one diff per span is all it ever costs,
-    // however often the panel polls. Bounded by the unspent landings: `retire` below drops a landing's entries
-    // the moment its claim ends. The one span whose far end MOVES (the expiry, measured to the current head)
-    // deliberately does not live in this map — see `expiries`.
+    // however often the panel polls. Bounded by the UNABSORBED landings: a landing history has taken whole is
+    // marked on its registry entry (markLandingAbsorbed) and skipped before any git, and its cached spans are
+    // dropped the moment the mark goes down. The one span whose far end MOVES (the expiry, measured to the
+    // current head) lives in the shared tracker instead — see agents/expiry.ts.
     const cache = new Map<string, readonly string[]>();
     const anchors = new Map<string, string>();
-    /* LANDINGS WHOSE CLAIM IS OVER, so the panel never pays for them again.
-     *
-     * A landing is spent once history has absorbed every path it put in the tree — the per-path expiry in the
-     * header, reached for all of its paths at once. That is a one-way door, and the reason this can be
-     * remembered rather than re-derived: the header's own answer to a path that goes dirty again after the
-     * commit is "the user's own work, and naming the agent would be a confident lie".
-     *
-     * Without it, every agent that ever landed was re-measured on every scan, because the two reads below are
-     * keyed on the CURRENT head and a commit moves it — 2 git spawns per landing, per commit, forever. On this
-     * workspace that was 161 landings (165 of the 203 agents long archived) re-deriving 322 diffs to conclude
-     * what the previous scan already knew, which is what made the Changes panel take 10-20s to answer while
-     * the user was committing. It is memo, not ledger: nothing is written down, and a restart re-derives it.
-     */
-    const spent = new Set<string>();
+    /* LANDINGS WHOSE SHAS CANNOT BE RESOLVED — a pruned branch, a rewritten history, a repo whose objects are
+     * gone. Attribution for them fails identically on every scan, and each failure is a spawn that throws; the
+     * set remembers the verdict so a broken landing costs nothing after its first failure. In memory on
+     * purpose: a repo that was merely mid-upload heals on the next restart, and attribution is decoration —
+     * the honest cost of the cache being wrong is a missing chip until then. */
+    const unresolvable = new Set<string>();
 
     /* EVERY PATH A SPAN TOUCHES — and for a rename that is TWO, which is why `--no-renames` is here rather
      * than at any one call site.
@@ -112,9 +110,8 @@ export const createAgentOrigins = (
      * Detection has to be turned OFF EXPLICITLY. Omitting `-M` does not do it — git has defaulted
      * diff.renames to true since 2.9, so a span with no flag at all still collapses renames.
      *
-     * All three spans below want this, and want it identically: the two that are INTERSECTED must name a
-     * rename alike or the intersection drops it, and the third (the expiry) has always said in its own comment
-     * that a commit renaming a landed path must retire both names. One flag, one place, no caller to forget. */
+     * The two spans below want this identically (they are INTERSECTED, so they must name a rename alike or the
+     * intersection drops it), and the tracker's expiry span states the same flag for the same reason. */
     const pathsBetween = async (dir: string, key: string, args: readonly string[]): Promise<readonly string[]> => {
         const hit = cache.get(key);
         if (hit !== undefined) {
@@ -168,56 +165,22 @@ export const createAgentOrigins = (
         return anchor;
     };
 
-    /* What history has done to those paths since the land — the claim's expiry, one path at a time. A commit
-     * that renamed a landed path has to retire BOTH names, which is one of the reasons pathsBetween turns
-     * rename detection off; leave the source claimed and an agent keeps a chip on a path that no longer exists.
-     *
-     * ONE SLOT PER LANDING, not one cache entry per (landing, head). This is the only span here whose far end
-     * is the MOVING head, so keying the shared cache on it minted a fresh entry per landing at every commit and
-     * never read the old one again — on this fleet (~800 landings, ~100 head moves a day) that was the daemon's
-     * memory leak: gigabytes of dead path lists, each pinning its parent diff listing, accumulated per day and
-     * released only by a restart. A superseded head's answer is worthless by construction, so it is REPLACED. */
-    const expiries = new Map<string, { readonly head: string; readonly paths: readonly string[] }>();
-    const committedSince = async (dir: string, repo: string, landedHead: string, head: string): Promise<readonly string[]> => {
-        const key = `${repo} ${landedHead}`;
-        const hit = expiries.get(key);
-        if (hit !== undefined && hit.head === head) {
-            return hit.paths;
-        }
-        const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", landedHead, head]);
-        const paths = materializedPaths(stdout);
-        expiries.set(key, { head, paths });
-        return paths;
-    };
-
-    // A spent landing is never read again (forRepo skips it before any git), so its cached spans are dead
-    // weight the moment it retires — dropped with it, which keeps every map here proportional to the UNSPENT
-    // landings rather than to everything the fleet has ever landed.
-    const retire = (repo: string, landedHead: string, tip: string, anchor: string): void => {
-        spent.add(landingKey(repo, landedHead, tip));
+    // An absorbed landing is never read again (forRepo skips it before any git), so its cached spans are dead
+    // weight the moment the mark goes down — dropped with it, which keeps every map here proportional to the
+    // landings still doing attribution work rather than to everything the fleet has ever landed.
+    const dropSpans = (repo: string, landedHead: string, tip: string, anchor: string): void => {
         cache.delete(`landed ${repo} ${anchor} ${tip}`);
         cache.delete(`applied ${repo} ${landedHead} ${tip}`);
-        expiries.delete(`${repo} ${landedHead}`);
+        expiry.drop(repo, landedHead);
         anchors.delete(`anchor ${repo} ${tip}`);
-    };
-
-    const pathChars = (lists: Iterable<readonly string[]>): number => {
-        let total = 0;
-        for (const paths of lists) {
-            for (const path of paths) {
-                total += path.length;
-            }
-        }
-        return total;
     };
 
     return {
         metrics: () => ({
             spans: cache.size,
-            expiries: expiries.size,
             anchors: anchors.size,
-            spent: spent.size,
-            pathCharacters: pathChars(cache.values()) + pathChars([...expiries.values()].map((entry) => entry.paths)),
+            unresolvable: unresolvable.size,
+            pathCharacters: pathWeight(cache.values()),
         }),
         // Straight off the persisted entries, which is the point: `entry` finds an archived agent and
         // `AgentsRegistry.list` (what the client mirrors) does not. An id with no entry left at all is simply
@@ -242,7 +205,7 @@ export const createAgentOrigins = (
             }
             return identities;
         },
-        forRepo: async (repo, dir) => {
+        forRepo: async (repo, dir, knownHead) => {
             // One entry per agent that has landed something into THIS repo, newest land first — the order the
             // panel shows chips in, so the most recent author reads first.
             const landings = agents
@@ -252,10 +215,11 @@ export const createAgentOrigins = (
                     if (composed?.landedTip === undefined || composed.landedHead === undefined) {
                         return [];
                     }
-                    // A spent landing is skipped BEFORE the head read below, which is the point: it costs
-                    // nothing at all, rather than two diffs that conclude it is still spent. A further land by
-                    // the same agent advances both shas, so it arrives as a new key and is measured afresh.
-                    if (spent.has(landingKey(repo, composed.landedHead, composed.landedTip))) {
+                    // An absorbed landing is skipped BEFORE the head read below, which is the point: it costs
+                    // nothing at all, rather than diffs that conclude what the registry entry already records.
+                    // A further land by the same agent writes a fresh row, so it arrives unmarked and is
+                    // measured afresh. Unresolvable landings are the same short-circuit for the failure case.
+                    if (composed.absorbed !== undefined || unresolvable.has(landingKey(repo, composed.landedHead, composed.landedTip))) {
                         return [];
                     }
                     return [{ id, base: composed.base, tip: composed.landedTip, head: composed.landedHead, at: composed.landedAt ?? 0 }];
@@ -264,7 +228,7 @@ export const createAgentOrigins = (
             if (landings.length === 0) {
                 return {};
             }
-            const head = await headSha(dir, git);
+            const head = knownHead ?? (await headSha(dir, git));
             if (head === undefined) {
                 return {};
             }
@@ -272,29 +236,44 @@ export const createAgentOrigins = (
             for (const landing of landings) {
                 try {
                     // The agent's own paths, narrowed to the ones this land put in the tree, minus the ones
-                    // history has since absorbed. When HEAD hasn't moved at all the last diff is empty and
-                    // every applied path still counts, which is the common case.
+                    // history has since absorbed. When HEAD hasn't moved at all the expiry answers from memory
+                    // and every applied path still counts, which is the common case.
                     const applied = new Set(await appliedPaths(dir, repo, landing.head, landing.tip));
-                    const retired = new Set(await committedSince(dir, repo, landing.head, head));
+                    const retired = await expiry.committedSince(dir, repo, landing.head, head);
                     const anchor = await anchorOf(dir, repo, head, landing.tip, landing.base);
+                    let total = 0;
                     let claimed = 0;
                     for (const path of await landedPaths(dir, repo, anchor, landing.tip)) {
-                        if (!applied.has(path) || retired.has(path)) {
+                        if (!applied.has(path)) {
+                            continue;
+                        }
+                        total += 1;
+                        if (retired.has(path)) {
                             continue;
                         }
                         claimed += 1;
                         (origins[path] ??= []).push(landing.id);
                     }
-                    // Nothing left to claim — history has taken every path this land put in the tree (or it
-                    // put none there at all). That is the end of the claim, not a quiet scan: retire it (and
-                    // its cached spans with it) so no later scan spends a spawn rediscovering it.
+                    /* Nothing left to claim — history has taken every path this land put in the tree (or it put
+                     * none there at all). That is the end of the claim, not a quiet scan: record it on the
+                     * registry entry (with the landing's size, for the presence fraction's denominator) so no
+                     * later scan — including the first one after a restart — spends a spawn rediscovering it,
+                     * and drop the cached spans with it. The mark is fire-and-forget: it is a memo about an
+                     * outcome that already happened, and a failed persist only costs re-deriving it. */
                     if (claimed === 0) {
-                        retire(repo, landing.head, landing.tip, anchor);
+                        dropSpans(repo, landing.head, landing.tip, anchor);
+                        void agents
+                            .markLandingAbsorbed(landing.id, repo, landing.head, landing.tip, total)
+                            .catch((error: unknown) =>
+                                logger.debug({ err: error, repo, agent: landing.id }, "agent origins: absorbed mark not persisted"),
+                            );
                     }
                 } catch (error) {
                     // A pruned branch or a rewritten history leaves the shas unresolvable — that agent simply
-                    // goes unattributed, which is the same outcome as never having landed. Debug: on a repo
-                    // whose objects are gone this would fire on every poll.
+                    // goes unattributed, which is the same outcome as never having landed. Remembered so the
+                    // next scan skips it outright instead of re-failing the same spawns. Debug: even the first
+                    // failure is routine on a repo whose objects are gone.
+                    unresolvable.add(landingKey(repo, landing.head, landing.tip));
                     logger.debug({ err: error, repo, agent: landing.id }, "agent origins: delta unresolvable");
                 }
             }

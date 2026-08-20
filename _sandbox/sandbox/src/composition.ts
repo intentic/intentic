@@ -34,7 +34,8 @@ import {
     gitSync,
     politeGit,
 } from "@intentic/scaffold";
-import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
+import type { ResidentEngine } from "@intentic/iq-engine";
+import { createEngineClient } from "@intentic/iq-engine/host";
 import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
 import { registerDaemonInvariants } from "./invariants/register.js";
 import type { Logger } from "pino";
@@ -101,6 +102,7 @@ import type { AgentArchiveDeps } from "./agents/archive.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
+import { createExpiryTracker } from "./agents/expiry.js";
 import { createLandedPresences } from "./agents/landed-presence.js";
 import { createLandStandings } from "./agents/standing.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
@@ -504,7 +506,11 @@ export interface Services {
         readonly sync: (dir: string) => Promise<GitSyncResult>;
         // The Changes review verbs (git/changes.ts): working-tree status split into the index and worktree sides,
         // the index moves, the two whole-repo commit shapes, per-path discard, and the per-side file diffs.
-        readonly changedFiles: (dir: string) => Promise<{ branch?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }>;
+        // `head` rides along because the status read already carries it: the scan's other readers (attribution)
+        // take it as an argument rather than spawning `rev-parse HEAD` for the answer it just had.
+        readonly changedFiles: (
+            dir: string,
+        ) => Promise<{ branch?: string; head?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
@@ -517,7 +523,9 @@ export interface Services {
         readonly listRemoteBranches: (dir: string) => Promise<GitRemoteBranch[]>;
         readonly createBranch: (dir: string, name: string, start: string | undefined, checkout: boolean) => Promise<void>;
         readonly deleteBranch: (dir: string, name: string, force: boolean) => Promise<void>;
-        readonly remoteState: (dir: string) => Promise<GitRemoteState>;
+        // `known.branch` lets a caller that already holds the checked-out branch (the Changes scan reads it
+        // off the same status pass that produced the rows) spare the spawn that would re-derive it.
+        readonly remoteState: (dir: string, known?: { readonly branch?: string | undefined }) => Promise<GitRemoteState>;
         readonly fetchRemote: (dir: string) => Promise<ActionResult>;
         readonly pullRemote: (dir: string) => Promise<ActionResult>;
         readonly pushBranch: (dir: string, options: { branch?: string }) => Promise<ActionResult>;
@@ -842,7 +850,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
     // The presences are held by name too, because their caches report into the resource series below.
-    const landedPresences = createLandedPresences(agentWorktrees, logger);
+    // ONE expiry tracker for both landing readers (agents/expiry.ts): they ask the identical
+    // "what has history touched since this landing" question, so sharing the tracker halves both the
+    // per-head-move diff and the memory the answers sit in.
+    const landingExpiry = createExpiryTracker();
+    const landedPresences = createLandedPresences(agentWorktrees, logger, landingExpiry);
     const agents = createAgentsRegistry(
         fileAgentsStore(join(config.historyRoot, "agents.json")),
         createLandStandings(agentWorktrees),
@@ -872,7 +884,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     onTurnSettled(clearTurnTaint);
     // Hoisted like the presences above, and for the same reason: the attribution caches report into the
     // resource series — they are the structures whose silent growth was once the daemon's memory leak.
-    const agentOrigins = createAgentOrigins({ agents, logger });
+    const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
     /* The free trial is laid OVER the manifest, never into it (trial/trial-endpoint.ts): every consumer of
      * `capabilities` — the translator's compat entries, the endpoint catalog, the picker's provider list —
@@ -970,7 +982,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const BACKLOG_LOG_MS = 30_000;
     let backlogLoggedAt = 0;
     let backlogActive = false;
-    const iq = createResidentEngine({
+    /* The engine runs in a CHILD PROCESS (iq-engine/host), not on this one. Its two worker threads and their
+     * ML models were the bulk of this daemon's ~2 GB RSS against ~360 MB of heap, and on a memory-pressured
+     * host that put most of a gigabyte of the CONTROL PLANE into swap — the floor under every slow request
+     * here, search or not. The interface is unchanged (a ResidentEngine either way), and a child that dies
+     * takes only the searches it was holding: the next one brings up a fresh engine. */
+    const iq = createEngineClient({
         root: workspace.root,
         indexDir: statePath(workspace.root, ".intentic/local/cache/", "iq"),
         // An index pass that fails once warm() has settled has no caller to reject — without this the index
@@ -998,6 +1015,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
         ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
     });
+    // Named once at boot, because from outside this box the engine is now just one more node child among
+    // several, and "which process is holding the gigabyte" is the first question anyone asks of a memory
+    // report. Without this line the answer needs `ps` plus a guess.
+    logger.info({ pid: iq.pid() }, "iq search engine running in its own process");
 
     /* The backend supervisor enumerates extensions through the finished services object (the same
      * ExtensionHost seam every other consumer uses), which does not exist until the literal below is built —
@@ -1014,6 +1035,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 conversationTranscriptSearch: transcriptLines.metrics(),
                 agentOrigins: agentOrigins.metrics(),
                 landedPresences: landedPresences.metrics(),
+                landingExpiry: landingExpiry.metrics(),
                 iq: iq.metrics(),
                 perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
             };

@@ -339,6 +339,15 @@ conversation's worktree instead of a path that still reaches the shared checkout
   `tail -n 20 /history/logs/resource-metrics.jsonl | jq .`) and through the existing authenticated
   `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The normal logs retention applies: files are
   tail-truncated after 5 MB, expire after 30 days, and participate in the 100-file cap.
+- **This process is the control plane, so weight is kept out of it.** Every browser request, agent turn and git
+  poll goes through one event loop, and what makes them slow is usually not their own work but the daemon's
+  resident size: `fork()` copies page tables in proportion to it (1.5 ms from 55 MB, 27 ms at the 1.8 GB this
+  used to run at, paid synchronously on the loop by whoever spawns), and a big process on a memory-pressured
+  host gets paged out. Two things follow. Git is never forked from here — one tiny long-lived child does it
+  (`@intentic/scaffold`'s forker), so every `git` costs a fork from ~50 MB. And the search engine runs in its
+  own process (`@intentic/iq-engine/host`, logged with its pid at boot) rather than as worker threads sharing
+  this address space, because threads move CPU off the loop but leave the models and the index cache resident
+  here. Anything new that is large or forks often belongs on the far side of one of those boundaries.
 - Built on Hono, zod, and provider-native runtimes. Claude uses the Agent SDK; Codex uses app-server, whose
   runner seam is injectable so co-located tests run without a provider process or network.
 - There is more than one workspace, and a path alone does not say which. Every isolated conversation has its own checkout, so the same path names a different file in each — which is why the workspace read routes take an optional conversation and resolve the root in one place (`src/workspace/workspace-scope.ts`). A checkout is **not** a superset of `/work` (the mirrored dirs are bare mount points from outside the turn's namespace, and untracked workspace content was never in it), so a scoped read falls back to the shared tree and reports which one answered. Search is the stated exception: the iq index is built over `/work` and stays there.

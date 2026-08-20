@@ -40,10 +40,10 @@ host that plots them: the daemon serves it at `/workspace/health` and the browse
 codebase-health panel from it. One ranking, two presentations — the verbs keep printing text for the agent.
 
 **Part of the iq dependency island.** The CLI (`@intentic/iq`) and the benchmark harness are its only
-*search-shaped* consumers; the daemon holds ONE long-lived `createResidentEngine` (see the app's
-`composition.ts`) and calls `run` / `health` in-process for `/workspace/search` and `/workspace/health`, which
-is the only reason app code imports this package at all. Nothing else should: every other path to these
-results is the `sandbox-contract` wire shape (`WorkspaceSearch*`, `WorkspaceHealth*`), never an import.
+*search-shaped* consumers; the daemon holds ONE long-lived engine — as a `createEngineClient` handle, see below
+— and calls `run` / `health` on it for `/workspace/search` and `/workspace/health`, which is the only reason
+app code imports this package at all. Nothing else should: every other path to these results is the
+`sandbox-contract` wire shape (`WorkspaceSearch*`, `WorkspaceHealth*`), never an import.
 
 ## Two engines, and why the resident one has threads
 
@@ -58,28 +58,55 @@ a few hundred milliseconds per query, tokenized in JS, yielding at no point. Sco
 again and no longer does: since the vector table took over the ranking it is tens of milliseconds, and it is the
 reranker alone that would otherwise stall every agent stream the daemon is serving.
 
+## And why the whole thing is a separate process
+
+Threads moved the CPU off the daemon's loop. They could not move the MEMORY: a worker thread shares its
+process's address space, so the two models, the index cache and the workspace sweep were all resident in the
+daemon. Measured there: about 2 GB of resident memory against 360 MB of JavaScript heap. On a box under memory
+pressure most of a gigabyte of the *control plane* — the thing every browser request, every agent turn and
+every git poll goes through — was paged out to serve a search nobody had asked for yet. It showed up as tens of
+milliseconds of baseline event-loop delay and multi-second stalls with no I/O to blame.
+
+So [host/client.ts](src/host/client.ts) is a `ResidentEngine` by interface and a proxy by implementation: it
+forks [host/child.ts](src/host/child.ts), which builds the real engine over there and answers over an IPC
+channel. The daemon keeps a small hot set and pays one round trip plus a structured clone per query, which
+against a search that runs BM25, a vector scan and a cross-encoder is noise.
+
+Two consequences worth knowing. `metrics()` is **synchronous** and a process boundary is not, so the child
+*pushes* a snapshot whenever the numbers move and the client answers from the last one — with the sweep's
+timestamp rather than its age, so an idle engine's figures keep aging instead of freezing at the last push. And
+an `AbortSignal` does not cross a boundary at all: the client forwards the abort as a message, and the child
+raises it on a controller of its own so it still reaches the ripgrep child it was always meant to kill.
+
 ```dag
-{ "title": "One index, three threads", "direction": "LR",
-  "nodes": [{ "id": "host", "label": "Host thread", "note": "BM25, rg, fusion, render", "accent": "4" },
+{ "title": "One index, its own process, three threads", "direction": "LR",
+  "nodes": [{ "id": "daemon", "label": "Sandbox daemon", "note": "keeps none of this", "accent": "2" },
+            { "id": "host", "label": "Engine main thread", "note": "BM25, rg, fusion, render", "accent": "4" },
             { "id": "index", "label": "Index worker", "note": "the only writer", "accent": "4" },
             { "id": "query", "label": "Query worker", "note": "vectors + cross-encoder", "accent": "4" },
             { "id": "db", "label": "index.db", "note": "SQLite, WAL", "accent": "neutral" }],
-  "edges": [{ "from": "host", "to": "db" }, { "from": "query", "to": "db" }, { "from": "index", "to": "db" },
+  "edges": [{ "from": "daemon", "to": "host", "dashed": true },
+            { "from": "host", "to": "db" }, { "from": "query", "to": "db" }, { "from": "index", "to": "db" },
             { "from": "host", "to": "index", "dashed": true }, { "from": "host", "to": "query", "dashed": true }] }
 ```
 
-Write-ahead logging is what makes that safe: one writer, two readers, no waiting. The dashed edges are
-messages — a change notification out to the indexer, a query out to the scorer and its ranked answer back.
-The resident engine's `metrics()` reports its cached file count, dirty/applied sequence lag, generation, and
-query-worker liveness/backlog without walking the sweep; the sandbox folds those numbers into its durable
-resource time series so a growing host heap can be compared with the state this engine actually retains.
+Write-ahead logging is what makes the three-thread part safe: one writer, two readers, no waiting. Every dashed
+edge is messages — the daemon's query and its answer, a change notification out to the indexer, a query out to
+the scorer. Notice that nothing but the engine's own main thread ever holds the daemon's, and that the box
+around the right-hand four is a process the daemon can lose: a child that dies fails the calls it was holding,
+says so through the host's `onQueryError`, and the next search brings up a fresh one.
+
+The engine's `metrics()` reports its cached file count, dirty/applied sequence lag, generation, and query-worker
+liveness/backlog without walking the sweep; the sandbox folds those numbers into its durable resource time
+series so a growing host heap can be compared with the state this engine actually retains.
 
 ## Key files
 
 - [src/verbs](src/verbs) — one file per search verb; the surface `iq` dispatches into.
 - [src/engines](src/engines) — the four searches: lexical, structural, semantic, git.
 - [src/plan](src/plan) — intent detection and rank fusion; how four answers become one.
-- [src/query](src/query) — the two model stages behind an interface, and the thread the daemon runs them on.
+- [src/query](src/query) — the two model stages behind an interface, and the thread they run on.
+- [src/host](src/host) — the client/child pair that puts the resident engine in its own process.
 - [src/indexer](src/indexer) — building and updating the disk index.
 - [src/render](src/render) — fitting results into a token budget.
 - [src/store](src/store) — the `node:sqlite` index itself.

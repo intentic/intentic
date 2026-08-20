@@ -12,13 +12,14 @@ import { createPerfTracker } from "../platform/perf.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import type { PersistedAgent } from "./agents-store.js";
+import { createExpiryTracker } from "./expiry.js";
 import { landAgent } from "./land.js";
 import { createAgentOrigins } from "./origins.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 /* Attribution is derived from the landed shas, so these run against a REAL land into a real main tree — the
  * only way to prove the derivation matches what the patch actually did. The registry is stubbed down to the
- * two methods origins reads (ids/entry); everything else on it is irrelevant here. */
+ * three methods origins touches (ids/entry/markLandingAbsorbed); everything else on it is irrelevant here. */
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -60,12 +61,27 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
-// Only ids() and entry() are read; the rest of the registry surface never runs.
+// Only ids(), entry() and markLandingAbsorbed() run; the rest of the registry surface never does. The mark
+// mutates the row in place with the real registry's guard, so the tests exercise the same contract the
+// daemon persists — including the restart-survival the mark exists for (a fresh origins instance over the
+// same entries reads no git for an absorbed landing).
 const registryOf = (...entries: PersistedAgent[]): AgentsRegistry =>
     ({
         ids: () => entries.map((entry) => entry.id),
         entry: (id: string) => entries.find((entry) => entry.id === id),
+        markLandingAbsorbed: async (id: string, repo: string, landedHead: string, landedTip: string, size: number) => {
+            const row = entries.find((entry) => entry.id === id)?.repos.find((composed) => composed.repo === repo);
+            if (row === undefined || row.landedHead !== landedHead || row.landedTip !== landedTip || row.absorbed !== undefined) {
+                return;
+            }
+            (row as { absorbed?: number }).absorbed = size;
+        },
     }) as unknown as AgentsRegistry;
+
+// Origins over a stub registry and a fresh shared-expiry tracker — every test's default wiring. `git` rides
+// into BOTH readers, so a counting runner sees every spawn attribution costs.
+const originsOf = (agents: AgentsRegistry, git: GitRunner = defaultGit): ReturnType<typeof createAgentOrigins> =>
+    createAgentOrigins({ agents, logger, expiry: createExpiryTracker(git) }, git);
 
 test("a landed file is credited to the agent that landed it; untouched files are unattributed", async () => {
     const { work, worktrees, conversation } = await setup();
@@ -73,13 +89,13 @@ test("a landed file is credited to the agent that landed it; untouched files are
     await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"], "added.ts": ["c1"] });
 });
 
 test("nothing landed ⇒ nothing claimed", async () => {
     const { work, worktrees, conversation } = await setup();
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(conversation.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(conversation.repos)));
     expect(await origins.forRepo("root", work)).toEqual({});
     // Same for a repo the agent's composition doesn't even include.
     await worktrees.remove("c1", conversation.repos);
@@ -100,7 +116,7 @@ test("a path two agents landed lists both, newest land first", async () => {
 
     // c2 landed after c1 — both own the path, and the most recent author reads first.
     const agents = registryOf(isolatedAgent(first.repos), isolatedAgent(later.repos, { id: "c2" }));
-    expect((await createAgentOrigins({ agents, logger }).forRepo("root", work))[`app.ts`]).toEqual(["c2", "c1"]);
+    expect((await originsOf(agents).forRepo("root", work))[`app.ts`]).toEqual(["c2", "c1"]);
 });
 
 test("committing one agent's work leaves another agent's landed files attributed", async () => {
@@ -117,7 +133,7 @@ test("committing one agent's work leaves another agent's landed files attributed
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed c2");
 
     // …so c1 keeps its file and c2's — now in history — drops out. A repo-wide expiry would blank both.
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(first.repos), isolatedAgent(later.repos, { id: "c2" })), logger });
+    const origins = originsOf(registryOf(isolatedAgent(first.repos), isolatedAgent(later.repos, { id: "c2" })));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 });
 
@@ -141,7 +157,7 @@ test("a rename credits BOTH paths to the agent — the deletion is its work as m
     // The land itself gets this right — both halves are in the tree.
     expect(await sh(work, "status", "--porcelain")).toContain("app.ts");
 
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"], "moved/app.ts": ["c1"] });
 });
 
@@ -158,7 +174,7 @@ test("committing a rename of a landed path retires BOTH of its names", async () 
     await sh(work, "mv", "app.ts", "renamed.ts");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed and renamed");
 
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
     expect(await origins.forRepo("root", work)).toEqual({});
 });
 
@@ -169,7 +185,7 @@ test("identify names an ARCHIVED agent — the roster the client mirrors no long
     const archived = { ...isolatedAgent([], { id: "c1" }), archivedAt: 1 };
     const untitled = { ...isolatedAgent([], { id: "c2" }) };
     delete untitled.title;
-    const origins = createAgentOrigins({ agents: registryOf(archived, untitled), logger });
+    const origins = originsOf(registryOf(archived, untitled));
     expect(origins.identify(["c1", "c2", "gone"])).toEqual({
         c1: { provider: "claude", title: "fix the thing" },
         // No title ⇒ the key is absent rather than empty, and an id with no entry left at all is omitted
@@ -197,7 +213,7 @@ test("a re-land after a rebase claims only the new delta, not the main-line comm
     // per-path expiry cannot save it: landedHead advanced PAST the commit of app.ts on this very land, so
     // `landedHead..HEAD` is empty and the phantom claim would never retire. That is the chip that puts a stale
     // session's title in the commit box and gets the same work committed twice.
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(second.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(second.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
 });
 
@@ -218,7 +234,7 @@ test("a re-land WITHOUT a rebase drops the delta the user committed in between",
 
     // Only the new delta is claimed: app.ts was already in the tree, committed, when this land went in, so the
     // land put nothing of its own there. Measured from the span alone the claim on app.ts never expires…
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(second.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(second.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
 
     // …and it costs nothing until someone touches the file, which is what made it so hard to see: a finished
@@ -243,7 +259,7 @@ test("a path the user committed BEFORE the land stays credited — only commits 
     // expiry stays anchored at landedHead and is NOT folded into the merge-base for symmetry: from the
     // merge-base, the user's EARLIER commit reads as "history has absorbed this path" and the agent's own
     // uncommitted work gets handed to the user.
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 });
 
@@ -257,25 +273,34 @@ const countingGit =
         return defaultGit(dir, args, env);
     };
 
-test("a spent claim is never re-derived — the scan after it reads no git for that landing at all", async () => {
+test("an absorbed claim is never re-derived — not by the next scan, and not by the next PROCESS", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
     const calls: string[][] = [];
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger }, countingGit(calls));
+    const entry = isolatedAgent(landed.repos);
+    const registry = registryOf(entry);
+    const origins = originsOf(registry, countingGit(calls));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 
     // The user reviews and commits it. The scan that discovers the claim is over is the LAST one to spend
-    // anything on it — history absorbing every landed path is a one-way door.
+    // anything on it — history absorbing every landed path is a one-way door, recorded on the entry.
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
     expect(await origins.forRepo("root", work)).toEqual({});
+    expect(entry.repos[0]?.absorbed).toBe(1);
 
     calls.length = 0;
     expect(await origins.forRepo("root", work)).toEqual({});
     // Not one command — the landing is dropped before the HEAD read, so a fleet of archived agents whose work
     // shipped months ago costs the panel nothing. It used to cost two diffs each, on every commit, forever.
+    expect(calls).toEqual([]);
+
+    // The mark is on the PERSISTED entry, so a fresh instance — a daemon restart — starts already knowing.
+    // The in-memory memo this replaces re-derived every landing the fleet ever made on the first scan after
+    // every reboot, which is what made that scan take 10-20 seconds.
+    expect(await originsOf(registry, countingGit(calls)).forRepo("root", work)).toEqual({});
     expect(calls).toEqual([]);
 });
 
@@ -285,7 +310,7 @@ test("advancing HEAD does not re-read a merge-base — the branch point cannot m
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
     const calls: string[][] = [];
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger }, countingGit(calls));
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)), countingGit(calls));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
     expect(calls.filter((args) => args[0] === "merge-base")).toHaveLength(1);
 
@@ -310,7 +335,8 @@ test("advancing HEAD replaces the expiry entry — the caches do not grow with t
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const expiry = createExpiryTracker();
+    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger, expiry });
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
     const { pathCharacters: _content, ...settled } = origins.metrics();
 
@@ -321,24 +347,26 @@ test("advancing HEAD replaces the expiry entry — the caches do not grow with t
         await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", `user commit ${round}`);
         expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
     }
-    // Same cardinalities as after the first scan: nothing accumulated per head move. (The expiry's CONTENT
-    // may grow — the diff since the land legitimately names the user's new file — but as a replaced slot,
-    // never as more entries.)
+    // Same cardinalities as after the first scan: nothing accumulated per head move — in this module's own
+    // spans, and in the shared expiry tracker whose CONTENT may grow (the diff since the land legitimately
+    // names the user's new file) but only ever inside the one slot per landing.
     const { pathCharacters: _grown, ...after } = origins.metrics();
     expect(after).toEqual(settled);
+    expect(expiry.metrics()["entries"]).toBe(1);
 
-    // The user commits the landed work — the claim retires, and its cached spans go with it.
+    // The user commits the landed work — the claim retires, and its cached spans go with it, tracker included.
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
     expect(await origins.forRepo("root", work)).toEqual({});
-    expect(origins.metrics()).toEqual({ spans: 0, expiries: 0, anchors: 0, spent: 1, pathCharacters: 0 });
+    expect(origins.metrics()).toEqual({ spans: 0, anchors: 0, unresolvable: 0, pathCharacters: 0 });
+    expect(expiry.metrics()["entries"]).toBe(0);
 });
 
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
-    const origins = createAgentOrigins({ agents: registryOf(isolatedAgent(landed.repos)), logger });
+    const origins = originsOf(registryOf(isolatedAgent(landed.repos)));
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 
     // The user reviews and commits it. HEAD moves off the sha the land was recorded against…

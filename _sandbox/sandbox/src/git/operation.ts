@@ -1,5 +1,5 @@
-import { access, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, lstat, readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 
 /* THE OPERATION A WORKTREE IS HALTED IN THE MIDDLE OF, and the way out of it.
@@ -48,16 +48,31 @@ const queuedSequence = async (gitDir: string): Promise<GitOperation | undefined>
 
 // The per-worktree git dir — NOT the common dir. Every marker below is per worktree, which is what makes an
 // agent's linked worktree report its own halted state rather than the main checkout's.
-const gitDirOf = async (dir: string, git: GitRunner): Promise<string | undefined> => {
+//
+// Read straight off the `.git` entry rather than asked of `rev-parse --git-dir`, because this runs for every
+// repo on every Changes scan and the spawn was a scan-wide multiplier for an answer the filesystem already
+// holds: every caller passes a checkout ROOT (the workspace repo dirs, an agent's worktree), where `.git` is
+// either the admin dir itself or a pointer FILE whose one line is the path (`gitdir: <path>` — what
+// repo-git-dirs.ts and worktree checkouts both write, and exactly what git's own discovery reads). No memo, so
+// nothing can go stale: a re-created checkout is re-read from its fresh pointer on the next call.
+const gitDirOf = async (dir: string): Promise<string | undefined> => {
+    const entry = join(dir, ".git");
     try {
-        return (await git(dir, ["rev-parse", "--path-format=absolute", "--git-dir"])).stdout.trim();
+        const stats = await lstat(entry);
+        if (stats.isDirectory()) {
+            return entry;
+        }
+        const target = /^gitdir:\s*(.+?)\s*$/.exec(await readFile(entry, "utf8"))?.[1];
+        // A relative pointer is resolved against the dir holding it — the rule gitfiles are defined by.
+        return target === undefined ? undefined : resolve(dir, target);
     } catch {
-        return undefined;
+        return undefined; // Not a repo (or a torn pointer) — the same "nothing to report" as before.
     }
 };
 
-export const operationInProgress = async (dir: string, git: GitRunner = defaultGit): Promise<GitOperation | undefined> => {
-    const gitDir = await gitDirOf(dir, git);
+// No git runner: every answer below comes from the filesystem, which is the whole point of the change above.
+export const operationInProgress = async (dir: string): Promise<GitOperation | undefined> => {
+    const gitDir = await gitDirOf(dir);
     if (gitDir === undefined) {
         return undefined;
     }

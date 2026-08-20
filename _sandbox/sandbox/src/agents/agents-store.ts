@@ -103,6 +103,16 @@ export const PersistedAgentSchema = z.object({
     // `landedHead`/`landedAt` are that land's provenance in the MAIN tree: the commit HEAD stood on and when.
     // They are what lets the Changes panel say which agent an uncommitted file came from — `base → landedTip`
     // names the paths, and a HEAD that has since moved retires the claim (see agents/origins.ts).
+    //
+    // `absorbed` records the landing's one terminal fact: history has taken every path this land put in the
+    // tree (the user committed all of it), at which point no later act of theirs can make the work missing —
+    // an edit-and-discard returns to the commit that holds it. Its value is the landing's SIZE (the count of
+    // paths it actually applied), because the presence reading is a fraction and a settled repo still belongs
+    // in the denominator. Written once, by the attribution scan that observes the absorption (agents/origins.ts
+    // via registry.markLandingAbsorbed), and cleared for free by the next land, which writes a fresh row. It
+    // is what keeps the per-scan attribution cost proportional to the ACTIVE landings rather than to everything
+    // the fleet has ever landed — the in-memory memos it replaces (`spent`/`settled`) re-derived the same
+    // one-way fact from hundreds of git spawns on the first scan after every restart.
     repos: z.array(
         z.object({
             repo: z.string(),
@@ -110,6 +120,7 @@ export const PersistedAgentSchema = z.object({
             landedTip: z.string().optional(),
             landedHead: z.string().optional(),
             landedAt: z.number().optional(),
+            absorbed: z.number().optional(),
         }),
     ),
     /* WHAT THE LANDED WORK DID, as a commit subject — drafted from the diff the moment it reached the main tree

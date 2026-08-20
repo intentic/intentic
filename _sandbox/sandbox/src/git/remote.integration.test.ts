@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { createBranch, deleteBranch, listBranches } from "./branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./remote.js";
@@ -119,6 +120,48 @@ test("remoteState still falls back to the only remote there is when it isn't nam
     await createBranch(clone, "feature", undefined, true);
 
     expect((await remoteState(clone)).remote).toBe("upstream");
+});
+
+/* WHAT THIS COSTS, not just what it answers. remoteState runs for every repo on every Changes scan, so a
+ * spawn here is a scan-wide multiplier — these pin the read order that makes the steady state one spawn, and
+ * would fail the moment a config read crept back in front of it. */
+const counted =
+    (calls: string[][]): GitRunner =>
+    (dir, args, env) => {
+        calls.push([...args]);
+        return defaultGit(dir, args, env);
+    };
+
+test("a tracking branch costs ONE spawn: no branch read, no remote listing", async () => {
+    const { clone } = await cloned();
+    const calls: string[][] = [];
+    // The Changes scan holds the branch already — it comes off the same status pass that produced the rows.
+    const state = await remoteState(clone, { branch: "main" }, counted(calls));
+
+    expect(state).toMatchObject({ remote: "origin", branch: "main", upstream: "origin/main", ahead: 0, behind: 0 });
+    // for-each-ref alone: it carries the tracking ref, its remote AND the ahead/behind counts.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toBe("for-each-ref");
+});
+
+test("only a branch with no upstream pays for the remote listing, which is where a publish has to go", async () => {
+    const { clone } = await cloned();
+    await sh(clone, "checkout", "-q", "-b", "unpushed");
+    const calls: string[][] = [];
+    const state = await remoteState(clone, { branch: "unpushed" }, counted(calls));
+
+    expect(state).toMatchObject({ remote: "origin", branch: "unpushed", ahead: 0, behind: 0 });
+    expect(state.upstream).toBeUndefined();
+    expect(calls.map((args) => args[0])).toEqual(["for-each-ref", "remote"]);
+});
+
+test("a caller that knows no branch still gets a truthful answer, at the cost of the read it skipped", async () => {
+    const { clone } = await cloned();
+    const calls: string[][] = [];
+    const state = await remoteState(clone, {}, counted(calls));
+
+    expect(state).toMatchObject({ remote: "origin", branch: "main", upstream: "origin/main" });
+    expect(calls.map((args) => args[0])).toEqual(["branch", "for-each-ref"]);
 });
 
 test("pullRemote fast-forwards, and reports a non-fast-forward as a reason rather than throwing", async () => {

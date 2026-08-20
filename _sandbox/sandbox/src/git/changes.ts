@@ -331,7 +331,7 @@ const withUntrackedLineStats = async (dir: string, untracked: readonly string[],
 export const changedFiles = async (
     dir: string,
     git: GitRunner = defaultGit,
-): Promise<{ branch?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }> => {
+): Promise<{ branch?: string; head?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }> => {
     const { stdout } = await git(dir, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"]);
     const { branch, head, conflicted, staged: stagedNames, unstaged: unstagedNames, untracked } = parseStatusV2(stdout);
     // On an unborn HEAD there is no commit to diff the index against — the empty tree stands in, so a repo
@@ -348,7 +348,9 @@ export const changedFiles = async (
         withLineStats(dir, ["--cached", base], stagedNames, git),
         withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes)),
     ]);
-    return { ...(branch !== undefined ? { branch } : {}), conflicted, staged, unstaged };
+    // `head` rides along because the status read already carries it, and the scan's other readers (the
+    // attribution pass above all) each spend a rev-parse to learn the same sha — see git.routes scanRepo.
+    return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged };
 };
 
 // A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged

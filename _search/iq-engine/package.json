@@ -29,6 +29,17 @@
                 "default": "./dist/index.js"
             }
         },
+        "./host": {
+            "types": "./dist/host/client.d.ts",
+            "import": {
+                "@intentic/src": "./src/host/client.ts",
+                "default": "./dist/host/client.js"
+            },
+            "require": {
+                "@intentic/src": "./src/host/client.ts",
+                "default": "./dist/host/client.js"
+            }
+        },
         "./testing": {
             "types": "./dist/testing.d.ts",
             "import": {

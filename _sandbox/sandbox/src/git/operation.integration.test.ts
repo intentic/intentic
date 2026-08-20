@@ -109,6 +109,32 @@ test("a sequence with picks still queued is reported after the marker is cleared
     expect(await operationInProgress(dir)).toBe("cherry-pick");
 });
 
+/* AN AGENT'S LINKED WORKTREE, which is where most halted operations in this product actually happen. Its
+ * `.git` is a POINTER FILE, not a directory, and the markers live in the per-worktree admin dir it names —
+ * so a reading that stopped at `<dir>/.git/MERGE_HEAD` would report the worktree clean while git refuses
+ * every verb in it. Read off the pointer rather than asked of `rev-parse --git-dir`, which is one spawn per
+ * repo per scan for an answer the filesystem holds. */
+test("a linked worktree reports its OWN halted state, through its pointer file", async () => {
+    const dir = await conflicting();
+    const linked = join(dir, "..", `wt-${dirs.length}`);
+    dirs.push(linked);
+    await git(dir, ["worktree", "add", "-q", linked, "other"]);
+
+    // The main checkout is untouched throughout — the whole point of per-worktree markers.
+    await git(linked, ["merge", "main"]).catch(() => undefined);
+    expect(await operationInProgress(linked)).toBe("merge");
+    expect(await operationInProgress(dir)).toBeUndefined();
+
+    await abortOperation(linked, "merge");
+    expect(await operationInProgress(linked)).toBeUndefined();
+});
+
+test("a directory that is not a repo at all reports nothing rather than throwing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gitop-bare-"));
+    dirs.push(dir);
+    expect(await operationInProgress(dir)).toBeUndefined();
+});
+
 test("a queued revert sequence is reported as a revert, the todo being shared", async () => {
     const dir = await mkdtemp(join(tmpdir(), "gitop-seq2-"));
     dirs.push(dir);

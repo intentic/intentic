@@ -102,6 +102,21 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
     expect(unstaged.some((change) => change.path.includes(".env"))).toBe(false);
 });
 
+/* The status pass already parses HEAD's sha, and the Changes scan hands it to attribution rather than letting
+ * it spawn a `rev-parse` for the answer this read just had. Reported for an unborn repo as absent, not as a
+ * fabricated empty-tree sha — a caller that reads it as one would attribute against a tree that never was. */
+test("changedFiles reports HEAD's sha alongside the branch, and nothing on an unborn repo", async () => {
+    const dir = await tempRepo();
+    expect(await sh(dir, "rev-parse", "HEAD")).toBe((await changedFiles(dir)).head);
+
+    const unborn = await mkdtemp(join(tmpdir(), "intentic-changes-unborn-"));
+    tempDirs.push(unborn);
+    await sh(unborn, "init", "-q", "-b", "main");
+    const fresh = await changedFiles(unborn);
+    expect(fresh.head).toBeUndefined();
+    expect(fresh.branch).toBe("main");
+});
+
 test("changedFiles reports a partially staged file on BOTH sides, with each side's own line counts", async () => {
     const dir = await tempRepo(); // a.txt = "one"
     await writeFile(join(dir, "a.txt"), "two\n");

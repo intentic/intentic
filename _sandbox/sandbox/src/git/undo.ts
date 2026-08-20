@@ -84,7 +84,7 @@ const SEP = "\x1f";
 export const undoableAction = async (dir: string, git: GitRunner = defaultGit): Promise<UndoableAction | undefined> => {
     // A halted merge/rebase/cherry-pick ends by ABORTING it, not by moving the branch — offering both would be
     // offering two different recoveries for one state, and only one of them is correct.
-    if ((await operationInProgress(dir, git)) !== undefined) {
+    if ((await operationInProgress(dir)) !== undefined) {
         return undefined;
     }
     // A detached HEAD has no branch reflog to walk back through, and nothing a reset could usefully move.

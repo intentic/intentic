@@ -1161,4 +1161,50 @@ describe("agents registry", () => {
         expect(second.get("c1")).toBeUndefined();
         expect(store.saved()).toEqual([]);
     });
+
+    /* The absorbed mark is a memo about a landing that no longer exists by the time anyone reads it back, so
+     * the guard IS the contract: only the very (landedHead, landedTip) pair the scan measured takes it, it
+     * survives a restart, and a row a newer land has since rewritten is left exactly alone. */
+    it("markLandingAbsorbed stamps the measured landing, persists it, and refuses every other row", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000);
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "b1", landedTip: "t1", landedHead: "h1", landedAt: 3_000 }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+        });
+
+        // A mark computed against shas the entry does not carry — a stale scan racing a newer land — is a no-op.
+        await registry.markLandingAbsorbed("c1", "root", "h0", "t1", 4);
+        expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
+
+        await registry.markLandingAbsorbed("c1", "root", "h1", "t1", 4);
+        expect(registry.entry("c1")?.repos[0]?.absorbed).toBe(4);
+        // Idempotent: the door is one-way, and a second mark (whatever size it claims) changes nothing.
+        await registry.markLandingAbsorbed("c1", "root", "h1", "t1", 9);
+        expect(registry.entry("c1")?.repos[0]?.absorbed).toBe(4);
+        // Unknown agents and repos are silently nobody's business.
+        await registry.markLandingAbsorbed("gone", "root", "h1", "t1", 1);
+        await registry.markLandingAbsorbed("c1", "nested", "h1", "t1", 1);
+
+        // Persisted — the whole point: a restart starts already knowing (origins.integration.test.ts proves
+        // what that saves; this proves the fact survives the trip through the store).
+        const restarted = createAgentsRegistry(store, standings(), presences());
+        await restarted.init();
+        expect(restarted.entry("c1")?.repos[0]?.absorbed).toBe(4);
+
+        // The next land writes a fresh row, which clears the mark for free — recordLanded carries the rows the
+        // land built, and a landing that just happened is by definition not absorbed.
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "b1", landedTip: "t2", landedHead: "h2", landedAt: 5_000 }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+        });
+        expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
+    });
 });

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { discardPaths } from "../git/changes.js";
@@ -10,6 +11,7 @@ import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../platform/perf.js";
 import { isolatedAgent, noIsolation } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { createExpiryTracker } from "./expiry.js";
 import { createLandedPresences } from "./landed-presence.js";
 import { landAgent } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
@@ -66,7 +68,7 @@ test("landed work still sitting in the tree reads as present — nothing to say"
     await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    const presences = createLandedPresences(worktrees, logger);
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     expect(await presences.refresh([isolatedAgent(landed.repos)])).toBe(false);
     // The steady state is SILENCE, not a reading of 2-of-2: a card that spent a line on the happy path would
     // spend it on nearly every card on the board.
@@ -84,7 +86,7 @@ test("discarding the whole land reads as removed from the workspace", async () =
 
     await discardPaths(work, undefined);
 
-    const presences = createLandedPresences(worktrees, logger);
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     // The verdict MOVED, which is what makes the board repaint — the roster read that heals the card.
     expect(await presences.refresh([entry])).toBe(true);
     expect(presences.of("c1")).toEqual({ landed: 2, present: 0 });
@@ -99,7 +101,7 @@ test("discarding part of a land reads as the fraction that survived", async () =
 
     await discardPaths(work, ["app.ts"]);
 
-    const presences = createLandedPresences(worktrees, logger);
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     await presences.refresh([entry]);
     expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
 });
@@ -113,7 +115,7 @@ test("committing the landed work is the strongest form of present — and never 
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "keep it");
 
-    const presences = createLandedPresences(worktrees, logger);
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     await presences.refresh([entry]);
     expect(presences.of("c1")).toBeUndefined();
 
@@ -125,6 +127,26 @@ test("committing the landed work is the strongest form of present — and never 
     await discardPaths(work, ["app.ts"]);
     await presences.refresh([entry]);
     expect(presences.of("c1")).toBeUndefined();
+});
+
+test("an ABSORBED landing is answered from the entry — fully present, and not one git command", async () => {
+    const { worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    // The mark the attribution scan writes once history has taken every landed path (agents/origins.ts via
+    // registry.markLandingAbsorbed) — here stamped directly, because what THIS module owes it is only the
+    // reading: both sides of the fraction, from memory, before any head read.
+    const entry = isolatedAgent(landed.repos.map((composed) => Object.assign({}, composed, { absorbed: 3 })));
+
+    const calls: string[][] = [];
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker(), (dir, args, env) => {
+        calls.push([...args]);
+        return defaultGit(dir, args, env);
+    });
+    expect(await presences.refresh([entry])).toBe(false);
+    // Absorbed is this reading's strongest "present": nothing missing, so nothing to say — and nothing spent.
+    expect(presences.of("c1")).toBeUndefined();
+    expect(calls).toEqual([]);
 });
 
 test("a cumulative land puts discarded work back; the default span cannot", async () => {
@@ -147,7 +169,7 @@ test("a cumulative land puts discarded work back; the default span cannot", asyn
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(edited(1));
 
     // And the card goes quiet again, because the work is back where the land put it.
-    const presences = createLandedPresences(worktrees, logger);
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     await presences.refresh([isolatedAgent(again.repos)]);
     expect(presences.of("c1")).toBeUndefined();
 });
