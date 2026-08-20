@@ -112,11 +112,9 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
 
                         <div class="a-hero-actions">
                             <a class="a-btn a-btn-primary" href={APP_URL}>
-                                <Corners />
                                 Get started free
                             </a>
                             <a class="a-btn" href={githubUrl} target="_blank" rel="noopener">
-                                <Corners />
                                 See the source
                             </a>
                         </div>
@@ -127,7 +125,6 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                             reader on a Mac is never promised a build that does not exist. */}
                         <div class="a-hero-actions a-hero-actions-second">
                             <a class="a-btn" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
-                                <Corners />
                                 <svg viewBox="0 0 24 24" class="a-win" fill="currentColor" aria-hidden="true">
                                     <path d="M3 5.4 10.2 4.4v7.1H3zM11.4 4.2 21 3v8.5h-9.6zM3 12.6h7.2v7.1L3 18.7zM11.4 12.6H21V21l-9.6-1.3z"></path>
                                 </svg>
@@ -527,7 +524,6 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                             <p class="a-desktop-note">{content.connect.desktop.note}</p>
                         </div>
                         <a class="a-btn a-btn-sm" href="/download/">
-                            <Corners />
                             {content.connect.desktop.cta}
                         </a>
                     </div>
@@ -593,11 +589,9 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                     <span class="a-divider a-final-divider" aria-hidden="true" set:html={DIVIDER} />
                     <div class="a-hero-actions a-final-actions">
                         <a class="a-btn a-btn-primary" href={APP_URL}>
-                            <Corners />
                             Get started free
                         </a>
                         <a class="a-btn" href={githubUrl} target="_blank" rel="noopener">
-                            <Corners />
                             See the source
                         </a>
                     </div>
@@ -787,12 +781,19 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
        shade narrower than it: left greedy, it orphaned "of sight." on a line of its own directly under
        the brand line, which is the most looked-at inch of the page. Balance splits it on its own full
        stop instead — one clause per line. */
+    /* THE HERO'S THREE VOICES, sampled off the reference art rather than picked. All three were too
+       cool and too pale: this line sat at #e4d3b6, a near-white with the warmth washed out of it, and
+       the summary under it took the page's grey `--a-muted`. On a wall this warm that reads as paper
+       laid over stone. The reference runs both several steps warmer and a step darker — amber for the
+       line that carries the claim, a dusty tan for the one that explains it — so the three levels are
+       separated by TEMPERATURE as much as by brightness, which is what stops the block looking like
+       one paragraph in three sizes. */
     .a-page .a-hero-sub {
         margin: 1.5rem 0 0;
         max-width: 40ch;
         font-size: 1.125rem;
         line-height: 1.6;
-        color: #e4d3b6;
+        color: #c2a077;
         text-wrap: balance;
     }
     /* 45ch, not the 50 the column would allow: at 50 the line broke between "git" and "worktree", and
@@ -802,7 +803,7 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         max-width: 45ch;
         font-size: 0.9375rem;
         line-height: 1.7;
-        color: var(--a-muted);
+        color: #9c8971;
     }
     .a-page .a-hero-divider {
         margin: 1.7rem 0 1.6rem;

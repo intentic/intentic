@@ -7,14 +7,14 @@
  * pointing at the destination its menu's first row points at. It is a skin of the same navigation, not
  * a second one, and every href comes from nav.ts so the two cannot name different pages.
  *
- * The wordmark is set rather than drawn: the reference art letters "intentic" in the same high-contrast
- * serif as the headline, which the geometric brand mark cannot be made to do. That is the one place this
- * page departs from the real brand, and it departs there on purpose — the wordmark is the loudest
- * statement of what the treatment IS.
+ * The wordmark is set rather than drawn, in the ONE face on this page that exists for it alone: a
+ * rounded geometric with cut terminals and an angled `t`. It was briefly set in the headline's serif,
+ * which was wrong in the way a logo is wrong rather than the way type is wrong — a wordmark is a
+ * drawing of a name, and dressing it in whatever the headings happen to wear makes it somebody else's
+ * name. See `--a-font-mark` in angkor.css.
  */
 import { navEntries } from "@intentic-dev/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
-import Corners from "./Corners.astro";
 import DiscordIcon from "../DiscordIcon.astro";
 import Lotus from "./Lotus.astro";
 
@@ -61,7 +61,6 @@ const links = navEntries.map((entry) => ({
                 <DiscordIcon size={17} />
             </a>
             <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm">
-                <Corners />
                 Get started free
             </a>
         </div>
@@ -107,12 +106,16 @@ const links = navEntries.map((entry) => ({
         text-decoration: none;
         flex: none;
     }
+    /* `line-height: 1` on a face with this much overshoot leaves the word sitting high in its own box,
+       which is what made the lotus beside it look low. `block` + a line box the glyphs actually fill
+       lets the flex row centre the two against each other rather than against two different boxes. */
     .a-wordmark {
-        font-family: var(--a-font-display);
+        display: block;
+        font-family: var(--a-font-mark);
         font-size: 1.85rem;
         font-weight: 500;
-        line-height: 1;
-        letter-spacing: 0.01em;
+        line-height: 1.18;
+        letter-spacing: 0.005em;
         color: var(--a-ember);
         text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
     }
@@ -165,11 +168,11 @@ const links = navEntries.map((entry) => ({
         .a-bar-icon {
             display: none;
         }
-        /* Still 28px, not the 24 this used to shrink to: the fence in angkor.css is a fence, and the
-           wordmark is the one piece of display type on the page that cannot be replaced with something
-           else. There is room — the bar down here holds only the brand and one compact cartouche. */
+        /* The wordmark keeps most of its size down here: the bar holds only the brand and one compact
+           cartouche at this width, so there is room, and a logo that shrinks first reads as the thing
+           on the page that mattered least. */
         .a-wordmark {
-            font-size: 1.75rem;
+            font-size: 1.6rem;
         }
         .a-bar-inner {
             padding: 0.75rem 1.1rem;

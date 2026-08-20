@@ -18,8 +18,15 @@
  *  and at 15px a 1px stroke on a 32-unit grid lands at half a device pixel: the outlined version of this
  *  drawing resolved into a grey asterisk in every chip on the page. Solid petals hold their silhouette at
  *  any size, and the petals are separated by falling opacity rather than by gaps — an outline needs room
- *  between shapes to read, a tonal step does not. */
-export const LOTUS = `<svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+ *  between shapes to read, a tonal step does not.
+ *
+ *  THE VIEWBOX IS OFFSET, and that is not a typo. The drawing runs from y≈3.4 to y≈26.1, so inside a
+ *  plain `0 0 32 32` box its own centre sits about 1.3 units ABOVE the box's. Every caller renders this
+ *  in a square inside a flex row, so `align-items: center` was faithfully centring a box whose contents
+ *  were high in it — which is why the lotus read a little above the text beside it everywhere on the
+ *  page, the wordmark included. Shifting the box up by the same 1.3 puts the two centres on top of each
+ *  other. If the petals are ever redrawn, re-measure the extents and re-set this number. */
+export const LOTUS = `<svg viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">
   <path d="M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z" opacity=".42"/>
   <path d="M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z" opacity=".42"/>
   <path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(-74 16 22.6)" opacity=".55"/>

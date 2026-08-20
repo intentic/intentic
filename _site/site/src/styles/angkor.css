@@ -30,15 +30,24 @@
  * So the faces are split by JOB and each is fenced to a size band:
  *
  *   Playfair Display  — display only, and nothing under ~28px: the hero's three beats, the section
- *                       headings, the step numerals, the wordmark. This is where the contrast pays.
- *   Spectral          — the titling tier, 13–24px: card headings, buttons, list labels. A screen-first
- *                       text serif with moderate contrast and sturdy wedge serifs, so it keeps the
- *                       carved character exactly where Playfair loses it. 500 and 600 only.
- *   Inter             — running copy and all small print, as global.css already serves it. The
- *                       reference art sets its paragraphs in a sans too.
+ *                       headings, the step numerals. This is where the contrast pays.
+ *   Spectral          — the titling tier, 13–24px: card headings and list labels. A screen-first text
+ *                       serif with moderate contrast and sturdy wedge serifs, so it keeps the carved
+ *                       character exactly where Playfair loses it. 500 and 600 only.
+ *   Inter             — running copy, all small print, AND EVERY BUTTON LABEL. See below.
+ *   Baloo 2           — the wordmark, and nothing else ever.
  *
  * If a new element is between 13 and 24px, it is Spectral. That is the whole rule.
- * ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+ *
+ * BUTTONS ARE SANS, and that is a deliberate exception to the band above. A button label is not
+ * titling — it is an instruction, read at a glance, in a box the eye has already decided to look at.
+ * Set in the titling serif they read as ornament rather than as something to press, and the reference
+ * art sets them in a sans for exactly that reason. So the one serif that survives inside a control is
+ * none: `--font-sans`, medium weight, a touch of tracking to hold the small caps-height open.
+ *
+ * THE WORDMARK IS ITS OWN FACE, because a wordmark is a drawing rather than a setting. Baloo 2 is the
+ * rounded geometric with the cut terminals and the angled `t` the brand art uses — a serif version of
+ * this word is a different company's logo. One weight, one place. */
 @font-face {
     font-family: "Playfair Display";
     font-style: normal;
@@ -97,11 +106,33 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* The wordmark's face, and the only thing on the page allowed to ask for it. One weight: a logo has
+ * no second weight, and shipping one would only invite something else to use it. */
+@font-face {
+    font-family: "Baloo 2";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/baloo2-500-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Baloo 2";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/fonts/baloo2-500-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 .a-page {
     /* The two serifs, named by the job rather than by the typeface, so a call site says which TIER it
      * belongs to and the fence above is enforced by which variable it reaches for. */
     --a-font-display: "Playfair Display", Georgia, "Times New Roman", serif;
     --a-font-title: "Spectral", Georgia, "Times New Roman", serif;
+    --a-font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
 
     /* ── The metals ──────────────────────────────────────
      * Two of them, and the page is built on the difference. GOLD is structure: every rule, frame,
@@ -150,19 +181,62 @@ body:has(.a-page) {
 }
 
 /* ── Display type ────────────────────────────────────────
- * Carved, not printed. The letterform is Playfair; the metal is a top-lit gradient clipped to the
- * glyphs; the relief is two drop-shadows on the element (a hard black offset for the cut edge, a soft
- * one for the shadow it throws). `filter` rather than `text-shadow` because the fill is a clipped
- * background, which text-shadow paints straight over. */
+ * CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour.
+ *
+ * This started as a single smooth gradient from near-white to gold, and it read as gold leaf: too
+ * bright at the top (#fbf3e2 is four steps lighter than anything in the reference art, so the letters
+ * blew out and the relief had nothing to sit against) and too saturated at the foot. Sampling the
+ * reference gives a much narrower, much less shiny range — its brightest 0.5% of glyph pixels average
+ * #dfc8aa, not white — so the ramp below tops out there and lands on a warm grey-brown.
+ *
+ * The mottle is what actually makes it stone. Three background layers are clipped to the glyphs at
+ * once: a coarse fractal cloud for the blotching a weathered surface has, a fine one for grain, and
+ * the ramp under both. They composite with `overlay` and `soft-light`, so the noise moves the ramp's
+ * own colour lighter and darker rather than laying grey over it — a stone is one material lit
+ * unevenly, not two materials stacked. `stitchTiles` makes each cloud tile seamlessly, so a heading
+ * that wraps does not show a seam at the fold.
+ *
+ * The relief is three drop-shadows: a hard 1px black for the cut edge, a short soft one for the depth
+ * of the cut, and a long one for the shadow the letter throws on the wall behind it. `filter` rather
+ * than `text-shadow` because the fill IS a background here, and text-shadow paints above a
+ * background-clipped fill rather than behind it. */
 .a-page .a-display {
     font-family: var(--a-font-display);
     font-weight: 600;
     letter-spacing: -0.005em;
-    background: linear-gradient(178deg, #fbf3e2 0%, #ecdcbd 38%, #cbb086 72%, #a98c60 100%);
+    /* THE FACE OF A CUT LETTER IS NOT ITS BRIGHTEST PART. Sampling the reference inside the thick
+     * strokes — ignoring the edges — gives #a58566 to #b29372, a mid tan; the near-cream this ramp used
+     * to run through is only ever on the reference's lit EDGE, which is the bevel below, not the fill.
+     * Setting the face at the edge's brightness is what made the first attempts read as ivory rather
+     * than stone: there was nothing left for the highlight to be brighter than.
+     *
+     * The two noise layers are what stone has and paint does not. `feColorMatrix` here is a full matrix
+     * rather than `saturate 0` on purpose: feTurbulence generates noise in the ALPHA channel too, so a
+     * saturate-only filter leaves a randomly transparent rect whose holes average back toward the flat
+     * grey underneath — the mottle was being cancelled out almost exactly. This matrix takes the mean of
+     * the RGB noise as the grey AND pins alpha to 1, so what lands is opaque greyscale cloud. */
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncG type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncB type='linear' slope='0.78' intercept='0.11'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23g)'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='s' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncG type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncB type='linear' slope='0.55' intercept='0.225'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23s)'/%3E%3C/svg%3E"),
+        linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
+    background-size:
+        70px 70px,
+        200px 200px,
+        100% 100%;
+    background-blend-mode: soft-light, overlay, normal;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+    /* THE BEVEL, and it has to be `filter` rather than `text-shadow`. The fill here IS a background, and
+     * a background is painted BEFORE a text shadow — so a light text-shadow offset up-left would lay a
+     * flat pale copy of the glyph straight over the texture it is meant to be lighting. `drop-shadow`
+     * composites behind the finished element instead, so each of these reads as an edge OUTSIDE the
+     * stroke: two pale ones up and to the left for the lit face of the cut, then a hard black one below
+     * for the cut's depth, then two soft ones for the shadow the letter throws on the wall. Chained, so
+     * each sees the one before it and the black picks out the pale — which is what turns two flat
+     * fringes into an edge with a thickness. */
+    filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.8)) drop-shadow(-1px -1px 0 rgba(247, 234, 208, 0.38))
+        drop-shadow(0 2px 0 rgba(0, 0, 0, 0.92)) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.62)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
 }
 
 /* The full stop that ends each headline beat, and the only ember on the first screen apart from the
@@ -299,87 +373,122 @@ body:has(.a-page) {
 }
 
 /* ── Buttons ─────────────────────────────────────────────
- * Cartouches. A double rule, a lozenge turned into each corner (the same drawn corner as the frames,
- * at button scale), serif lettering, and — for the primary only — a lit ember interior. The reference
- * art gives the page exactly one lit button per screen and that restraint is what makes it read as
- * gold rather than as a Christmas tree. */
+ * CARTOUCHES WITH THE CORNERS CUT OUT OF THEM. The reference art's button is an octagon: two thin
+ * concentric gold rules, each with a 45-degree notch taken out of all four corners, like a corner
+ * chamfered off a stone slab. It used to be a rounded rectangle with a drawn filigree bracket dropped
+ * on each corner — an ornament sitting ON the frame rather than the frame's own shape.
+ *
+ * TWO PROPERTIES DO IT, and they have to agree.
+ *
+ *   `clip-path` cuts the octagon out of everything the element paints — the fill, and on the primary
+ *   the lit ember interior, which is the half that actually shows: a square corner glowing outside a
+ *   notched rule is the whole illusion gone.
+ *
+ *   `border-image` draws the two rules. Not a border and not a pseudo-element, because the corner is
+ *   the one part of this frame that must NOT stretch: a nine-slice keeps all four corner tiles at
+ *   their drawn size and stretches only the straight runs between them, so a 320px button and a 90px
+ *   button get the same notch. `border-width` stays at 1px so layout reserves almost nothing, while
+ *   `border-image-width` paints 13px inward — the standard way to hang artwork inside the padding box
+ *   without it pushing the label around.
+ *
+ * The chamfer is 6px, set in three places that must match: the SVG's own geometry, `--a-cut` for the
+ * clip, and nothing else. Change one, change all three.
+ *
+ * The label is SANS — see the type note at the top of this file for why a control is the one place
+ * the serif does not go. */
 .a-page .a-btn {
+    /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at
+       x+y≈7.3 in the artwork's units, which map 1:1 to px here. Cut at 6 and a sliver of lit interior
+       showed past the gold at each corner of the primary button. */
+    --a-cut: 7.3px;
+    --a-frame: rgba(201, 160, 92, 0.55);
+    --a-frame-inner: rgba(201, 160, 92, 0.3);
+
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.6rem;
-    padding: 0.85rem 1.65rem;
-    border: 1px solid var(--a-line-mid);
-    border-radius: 3px;
-    /* Titling tier: a button label is 17px and it is the most clicked type on the page. */
-    font-family: var(--a-font-title);
-    font-size: 1.0625rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
+    gap: 0.55rem;
+    padding: 0.85rem 1.6rem;
+
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: 0.015em;
     line-height: 1.35;
     color: var(--a-cream);
     text-decoration: none;
     white-space: nowrap;
+
     background: rgba(20, 14, 10, 0.5);
+    border: 1px solid transparent;
+    border-image-source: var(--a-btn-frame-img);
+    border-image-slice: 13;
+    border-image-width: 13px;
+    border-image-repeat: stretch;
+    clip-path: polygon(
+        var(--a-cut) 0,
+        calc(100% - var(--a-cut)) 0,
+        100% var(--a-cut),
+        100% calc(100% - var(--a-cut)),
+        calc(100% - var(--a-cut)) 100%,
+        var(--a-cut) 100%,
+        0 calc(100% - var(--a-cut)),
+        0 var(--a-cut)
+    );
     transition:
-        border-color 0.25s ease,
         background-color 0.25s ease,
         color 0.25s ease,
         box-shadow 0.25s ease;
 }
-.a-page .a-btn::before {
-    content: "";
-    position: absolute;
-    inset: 3px;
-    border: 1px solid var(--a-line);
-    border-radius: 2px;
-    pointer-events: none;
+
+/* The frame artwork, as a variable so the two rules' colours are the only thing a variant overrides.
+ * 40-unit box, sliced at 13: the corner tile carries the whole notch (6 units) plus a little straight
+ * run, which is what stops the diagonal being stretched. */
+.a-page .a-btn {
+    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.55)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(201,160,92,0.26)' stroke-width='1'/%3E%3C/svg%3E");
 }
 .a-page .a-btn:hover {
-    border-color: var(--a-line-strong);
-    background: rgba(38, 27, 17, 0.6);
+    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(216,178,112,0.85)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(216,178,112,0.4)' stroke-width='1'/%3E%3C/svg%3E");
+    background: rgba(38, 27, 17, 0.62);
     color: #fff6e6;
 }
-.a-page .a-btn .a-corner {
-    width: 0.85rem;
-    height: 0.85rem;
-    opacity: 0.85;
+
+/* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text
+ * baseline with a descender's worth of space under it, and no shrinking, so a long label cannot
+ * squash it out of round. The flex `align-items: center` above then does the rest. */
+.a-page .a-btn svg {
+    display: block;
+    flex: none;
 }
 
 .a-page .a-btn-primary {
     color: var(--a-ember-bright);
-    border-color: rgba(224, 123, 39, 0.55);
     background:
         radial-gradient(120% 160% at 50% 120%, rgba(224, 123, 39, 0.28) 0%, rgba(224, 123, 39, 0.08) 45%, transparent 75%),
         rgba(28, 17, 9, 0.72);
     box-shadow:
         0 0 22px rgba(224, 123, 39, 0.18),
         inset 0 0 22px rgba(224, 123, 39, 0.12);
-}
-.a-page .a-btn-primary::before {
-    border-color: rgba(224, 123, 39, 0.35);
-}
-.a-page .a-btn-primary .a-corner {
-    color: var(--a-ember);
-    opacity: 1;
+    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(224,123,39,0.7)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(224,123,39,0.36)' stroke-width='1'/%3E%3C/svg%3E");
 }
 .a-page .a-btn-primary:hover {
     color: #ffcf95;
-    border-color: rgba(245, 155, 63, 0.8);
     box-shadow:
         0 0 32px rgba(224, 123, 39, 0.3),
         inset 0 0 26px rgba(224, 123, 39, 0.18);
+    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(245,155,63,0.95)' stroke-width='1.3'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(245,155,63,0.5)' stroke-width='1'/%3E%3C/svg%3E");
 }
 
-/* The compact cartouche, for the bar and for secondary rows further down the page. */
+/* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
+ * with it: a 6px cut on a 34px-tall control eats most of its corner. */
 .a-page .a-btn-sm {
-    padding: 0.5rem 1.05rem;
-    font-size: 0.9375rem;
-}
-.a-page .a-btn-sm .a-corner {
-    width: 0.7rem;
-    height: 0.7rem;
+    /* 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px here. */
+    --a-cut: 5.4px;
+    padding: 0.55rem 1.05rem;
+    font-size: 0.875rem;
+    border-image-slice: 15;
+    border-image-width: 11px;
 }
 
 /* ── Links ───────────────────────────────────────────────── */
