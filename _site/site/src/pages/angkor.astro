@@ -24,11 +24,16 @@
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { gitStats } from "@intentic-dev/astro-integrations";
 import { CREATOR_NAME, creatorBio, creatorRole, trustCards } from "@intentic-dev/site-content/about";
+import { apiHref } from "@intentic-dev/site-content/api";
+import { docsDestinations } from "@intentic-dev/site-content/docs";
 import { faqGroups } from "@intentic-dev/site-content/faq";
+import { guidePages, guidesHref } from "@intentic-dev/site-content/guides";
 import { landingContent } from "@intentic-dev/site-content/landing";
-import { APP_URL, DEMO_PATH, discordUrl, githubUrl } from "@intentic-dev/site-content/site";
+import { productHref, productPages } from "@intentic-dev/site-content/product";
+import { APP_URL, DEMO_PATH, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
+import DiscordIcon from "../components/DiscordIcon.astro";
 import AngkorNav from "../components/angkor/AngkorNav.astro";
 import Corners from "../components/angkor/Corners.astro";
 import Lotus from "../components/angkor/Lotus.astro";
@@ -65,6 +70,60 @@ const stats = gitStats();
 
 // The same table the live download button reads, for the same progressive narrowing (see the script below).
 const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(([key, platform]) => [key, { name: platform.name, href: platform.href }]));
+
+/* THE FOOTER'S COLUMNS, DERIVED rather than typed out. Each one is generated from the module that owns
+ * those pages, so adding a feature page or a guide puts it in this footer and the live site's on the
+ * same commit, and neither can quietly go stale. The shape follows the live footer's: what the product
+ * does, where it is documented, what you can build on it, and where to get help. */
+const footerColumns: { label: string; links: { href: string; label: string; external?: boolean }[] }[] = [
+    { label: "Features", links: productPages.map((page) => ({ href: productHref(page.slug), label: page.navLabel })) },
+    {
+        label: "Docs",
+        links: [
+            ...docsDestinations.map((destination) => ({ href: destination.href, label: destination.label })),
+            { href: githubReleasesUrl, label: "Release notes", external: true },
+        ],
+    },
+    {
+        label: "Developers",
+        links: [
+            { href: apiHref(""), label: "Extension API" },
+            { href: apiHref("build"), label: "Build an extension" },
+            { href: apiHref("publish"), label: "Publish & registries" },
+            { href: apiHref("services"), label: "Offer a paid service" },
+            { href: "/extensions/", label: "Extension gallery" },
+            { href: "/earn/", label: "Earn & the creator pool" },
+        ],
+    },
+    { label: "Guides", links: [{ href: guidesHref(""), label: "All guides" }, ...guidePages.map((page) => ({ href: guidesHref(page.slug), label: page.navLabel }))] },
+    {
+        label: "Resources",
+        links: [
+            { href: APP_URL, label: "Open the app", external: true },
+            { href: "/download/", label: "Download the app" },
+            { href: "/changelog/", label: "Changelog" },
+            { href: "/about/", label: "About the creator" },
+            { href: discordUrl, label: "Discord community", external: true },
+            { href: githubIssuesUrl, label: "Issues", external: true },
+        ],
+    },
+];
+
+const legalLinks = [
+    { href: "/privacy/", label: "Privacy" },
+    { href: "/terms/", label: "Terms" },
+    { href: "/acceptable-use/", label: "Acceptable Use" },
+    { href: "/dpa/", label: "DPA" },
+    { href: "/subprocessors/", label: "Sub-processors" },
+    { href: "/credits/", label: "Credits" },
+];
+
+// Fixed, like the live footer's: a build-time `new Date()` would make every rebuild a diff in December.
+const FOOTER_YEAR = 2026;
+
+// The repo mark, drawn once here because the bar draws its own and this file cannot reach into that component.
+const GITHUB_MARK =
+    "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12";
 ---
 
 <BaseLayout
@@ -224,7 +283,6 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                                 </div>
                             </div>
                         </div>
-                        <figcaption>{content.hero.demo.note}</figcaption>
                     </figure>
                 </div>
             </section>
@@ -582,10 +640,23 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
                 <div class="a-plate a-plate-foot" aria-hidden="true">
                     <div class="a-plate-img"></div>
                 </div>
+                {/* THE ONE PLACE THIS PAGE AUTHORS ITS OWN WORDS. Everywhere else the copy is read from
+                    `landing.ts`, so the treatment can never make a claim the live page does not — see the
+                    file header. The closing band is the exception, by request: it argues from the licence
+                    and the community rather than from the fleet, so it needs a sentence the live page does
+                    not have. If this ever becomes the site's closing argument rather than this page's, it
+                    belongs back in `landing.ts` with the rest. */}
                 <div class="a-shell a-reveal a-final-inner">
                     <Lotus size="lg" class="a-final-lotus" />
-                    <h2 class="a-h2 a-display a-final-heading">{content.finalCta.heading}</h2>
-                    <p class="a-lede a-final-sub">{content.finalCta.sub}</p>
+                    <h2 class="a-h2 a-display a-final-heading">
+                        <span>Open-source and free</span>
+                        {/* The underline is drawn rather than `text-decoration`, which on a face this
+                            large sits too close and too thin, and cannot take the page's gold. */}
+                        <span class="a-final-forever">forever</span>
+                    </h2>
+                    <p class="a-lede a-final-sub">
+                        Contribute to our code, extend workspace<br />or offer services for others.
+                    </p>
                     <span class="a-divider a-final-divider" aria-hidden="true" set:html={DIVIDER} />
                     <div class="a-hero-actions a-final-actions">
                         <a class="a-btn a-btn-primary" href={APP_URL}>
@@ -599,24 +670,65 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
             </section>
         </main>
 
+        <!-- ═══ The foot ════════════════════════════════════════════════════════════════════════
+             A REAL FOOTER, columns and all. What stood here was a single strip of eight links and a
+             line admitting the page was a mock-up — fine for something nobody scrolls to, and this is
+             not that: the footer is where a reader who has read the whole page goes looking for the one
+             thing the page did not cover, and half the site is reachable from nowhere else.
+             Every column is built from the same modules the live site's footer reads, so a page added
+             anywhere shows up in both without either being edited. -->
         <footer class="a-foot">
-            <div class="a-shell a-foot-inner">
-                <div class="a-foot-brand">
-                    <Lotus size="md" />
-                    <span class="a-foot-word">intentic</span>
+            <div class="a-wall" aria-hidden="true"></div>
+            <div class="a-shell a-foot-shell">
+                <div class="a-foot-grid">
+                    <div class="a-foot-brand-cell">
+                        <div class="a-foot-brand">
+                            <Lotus size="md" class="a-foot-mark" />
+                            <span class="a-foot-word">intentic</span>
+                        </div>
+                        <p class="a-foot-tagline">{ORG_TAGLINE}</p>
+                        <div class="a-foot-social">
+                            <a href={githubUrl} target="_blank" rel="noopener" class="a-bar-icon a-foot-icon" aria-label="GitHub repository">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true">
+                                    <path d={GITHUB_MARK} />
+                                </svg>
+                            </a>
+                            <a href={discordUrl} target="_blank" rel="noopener" class="a-bar-icon a-foot-icon" aria-label="Discord community">
+                                <DiscordIcon size={17} />
+                            </a>
+                        </div>
+                    </div>
+
+                    {
+                        footerColumns.map((column) => (
+                            <div class="a-foot-col">
+                                <div class="a-eyebrow">{column.label}</div>
+                                <ul>
+                                    {column.links.map((link) => (
+                                        <li>
+                                            <a
+                                                href={link.href}
+                                                class="a-foot-link"
+                                                target={link.external ? "_blank" : undefined}
+                                                rel={link.external ? "noopener" : undefined}
+                                            >
+                                                {link.label}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))
+                    }
                 </div>
-                <p class="a-foot-note">
-                    An alternative treatment of the home page. The live one is at <a href="/" class="a-link">intentic.dev</a>.
-                </p>
-                <div class="a-foot-links">
-                    <a href="/features/" class="a-link">Features</a>
-                    <a href="/docs/" class="a-link">Docs</a>
-                    <a href="/developers/" class="a-link">Developers</a>
-                    <a href="/extensions/" class="a-link">Extensions</a>
-                    <a href="/earn/" class="a-link">Earn</a>
-                    <a href="/about/" class="a-link">About</a>
-                    <a href={discordUrl} target="_blank" rel="noopener" class="a-link">Discord</a>
-                    <a href={githubUrl} target="_blank" rel="noopener" class="a-link">GitHub</a>
+
+                <div class="a-foot-rule" aria-hidden="true"></div>
+
+                <div class="a-foot-base">
+                    <p>© {FOOTER_YEAR} {ORG_NAME}. The sandbox and the CLI are MIT.</p>
+                    <div class="a-foot-legal">
+                        {legalLinks.map((link) => <a href={link.href}>{link.label}</a>)}
+                    </div>
                 </div>
             </div>
         </footer>
@@ -894,31 +1006,47 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
     .a-page .a-play:hover {
         background: rgba(10, 7, 5, 0.35);
     }
+    /* THE PRESS INTO THE DEMO. It sits ON a screenshot rather than on the page, which is what makes it
+       different from every other control here: whatever is behind it is busy, bright in places, and not
+       ours. So it is the quietest possible chip — sans, small, tight, on a near-solid plate — and it
+       borrows the buttons' cut corners so it still belongs to the page. It was set in the titling serif
+       at 15px, which over a screenshot of an IDE read as decoration rather than as something to press. */
     .a-page .a-play-pill {
+        --a-cut: 5px;
         display: inline-flex;
         align-items: center;
-        gap: 0.55rem;
-        border: 1px solid var(--a-line-mid);
-        background: rgba(12, 9, 7, 0.86);
-        padding: 0.5rem 1rem;
-        font-family: var(--a-font-title);
-        font-size: 0.9375rem;
-        /* 500, explicitly: only 500 and 600 of this face are loaded, so an unset weight falls to a
-           400 that does not exist and the browser synthesises one. */
+        gap: 0.5rem;
+        border: 1px solid rgba(201, 160, 92, 0.4);
+        background: rgba(10, 7, 5, 0.92);
+        padding: 0.42rem 0.85rem;
+        font-family: var(--font-sans);
+        font-size: 0.8125rem;
         font-weight: 500;
+        letter-spacing: 0.01em;
         color: var(--a-cream);
-        backdrop-filter: blur(4px);
+        clip-path: polygon(
+            var(--a-cut) 0,
+            calc(100% - var(--a-cut)) 0,
+            100% var(--a-cut),
+            100% calc(100% - var(--a-cut)),
+            calc(100% - var(--a-cut)) 100%,
+            var(--a-cut) 100%,
+            0 calc(100% - var(--a-cut)),
+            0 var(--a-cut)
+        );
         transition:
-            border-color 0.25s ease,
-            color 0.25s ease;
+            border-color 0.22s ease,
+            color 0.22s ease;
     }
     .a-page .a-play:hover .a-play-pill {
-        border-color: rgba(224, 123, 39, 0.6);
+        border-color: rgba(245, 155, 63, 0.85);
         color: var(--a-ember-bright);
     }
     .a-page .a-play-pill svg {
-        width: 0.8rem;
-        height: 0.8rem;
+        display: block;
+        flex: none;
+        width: 0.7rem;
+        height: 0.7rem;
     }
 
     .a-page .a-window-chat {
@@ -1525,6 +1653,26 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         margin-top: 1.4rem;
         font-size: clamp(2.1rem, 4vw, 3.25rem);
     }
+    .a-page .a-final-heading span {
+        display: block;
+    }
+    /* The rule under "forever": its own element, so it can be gold, sit where a drawn underline sits
+       rather than where the font's metrics put one, and keep its weight when the heading scales. */
+    .a-page .a-final-forever {
+        position: relative;
+        width: fit-content;
+        margin: 0 auto;
+        padding-bottom: 0.12em;
+    }
+    .a-page .a-final-forever::after {
+        content: "";
+        position: absolute;
+        right: 0.04em;
+        bottom: 0;
+        left: 0.04em;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(224, 123, 39, 0.9) 18%, rgba(224, 123, 39, 0.9) 82%, transparent);
+    }
     .a-page .a-final-sub {
         max-width: 46ch;
     }
@@ -1535,43 +1683,125 @@ const downloadTargets = Object.fromEntries(Object.entries(desktopPlatforms).map(
         justify-content: center;
     }
 
-    /* ── The foot ────────────────────────────────────────── */
+    /* ── The foot ─────────────────────────────────────────
+       Five columns and a brand cell, on a ground a shade darker than the page so the band reads as the
+       end of it rather than as one more section. `mt-auto` is not needed — the page's own flex column
+       already pushes it down on short pages. */
     .a-page .a-foot {
         position: relative;
+        overflow: hidden;
         border-top: 1px solid var(--a-line);
         background: #090706;
     }
-    .a-page .a-foot-inner {
+    .a-page .a-foot-shell {
+        padding-top: 3.5rem;
+        padding-bottom: 2.25rem;
+    }
+    .a-page .a-foot-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 2.25rem 1.5rem;
+    }
+    @media (min-width: 44rem) {
+        .a-page .a-foot-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+    /* Six cells in one row only from 80rem, where each gets ~190px and "Earn & the creator pool" still
+       sits on one line. Below that, two even rows beat one ragged one. */
+    @media (min-width: 80rem) {
+        .a-page .a-foot-grid {
+            grid-template-columns: 1.35fr repeat(5, minmax(0, 1fr));
+            gap: 2rem;
+        }
+    }
+    .a-page .a-foot-brand-cell {
+        grid-column: 1 / -1;
+    }
+    @media (min-width: 44rem) {
+        .a-page .a-foot-brand-cell {
+            grid-column: auto;
+        }
+    }
+
+    /* Same correction as the bar's brand, at this cell's own sizes — see AngkorNav for why. */
+    .a-page .a-foot-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .a-page .a-foot-mark {
+        transform: translateY(-0.09rem);
+    }
+    .a-page .a-foot-word {
+        font-family: var(--a-font-mark);
+        font-size: 1.55rem;
+        font-weight: 500;
+        line-height: 1;
+        color: var(--a-ember);
+    }
+    .a-page .a-foot-tagline {
+        margin: 0.85rem 0 0;
+        max-width: 26ch;
+        font-size: 0.8125rem;
+        line-height: 1.65;
+        color: var(--a-subtle);
+    }
+    .a-page .a-foot-social {
+        display: flex;
+        gap: 0.9rem;
+        margin-top: 1.1rem;
+    }
+
+    .a-page .a-foot-col ul {
+        margin: 0.85rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.5rem;
+    }
+    .a-page .a-foot-link {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        color: var(--a-muted);
+        text-decoration: none;
+        transition: color 0.18s ease;
+    }
+    .a-page .a-foot-link:hover {
+        color: var(--a-ember-bright);
+    }
+
+    /* A gold hairline that fades at both ends, the same rule the bands upstairs are divided by. */
+    .a-page .a-foot-rule {
+        height: 1px;
+        margin: 2.5rem 0 1.5rem;
+        background: linear-gradient(90deg, transparent, var(--a-line-mid) 20%, var(--a-line-mid) 80%, transparent);
+    }
+    .a-page .a-foot-base {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 1.25rem 2rem;
-        padding-top: 2.5rem;
-        padding-bottom: 2.5rem;
+        gap: 0.75rem 2rem;
     }
-    .a-page .a-foot-brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.6rem;
-    }
-    /* The wordmark, so it is the bar's face and not a smaller cousin of it — which means display, which
-       means it has to clear the ~28px fence. 1.75rem does; the 1.35 it started at did not. */
-    .a-page .a-foot-word {
-        font-family: var(--a-font-display);
-        font-size: 1.75rem;
-        color: var(--a-ember);
-    }
-    .a-page .a-foot-note {
+    .a-page .a-foot-base p {
         margin: 0;
-        font-size: 0.8125rem;
+        font-size: 0.75rem;
         color: var(--a-subtle);
     }
-    .a-page .a-foot-links {
+    .a-page .a-foot-legal {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem 1.25rem;
-        font-size: 0.875rem;
+        gap: 0.4rem 1.1rem;
+    }
+    .a-page .a-foot-legal a {
+        font-size: 0.75rem;
+        color: var(--a-subtle);
+        text-decoration: none;
+        transition: color 0.18s ease;
+    }
+    .a-page .a-foot-legal a:hover {
+        color: var(--a-gold-bright);
     }
 
     /* ── Below the columns break ─────────────────────────── */

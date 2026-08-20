@@ -375,34 +375,43 @@ body:has(.a-page) {
 /* ── Buttons ─────────────────────────────────────────────
  * CARTOUCHES WITH THE CORNERS CUT OUT OF THEM. The reference art's button is an octagon: two thin
  * concentric gold rules, each with a 45-degree notch taken out of all four corners, like a corner
- * chamfered off a stone slab. It used to be a rounded rectangle with a drawn filigree bracket dropped
- * on each corner — an ornament sitting ON the frame rather than the frame's own shape.
+ * chamfered off a stone slab.
  *
- * TWO PROPERTIES DO IT, and they have to agree.
+ * TWO PROPERTIES DRAW IT, and they have to agree.
  *
  *   `clip-path` cuts the octagon out of everything the element paints — the fill, and on the primary
  *   the lit ember interior, which is the half that actually shows: a square corner glowing outside a
  *   notched rule is the whole illusion gone.
  *
  *   `border-image` draws the two rules. Not a border and not a pseudo-element, because the corner is
- *   the one part of this frame that must NOT stretch: a nine-slice keeps all four corner tiles at
- *   their drawn size and stretches only the straight runs between them, so a 320px button and a 90px
- *   button get the same notch. `border-width` stays at 1px so layout reserves almost nothing, while
- *   `border-image-width` paints 13px inward — the standard way to hang artwork inside the padding box
- *   without it pushing the label around.
+ *   the one part of this frame that must NOT stretch: a nine-slice keeps all four corner tiles at their
+ *   drawn size and stretches only the straight runs between them, so a 320px button and a 90px button
+ *   get the same notch. `border-width` stays 1px so layout reserves almost nothing, while
+ *   `border-image-width` paints 13px inward.
  *
- * The chamfer is 6px, set in three places that must match: the SVG's own geometry, `--a-cut` for the
- * clip, and nothing else. Change one, change all three.
+ * The chamfer is set in two places that must match: the SVG's geometry and `--a-cut` for the clip.
  *
- * The label is SANS — see the type note at the top of this file for why a control is the one place
- * the serif does not go. */
+ * ── WHY HOVER IS AN OPACITY CROSS-FADE AND NOTHING ELSE ──
+ *
+ * The first version swapped `border-image-source` for a brighter copy on hover and animated the
+ * `background` gradient and the `box-shadow` under it. All three are among the worst things to put in a
+ * transition. A new `border-image-source` is a new image: the browser cannot interpolate between two
+ * images, so it decodes and repaints the frame on the first hovered frame — the "lag" — and then the
+ * bright frame simply appears rather than arriving. A `background` that is a radial-gradient cannot
+ * interpolate either when its stops differ, so it also snaps. And a large blurred `box-shadow` repaints
+ * the whole button every animation frame.
+ *
+ * So the lit state is a SECOND, COMPLETE FRAME stacked on top at `opacity: 0`. Both images decode when
+ * the page loads, and hover animates one compositor-friendly property. Nothing repaints, nothing snaps,
+ * and the fade runs on the compositor. The glow moves onto its own layer for the same reason: a static
+ * `box-shadow` whose opacity is animated costs nothing per frame.
+ *
+ * The label is SANS — see the type note at the top of this file for why a control is the one place the
+ * serif does not go. */
 .a-page .a-btn {
     /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at
-       x+y≈7.3 in the artwork's units, which map 1:1 to px here. Cut at 6 and a sliver of lit interior
-       showed past the gold at each corner of the primary button. */
+       x+y≈7.3 in the artwork's units, which map 1:1 to px here. */
     --a-cut: 7.3px;
-    --a-frame: rgba(201, 160, 92, 0.55);
-    --a-frame-inner: rgba(201, 160, 92, 0.3);
 
     position: relative;
     display: inline-flex;
@@ -420,9 +429,9 @@ body:has(.a-page) {
     text-decoration: none;
     white-space: nowrap;
 
-    background: rgba(20, 14, 10, 0.5);
+    background-color: rgba(20, 14, 10, 0.5);
     border: 1px solid transparent;
-    border-image-source: var(--a-btn-frame-img);
+    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3C/svg%3E");
     border-image-slice: 13;
     border-image-width: 13px;
     border-image-repeat: stretch;
@@ -436,27 +445,60 @@ body:has(.a-page) {
         0 calc(100% - var(--a-cut)),
         0 var(--a-cut)
     );
-    transition:
-        background-color 0.25s ease,
-        color 0.25s ease,
-        box-shadow 0.25s ease;
+    /* Colour is the only paint property that transitions here, and it interpolates cleanly. */
+    transition: color 0.22s ease;
+    /* A stacking context, so the two overlay layers below can sit at `z-index: -1`: inside one, a
+       negative layer paints after the element's own background and border but BEFORE its inline
+       content. That is exactly where a wash belongs — over the frame, under the label. Without it the
+       positioned pseudo-elements paint above the text, and the hover wash tints the words. */
+    z-index: 0;
 }
 
-/* The frame artwork, as a variable so the two rules' colours are the only thing a variant overrides.
- * 40-unit box, sliced at 13: the corner tile carries the whole notch (6 units) plus a little straight
- * run, which is what stops the diagonal being stretched. */
-.a-page .a-btn {
-    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.55)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(201,160,92,0.26)' stroke-width='1'/%3E%3C/svg%3E");
+/* The lit frame, stacked and faded in. Inherits `--a-cut`, so its notch can never drift from the one
+ * the button is clipped to. `inset: -1px` because the frame is painted in the border box, which the
+ * pseudo-element's own box would otherwise sit one pixel inside. */
+.a-page .a-btn::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 1px solid transparent;
+    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3C/svg%3E");
+    border-image-slice: 13;
+    border-image-width: 13px;
+    border-image-repeat: stretch;
+    clip-path: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+    z-index: -1;
+}
+.a-page .a-btn:hover::before,
+.a-page .a-btn:focus-visible::before {
+    opacity: 1;
+}
+
+/* The wash and the glow, on their own layer for the same reason, and under the label. */
+.a-page .a-btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(70, 50, 30, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+    z-index: -1;
+}
+.a-page .a-btn:hover::after,
+.a-page .a-btn:focus-visible::after {
+    opacity: 1;
 }
 .a-page .a-btn:hover {
-    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(216,178,112,0.85)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(216,178,112,0.4)' stroke-width='1'/%3E%3C/svg%3E");
-    background: rgba(38, 27, 17, 0.62);
     color: #fff6e6;
 }
 
 /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text
- * baseline with a descender's worth of space under it, and no shrinking, so a long label cannot
- * squash it out of round. The flex `align-items: center` above then does the rest. */
+ * baseline with a descender's worth of space under it, and no shrinking, so a long label cannot squash
+ * it out of round. The flex `align-items: center` above then does the rest. */
 .a-page .a-btn svg {
     display: block;
     flex: none;
@@ -464,31 +506,44 @@ body:has(.a-page) {
 
 .a-page .a-btn-primary {
     color: var(--a-ember-bright);
-    background:
-        radial-gradient(120% 160% at 50% 120%, rgba(224, 123, 39, 0.28) 0%, rgba(224, 123, 39, 0.08) 45%, transparent 75%),
-        rgba(28, 17, 9, 0.72);
-    box-shadow:
-        0 0 22px rgba(224, 123, 39, 0.18),
-        inset 0 0 22px rgba(224, 123, 39, 0.12);
-    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(224,123,39,0.7)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(224,123,39,0.36)' stroke-width='1'/%3E%3C/svg%3E");
+    background-color: rgba(28, 17, 9, 0.72);
+    background-image: radial-gradient(120% 160% at 50% 120%, rgba(224, 123, 39, 0.26) 0%, rgba(224, 123, 39, 0.07) 45%, transparent 75%);
+    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='1.15'/%3E%3C/svg%3E");
+    box-shadow: 0 0 22px rgba(224, 123, 39, 0.16);
+}
+.a-page .a-btn-primary::before {
+    border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='1.2'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='1.15'/%3E%3C/svg%3E");
+}
+/* The primary's hover wash is ember rather than stone, and it carries the brighter glow with it — one
+ * layer, one opacity, so the lift and the light arrive together. */
+.a-page .a-btn-primary::after {
+    background: radial-gradient(120% 160% at 50% 120%, rgba(245, 155, 63, 0.3) 0%, rgba(245, 155, 63, 0.1) 48%, transparent 78%);
+    box-shadow: inset 0 0 26px rgba(245, 155, 63, 0.18);
 }
 .a-page .a-btn-primary:hover {
     color: #ffcf95;
-    box-shadow:
-        0 0 32px rgba(224, 123, 39, 0.3),
-        inset 0 0 26px rgba(224, 123, 39, 0.18);
-    --a-btn-frame-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(245,155,63,0.95)' stroke-width='1.3'/%3E%3Cpath d='M8.6 4.5H31.4L35.5 8.6V31.4L31.4 35.5H8.6L4.5 31.4V8.6Z' fill='none' stroke='rgba(245,155,63,0.5)' stroke-width='1'/%3E%3C/svg%3E");
 }
 
 /* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
- * with it: a 6px cut on a 34px-tall control eats most of its corner. */
+ * with it: 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px. */
 .a-page .a-btn-sm {
-    /* 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px here. */
     --a-cut: 5.4px;
     padding: 0.55rem 1.05rem;
     font-size: 0.875rem;
     border-image-slice: 15;
     border-image-width: 11px;
+}
+.a-page .a-btn-sm::before {
+    border-image-slice: 15;
+    border-image-width: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .a-page .a-btn,
+    .a-page .a-btn::before,
+    .a-page .a-btn::after {
+        transition: none;
+    }
 }
 
 /* ── Links ───────────────────────────────────────────────── */
