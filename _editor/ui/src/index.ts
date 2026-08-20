@@ -1,4 +1,14 @@
 export { clipboardOf } from "./lib/clipboard.js";
+// Waiting on a freshly-minted preview hostname, and the tab-opening dance around a forwarded port. Three
+// surfaces had written the same loop, one of them an extension that could reach neither of the others.
+export {
+    type ForwardedPortTab,
+    openForwardedPort,
+    parseLoopbackLink,
+    type ProbeOptions,
+    type ProbeOutcome,
+    probeUntilReachable,
+} from "./lib/portPreview.js";
 export { ui } from "./lib/ui.js";
 export { default as AgentRunButton } from "./components/AgentRunButton.vue";
 export { type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";

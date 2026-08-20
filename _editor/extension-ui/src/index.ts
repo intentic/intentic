@@ -43,6 +43,11 @@ export {
      * the module-global navigator belongs to the opener, whose document isn't focused, so the write rejects
      * and every call site swallows it. */
     clipboardOf,
+    /* `openForwardedPort` ships because the Ports view is the third surface to wait on a freshly-minted preview
+     * hostname and the second to open one in a tab — and the two that had solved it (the preview panel's iframe
+     * gate, the terminal's Ctrl+click) both sat in the web app where no extension could import them. The
+     * duplicate was word-for-word, down to the sentence a user reads while DNS propagates. */
+    openForwardedPort,
     /* The two halves of a changed-file row ship together because they are always drawn together, and they ship
      * at all for the reason <SplitView> did: the git-history extension is the seventh surface to draw one, and
      * the six that had solved it all sat in the web app where no extension could import them. <ChangeStatusMark>

@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { CopyButton, Notice, noticeOf, Picker, type PickerGroup, SegmentedControl, StatusBadge, type StatusVariant } from "@intentic/ui";
+import {
+    CopyButton,
+    Notice,
+    noticeOf,
+    Picker,
+    type PickerGroup,
+    probeUntilReachable,
+    SegmentedControl,
+    StatusBadge,
+    type StatusVariant,
+} from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -129,48 +139,34 @@ const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<voi
 };
 
 // --- The iframe, probe-gated --------------------------------------------------------------------
-/* Hand the browser the hostname only once a fetch proves it resolves: `no-cors` resolves on ANY HTTP response
- * and rejects only on DNS/socket failure — exactly the needed signal, since a freshly-minted DNS record can
- * lag at the user's resolver and an iframe that error-pages never retries. The public page skips the probe:
- * its address is the sandbox's own, which everything on screen already resolved to load. */
+/* Hand the browser the hostname only once a fetch proves it resolves — an iframe that error-pages never
+ * retries, and a freshly-minted DNS record can lag at the user's resolver. The loop and its intervals are the
+ * kit's (@intentic/ui portPreview); what is local is the generation counter, which is how a superseded probe
+ * stops being allowed to write this panel's state. The public page skips the probe entirely: its address is the
+ * sandbox's own, which everything on screen already resolved to load. */
 const previewSrc = ref<string | undefined>(undefined);
 const probeSlow = ref(false);
 const probeFailed = ref(false);
 let probeGeneration = 0;
 
-const PROBE_INTERVAL_MS = 3000;
-const PROBE_SLOW_AFTER_MS = 30_000;
-// Absolute cap so a never-resolving preview host isn't polled forever — generous, since a first start can
-// legitimately take a minute for the address to propagate.
-const PROBE_GIVE_UP_MS = 180_000;
-
-const probeUntilReachable = async (url: string): Promise<void> => {
+const probeThenShow = async (url: string): Promise<void> => {
     const generation = ++probeGeneration;
+    const current = (): boolean => generation === probeGeneration;
     probeSlow.value = false;
     probeFailed.value = false;
-    const startedAt = Date.now();
-    for (;;) {
-        try {
-            await fetch(url, { mode: `no-cors`, cache: `no-store` });
-            break;
-        } catch {
-            const elapsed = Date.now() - startedAt;
-            probeSlow.value = elapsed > PROBE_SLOW_AFTER_MS;
-            if (elapsed > PROBE_GIVE_UP_MS) {
-                if (generation === probeGeneration) {
-                    probeFailed.value = true;
-                }
-                return;
-            }
-            await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
-        }
-        if (generation !== probeGeneration) {
-            return;
-        }
+    const outcome = await probeUntilReachable(url, {
+        stillWanted: current,
+        onWaiting: (_elapsed, slow) => {
+            probeSlow.value = slow;
+        },
+    });
+    if (!current()) {
+        return;
     }
-    if (generation === probeGeneration) {
+    if (outcome === `reachable`) {
         previewSrc.value = url;
     }
+    probeFailed.value = outcome === `gaveUp`;
 };
 
 // Resolved when the target is HEALTHY — on `running` the dev server may still be installing/booting.
@@ -192,7 +188,7 @@ const resolvePreview = (): void => {
         previewSrc.value = entry.url;
         return;
     }
-    void probeUntilReachable(entry.url);
+    void probeThenShow(entry.url);
 };
 
 // (Re)resolve on the facts that matter — primitive deps, so the poll's object churn doesn't re-fire it — and

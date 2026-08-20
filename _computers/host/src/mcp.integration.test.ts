@@ -69,6 +69,41 @@ test("tools/list is the machine's whole surface — and there is no delete", asy
     expect(names).not.toContain("remove_file");
 });
 
+/* Every tool publishes the schema its arguments are CHECKED against, which is the whole reason there is only one
+ * of them. Asserted structurally rather than tool by tool, so a tool added without a schema fails here instead
+ * of being advertised as taking anything. */
+test("tools/list publishes each tool's argument schema, which is the one an arriving call is held to", async () => {
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes)) as {
+        result: { tools: { name: string; description: string; inputSchema: Record<string, unknown> }[] };
+    };
+    for (const entry of response.result.tools) {
+        expect(entry.description.length, entry.name).toBeGreaterThan(0);
+        expect(entry.inputSchema["type"], entry.name).toBe("object");
+        expect(entry.inputSchema, entry.name).toHaveProperty("properties");
+    }
+    const logs = response.result.tools.find((entry) => entry.name === "sandbox_logs");
+    expect(logs).toBeDefined();
+    const lines = (logs?.inputSchema["properties"] as { lines: { maximum: number; description: string } } | undefined)?.lines;
+    // The ceiling the model is told is the ceiling it is held to, below — one number, not two.
+    expect(lines?.maximum).toBe(2000);
+    expect(lines?.description).toContain("maximum 2000");
+});
+
+test("an argument the schema does not accept is a readable result, and nothing is looked at", async () => {
+    const badOp = await call("manage_sandbox", { op: "kill", slug: "work" }, scopes());
+    expect(badOp.isError).toBe(true);
+    expect(badOp.text).toMatch(/op/);
+    const badSwap = await call("swap_sandbox", { op: "remove", slug: "work" }, scopes());
+    expect(badSwap.isError).toBe(true);
+    // Past the published ceiling, refused rather than quietly trimmed: a model that asked for 9000 lines and got
+    // 2000 has no way to know it is reading a fraction of what it reasoned about.
+    const tooMany = await call("sandbox_logs", { slug: "work", lines: 9000 }, scopes());
+    expect(tooMany.isError).toBe(true);
+    expect(tooMany.text).toMatch(/lines/);
+    const noPath = await call("read_file", { path: "" }, scopes());
+    expect(noPath.isError).toBe(true);
+});
+
 // A notification expects no answer; replying to one is a protocol violation the client reports as noise.
 test("a notification is handled and answered with nothing", async () => {
     expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, scopes)).toBeUndefined();

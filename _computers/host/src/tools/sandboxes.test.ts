@@ -2,9 +2,6 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
-    asLogLines,
-    asSandboxOp,
-    asSandboxSwap,
     icCandidates,
     icRemoveArgs,
     icSwapArgs,
@@ -70,18 +67,7 @@ test("managing is refused by the sandboxes switch alone — a full shell does no
     await expect(manageSandbox("stop", "work", scopes({ sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this computer/);
 });
 
-test("an op outside start/stop/restart is rejected before anything is looked at", () => {
-    expect(() => asSandboxOp("kill")).toThrow(/start.*stop.*restart/);
-    expect(asSandboxOp("restart")).toBe("restart");
-});
-
 /* ---- the flows that run `ic` ---- */
-
-test("a swap outside prepare/update/rebuild/rollback is rejected before anything is looked at", () => {
-    expect(() => asSandboxSwap("remove")).toThrow(/update.*rebuild.*rollback/);
-    expect(asSandboxSwap("rollback")).toBe("rollback");
-    expect(asSandboxSwap("prepare")).toBe("prepare");
-});
 
 /* The argv, both platforms' worth of risk in one place: an argument that regresses to a different position binds
  * to a different parameter and fails silently, much later, as something else. */
@@ -136,14 +122,6 @@ test("removal takes its own switch — managing sandboxes does not imply destroy
 
 test("reading a log is covered by either grant, like listing", async () => {
     await expect(sandboxLogs("work", 50, scopes({ shell: "off", sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this computer/);
-});
-
-test("a log tail is clamped to something that can cross the socket, and defaults when unusable", () => {
-    expect(asLogLines(50)).toBe(50);
-    expect(asLogLines(undefined)).toBe(200);
-    expect(asLogLines("lots")).toBe(200);
-    expect(asLogLines(-5)).toBe(200);
-    expect(asLogLines(9_000)).toBe(2_000);
 });
 
 /* The Computers view's Logs button reaches the same reading through the flow door, so it is gated the same way

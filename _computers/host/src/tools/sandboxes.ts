@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 import type { HostScopes, MachineSandbox } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { assertScope } from "../policy.js";
 
 /* The Intentic sandboxes running on THIS machine — the supervisor's tools.
@@ -101,14 +102,10 @@ export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
     return JSON.stringify(await fleet(), undefined, 2);
 };
 
-export type SandboxOp = "start" | "stop" | "restart";
-
-export const asSandboxOp = (value: unknown): SandboxOp => {
-    if (value !== "start" && value !== "stop" && value !== "restart") {
-        throw new Error(`"op" must be "start", "stop" or "restart".`);
-    }
-    return value;
-};
+// The ops themselves, in the one place that spells them: the MCP tool advertises this schema to the model and
+// checks an arriving call against it, so a name added here is offered and accepted in the same commit.
+export const SandboxOpSchema = z.enum(["start", "stop", "restart"]);
+export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
 /* WHICH CONTAINER THE SLUG MEANS, or the machine's own answer that it means none — one lookup for every op,
  * because a wrong slug deserves the same sentence whichever button sent it, and because a flow that will take
@@ -143,14 +140,8 @@ export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostSco
  * the same output to narrate — it just stops before the container is touched, downloading and building the
  * next update so that the update itself is a restart rather than a wait. Grouping it with the swaps is what
  * keeps one implementation of "run `ic`, stream what it says". */
-export type SandboxSwap = "prepare" | "update" | "rebuild" | "rollback";
-
-export const asSandboxSwap = (value: unknown): SandboxSwap => {
-    if (value !== "prepare" && value !== "update" && value !== "rebuild" && value !== "rollback") {
-        throw new Error(`"op" must be "prepare", "update", "rebuild" or "rollback".`);
-    }
-    return value;
-};
+export const SandboxSwapSchema = z.enum(["prepare", "update", "rebuild", "rollback"]);
+export type SandboxSwap = z.infer<typeof SandboxSwapSchema>;
 
 /* Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install writes
  * under the home and symlinks ~/.local/bin, and Windows only ever has the profile copy. PATH is the last resort
@@ -266,14 +257,15 @@ export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (l
     return `Removed sandbox "${slug}" and everything in it.`;
 };
 
-// How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why
-// something is wrong, so the tail is what matters; the cap is there because this answer crosses a WebSocket that
-// also carries everything else the machine is doing.
-const DEFAULT_LOG_LINES = 200;
-const MAX_LOG_LINES = 2_000;
-
-export const asLogLines = (value: unknown): number =>
-    typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.min(Math.floor(value), MAX_LOG_LINES) : DEFAULT_LOG_LINES;
+/* How many lines of a container's log to answer with by default, and the ceiling. A log is read to find out why
+ * something is wrong, so the tail is what matters; the cap is there because this answer crosses a WebSocket that
+ * also carries everything else the machine is doing.
+ *
+ * Both are exported because the MCP tool's schema is built from them — the ceiling is a rule the model is TOLD,
+ * in the same sentence that the rule is enforced by, so a bigger tail comes back as "the maximum is 2000"
+ * rather than as 2000 lines quietly presented as the 9000 that were asked for. */
+export const DEFAULT_LOG_LINES = 200;
+export const MAX_LOG_LINES = 2_000;
 
 /* The container's own log. Gated like `list_sandboxes` — it is a way of SEEING what you already manage, and a
  * shell on this machine could run `docker logs` itself — so either grant answers it.
@@ -296,8 +288,8 @@ const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promis
     return [stdout, stderr].filter((part) => part !== "").join("\n");
 };
 
-export const sandboxLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
-    const text = await readLogs(slug, lines, scopes);
+export const sandboxLogs = async (slug: string, lines: number | undefined, scopes: HostScopes): Promise<string> => {
+    const text = await readLogs(slug, lines ?? DEFAULT_LOG_LINES, scopes);
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;
 };
 

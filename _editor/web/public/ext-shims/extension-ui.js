@@ -70,6 +70,7 @@ export const freshness = m["freshness"];
 export const isRenderableImage = m["isRenderableImage"];
 export const noticeFrom = m["noticeFrom"];
 export const noticeOf = m["noticeOf"];
+export const openForwardedPort = m["openForwardedPort"];
 export const seriesColor = m["seriesColor"];
 export const sinceOf = m["sinceOf"];
 export const timeAgo = m["timeAgo"];

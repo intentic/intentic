@@ -2,7 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
-import { clipboardOf, useDevice } from "@intentic/ui";
+import { clipboardOf, parseLoopbackLink, useDevice } from "@intentic/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { toScreenPx } from "../uiScale";
@@ -10,7 +10,7 @@ import { useSandbox } from "../sandbox/useSandbox";
 import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
-import { openLoopbackPreview, parseLoopbackLink } from "./portPreview";
+import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
 /* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket — the shared core under the

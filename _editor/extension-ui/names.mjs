@@ -48,6 +48,7 @@ export const extensionUiNames = [
     "noticeFrom",
     "noticeOf",
     "NoticeStack",
+    "openForwardedPort",
     "Page",
     "PageAction",
     "PageHeader",

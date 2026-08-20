@@ -20,10 +20,14 @@ import { assertPath, assertScope, rootsOf } from "../policy.js";
  * unprimed `sudo`, an `npm login`, anything with a "[y/N]") would hang until the socket died. The timeout turns
  * that into a message the agent can act on, and the message says what it means rather than "timed out". */
 
-// Long enough for an install or a test run, short enough that a wedged command doesn't hold a tool call for the
-// hub's whole 15-minute ceiling. The agent can ask for more, up to the hard cap.
-const DEFAULT_TIMEOUT_MS = 120_000;
-const MAX_TIMEOUT_MS = 10 * 60 * 1000;
+/* Long enough for an install or a test run, short enough that a wedged command doesn't hold a tool call for the
+ * hub's whole 15-minute ceiling. The agent can ask for more, up to the hard cap.
+ *
+ * Exported because the MCP tool's schema is built from them: the default the model is offered and the ceiling it
+ * is held to are these two numbers, so a deadline past the cap is refused up front rather than accepted, silently
+ * lowered here, and then reported back as the number that was asked for. */
+export const DEFAULT_TIMEOUT_MS = 120_000;
+export const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 // Output beyond this is truncated in the middle: the head says what the command did, the tail says how it
 // ended, and the megabyte of npm progress bars in between is not worth a model's context.
 const MAX_OUTPUT = 100_000;

@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { Button, ui, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, SkeletonRows, StatusBadge, useLoadingReveal } from "@intentic/extension-ui";
+import {
+    Button,
+    ui,
+    Icon,
+    InfoHint,
+    Notice,
+    noticeOf,
+    openForwardedPort,
+    Row,
+    RowGroup,
+    SkeletonRows,
+    StatusBadge,
+    useLoadingReveal,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import SharePreview from "./SharePreview.vue";
@@ -32,60 +45,21 @@ const systemPorts = computed(() => ports.value.filter((entry) => entry.kind === 
 const busy = ref<number>();
 const actionError = ref<string>();
 
-const PROBE_INTERVAL_MS = 3000;
-// Generous: a slot's first forward on the intentic-provided tunnel waits on fresh DNS propagation.
-const PROBE_GIVE_UP_MS = 120_000;
-
-// Forward + open in one gesture: the tab must open synchronously inside the click's activation (popup
-// blockers), so a blank tab opens first, narrates progress, and navigates once the forward + reachability
-// probe land (`no-cors` resolves on ANY HTTP response and rejects only on DNS/socket failure).
-const openPreview = async (port: number): Promise<void> => {
+/* Forward + open in one gesture, the kit's (openForwardedPort): a blank tab opens synchronously inside the
+ * click's activation, narrates the wait, and navigates once the address answers.
+ *
+ * It takes no `busy` because the waiting happens in the OTHER tab. Holding this one's buttons disabled for the
+ * up-to-two-minute DNS propagation — which is what the local copy of this flow did — locked the whole view on
+ * work the user is watching somewhere else. */
+const openPreview = (port: number): void => {
     actionError.value = undefined;
-    busy.value = port;
-    const tab = window.open(``, `_blank`);
-    if (tab !== null) {
-        tab.opener = null;
-    }
-    const show = (text: string): void => {
-        if (tab !== null && !tab.closed) {
-            tab.document.body.textContent = text;
-        }
-    };
-    show(`Forwarding port ${port} from your sandbox…`);
-    try {
-        const url = await forward(port);
-        if (url === undefined) {
-            show(`This sandbox has no public preview hostname, so ports can't be previewed from the browser.`);
-            return;
-        }
-        show(`Waiting for ${url} to come up…`);
-        const startedAt = Date.now();
-        for (;;) {
-            if (tab !== null && tab.closed) {
-                return;
-            }
-            try {
-                await fetch(url, { mode: `no-cors`, cache: `no-store` });
-                break;
-            } catch {
-                if (Date.now() - startedAt > PROBE_GIVE_UP_MS) {
-                    show(
-                        `The preview address didn't come up — the server may have stopped, or DNS is still propagating. Close this tab and try again.`,
-                    );
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
-            }
-        }
-        if (tab !== null && !tab.closed) {
-            tab.location.href = url;
-        }
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Forwarding failed.`;
-        show(actionError.value);
-    } finally {
-        busy.value = undefined;
-    }
+    openForwardedPort({
+        port,
+        forward,
+        onError: (message) => {
+            actionError.value = message;
+        },
+    });
 };
 
 const stop = async (port: number): Promise<void> => {
