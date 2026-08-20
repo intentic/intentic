@@ -167,6 +167,13 @@
      * primary button, the full stop at the end of each headline beat, the lotus bullets, a link. The
      * reference art does exactly this, and it is why a page that is 90% brown does not read as muddy:
      * the eye has one saturated thing to find on each screen. */
+    /* THE TURNED CORNER'S REACH, and the depth of every frame's top ledge — one number, because they have
+     * to be the same one. The corner ornament is drawn from the frame's edge inwards; a ledge shallower
+     * than the ornament lets it cross into the screenshot below, which is what put a gold curl through the
+     * first row of every product frame on the page. Matched, the ornament sits inside the ledge it belongs
+     * to and the picture starts on a clean line. */
+    --a-corner-size: 1.7rem;
+
     --a-gold: #c9a05c;
     --a-gold-bright: #e5c489;
     --a-ember: #e07b27;
@@ -358,8 +365,8 @@ body:has(.a-page) {
 }
 .a-page .a-corner {
     position: absolute;
-    width: 1.7rem;
-    height: 1.7rem;
+    width: var(--a-corner-size);
+    height: var(--a-corner-size);
     color: var(--a-gold);
     opacity: 0.95;
     pointer-events: none;
@@ -573,13 +580,12 @@ body:has(.a-page) {
 
 /* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
  * with it: 15 units into 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px. */
-/* The play mark on the secondary button. An inline SVG with no intrinsic size fills whatever box it is
- * given, which on a flex button is the button — so the size is set here rather than left to the sprite. */
-.a-page .a-btn-play {
+/* A glyph inside a button. An inline SVG with no intrinsic size fills whatever box it is given, which on
+ * a flex button is the button, so the size is set here rather than left to the sprite. */
+.a-page .a-btn-icon {
     flex: none;
-    width: 0.8rem;
-    height: 0.8rem;
-    margin-right: -0.1rem;
+    width: 0.95rem;
+    height: 0.95rem;
     opacity: 0.85;
 }
 
@@ -798,27 +804,24 @@ body:has(.a-page) {
         0 2px 0 rgba(201, 160, 92, 0.06),
         0 24px 60px -12px rgba(0, 0, 0, 0.85);
 }
-/* THE RAIL IS A LEDGE, NOT A TITLE BAR. It carried an address pill — "acme-shop · /agents" — which was
- * doing no work: the screenshot under it already says which surface it is, in the product's own type,
- * and a second label above it only competed. Dropping it takes the pill's height with it, so the rail
- * is now three studs deep and the picture starts sooner. */
+/* THE RAIL IS A LEDGE, AND IT IS EMPTY. It has carried two things and lost both.
+ *
+ * An address pill went first: the screenshot under it already says which surface it is, in the product's
+ * own type, so a second label above it only competed. Three studs went next, and those were the harder
+ * call, because a row of dots is how a rectangle says "application window". The trouble is WHERE they
+ * fall. The corner ornament is drawn from the frame's corner inwards across the same 27px the studs sit
+ * in, so a reader met two ornament systems piled in one small square: a carved gold elbow with three grey
+ * diamonds crossing it. On the narrow wings there was barely a pixel between them.
+ *
+ * Only one of the two could stay, and the studs are the borrowed idea. The turned corner is this page's
+ * own, it says frame just as clearly, and it is already at all four. So the ledge keeps its lip and its
+ * light, and holds nothing.
+ *
+ * Its depth is the ornament's reach, which is what stops the elbow crossing into the picture. */
 .a-page .a-window-rail {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.42rem 0.75rem;
+    height: var(--a-corner-size);
     border-bottom: 1px solid var(--a-line);
     background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
-}
-/* The rail's three studs. Outlined they read as empty boxes at 8px — too little ink to be a shape, so
- * they looked like a rendering fault rather than hardware. Filled they are what they are meant to be:
- * three small stones set into the rail, lit from the same side as everything else on the page. */
-.a-page .a-window-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border: 1px solid rgba(150, 140, 126, 0.5);
-    background: linear-gradient(150deg, #6b6459, #46413a);
-    transform: rotate(45deg);
 }
 /* Each CYCLING screen is stacked in one box and cross-faded, exactly as the live hero does it, so a
  * reader who watches sees the product's several surfaces instead of one still.

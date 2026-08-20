@@ -39,7 +39,7 @@ import Corners from "../components/angkor/Corners.astro";
 import Lotus from "../components/angkor/Lotus.astro";
 import { DIVIDER, LOZENGE } from "../components/angkor/ornaments";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { DESKTOP_DOWNLOADS_PAGE, desktopPlatforms } from "../lib/desktop-downloads";
+import { DESKTOP_DOWNLOADS_PAGE, DESKTOP_GENERIC_ICON, desktopPlatforms } from "../lib/desktop-downloads";
 import { COLUMN_SIZES, shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import "../styles/angkor.css";
 
@@ -56,7 +56,11 @@ const beats = content.hero.headlineLines
     .filter((beat) => beat.length > 0);
 
 const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-const chatScreens = content.hero.screens.chat.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
+/* THE WINGS HOLD STILLS. Only the centre frame walks its surfaces (see the script at the foot of this
+ * file): a cross-fade inside a 340px frame is a flicker at the edge of vision, and caught mid-fade — which
+ * on a 4-second beat is a fair share of the time — it reads as two pictures printed over each other. So
+ * the chat wing takes the first of the same shared list the live hero cycles, and holds it. */
+const chatStill = shotAsset(content.hero.screens.chat[0]!.name);
 /* THREE FRAMES ON ONE AXIS, so three measures. The centre window is the wide one and the two wings lean
  * in over its edges at roughly two fifths of it; each screen is then drawn at more than 100% of its own
  * frame (see `.a-screen-*`) because these are crops of a legible top-left corner, not whole screenshots
@@ -188,32 +192,25 @@ const GITHUB_MARK =
                         </h1>
 
                         <p class="a-hero-sub">{subheadLead}</p>
-                        <p class="a-hero-summary">{content.hero.summary}</p>
 
                         {/* TWO PRESSES, and resist adding a third. On a centred axis three controls in a
-                            row read as a toolbar, and the claim above them drops to a caption on it. The
-                            installer is the one that goes: it lives in `#connect`, beside the install
-                            command, where it answers the question a reader is actually asking. */}
+                            row read as a toolbar, and the claim above them drops to a caption on it.
+                            They are the two ways to START: the hosted workspace, and the same thing on
+                            the reader's own machine. The demo is a fourth thing a visitor might want and
+                            it is not a way to start, so it rides on the picture below instead — over the
+                            surface it is a recording of.
+                            The download ships as the honest general case and the script at the foot of
+                            this file narrows it to the reader's platform. With no JavaScript the label
+                            and the link stay general, and both are still true. */}
                         <div class="a-hero-actions">
                             <a class="a-btn a-btn-primary" href={APP_URL}>
                                 Create your workspace
                             </a>
-                            <a class="a-btn" href={DEMO_PATH}>
-                                <svg viewBox="0 0 24 24" class="a-btn-play" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
-                                {content.hero.demo.playLabel}
+                            <a class="a-btn" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
+                                <svg viewBox="0 0 24 24" class="a-btn-icon" fill="currentColor" aria-hidden="true"><path d={DESKTOP_GENERIC_ICON}></path></svg>
+                                <span data-download-label>Download the app</span>
                             </a>
                         </div>
-
-                        <ul class="a-chips">
-                            {
-                                content.hero.chips.map((chip) => (
-                                    <li>
-                                        <Lotus />
-                                        {chip}
-                                    </li>
-                                ))
-                            }
-                        </ul>
                     </div>
 
                     <!-- THE PRODUCT, IN THREE FRAMES ON ONE AXIS. The workspace is the wide one on the
@@ -226,10 +223,7 @@ const GITHUB_MARK =
                         <div class="a-hero-stack">
                             <div class="a-window a-window-plan" aria-hidden="true">
                                 <Corners set="diag" />
-                                <div class="a-window-rail">
-                                    <span class="a-window-dot"></span>
-                                    <span class="a-window-dot"></span>
-                                </div>
+                                <div class="a-window-rail"></div>
                                 <div class="a-window-crop a-window-crop-plan">
                                     <Image src={shotAsset("chat-plan")} alt="" widths={SHOT_WIDTHS} sizes={planSizes} loading="lazy" decoding="async" class="a-screen a-screen-plan" />
                                 </div>
@@ -238,11 +232,7 @@ const GITHUB_MARK =
                             <div class="a-window a-window-app">
                                 <Corners />
                                 <span class="a-finial" aria-hidden="true"><Lotus size="md" /></span>
-                                <div class="a-window-rail">
-                                    <span class="a-window-dot"></span>
-                                    <span class="a-window-dot"></span>
-                                    <span class="a-window-dot"></span>
-                                </div>
+                                <div class="a-window-rail"></div>
                                 <div class="a-window-crop a-window-crop-app">
                                     {
                                         appScreens.map((screen, index) => (
@@ -262,30 +252,27 @@ const GITHUB_MARK =
                                         ))
                                     }
                                 </div>
+
+                                {/* THE DEMO, ON THE SURFACE IT IS A RECORDING OF. It is quiet at rest and
+                                    lights up when the pointer or the keyboard reaches the frame, so it
+                                    reads as a property of the picture rather than as a third button
+                                    competing with the two above.
+                                    Quiet, not hidden: a control that only exists on hover does not exist
+                                    on a touch screen. It sits top-right because the wing on the left
+                                    overlaps this frame's other free corner. */}
+                                <a class="a-play" href={DEMO_PATH}>
+                                    <span class="a-play-pill">
+                                        <svg viewBox="0 0 24 24" class="a-play-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                                        <span>{content.hero.demo.playLabel}</span>
+                                    </span>
+                                </a>
                             </div>
 
                             <div class="a-window a-window-chat" aria-hidden="true">
                                 <Corners set="diag" />
-                                <div class="a-window-rail">
-                                    <span class="a-window-dot"></span>
-                                    <span class="a-window-dot"></span>
-                                </div>
+                                <div class="a-window-rail"></div>
                                 <div class="a-window-crop a-window-crop-chat">
-                                    {
-                                        chatScreens.map((screen, index) => (
-                                            <Image
-                                                src={screen.image}
-                                                alt=""
-                                                widths={SHOT_WIDTHS}
-                                                sizes={chatSizes}
-                                                loading="lazy"
-                                                decoding="async"
-                                                class:list={["a-screen a-screen-chat", index === 0 && "is-on"]}
-                                                data-hero-screen="chat"
-                                                data-index={index}
-                                            />
-                                        ))
-                                    }
+                                    <Image src={chatStill} alt="" widths={SHOT_WIDTHS} sizes={chatSizes} loading="lazy" decoding="async" class="a-screen a-screen-chat" />
                                 </div>
                             </div>
                         </div>
@@ -327,11 +314,7 @@ const GITHUB_MARK =
                                     <span class="a-finial" aria-hidden="true">
                                         <Lotus size="md" />
                                     </span>
-                                    <div class="a-window-rail">
-                                        <span class="a-window-dot" />
-                                        <span class="a-window-dot" />
-                                        <span class="a-window-dot" />
-                                    </div>
+                                    <div class="a-window-rail"></div>
                                     <Image
                                         src={shotAsset(leadVerb.shot.name)}
                                         alt={leadVerb.shot.alt}
@@ -353,11 +336,7 @@ const GITHUB_MARK =
                                     <Corners set="diag" />
                                     {item.shot ? (
                                         <div class="a-verb-shot">
-                                            <div class="a-window-rail">
-                                                <span class="a-window-dot" />
-                                                <span class="a-window-dot" />
-                                                <span class="a-window-dot" />
-                                            </div>
+                                            <div class="a-window-rail"></div>
                                             <div class="a-verb-crop">
                                                 <Image
                                                     src={shotAsset(item.shot.name)}
@@ -833,27 +812,21 @@ const GITHUB_MARK =
             reveals.forEach((el) => el.classList.add("is-visible"));
         }
 
-        const STEP_MS = 6000;
-        const frames = ["app", "chat"] as const;
-        const shown = { app: 0, chat: 0 };
-        const screensOf = (frame: string) => document.querySelectorAll<HTMLElement>(`[data-hero-screen="${frame}"]`);
-
-        if (screensOf("app").length > 1) {
-            let tick = 0;
+        /* ONE FRAME WALKS, and it is the middle one. The two wings hold stills: a cross-fade in a frame
+           that size is movement at the edge of vision with nothing to show for it, and the centre is
+           where a reader is already looking. Three surfaces, four seconds each. */
+        const screens = document.querySelectorAll<HTMLElement>('[data-hero-screen="app"]');
+        if (screens.length > 1) {
+            let shown = 0;
             setInterval(() => {
-                const frame = frames[tick % frames.length]!;
-                tick += 1;
-                const screens = screensOf(frame);
-                if (screens.length < 2) return;
-                const next = (shown[frame] + 1) % screens.length;
-                shown[frame] = next;
+                shown = (shown + 1) % screens.length;
                 screens.forEach((screen, index) => {
-                    screen.classList.toggle("is-on", index === next);
-                    // The frame's own alt text is the one on screen: nobody on a screen reader should be
-                    // handed three descriptions of one picture.
-                    screen.setAttribute("aria-hidden", index === next ? "false" : "true");
+                    screen.classList.toggle("is-on", index === shown);
+                    // The alt text a screen reader gets is the one on screen: nobody should be handed
+                    // three descriptions of one picture.
+                    screen.setAttribute("aria-hidden", index === shown ? "false" : "true");
                 });
-            }, STEP_MS / frames.length);
+            }, 4000);
         }
     </script>
 </BaseLayout>
@@ -963,34 +936,20 @@ const GITHUB_MARK =
         font-family: var(--a-font-display);
     }
 
-    /* BALANCED, and that is what decides the cap. This sentence is two clauses and the column is a
-       shade narrower than it: left greedy, it orphaned "of sight." on a line of its own directly under
-       the brand line, which is the most looked-at inch of the page. Balance splits it on its own full
-       stop instead — one clause per line. */
-    /* THE HERO'S THREE VOICES, sampled off the reference art rather than picked. All three were too
-       cool and too pale: this line sat at #e4d3b6, a near-white with the warmth washed out of it, and
-       the summary under it took the page's grey `--a-muted`. On a wall this warm that reads as paper
-       laid over stone. The reference runs both several steps warmer and a step darker — amber for the
-       line that carries the claim, a dusty tan for the one that explains it — so the three levels are
-       separated by TEMPERATURE as much as by brightness, which is what stops the block looking like
-       one paragraph in three sizes. */
+    /* THE ONE LINE UNDER THE HEADLINE, and the last of the words on this screen. What used to follow it —
+       a plain restatement, then a row of three claims about price and providers — said in eleven lines
+       what the headline and the picture between them already say, and pushed the product below the fold
+       to do it. Both are still on the page further down, in the bands that exist to make those arguments.
+       The colour is sampled off the reference art rather than picked. A near-white here (#e4d3b6, which
+       is what stood) reads as paper laid over stone on a wall this warm; the amber below is several steps
+       warmer and one step darker, so it separates from the cream headline by TEMPERATURE as much as by
+       brightness. `balance` splits the sentence on its own clause rather than filling the measure. */
     .a-page .a-hero-sub {
         margin: 1.4rem auto 0;
         max-width: 36ch;
         font-size: 1.15rem;
         line-height: 1.6;
         color: #c2a077;
-        text-wrap: balance;
-    }
-    /* 54ch: wide enough that balanced text puts its own break at the comma before "and review", which is
-       where the sentence turns. Narrower and the break lands inside "its own container and git worktree",
-       which is one idea. */
-    .a-page .a-hero-summary {
-        margin: 0.65rem auto 0;
-        max-width: 54ch;
-        font-size: 0.9375rem;
-        line-height: 1.75;
-        color: #9c8971;
         text-wrap: balance;
     }
 
@@ -1003,26 +962,6 @@ const GITHUB_MARK =
     }
     .a-page .a-hero-copy .a-hero-actions {
         margin-top: 2.1rem;
-    }
-
-    /* The three free-ness claims, on one line under the buttons. Separated by their own lotus rather than
-       by a middot: the bullet of every list on this page is the brand's mark, and a row of chips is a
-       list set sideways. */
-    .a-page .a-chips {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 0.5rem 1.6rem;
-        margin: 1.7rem 0 0;
-        padding: 0;
-        list-style: none;
-        font-size: 0.8125rem;
-        color: var(--a-muted);
-    }
-    .a-page .a-chips li {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
     }
 
     /* ── The product, in three frames on one axis ─────────
@@ -1039,38 +978,46 @@ const GITHUB_MARK =
     .a-page .a-hero-stack {
         position: relative;
     }
+    /* The centre frame is the only one in flow, so it sets the block's height, and it carries a deeper
+       shadow than the shared frame style gives it: it is standing ON the two wings rather than beside
+       them, and that is the one place on this page where a cast shadow has real work to do. */
     .a-page .a-window-app {
         position: relative;
         z-index: 2;
         width: 62%;
         margin: 0 auto;
+        box-shadow:
+            0 2px 0 rgba(201, 160, 92, 0.06),
+            0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6),
+            0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
     }
-    /* The wings STRADDLE the centre frame rather than standing level with it — the plan rides above its
-       top rail, the chat drops below its foot. Level, the three read as a row of thumbnails; offset, they
-       read as one arrangement with a front and a back. Each throws its shadow inward, towards the frame
-       it overlaps, which is what carries the depth. */
+    /* THE WINGS RISE INTO THE FIGURES, and that is the point of them.
+       Each stands in the outer third of the plate, which is exactly where the art puts a devata, and each
+       is pulled up until its top rail crosses her lower body. That overlap is what binds the product to
+       the wall: level with the centre frame the three read as a row of thumbnails sitting ON a picture,
+       climbing into it they read as one arrangement standing IN it. The reference composition does the
+       same thing, and the copy above is unaffected because both wings are outside its measure.
+       They rise by different amounts so the pair is not a mirror.
+       BOTH SIT BEHIND THE CENTRE, and that is a layering decision rather than a stacking accident. One
+       wing in front and one behind reads as depth until you put a control on the middle frame: anything
+       in that frame's own corner is then paintable over by the wing above it, and the demo press ended up
+       half under a conversation panel. Behind, the centre keeps its four corners for its own use, and the
+       hierarchy says plainly which of the three surfaces is the product. */
     .a-page .a-window-plan,
     .a-page .a-window-chat {
         position: absolute;
+        z-index: 1;
         pointer-events: none;
     }
     .a-page .a-window-plan {
-        z-index: 1;
-        top: -2.25rem;
+        top: -27%;
         left: 0;
-        width: 24%;
-        box-shadow:
-            0.9rem 0 1.8rem -0.4rem rgba(0, 0, 0, 0.7),
-            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
+        width: 21%;
     }
     .a-page .a-window-chat {
-        z-index: 3;
+        top: -21%;
         right: 0;
-        bottom: -2.25rem;
-        width: 25.5%;
-        box-shadow:
-            -0.9rem 0 1.8rem -0.4rem rgba(0, 0, 0, 0.7),
-            0 1.4rem 3rem -0.8rem rgba(0, 0, 0, 0.75);
+        width: 21%;
     }
 
     .a-page .a-window-crop {
@@ -1084,11 +1031,14 @@ const GITHUB_MARK =
     .a-page .a-window-crop-app {
         aspect-ratio: 16 / 9;
     }
+    /* The wings are PORTRAITS. They are half the centre's width and have to reach from a figure's waist
+       down to near the centre frame's foot, and a landscape crop that tall would be a letterbox with a
+       margin. Portrait also suits what is in them: a plan is a list and a conversation is a column. */
     .a-page .a-window-crop-plan {
-        aspect-ratio: 5 / 6;
+        aspect-ratio: 1 / 2;
     }
     .a-page .a-window-crop-chat {
-        aspect-ratio: 6 / 5;
+        aspect-ratio: 5 / 9;
     }
     .a-page .a-screen {
         position: absolute;
@@ -1102,9 +1052,88 @@ const GITHUB_MARK =
     .a-page .a-screen-app {
         width: 112%;
     }
-    .a-page .a-screen-plan,
+    /* Each wing is drawn wide enough to FILL its portrait crop, and the two need very different amounts.
+       The plan's source is already a tall column, so a third over is enough. The chat's is a landscape
+       panel split into a list and a conversation, and 215% is not a round number: it is the width that
+       lands the crop's right edge ON the seam between those two panes. A few points either side and the
+       wing shows a column plus a slice of something else, which is what a crop looks like when it is an
+       accident. */
+    .a-page .a-screen-plan {
+        width: 135%;
+    }
     .a-page .a-screen-chat {
-        width: 134%;
+        width: 222%;
+    }
+
+    /* ── The press into the demo ──────────────────────────
+       It covers the whole centre frame so the whole picture is the target, and carries its own label in
+       the top-right corner. The scrim it lays down is nearly nothing at rest and a real veil under the
+       pointer, which is what makes the frame feel like something you can open rather than a picture of
+       one. `inset: 0` starts below the ledge so the ornament and the label never share a corner. */
+    .a-page .a-play {
+        position: absolute;
+        inset: var(--a-corner-size) 0 0;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        padding: 0.85rem;
+        background: rgba(10, 7, 5, 0.06);
+        transition: background-color 0.25s ease;
+    }
+    .a-page .a-play:hover,
+    .a-page .a-play:focus-visible {
+        background: rgba(10, 7, 5, 0.42);
+    }
+    /* THE LABEL SITS ON A SCREENSHOT rather than on the page, which is what makes it different from every
+       other control here: what is behind it is busy, bright in places, and not ours. So it is the quietest
+       thing that can still be read — sans, small, tight, on a near-solid plate — and it borrows the
+       buttons' cut corners so it still belongs to the page. Set in the titling serif it read as a caption
+       on the picture instead of as something to press.
+       The frame is a nine-slice drawn WITH the notch, like the buttons: a plain 1px border under a
+       clip-path loses its corners exactly where the notch is and arrives in four disconnected pieces. */
+    .a-page .a-play-pill {
+        --a-cut: 5.4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid transparent;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(201,160,92,0.45)' stroke-width='1.3'/%3E%3C/svg%3E");
+        border-image-slice: 15;
+        border-image-width: 11px;
+        border-image-repeat: stretch;
+        background: rgba(10, 7, 5, 0.88);
+        padding: 0.42rem 0.85rem;
+        font-family: var(--font-sans);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: var(--a-muted);
+        clip-path: polygon(
+            var(--a-cut) 0,
+            calc(100% - var(--a-cut)) 0,
+            100% var(--a-cut),
+            100% calc(100% - var(--a-cut)),
+            calc(100% - var(--a-cut)) 100%,
+            var(--a-cut) 100%,
+            0 calc(100% - var(--a-cut)),
+            0 var(--a-cut)
+        );
+        transition:
+            color 0.22s ease,
+            background-color 0.22s ease;
+    }
+    .a-page .a-play:hover .a-play-pill,
+    .a-page .a-play:focus-visible .a-play-pill {
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3L39.4 6.7V33.3L33.3 39.4H6.7L0.6 33.3V6.7Z' fill='none' stroke='rgba(245,155,63,0.9)' stroke-width='1.3'/%3E%3C/svg%3E");
+        background: rgba(10, 7, 5, 0.96);
+        color: var(--a-ember-bright);
+    }
+    .a-page .a-play-icon {
+        display: block;
+        flex: none;
+        width: 0.7rem;
+        height: 0.7rem;
     }
 
     /* ── 2 · The verbs ───────────────────────────────────── */
@@ -1855,22 +1884,27 @@ const GITHUB_MARK =
             padding-top: 4rem;
             padding-bottom: 4rem;
         }
-        /* The three widths are percentages of the same span, so the arrangement holds itself together as
-           the window narrows — what has to change is the CROP. Each frame is smaller in real pixels here,
-           so each screenshot is drawn further over and shows less of itself, which keeps its type at
-           roughly the size it had on a desktop. The vertical straddle tightens for the same reason. */
+        /* THE WINGS STOP CLIMBING HERE, and the reason is that the two things they are measured against
+           shrink at different rates. The plate is 16/9 of the window's width, so the figures on it rise as
+           the window narrows; the copy above is words, and words get TALLER as their column narrows. Below
+           about a thousand pixels the figures have already passed above the buttons, so a wing pulled up
+           far enough to reach them is a wing standing beside the call to action. It stays put instead, at
+           the gentle straddle it had before this treatment, and the overlap with the art is given up.
+           They widen at the same time: a fifth of a narrow window is 180px, which is a thumbnail rather
+           than a surface, and the centre gives up the width to pay for it. */
+        .a-page .a-window-app {
+            width: 56%;
+        }
         .a-page .a-window-plan {
-            top: -1.5rem;
+            top: -8%;
+            width: 25%;
         }
         .a-page .a-window-chat {
-            bottom: -1.5rem;
+            top: -4%;
+            width: 25%;
         }
         .a-page .a-screen-app {
             width: 138%;
-        }
-        .a-page .a-screen-plan,
-        .a-page .a-screen-chat {
-            width: 175%;
         }
     }
     /* THE WINGS COME OFF ON A PHONE. Overlapped across 380px the three frames hide most of each other and
