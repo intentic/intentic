@@ -7,7 +7,7 @@
      route belongs to the Workspace, and two document tabs open at once would fight over one key. A tab's subject
      is the tab's own state, so this takes it as a prop and touches no query at all. -->
 <script setup lang="ts">
-import { Button, ui, Icon, SegmentedControl, useLoadingReveal } from "@intentic/extension-ui";
+import { appLink, Button, ui, Icon, SegmentedControl, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import DocPage from "./DocPage.vue";
 import DocSkeleton from "./DocSkeleton.vue";
@@ -63,10 +63,10 @@ const staleness = computed(() => entries.value.find((entry) => entry.dir === dir
 
 // The full area, for everything this tab deliberately does not carry: the map, the other packages, generation,
 // publishing. `doc` is dropped for a repo overview so the link lands on the overview rather than an empty page.
-const openArea = (): void =>
-    api.navigate(
-        `/ext/documentation?repo=${encodeURIComponent(repo.value)}${dir.value === undefined ? `` : `&doc=${encodeURIComponent(dir.value)}`}`,
-    );
+const areaLink = computed(() => {
+    const to = `/ext/documentation?repo=${encodeURIComponent(repo.value)}${dir.value === undefined ? `` : `&doc=${encodeURIComponent(dir.value)}`}`;
+    return appLink(api.href(to), () => api.navigate(to));
+});
 </script>
 
 <template>
@@ -78,7 +78,7 @@ const openArea = (): void =>
             <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ label }}</span>
             <div class="ml-auto flex shrink-0 items-center gap-2">
                 <SegmentedControl v-if="hasStaged" v-model="source" :options="SOURCES" size="xs" />
-                <Button size="small" severity="secondary" text label="All documentation" @click="openArea" />
+                <Button size="small" severity="secondary" text label="All documentation" as="a" v-bind="areaLink" />
             </div>
         </div>
 
@@ -95,7 +95,7 @@ const openArea = (): void =>
             <div :class="ui.emptyState()">
                 <p class="text-sm">{{ label }} has no documentation yet.</p>
                 <p class="mt-1 text-xs text-muted">An agent can read this directory and write a plain-language page about it, for you to review.</p>
-                <Button size="small" label="Open Documentation" class="mt-3" @click="openArea" />
+                <Button size="small" label="Open Documentation" class="mt-3" as="a" v-bind="areaLink" />
             </div>
         </div>
 

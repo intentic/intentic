@@ -27,7 +27,7 @@ import { ContextMenu, CopyButton, type IconName, Row, StatusBadge } from "@inten
 import Button from "primevue/button";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useMenuLink } from "../composables/menuLink";
 import { type ConnectionState, rebuildStep, signsInByHand } from "../pages/capabilities/connections";
 
 const props = defineProps<{
@@ -97,7 +97,7 @@ const primary = computed<{ label: string; icon: IconName; run: () => void } | un
     return undefined;
 });
 
-const router = useRouter();
+const link = useMenuLink();
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 
 /* WHAT IS LEFT AFTER THE PRIMARY, in one order: the kind's own secondary verbs, then the three every connection
@@ -124,7 +124,7 @@ const items = computed<MenuItem[]>(() => {
     // A VPN is dialled from the Status card, which owns the whole flow (progress, the gateway's own error text,
     // a one-time code field). Going there beats a second, thinner set of controls that would handle 2FA worse.
     if (props.entry.kind === `vpn`) {
-        kindActions.push({ label: `Connect / disconnect`, icon: `wifi`, command: () => void router.push(`/sandbox/status`) });
+        kindActions.push({ label: `Connect / disconnect`, icon: `wifi`, ...link(`/sandbox/status`) });
     }
     return [
         ...kindActions,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
+import { appLink, Button, ui, DagGraph, Icon, Notice, noticeOf, timeAgo } from "@intentic/extension-ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
@@ -67,9 +67,13 @@ const stopRun = async (): Promise<void> => {
     }
 };
 
-// A step's conversation is an ordinary fleet agent, so its chat is reachable exactly as any other agent's is.
-// This is the door from a block on the diagram to the session log behind it.
-const openChat = (conversationId: string): void => host().navigate(`/agents/${encodeURIComponent(conversationId)}`);
+/* A step's conversation is an ordinary fleet agent, so its chat is reachable exactly as any other agent's is.
+ * This is the door from a block on the diagram to the session log behind it — and it is a real link (appLink),
+ * so the address is under the pointer and Ctrl/⌘-click opens the log beside the diagram it came from. */
+const chatLink = (conversationId: string) => {
+    const path = `/agents/${encodeURIComponent(conversationId)}`;
+    return appLink(host().href(path), () => host().navigate(path));
+};
 </script>
 
 <template>
@@ -115,7 +119,7 @@ const openChat = (conversationId: string): void => host().navigate(`/agents/${en
                     <span v-if="shown.costUsd" class="text-2xs text-subtle">${{ shown.costUsd.toFixed(2) }}</span>
                 </div>
 
-                <Button label="Open the session log" size="small" severity="secondary" :text="true" @click="openChat(shown.conversationId)">
+                <Button label="Open the session log" size="small" severity="secondary" :text="true" as="a" v-bind="chatLink(shown.conversationId)">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
 

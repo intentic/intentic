@@ -24,7 +24,7 @@ import {
 import { noticeFrom, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, onMounted, ref, watch } from "vue";
-import { type RouteLocationRaw, useRoute, useRouter } from "vue-router";
+import { type RouteLocationRaw, RouterLink, useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import {
     type ComputerScopes,
@@ -359,7 +359,6 @@ const BLOCK_ACTION: Record<ManageBlock[`kind`], string> = {
 /* WHERE THE FIX IS. A `connect` block opens the card that ADDS a computer of this kind; the other two open the
  * connection that already exists, at its own form. Undefined when this build has no card for the machine's
  * platform (a Mac, today) — the sentence is still worth saying, and a button pointing nowhere is not. */
-const router = useRouter();
 const blockTarget = (block: ManageBlock | undefined): RouteLocationRaw | undefined => {
     if (block?.card === undefined) {
         return undefined;
@@ -381,12 +380,9 @@ const blockAction = (computer: Computer): string | undefined => {
     const block = blockOf(computer);
     return block === undefined || blockTarget(block) === undefined ? undefined : BLOCK_ACTION[block.kind];
 };
-const goFix = (computer: Computer): void => {
-    const target = blockTarget(blockOf(computer));
-    if (target !== undefined) {
-        void router.push(target);
-    }
-};
+// Only ever read where `blockAction` already said there is somewhere to go, so the fallback is unreachable —
+// it exists because a template cannot narrow one call's result against another's.
+const fixAt = (computer: Computer): RouteLocationRaw => blockTarget(blockOf(computer)) ?? { name: `capabilities` };
 
 /* THE OTHER HALF OF THE CROSS-LINK. Read inside the desktop app, this page is one of two screens showing the same
  * machines — and the app's own is the one that needs no capability at all, because it is ON the computer it
@@ -629,13 +625,17 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                              this reaches most often, and the desktop app has managed its containers all along. -->
                         <div v-if="blockText(row.computer)" class="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <p class="min-w-0 text-xs text-muted">{{ blockText(row.computer) }}</p>
+                            <!-- The fix has an address, so this is a link wearing the button's clothes: hovering
+                                 it says where it goes, and Ctrl/⌘-click opens the card without losing the list
+                                 of machines it was read from. -->
                             <Button
                                 v-if="blockAction(row.computer)"
+                                :as="RouterLink"
+                                :to="fixAt(row.computer)"
                                 size="small"
                                 severity="secondary"
                                 :text="true"
                                 :label="blockAction(row.computer)"
-                                @click="goFix(row.computer)"
                             >
                                 <template #icon><Icon name="arrow-up-right" /></template>
                             </Button>

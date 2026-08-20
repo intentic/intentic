@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Avatar } from "@intentic/ui";
+import { AnchoredOverlay, Avatar, browserOwnsClick } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { creditSummary } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { useAuth } from "../composables/useAuth";
@@ -17,7 +17,6 @@ import AccountCredits from "./AccountCredits.vue";
  * when the allowance is gone. */
 
 const { user, signOut } = useAuth();
-const router = useRouter();
 const route = useRoute();
 
 /* THE SETTINGS PAGES HAVE NO TILE, SO THE CONTROL THAT OPENS THEM IS THE TILE. /settings and its tabs are
@@ -52,9 +51,16 @@ const avatarLoadFailed = (): void => {
     avatarFailed.value = true;
 };
 
-const openSettings = (): void => {
-    open.value = false;
-    void router.push(`/settings`);
+/* Settings is a PLACE, so its row is an anchor and not a button that pushed the router — which is what buys
+ * back the address in the status bar, the browser's own "Open in new tab", and Ctrl/⌘-click. Sign out stays a
+ * button: it is a thing that happens, not somewhere to go.
+ *
+ * The menu closes on the plain click alone. A modified click opens another tab; folding up the menu still
+ * under the pointer is not part of what was asked for. */
+const dismiss = (event: MouseEvent): void => {
+    if (!browserOwnsClick(event)) {
+        open.value = false;
+    }
 };
 
 const logout = async (): Promise<void> => {
@@ -126,18 +132,18 @@ const logout = async (): Promise<void> => {
             <!-- The day's allowance, between who you are and what you can do — it is a fact about the account,
                  and it is the reason somebody opens this menu without wanting either Settings or Sign out.
                  Dismisses the menu on its way to the membership page like every other row here. -->
-            <AccountCredits @click="open = false" />
+            <AccountCredits @click="dismiss" />
 
             <div v-if="meter" class="my-1 border-t border-line"></div>
 
-            <button
-                type="button"
+            <RouterLink
+                to="/settings"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
-                @click="openSettings"
+                @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-xs text-muted" /></span>
                 Settings
-            </button>
+            </RouterLink>
             <button
                 type="button"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"

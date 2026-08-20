@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
@@ -18,12 +18,13 @@ import { connectionNotice } from "./connectionNotice";
 const { active, connection } = useSandbox();
 const { clearCredential } = useGoogleIdentity();
 const { invalidateSession, getSessionToken } = useSandboxSession();
-const router = useRouter();
 
 const notice = computed(() => connectionNotice(connection.value.failure, active.value?.name));
 
 // Carry the sandbox id so /setup resumes THIS sandbox instead of offering a blank create form.
-const openSetup = (): void => void router.push({ path: `/setup`, query: { sandbox: active.value?.id } });
+// Carried as a link rather than pushed, so the one way out of this gate has an address on it like everything
+// else that goes somewhere.
+const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
 // Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser —
 // clearCredential disables auto-select) instead of replaying whatever the daemon just refused.
 const signIn = (): void => {
@@ -37,7 +38,7 @@ const signIn = (): void => {
     <GateCard icon="box" :title="notice.title" :spinner="notice.action === undefined">
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <template #actions>
-            <Button v-if="notice.action === `setup`" label="Finish setup" icon-pos="right" severity="secondary" @click="openSetup">
+            <Button v-if="notice.action === `setup`" :as="RouterLink" :to="setupTo" label="Finish setup" icon-pos="right" severity="secondary">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <Button v-else-if="notice.action === `signin`" label="Sign in again" icon-pos="right" severity="secondary" @click="signIn">

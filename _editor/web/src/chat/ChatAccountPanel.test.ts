@@ -46,7 +46,12 @@ vi.mock(`../composables/chat/useChat`, () => ({
     }),
 }));
 vi.mock(`../composables/chat/chatSurface`, () => ({ chatWide }));
-vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// The card's way out to the accounts page is a link, so the mock carries a router-free stand-in for it.
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRouter: () => ({ push: vi.fn() }) as never,
+    RouterLink: (await import(`../testing/routerLinkStub`)).RouterLinkStub as never,
+}));
 
 const { offerOnBoard } = await import("../composables/chat/connectOffer");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");

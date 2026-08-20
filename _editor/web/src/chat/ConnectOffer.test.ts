@@ -17,7 +17,12 @@ import { type App, computed, createApp, defineComponent, h, nextTick, ref } from
 // The kit's barrel reaches for matchMedia at import time (its device tracker), which jsdom does not have.
 
 const push = vi.fn();
-vi.mock(`vue-router`, () => ({ useRouter: () => ({ push }) }));
+// "All AI accounts" is a link now, so the mock carries a router-free stand-in that keeps its address.
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRouter: () => ({ push }) as never,
+    RouterLink: (await import(`../testing/routerLinkStub`)).RouterLinkStub as never,
+}));
 
 /* The account store, mocked down to the handshake — because the handshake is now half of what this card DOES.
  * The flows are refs the tests write to, so "a sign-in is running" is a state the card can be put into without
@@ -94,6 +99,9 @@ const dotted = (element: HTMLElement, label: string): boolean => chip(element, l
 // The free channel's call to action, whatever it is currently labelled.
 const cta = (element: HTMLElement): HTMLButtonElement | undefined =>
     buttons(element).find((button) => (button.textContent ?? ``).includes(`Continue with`));
+// The quiet door to the full account page. An ANCHOR, not a button — it is a place, so it carries an address
+// that can be hovered, copied and Ctrl/⌘-clicked like any other link in the app.
+const accountsDoor = (element: HTMLElement): HTMLAnchorElement | null => element.querySelector(`a`);
 
 beforeEach(() => {
     provider.value = `claude`;
@@ -190,9 +198,11 @@ it(`puts the free channel's own mark on the button that leaves for it`, () => {
     // used to be a second one floating above the headline saying it twice.
     expect(cta(element)?.querySelector(`svg`)).not.toBeNull();
     expect(element.querySelectorAll(`[data-icon="sparkles"]`)).toHaveLength(0);
-    // The free channel's CTA, the four chips, and the quiet door to the full account page. Nothing else — the
-    // "Connect <the chip you just pressed>" button that used to sit under the row is what the chips now do.
-    expect(buttons(element)).toHaveLength(6);
+    // The free channel's CTA and the four chips. Nothing else — the "Connect <the chip you just pressed>"
+    // button that used to sit under the row is what the chips now do, and the door to the account page is a
+    // link rather than a sixth button.
+    expect(buttons(element)).toHaveLength(5);
+    expect(accountsDoor(element)?.getAttribute(`href`)).toBe(`/sandbox/agent`);
     expect(cta(element)?.textContent).toContain(`Continue with Google`);
 });
 
@@ -203,9 +213,10 @@ it(`keeps the row working once the free channel is spent`, async () => {
     const element = mount();
 
     expect(element.textContent).not.toContain(`Continue with`);
-    // Google joins the row it was promoted out of, connected, and it is the fifth chip — those five plus the
-    // quiet door to the full account page, with the headline's CTA gone.
-    expect(buttons(element)).toHaveLength(6);
+    // Google joins the row it was promoted out of, connected, and it is the fifth chip — those five alone,
+    // with the headline's CTA gone and the door to the account page riding as a link beside them.
+    expect(buttons(element)).toHaveLength(5);
+    expect(accountsDoor(element)?.getAttribute(`href`)).toBe(`/sandbox/agent`);
     expect(dotted(element, `Google`)).toBe(true);
 
     chip(element, `Kimi Code`).click();

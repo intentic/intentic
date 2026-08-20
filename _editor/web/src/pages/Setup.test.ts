@@ -17,6 +17,9 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRoute: () => ({ query: {} }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
+    // "Back to workspace" is a link now, and the real one resolves its href out of a router this bare mount
+    // never installs.
+    RouterLink: (await import(`../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
 // The device the page is read on — desktop unless a test flips it. The phone default is behavior of its own
@@ -275,9 +278,7 @@ it(`keeps the sandbox once its name has been typed`, async () => {
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
-        card.textContent?.includes(`Start instantly`),
-    );
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
@@ -400,9 +401,7 @@ it(`defaults a phone to the hosted rung when one is offered`, async () => {
     mobileDevice.value = true;
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
-        card.textContent?.includes(`Start instantly`),
-    );
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
     expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`true`);
     // The rung is described, never taken: nothing is provisioned until the button under it is pressed.
     expect(hostedProvision).not.toHaveBeenCalled();
@@ -468,9 +467,7 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
-        card.textContent?.includes(`Start instantly`),
-    );
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
@@ -571,9 +568,7 @@ it(`says nothing about hours to someone they do not apply to`, async () => {
 it(`hands the machine back when another rung is chosen, keeping the same sandbox`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) =>
-        card.textContent?.includes(`Start instantly`),
-    );
+    const hostedRung = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`Start instantly`));
     hostedRung!.click();
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();

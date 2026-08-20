@@ -13,6 +13,8 @@ export const extensionUiNames = [
     "ChangeStatusMark",
     "Checkbox",
     "clipboardOf",
+    "browserOwnsClick",
+    "appLink",
     "ui",
     "Code",
     "CodeField",

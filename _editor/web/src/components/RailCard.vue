@@ -35,6 +35,7 @@
 import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
+import { type RouteLocationRaw, RouterLink } from "vue-router";
 import { formatElapsed } from "../composables/agents/agentStatus";
 import { markSegments } from "../composables/agents/markSegments";
 import IdentityTile from "./IdentityTile.vue";
@@ -72,14 +73,24 @@ const props = defineProps<{
     quiet?: boolean;
     // WHY this row survived the filter: the line the query hit and who said it (MatchLine draws both).
     snippet?: MatchSnippet;
+    /* WHERE THIS CARD GOES, for the lists whose rows are addresses rather than selections.
+     *
+     * Both kinds exist and they are genuinely different: a chat tab PICKS a conversation inside the panel you
+     * are already looking at (no URL changes, nothing to open in a tab), while a subagent row is a page with
+     * an address. Given `to` the card renders as a real link and everything a link brings comes with it — the
+     * address in the status bar, the browser's own menu, Ctrl/⌘-click into a second tab — at not one pixel of
+     * difference in how it looks. Without it the card stays the button it has always been. */
+    to?: RouteLocationRaw;
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 </script>
 
 <template>
-    <button
-        type="button"
+    <component
+        :is="to === undefined ? `button` : RouterLink"
+        :type="to === undefined ? `button` : undefined"
+        :to="to"
         class="rail-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-lg border p-2.5 text-left text-2xs"
         :class="[
             { 'rail-card-on': selected, 'rail-card-attention': attention, 'border-dashed': dashed },
@@ -128,7 +139,7 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                 <MatchLine :snippet="snippet" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </span>
         </span>
-    </button>
+    </component>
 </template>
 
 <style scoped>

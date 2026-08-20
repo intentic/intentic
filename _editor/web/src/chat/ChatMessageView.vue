@@ -66,9 +66,11 @@ const {
 } = usePaneView();
 
 // The browser-help card's one real action leads AWAY from the chat: the live stage (and "hand back") are on
-// /browsers, so the primary button is a navigation, not a decision — the card resolves from over there.
+// /browsers, so the primary button is a navigation, not a decision — the card resolves from over there. It is
+// therefore a LINK (ChatDecisionButton's `to`): an address to hover, and a Ctrl/⌘-click that puts the stage in
+// its own tab beside the conversation asking for help, rather than replacing it.
 const router = useRouter();
-const openHelpBrowser = (session: string): void => void router.push(`/browsers/${session}`);
+const helpBrowserAt = (session: string): string => `/browsers/${session}`;
 
 // The terminal-help card's, the same way — except the terminal is a PANEL under every view rather than a
 // route, so this opens and focuses it on the agent's own session instead of navigating. The title is what the
@@ -80,10 +82,10 @@ const openHelpTerminal = (help: TerminalHelpRequest): void =>
  * agent now waits for the connection to come live), and the setup itself happens on the Capabilities page —
  * opened straight on the asked card, so the user lands on the form rather than the grid. "Open setup" while
  * connecting is the navigation alone, for whoever closed the page mid-setup. */
-const openCapabilitySetup = (card: string): void => void router.push(`/capabilities/${card}`);
+const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
 const connectCapability = (message: ChatMessage): void => {
     void decideCapabilityOffer(message, true);
-    openCapabilitySetup(message.capabilityOffer?.offer.card ?? ``);
+    void router.push(capabilitySetupAt(message.capabilityOffer?.offer.card ?? ``));
 };
 
 // The card's one line of catalog prose, when the static catalog knows the card (a contributed card's frame
@@ -1308,7 +1310,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <div v-if="message.browserHelp.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <ChatDecisionButton tone="primary" icon="desktop" @click="openHelpBrowser(message.browserHelp.session)"
+                    <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)"
                         >Open the browser</ChatDecisionButton
                     >
                     <ChatDecisionButton tone="secondary" icon="times" @click="declineBrowserHelp(message)">Can't help now</ChatDecisionButton>
@@ -1428,9 +1430,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     }}</span>
                     <!-- The URL in full on hover: which endpoint is being paid is the fact this card exists to
                          put in front of the owner, and a truncated host is exactly how a lookalike gets paid. -->
-                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.url"
-                        >{{ message.paymentOffer.offer.url }}</span
-                    >
+                    <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.url">{{
+                        message.paymentOffer.offer.url
+                    }}</span>
                     <span class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="message.paymentOffer.offer.payTo"
                         >To {{ message.paymentOffer.offer.payTo }}</span
                     >
@@ -1450,9 +1452,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      because the signed authorization simply expires. -->
                 <div v-if="message.paymentOffer.receipt" class="border-t border-line px-3.5 py-2.5">
                     <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
-                        >Paid ${{ message.paymentOffer.receipt.amountUsd }}<template v-if="message.paymentOffer.receipt.transaction">
-                            · {{ message.paymentOffer.receipt.transaction }}</template
-                        ></span
+                        >Paid ${{ message.paymentOffer.receipt.amountUsd
+                        }}<template v-if="message.paymentOffer.receipt.transaction"> · {{ message.paymentOffer.receipt.transaction }}</template></span
                     >
                     <span v-else class="text-2xs text-muted">The payment didn't go through — nothing was spent.</span>
                 </div>
@@ -1500,7 +1501,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 >
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">Waiting for you to finish setup…</span>
-                    <ChatDecisionButton tone="secondary" icon="bolt" @click="openCapabilitySetup(message.capabilityOffer.offer.card)"
+                    <ChatDecisionButton tone="secondary" icon="bolt" :to="capabilitySetupAt(message.capabilityOffer.offer.card)"
                         >Open setup</ChatDecisionButton
                     >
                 </div>

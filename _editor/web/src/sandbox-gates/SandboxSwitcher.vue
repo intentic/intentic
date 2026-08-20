@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic-app/api-contract";
-import { AnchoredOverlay, Code, commandLang, ConfirmDialog, type IconName, OS_OPTIONS, SegmentedControl, useOsPreference } from "@intentic/ui";
+import {
+    AnchoredOverlay,
+    browserOwnsClick,
+    Code,
+    commandLang,
+    ConfirmDialog,
+    type IconName,
+    OS_OPTIONS,
+    SegmentedControl,
+    useOsPreference,
+} from "@intentic/ui";
 import { cloudProviderMeta } from "../pages/setupCloud";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
@@ -81,13 +91,24 @@ const pick = (option: SandboxSummary): void => {
     sandbox.select(option.id);
 };
 
+/* EVERY ROW IN THIS POPOVER THAT GOES SOMEWHERE IS A LINK. They were <button>s calling router.push, so twelve
+ * ordinary addresses in this app had no href on them: nothing in the status bar on hover, no "Open in new tab"
+ * in the browser's own menu, and Ctrl/⌘-click did the one thing it must never do — navigated the tab the user
+ * was reading instead of opening another. The rows that are not places (picking a sandbox, removing one) stay
+ * buttons, because they are not.
+ *
+ * The popover closes on the plain click alone (`dismiss`): a modified click is answered by a tab opening
+ * somewhere else, and shutting the menu somebody is still working through is not part of that answer. */
+const dismiss = (event: MouseEvent): void => {
+    if (!browserOwnsClick(event)) {
+        open.value = false;
+    }
+};
+
 // Back to the one screen where an unfinished sandbox can become a workspace, resuming THIS row rather than
 // offering a blank create form. (The router's requireSetup does the same thing on a cold load with nothing else
 // to open; this is the same rule from inside, for an account that also has one that works.)
-const resumeSetup = (option: SandboxSummary): void => {
-    open.value = false;
-    void router.push({ path: `/setup`, query: { sandbox: option.id } });
-};
+const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
 
 /* ALT+1…9 — the Nth sandbox in this popover's own order, without opening it.
  *
@@ -139,18 +160,6 @@ onUnmounted(() => {
     }
     disposables = [];
 });
-
-// The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface), and
-// it is where every attention row lands too: each names a tab of the same hub.
-const openTab = (to: string): void => {
-    open.value = false;
-    void router.push(to);
-};
-
-const addSandbox = (): void => {
-    open.value = false;
-    void router.push(`/setup`);
-};
 
 // The sandbox awaiting removal confirmation (owner: drops the platform record for everyone; member: leaves).
 // Non-destructive either way — the daemon keeps running on its host; teardown is the cleanup script's job,
@@ -255,19 +264,19 @@ const confirmRemove = async (): Promise<void> => {
                  whole sentence its bar used to shout — said once, where it was asked for. -->
             <template v-if="attention.length > 0">
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Needs you</div>
-                <button
+                <RouterLink
                     v-for="item in attention"
                     :key="item.message"
-                    type="button"
+                    :to="item.to"
                     class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="openTab(item.to)"
+                    @click="dismiss"
                 >
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
                         <Icon :name="item.icon" class="text-xs" />
                     </span>
                     <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </button>
+                </RouterLink>
                 <div class="my-1 border-t border-line"></div>
             </template>
 
@@ -277,19 +286,19 @@ const confirmRemove = async (): Promise<void> => {
                  Second, because a debt that IS waiting must not be read past to get to them. -->
             <template v-if="attentionNotes.length > 0">
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Worth knowing</div>
-                <button
+                <RouterLink
                     v-for="item in attentionNotes"
                     :key="item.message"
-                    type="button"
+                    :to="item.to"
                     class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="openTab(item.to)"
+                    @click="dismiss"
                 >
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon :name="item.icon" class="text-xs" />
                     </span>
                     <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </button>
+                </RouterLink>
                 <div class="my-1 border-t border-line"></div>
             </template>
 
@@ -336,16 +345,16 @@ const confirmRemove = async (): Promise<void> => {
                 />
             </button>
 
-            <button
-                type="button"
+            <RouterLink
+                to="/setup"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
-                @click="addSandbox"
+                @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="plus" class="text-xs text-muted" />
                 </span>
                 Add sandbox
-            </button>
+            </RouterLink>
 
             <!-- SETUPS THAT WERE NEVER FINISHED — a section, not rows in the list above, because they are not
                  places to go. Each one is an errand with one move left in it, so the row says the move ("Finish
@@ -358,12 +367,12 @@ const confirmRemove = async (): Promise<void> => {
             <template v-if="unfinished.length > 0">
                 <div class="my-1 border-t border-line"></div>
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</div>
-                <button
+                <RouterLink
                     v-for="option in unfinished"
                     :key="option.id"
-                    type="button"
+                    :to="resumeSetup(option)"
                     class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="resumeSetup(option)"
+                    @click="dismiss"
                 >
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
                         <Icon name="wrench" class="text-xs" />
@@ -371,28 +380,32 @@ const confirmRemove = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
                     <!-- In flow, not overlaid — same trick as the rows above: both icons always hold their slot
-                         and only their opacity changes, so hovering a row never shifts the text beside it. -->
+                         and only their opacity changes, so hovering a row never shifts the text beside it.
+                         `.prevent` as well as `.stop` now the row is an anchor: without it the trash would
+                         still follow the link it sits inside on its way to opening the dialog. -->
                     <Icon
                         name="trash"
-                        @click.stop="askRemove(option)"
+                        @click.prevent.stop="askRemove(option)"
                         v-tooltip.top="option.role === 'owner' ? 'Remove from account' : 'Leave'"
                         class="shrink-0 text-xs opacity-0 transition-opacity hover:text-danger group-hover:opacity-60"
                     />
-                </button>
+                </RouterLink>
             </template>
 
             <div class="my-1 border-t border-line"></div>
 
-            <button
-                type="button"
+            <!-- The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings
+                 surface), and it is where every attention row above lands too: each names a tab of the same hub. -->
+            <RouterLink
+                to="/sandbox"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
-                @click="openTab('/sandbox')"
+                @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center">
                     <Icon name="cog" class="text-xs text-muted" />
                 </span>
                 Sandbox settings
-            </button>
+            </RouterLink>
         </div>
     </AnchoredOverlay>
 

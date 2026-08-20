@@ -12,7 +12,7 @@
      document inside a pane that is already a box. Each surface says so in its own template; attributes fall
      through to the root, so "how much room" is the caller's line to write. -->
 <script setup lang="ts">
-import { ui, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { appLink, ui, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { DocAnchor, DocIndexEntry, DocProvenance } from "./docModel.js";
 import { host } from "./host.js";
@@ -38,8 +38,9 @@ const { prose, figures, anchors, provenance, repo, staleness } = defineProps<{
  * page missed by one segment in any workspace whose repo is not the tree root. `line` is dropped on purpose —
  * the workspace route addresses a path, and appending a line it does not understand would produce a link that
  * silently fails rather than one that lands one screen away from the right place. */
-const open = (anchor: DocAnchor): void => {
-    host().navigate(`/workspace/${repo === `` ? `` : `${repo}/`}${anchor.path}`);
+const anchorLink = (anchor: DocAnchor) => {
+    const path = `/workspace/${repo === `` ? `` : `${repo}/`}${anchor.path}`;
+    return appLink(host().href(path), () => host().navigate(path));
 };
 
 // The two footer facts, from whichever side has them. A repo overview carries its own provenance; a package's
@@ -76,12 +77,13 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
              light up under the pointer. The bordered card they used to sit in announced a panel of settings. -->
         <section v-if="anchors.length > 0" class="flex flex-col gap-0.5">
             <h2 :class="ui.sectionLabel(`mb-1 text-2xs`)">Where to start reading</h2>
-            <button
+            <!-- …and a place to go is a LINK, which is what makes the row behave the way its own address
+                 promises: hoverable, copyable, Ctrl/⌘-clickable into a tab beside the document. -->
+            <a
                 v-for="anchor in anchors"
                 :key="anchor.path"
-                type="button"
+                v-bind="anchorLink(anchor)"
                 class="anchorrow flex w-full items-start gap-3 rounded-lg px-2.5 py-1.5 text-left"
-                @click="open(anchor)"
             >
                 <Icon name="file" class="mt-0.5 shrink-0 text-subtle" />
                 <span class="flex min-w-0 flex-col">
@@ -90,7 +92,7 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
                     >
                     <span class="text-2xs text-muted">{{ anchor.what }}</span>
                 </span>
-            </button>
+            </a>
         </section>
 
         <!-- "When was this written, and what has happened since" is the first thing anyone asks of a page they

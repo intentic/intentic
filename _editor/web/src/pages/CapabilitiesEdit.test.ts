@@ -26,7 +26,9 @@ const replace = vi.fn();
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRoute: () => ({ params: { card: `vpn` }, query }) as never,
-    useRouter: () => ({ push: vi.fn(), replace }) as never,
+    // `resolve` as well as `push`: a row's menu now carries the ADDRESS of what it opens beside the command
+    // that opens it (menuLink.ts), so a router stub without it is a stub of half a router.
+    useRouter: () => ({ push: vi.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
 /* THE TUNNEL AS THE DAEMON REPORTS IT: every dial parameter echoed, the WireGuard conf absent, and `secrets`

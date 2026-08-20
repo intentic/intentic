@@ -2,7 +2,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import { Avatar, type IconName } from "@intentic/ui";
 import { computed, onMounted } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, TAB_BAR_IDS } from "../core-views/registry";
@@ -50,7 +50,6 @@ const extensionRow = (active: ActiveExtension): AreaRow => {
     };
 };
 
-const router = useRouter();
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
@@ -104,13 +103,9 @@ const sandboxRows = computed<readonly AreaRow[]>(() => [
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
-const addSandbox = (): void => {
-    void router.push(`/setup`);
-};
-
-const resumeSetup = (id: string): void => {
-    void router.push({ path: `/setup`, query: { sandbox: id } });
-};
+// Both of these are places, so both are links — the same rule the desktop switcher's rows follow. Switching
+// sandboxes is not (it re-points this window at another daemon), so those rows stay buttons.
+const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
 
 const logout = async (): Promise<void> => {
     await signOut();
@@ -187,31 +182,29 @@ const logout = async (): Promise<void> => {
                     :aria-label="availabilityVisual.label"
                 ></span>
             </button>
-            <button
-                type="button"
+            <RouterLink
+                to="/setup"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                @click="addSandbox"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
                 Add sandbox
-            </button>
+            </RouterLink>
 
             <!-- Setups that were never finished, under the two things the reader came here for. Same partition
                  and same wording as the desktop switcher: the row offers the one move left in it rather than
                  naming a machine that does not exist yet. -->
             <template v-if="unfinished.length > 0">
                 <h2 class="mt-2 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</h2>
-                <button
+                <RouterLink
                     v-for="option in unfinished"
                     :key="option.id"
-                    type="button"
+                    :to="resumeSetup(option.id)"
                     class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors active:bg-overlay"
-                    @click="resumeSetup(option.id)"
                 >
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center text-subtle"><Icon name="wrench" /></span>
                     <span class="min-w-0 flex-1 truncate text-muted">Finish setting up {{ option.name }}</span>
                     <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
-                </button>
+                </RouterLink>
             </template>
         </section>
 

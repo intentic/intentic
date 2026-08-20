@@ -3,7 +3,7 @@ import { ui, FilterBar, type NoticeModel, NoticeStack, RowGroup, SegmentedContro
 import { noticeFrom } from "@intentic/ui/async";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import SecretEntryRow from "../../components/SecretEntryRow.vue";
 import SecretField from "../../components/SecretField.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
@@ -47,7 +47,6 @@ const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
 const outline = useSandboxOutline(inventoryPending);
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
-const router = useRouter();
 
 // DevOps scaffolds the desired-state repo the env/generated secrets live in; until its capability reports
 // `active`, those groups are empty and every /secrets write 412s — so gate them on this signal (state, not
@@ -309,7 +308,7 @@ const pushToCi = async (): Promise<void> => {
                 <div class="mt-3 flex flex-col gap-6">
                     <RowGroup v-if="credentials.length > 0" label="Capability credentials" :count="credentials.length">
                         <template #actions>
-                            <Button label="Manage capabilities" size="small" severity="secondary" @click="router.push('/capabilities')" />
+                            <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
                         </template>
                         <SecretEntryRow
                             v-for="row in credentials"
@@ -322,7 +321,7 @@ const pushToCi = async (): Promise<void> => {
 
                     <RowGroup v-if="providers.length > 0" label="AI providers" :count="providers.length">
                         <template #actions>
-                            <Button label="Manage accounts" size="small" severity="secondary" @click="router.push('/sandbox/agent')" />
+                            <Button :as="RouterLink" to="/sandbox/agent" label="Manage accounts" size="small" severity="secondary" />
                         </template>
                         <SecretEntryRow
                             v-for="row in providers"

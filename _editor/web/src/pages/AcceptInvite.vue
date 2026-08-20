@@ -4,7 +4,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import type { InvitePreview } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -72,7 +72,7 @@ const accept = async (): Promise<void> => {
     }
 };
 
-const open = (): Promise<unknown> => router.push(`/`);
+// The workspace is a place, so the button that opens it is a link — same as every other way into it.
 
 const switchAccount = async (): Promise<void> => {
     await signOut();
@@ -139,7 +139,7 @@ const switchAccount = async (): Promise<void> => {
                     You already have access to <span class="font-medium text-content">{{ sandboxName }}</span
                     >.
                 </p>
-                <Button label="Open sandbox" class="mt-6 w-full justify-center" @click="open">
+                <Button :as="RouterLink" to="/" label="Open sandbox" class="mt-6 w-full justify-center">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
             </template>

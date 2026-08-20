@@ -15,12 +15,25 @@
 
      `minWidth` is in rem and per call site because these menus genuinely differ: the file tree's four short
      verbs want 10rem, the terminal's "Kill 3 running terminals" wants 14. Everything else is fixed here, which
-     is the point. -->
+     is the point.
+
+     A ROW THAT GOES SOMEWHERE IS A LINK, and that is what `url` on the item buys. PrimeVue's own markup puts
+     the click handler on the row's wrapper and leaves the `<a>` inside it hrefless, so a menu row that
+     navigated was an anchor in name only: no address in the status bar, no "Open link in new tab" in the
+     browser's own menu, no Ctrl/⌘-click, no middle-click, nothing to copy. Every destination in this app is a
+     real URL, so every row that names one now says so.
+
+     THE COMMAND STILL OWNS THE ORDINARY CLICK. `url` is the ADDRESS; `command` is what a plain click does —
+     usually a router push, plus whatever else the row has to tidy up (closing the popover it lives in). So a
+     plain click cancels the anchor's own navigation and lets the command run, and a MODIFIED click does the
+     exact opposite: the browser takes it, the command is held back so nothing navigates this tab underneath
+     the new one, and the menu closes. A row given `url` and no command is a plain link and behaves like one. -->
 <script setup lang="ts">
 import PrimeContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import type { IconName } from "../icons/iconSets.js";
+import { browserOwnsClick } from "../lib/link.js";
 import Icon from "./Icon.vue";
 
 const {
@@ -47,6 +60,23 @@ defineExpose({
     show: (event: Event): void => menu.value?.show(event),
     hide: (): void => menu.value?.hide(),
 });
+
+const onRowClick = (event: MouseEvent, item: MenuItem): void => {
+    if (item.url === undefined) {
+        return; // an ordinary command row — nothing here to intercept
+    }
+    if (browserOwnsClick(event)) {
+        // PrimeVue's handler sits on this row's wrapper, so the command runs unless the event stops here —
+        // and a command that navigates would move THIS tab while the browser opens another.
+        event.stopPropagation();
+        menu.value?.hide();
+        return;
+    }
+    // A plain click on a row that has both: the command navigates in-app, so the anchor must not reload.
+    if (item.command !== undefined) {
+        event.preventDefault();
+    }
+};
 </script>
 
 <template>
@@ -62,7 +92,7 @@ defineExpose({
         }"
     >
         <template #item="{ item, props }">
-            <a v-bind="props.action">
+            <a v-bind="props.action" :href="item.url" :target="item.target" @click="onRowClick($event, item as MenuItem)">
                 <span v-if="hasGutter" class="flex w-3.5 shrink-0 justify-center">
                     <!-- A checkable row draws its state even when false — the gutter holds the space either
                          way, so the label cannot shift as the toggle flips. -->

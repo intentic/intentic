@@ -15,6 +15,7 @@ import { CHAT_SURFACE } from "../chat/chatSurface";
 import { workspaceSurface } from "../chat/workspaceSurface";
 import ChatToolCard from "../chat/ChatToolCard.vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";
+import ActionLink from "../components/ActionLink.vue";
 import IdentityTile from "../components/IdentityTile.vue";
 import RailCard from "../components/RailCard.vue";
 import RailLane from "../components/RailLane.vue";
@@ -96,8 +97,10 @@ provide(
     }),
 );
 
-// Selecting keeps whatever narrowed the list — a click inside a filtered rail must not silently widen it.
-const select = (id: string): void => void router.push({ name: `subagents`, params: { id }, query: route.query });
+/* Selecting keeps whatever narrowed the list — a click inside a filtered rail must not silently widen it.
+ * A ROUTE, so the row is a link (RailCard's `to`): every one of these transcripts has an address, and
+ * Ctrl/⌘-click opens one beside the list instead of taking the list's place. */
+const rowTo = (id: string) => ({ name: `subagents`, params: { id }, query: route.query });
 
 // Running first, then what has finished — the two questions this list is opened with, in that order. The dots
 // are the board's own (ChatTabList's LANES): live is success, the terminal shelf is neutral.
@@ -122,13 +125,14 @@ const parentOf = (session: SubagentSession): string | undefined => agentById(ses
  * whole area for a diff nobody had asked to see. Now it points the dock at the parent and leaves the child's
  * transcript on screen, which is the pairing the press is for: the delegation beside the turn that made it.
  * Falls back to the route when the roster has never heard of the parent — that page knows how to go and ask. */
+const parentTo = (session: SubagentSession): string => `/agents/${encodeURIComponent(session.conversationId)}`;
 const openParent = (session: SubagentSession): void => {
     const parent = agentById(session.conversationId);
     if (parent !== undefined && !mobile.value) {
         openAgent(parent);
         return;
     }
-    void router.push(`/agents/${encodeURIComponent(session.conversationId)}`);
+    void router.push(parentTo(session));
 };
 
 /* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark — and for a delegation that is the row's
@@ -310,7 +314,7 @@ watch(messages, () => {
                                     :live="liveOf(session)"
                                     :now="now"
                                     :selected="session.id === selected"
-                                    @click="select(session.id)"
+                                    :to="rowTo(session.id)"
                                 >
                                     <template v-if="hasFacts(session)" #meta>
                                         <!-- Backgrounded: the parent went on working instead of waiting. The fact
@@ -402,14 +406,17 @@ watch(messages, () => {
                     >
                         <Icon name="terminal" class="text-2xs" />Terminal
                     </button>
-                    <button
-                        type="button"
+                    <!-- A control AND an address (ActionLink): the plain click points the docked chat at the
+                         parent, which is better than a page load; Ctrl/⌘-click opens that conversation's own
+                         page in a tab, which a <button> could never offer. -->
+                    <ActionLink
+                        :to="parentTo(current)"
                         :class="HEADER_ACTION"
                         v-tooltip.bottom="`Open the conversation that started this agent`"
-                        @click="openParent(current)"
+                        @activate="openParent(current)"
                     >
                         <Icon name="comments" class="text-2xs" />Parent
-                    </button>
+                    </ActionLink>
                 </div>
                 <!-- HOW IT ENDED, when that was badly. Plain text, because an error string is a string and
                      not a document — and separate from the report below, which for a delegation is the same

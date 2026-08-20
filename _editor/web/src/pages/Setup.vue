@@ -19,7 +19,7 @@ import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { track } from "../composables/analytics";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
@@ -481,9 +481,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                    * membership" for a release, which names the same fact as a subscription already scheduled.
                    * Members and ceiling-less platforms send no hours at all and read the old way. */
                   meta:
-                      hostedHours.value === null
-                          ? `Free · ready in seconds`
-                          : `Free · ${hostedHours.value.allowance}h a month, more with membership`,
+                      hostedHours.value === null ? `Free · ready in seconds` : `Free · ${hostedHours.value.allowance}h a month, more with membership`,
                   note: `Runs on our servers`,
               },
           ]
@@ -1667,11 +1665,12 @@ watch(commandReady, (ready) => {
                      step, offering a finished workspace to someone who has not run anything yet. -->
                 <Button
                     v-if="otherWorkspace"
+                    :as="RouterLink"
+                    to="/"
                     label="Back to workspace"
                     severity="secondary"
                     :text="true"
                     class="order-first -ml-3 w-full justify-start md:order-last md:ml-auto md:w-auto md:shrink-0"
-                    @click="void router.push(`/`)"
                 >
                     <template #icon><Icon name="arrow-left" /></template>
                 </Button>
@@ -2021,7 +2020,6 @@ watch(commandReady, (ready) => {
                                         </div>
                                     </div>
                                 </div>
-
                             </div>
 
                             <Notice v-if="error" :of="error" />

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE } from "@intentic/sandbox-contract";
 import { trialExhausted } from "../composables/chat/access";
 import { useAgents } from "../composables/agents/useAgents";
@@ -26,7 +26,6 @@ import ChatAccountPanel from "./ChatAccountPanel.vue";
 const { conversation, provider, account, accounts, streaming } = usePaneView();
 const { reachable } = useSandbox();
 const { agentById, archived, loadArchived, restore, busyIds, setResumeAfterOutage } = useAgents();
-const router = useRouter();
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
  * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
@@ -187,27 +186,27 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         >
             Retry
         </button>
-        <button
-            type="button"
+        <!-- A place, so a link: the sign-in has an address, and Ctrl/⌘-click starts it in another tab rather
+             than taking away the conversation this strip is sitting above. -->
+        <RouterLink
+            :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
             class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-            @click="router.push({ path: '/sandbox/agent', query: { connect: 'gemini' } })"
         >
             Connect Google
-        </button>
+        </RouterLink>
     </div>
     <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be refreshed,
          so surface it here — before a send fails opaquely — with a jump to reconnect. -->
-    <button
+    <RouterLink
         v-if="activeAccountReauth"
-        type="button"
+        :to="{ path: '/sandbox/agent', query: { connect: provider } }"
         class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-        @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
     >
         <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
         <span
             >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }} <span class="font-semibold underline">Reconnect</span></span
         >
-    </button>
+    </RouterLink>
     <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this says when and how
          many tries are left. Naming the bound is the point — an automation spending the user's allowance while
          they watch has to account for itself, or the reasonable response is to switch it back off. -->

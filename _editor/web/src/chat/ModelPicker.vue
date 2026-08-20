@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { SearchBar, useDevice, useListNavigation } from "@intentic/ui";
+import { browserOwnsClick, SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS, TRIAL_NOTICE } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
@@ -43,7 +43,6 @@ const { provider, model, unpickable } = defineProps<{
 }>();
 
 const { mobile } = useDevice();
-const router = useRouter();
 
 const query = ref(``);
 const rail = ref<AgentProvider | undefined>();
@@ -141,12 +140,19 @@ const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true
 // A row whose provider has no credential yet. Dimmed and lock-marked, never disabled — see the header comment.
 const isLocked = (entry: PickerEntry): boolean => !providerReady(entry.provider);
 
-// Straight to the handshake, for the user who opened the picker already knowing they need to connect something.
-// The provider rides along as `?connect=<provider>` so the Agent tab opens on that card — the same deep link the
-// composer's connect gate uses.
-const connect = (target: AgentProvider): void => {
-    emit(`close`);
-    void router.push({ path: `/sandbox/agent`, query: { connect: target } });
+/* Straight to the handshake, for the user who opened the picker already knowing they need to connect something.
+ * The provider rides along as `?connect=<provider>` so the Agent tab opens on that card — the same deep link the
+ * composer's connect gate uses, and now a real address on a real link rather than a router push behind a
+ * <button>: hovering it shows where it goes, and Ctrl/⌘-click sets the handshake up in another tab while the
+ * picker stays where it is. */
+const connectTo = (target: AgentProvider) => ({ path: `/sandbox/agent`, query: { connect: target } });
+
+// Closing the picker is what the PLAIN click does. A modified one opens a tab elsewhere and must leave this
+// list exactly as the user left it.
+const closeOnPlainClick = (event: MouseEvent): void => {
+    if (!browserOwnsClick(event)) {
+        emit(`close`);
+    }
 };
 
 const pick = (entry: PickerEntry): void => {
@@ -364,9 +370,13 @@ onMounted(() => {
                                 "
                                 >{{ section.badge }}</span
                             >
-                            <button type="button" class="ml-auto text-2xs normal-case tracking-normal text-link" @click="connect(section.provider)">
+                            <RouterLink
+                                :to="connectTo(section.provider)"
+                                class="ml-auto text-2xs normal-case tracking-normal text-link"
+                                @click="closeOnPlainClick"
+                            >
                                 Connect
-                            </button>
+                            </RouterLink>
                         </template>
                         <!-- The trial's count. No Connect beside it on purpose: this provider already works, and
                              offering a handshake for it would be offering to fix something that isn't broken. -->

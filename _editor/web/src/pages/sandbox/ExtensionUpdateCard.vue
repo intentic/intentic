@@ -6,6 +6,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { ui, SegmentedControl, StatusBadge } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
+import ActionLink from "../../components/ActionLink.vue";
 import { startAgent } from "../../composables/agents/agentActions";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useExtensions } from "../../composables/extensions/useExtensions";
@@ -86,13 +87,14 @@ const revert = (): Promise<void> =>
 
 // The agent's diff-read: link the finished one when the agent-prepared policy already ran it, offer to start
 // it otherwise. An unregistered conversation still has a route — the chat screen resolves it by id.
+const reviewAt = (conversationId: string): string => `/agents/${encodeURIComponent(conversationId)}`;
 const openReview = (conversationId: string): void => {
     const { agentById, open } = useAgents();
     const agent = agentById(conversationId);
     if (agent !== undefined) {
         open(agent);
     } else {
-        void router.push(`/agents/${encodeURIComponent(conversationId)}`);
+        void router.push(reviewAt(conversationId));
     }
 };
 const readDiff = (): void => {
@@ -203,9 +205,14 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
                     :label="confirmLabel"
                     @click="apply"
                 />
-                <button v-if="update.review" type="button" :class="ui.linkButton(`text-2xs`)" @click="openReview(update.review.conversationId)">
+                <ActionLink
+                    v-if="update.review"
+                    :to="reviewAt(update.review.conversationId)"
+                    :class="ui.linkButton(`text-2xs`)"
+                    @activate="openReview(update.review.conversationId)"
+                >
                     Your agent already read this diff — open its review
-                </button>
+                </ActionLink>
                 <button v-else type="button" :class="ui.linkButton(`text-2xs`)" @click="readDiff">Have an agent read the diff first</button>
             </div>
         </div>

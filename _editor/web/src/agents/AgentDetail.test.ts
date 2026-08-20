@@ -16,9 +16,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
-vi.mock("vue-router", () => ({
-    useRoute: () => ({ params: { id: `agent-1` } }),
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+// The header's way back to the board is a link now, so this mock has to carry a <RouterLink> — the real one
+// resolves its href out of a router this bare mount never installs.
+vi.mock(import("vue-router"), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRoute: () => ({ params: { id: `agent-1` } }) as never,
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
+    RouterLink: (await import("../testing/routerLinkStub")).RouterLinkStub as never,
 }));
 
 vi.mock("@intentic/ui", async () => {

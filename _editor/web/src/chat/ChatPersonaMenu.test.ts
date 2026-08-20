@@ -22,9 +22,13 @@ vi.mock(`../composables/sandbox/usePersonas`, () => ({
     }),
 }));
 
-// The "manage personas" row navigates; the picker is mounted without a router here, so the push is a spy.
-const push = vi.fn();
-vi.mock(`vue-router`, () => ({ useRouter: () => ({ push }) }));
+// The "manage personas" rows are links to the personas page. The stub keeps their href, which is what the test
+// below checks — a spy on a push would no longer see them at all.
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRouter: () => ({ push: vi.fn() }) as never,
+    RouterLink: (await import(`../testing/routerLinkStub`)).RouterLinkStub as never,
+}));
 
 const { default: ChatPersonaMenu } = await import("./ChatPersonaMenu.vue");
 
@@ -43,12 +47,14 @@ const events: (string | undefined)[] = [];
 const text = (element: HTMLElement): string => element.textContent ?? ``;
 const rowLabelled = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...element.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
+// The rows that GO somewhere are anchors, not buttons — that is the whole point of them.
+const linkLabelled = (element: HTMLElement, label: string): HTMLAnchorElement | undefined =>
+    [...element.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(label));
 
 beforeEach(() => {
     personas.value = [];
     connected.value = [];
     events.length = 0;
-    push.mockClear();
 });
 
 afterEach(() => {
@@ -115,6 +121,6 @@ it(`explains the empty workspace and offers the way in`, () => {
     const element = mount();
 
     expect(text(element)).toContain(`No personas yet`);
-    rowLabelled(element, `Set up a persona`)!.click();
-    expect(push).toHaveBeenCalledWith(`/sandbox/personas`);
+    // A real address, so the row can be hovered, copied and Ctrl/⌘-clicked like anything else that is a place.
+    expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
 });

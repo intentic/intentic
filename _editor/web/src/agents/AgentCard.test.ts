@@ -148,8 +148,11 @@ it(`drops the button once the work is in the workspace`, () => {
  * only exist once a turn has ended — so an agent whose FIRST turn delegated ran eight children with the board
  * saying nothing, which is the exact case the count was added for. The row is the only surface that outlives
  * the turn (the live line below it goes with the spinner), so this is not a duplicate of that line. */
+// A LINK rather than a button, because the count names a list with an address: the Subagents area narrowed to
+// this agent's children. That is what lets it be hovered, copied and Ctrl/⌘-clicked into its own tab.
 it(`counts the agents it started while its first turn is still running`, () => {
-    expect([...mount(delegating()).querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `8 / 8`)).toBe(true);
+    const chip = [...mount(delegating()).querySelectorAll(`a`)].find((link) => link.textContent?.trim() === `8 / 8`);
+    expect(chip).toBeDefined();
 });
 
 /* THE CARD THE BOARD COULD DO NOTHING WITH. A refused send leaves a conversation the daemon never registered,

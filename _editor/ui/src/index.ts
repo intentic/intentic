@@ -1,4 +1,8 @@
 export { clipboardOf } from "./lib/clipboard.js";
+// "The browser is opening this one itself, stand down" — the one test every navigational row, tile and menu
+// item in the app runs before it also does app work on a click, and the pair of anchor attributes that applies
+// it for the surfaces with no router to reach. See lib/link.ts.
+export { appLink, browserOwnsClick } from "./lib/link.js";
 // Waiting on a freshly-minted preview hostname, and the tab-opening dance around a forwarded port. Three
 // surfaces had written the same loop, one of them an extension that could reach neither of the others.
 export {

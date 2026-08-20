@@ -470,6 +470,8 @@ export const createExtensionApi = (
         navigate: (path) => {
             void router.push(path);
         },
+        // The address behind the same path, for the views whose rows are links rather than buttons.
+        href: (path) => router.resolve(path).href,
         /* `router.currentRoute` rather than `useRoute()`: an extension reads this from a composable that may run
          * outside any component's setup (module state, a lazily-created query), and useRoute() needs injection
          * context. currentRoute is a ref, so reading it inside a computed is reactive either way. */

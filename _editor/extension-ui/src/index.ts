@@ -43,6 +43,13 @@ export {
      * the module-global navigator belongs to the opener, whose document isn't focused, so the write rejects
      * and every call site swallows it. */
     clipboardOf,
+    /* `browserOwnsClick` ships because every extension view that navigates has the same one-line decision to
+       make and no way to reach the app's answer: a row that is BOTH a link and a control must let a Ctrl/⌘,
+       Shift or Alt click belong to the browser, and do its own work only on the plain one. Three views had
+       hand-rolled a navigate() on a <button>, which is the version of that decision where the modifier keys
+       simply do not work. */
+    browserOwnsClick,
+    appLink,
     /* `openForwardedPort` ships because the Ports view is the third surface to wait on a freshly-minted preview
      * hostname and the second to open one in a tab, and the two that had solved it (the preview panel's iframe
      * gate, the terminal's Ctrl+click) both sat in the web app where no extension could import them. The

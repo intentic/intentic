@@ -123,14 +123,18 @@ it(`lists every child when nothing narrowed it`, async () => {
     expect(text).toContain(`Audit the deps`);
 });
 
-// "Parent" asks for the CONVERSATION this child came out of. It used to be a link to /agents/:id, which on a
-// desktop is the review page — so the press traded the transcript you were reading for a diff you hadn't asked
-// for. The dock is where a conversation lives there, so that is what it points, and this page stays open.
+/* "Parent" asks for the CONVERSATION this child came out of. A plain press used to leave for /agents/:id, which
+ * on a desktop is the review page — so it traded the transcript you were reading for a diff you hadn't asked
+ * for. The dock is where a conversation lives there, so that is what it points, and this page stays open.
+ *
+ * It is still an ANCHOR carrying that address, which is the half a <button> could never offer: hover it and the
+ * browser says where it goes, Ctrl/⌘-click it and the conversation opens in a tab of its own. Only the PLAIN
+ * click is the app's. */
 it(`opens the parent conversation in the chat instead of leaving for its diff`, async () => {
     sessions.value = [child({})];
     const el = await mount({});
-    const parent = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Parent`));
-    expect(parent).toBeDefined();
+    const parent = [...el.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Parent`));
+    expect(parent?.getAttribute(`href`)).toBe(`/agents/c1`);
     parent?.click();
     await nextTick();
     expect(opened).toEqual([`c1`]);

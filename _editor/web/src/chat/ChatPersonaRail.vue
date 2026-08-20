@@ -32,7 +32,7 @@
 import { personaBounds } from "@intentic/sandbox-contract";
 import { ui, Icon, type IconName, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { agentStatusMeta, blocked, type FleetLane } from "../composables/agents/agentStatus";
 import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
@@ -47,7 +47,6 @@ import RailCard from "../components/RailCard.vue";
 // the store itself.
 const emit = defineEmits<{ select: [id: string] }>();
 
-const router = useRouter();
 const { personas } = usePersonas();
 const { activeId, conversations } = useChat();
 const { agentById } = useAgents();
@@ -211,17 +210,17 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
     const icon = statusIcon(entry.conversation.status.value);
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}` };
 };
-
-const managePersonas = (): void => void router.push(`/sandbox/personas`);
 </script>
 
 <template>
     <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
         <template v-if="empty">
-            <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
+            <!-- A place, so it is a link: the sandbox hub has an address, and this tile is often the first
+                 time somebody goes looking for it. -->
+            <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                 <Icon name="plus" class="text-2xs" />
                 Set up a persona
-            </button>
+            </RouterLink>
         </template>
 
         <template v-else>
@@ -321,10 +320,10 @@ const managePersonas = (): void => void router.push(`/sandbox/personas`);
 
             <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is —
                  the picker in the composer puts it in the same place. -->
-            <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="managePersonas">
+            <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">
                 <Icon name="cog" class="text-2xs" />
                 Manage personas
-            </button>
+            </RouterLink>
         </template>
     </div>
 </template>

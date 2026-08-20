@@ -2,7 +2,7 @@
 import type { BrowserPage } from "@intentic/sandbox-contract";
 import { Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
 import { closeBrowser, useBrowsersQuery } from "../composables/browser/browsersQuery";
 import { useBrowserView, VIEW_HEIGHT, VIEW_WIDTH } from "../composables/browser/useBrowserView";
@@ -28,7 +28,6 @@ import { postTurnControl } from "../composables/chat/turnStream";
  * that record rather than a socket dialling something that isn't there. */
 
 const route = useRoute();
-const router = useRouter();
 const { sessions } = useBrowsersQuery();
 
 // The session in the URL, so a reload (or a shared link) reopens the same browser. Falls back to a browser
@@ -63,7 +62,10 @@ const pickPage = (page: BrowserPage): void => {
     view.bindPage(page.id);
 };
 
-const selectSession = (name: string): void => void router.push(`/browsers/${name}`);
+// Each browser is a URL of its own — that is how a reload, a chat card and the rail all reach one — so the
+// pills and the queue rows are links rather than buttons that pushed the router. Ctrl/⌘-click then opens a
+// second browser beside the one on screen, which is exactly what a strip of them invites.
+const sessionAt = (name: string): string => `/browsers/${name}`;
 
 // A tab's text: the page's own title, else its host, else the raw url — the same ladder the daemon uses for the
 // session label, so a tab and its pill never disagree about what a page is called.
@@ -132,13 +134,12 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
             <!-- Which browser. One pill per conversation that has browsed; hidden entirely when there is only
                  one, since a single pill is furniture rather than a choice. -->
             <div v-if="sessions.length > 1" class="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2 py-1">
-                <button
+                <RouterLink
                     v-for="session in sessions"
                     :key="session.name"
-                    type="button"
+                    :to="sessionAt(session.name)"
                     class="flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
                     :class="session.name === selected ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
-                    @click="selectSession(session.name)"
                 >
                     <!-- A dot rather than a word: liveness is the only thing that separates two otherwise
                          identical pills, and it has to read at a glance. A browser asking for help outranks
@@ -148,7 +149,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                         :class="session.help !== undefined ? 'bg-warning' : session.running ? 'bg-success' : 'bg-muted'"
                     />
                     <span class="max-w-40 truncate">{{ session.label }}</span>
-                </button>
+                </RouterLink>
             </div>
 
             <!-- Which page. The agent's own tab strip, in the shape a person already reads. -->
@@ -199,18 +200,17 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
             <!-- Other browsers waiting for hands — the queue. Each row is one parked ask, one click from the
                  stage it is parked over; the selected browser's own ask is the banner below, not a row here. -->
             <div v-if="queuedHelp.length > 0" class="flex shrink-0 flex-col border-b border-line">
-                <button
+                <RouterLink
                     v-for="session in queuedHelp"
                     :key="session.name"
-                    type="button"
+                    :to="sessionAt(session.name)"
                     class="flex items-center gap-2 border-b border-line/50 bg-warning/5 px-3 py-1.5 text-left text-xs transition-colors last:border-b-0 hover:bg-warning/10"
-                    @click="selectSession(session.name)"
                 >
                     <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
                     <span class="shrink-0 font-medium text-content">{{ session.label }}</span>
                     <span class="min-w-0 flex-1 truncate text-muted">{{ session.help?.message }}</span>
                     <span class="shrink-0 text-link">Help →</span>
-                </button>
+                </RouterLink>
             </div>
 
             <!-- The agent asked for hands. The banner sits between the controls and the picture — over the very

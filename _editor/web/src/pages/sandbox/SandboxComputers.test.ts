@@ -46,7 +46,13 @@ vi.mock(`../../composables/extensions/useCapabilities`, () => ({ useCapabilities
 // The two cards below the list have their own daemon calls; this mounts the list and nothing else.
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./BridgeTokensCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`vue-router`, () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: () => {} }) }));
+// A blocked machine's "open its permissions" is a link now, so the mock carries a stand-in for it.
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRoute: () => ({ query: {} }) as never,
+    useRouter: () => ({ push: () => {} }) as never,
+    RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
+}));
 
 const { default: SandboxComputers } = await import("./SandboxComputers.vue");
 
@@ -216,7 +222,10 @@ const managed = (running: boolean): Computer => ({
     },
 });
 
-const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim() ?? ``);
+/* Every control a row offers, by its label — anchors as well as buttons, because a control that GOES somewhere
+ * is a link: the fix for a blocked machine is the capability card's own address, so it is hoverable, copyable
+ * and Ctrl/⌘-clickable rather than a button that moves this tab. */
+const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a`)].map((control) => control.textContent?.trim() ?? ``);
 
 // Every switch granted — the state a row reaches once its computer is connected AND permitted, which is what the
 // verb tests below are about. Without it the row correctly says which grant is missing instead.

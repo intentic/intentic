@@ -38,7 +38,12 @@ vi.mock(`../../composables/extensions/useExtensions`, () => ({ useExtensions: ()
 vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 
 // The two "Manage …" buttons navigate; no route is mounted here, and RouterLink is stubbed below.
-vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// The two "Manage …" controls are links now, so the mock carries a stand-in for them.
+vi.mock(import(`vue-router`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    useRouter: () => ({ push: vi.fn() }) as never,
+    RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
+}));
 
 const { default: SandboxSecrets } = await import("./SandboxSecrets.vue");
 

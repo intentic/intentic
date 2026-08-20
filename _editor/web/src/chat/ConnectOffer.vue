@@ -3,7 +3,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract";
 import { ui } from "@intentic/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { connectPitch, freeOffer, providerReadyOn } from "../composables/chat/access";
 import { providerTabs } from "../composables/chat/providerCatalog";
 import { useChat, type ConversationView } from "../composables/chat/useChat";
@@ -45,7 +45,6 @@ const { view, prominent = false } = defineProps<{
 const provider = computed(() => view.provider.value);
 const harness = computed(() => view.harness.value);
 
-const router = useRouter();
 const {
     setManagedProvider,
     startConnect,
@@ -198,11 +197,11 @@ const pick = (target: AgentProvider, ready: boolean) => (ready ? view.selectProv
                 </button>
             </div>
             <!-- The door to everything this card deliberately doesn't carry — a second account, an account to
-                 drop, the mechanics behind each row. It is a link rather than a button because it is a place,
-                 and quiet because nobody arriving here for the first time needs it. -->
-            <button type="button" :class="ui.linkButton(`mt-1 text-2xs text-subtle hover:text-content`)" @click="router.push(`/sandbox/agent`)">
-                All AI accounts
-            </button>
+                 drop, the mechanics behind each row. It is a place, so it is a real link: it said so in this
+                 comment while being a <button> that pushed the router, which is exactly the gap that left it
+                 with no address to hover, no browser menu on it and no Ctrl/⌘-click. Quiet, because nobody
+                 arriving here for the first time needs it. -->
+            <RouterLink to="/sandbox/agent" :class="ui.linkButton(`mt-1 text-2xs text-subtle hover:text-content`)"> All AI accounts </RouterLink>
         </div>
     </div>
 </template>

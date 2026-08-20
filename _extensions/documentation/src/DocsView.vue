@@ -7,6 +7,7 @@
 <script setup lang="ts">
 import {
     type AgentRunChoice,
+    appLink,
     Button,
     ui,
     Icon,
@@ -177,7 +178,8 @@ const onStart = (dirs: readonly string[], pick: AgentRunChoice | undefined): voi
     });
 };
 
-const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
+// Each running writer is an ordinary agent with a page of its own, so its chip is a link to it.
+const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.navigate(`/agents/${id}`));
 </script>
 
 <template>
@@ -221,7 +223,8 @@ const openAgent = (id: string): void => api.navigate(`/agents/${id}`);
                         severity="secondary"
                         text
                         :label="agent.id.split(`-`).slice(2).join(`-`) || `map`"
-                        @click="openAgent(agent.id)"
+                        as="a"
+                        v-bind="agentLink(agent.id)"
                     />
                     <Button size="small" severity="secondary" label="Stop" @click="stop(activeRun.manifest.runId)" />
                 </div>

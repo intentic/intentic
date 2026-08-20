@@ -839,6 +839,7 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
 // The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
 // card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it
 // for a registered agent, so there is always a detail to land on.
+const agentHref = (agent: FleetAgent): string => router.resolve(`/agents/${encodeURIComponent(agent.id)}`).href;
 const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
@@ -893,7 +894,11 @@ const cardMenuItems = computed<MenuItem[]>(() => {
     const groups: MenuItem[][] = [
         [
             { label: `Open`, icon: `arrow-right`, command: () => focusAgent(agent) },
-            ...(review === undefined ? [] : [{ label: review, icon: `copy`, command: () => reviewAgent(agent) }]),
+            /* The agent's own page has an address, so this row is a link as well as a command: it can be
+               hovered to read where it goes, and Ctrl/⌘-clicked to put the review in its own tab. The
+               plain click still goes through `reviewAgent`, which also points the chat dock at the agent —
+               a second thing this window does that no URL can carry. */
+            ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: agentHref(agent), command: () => reviewAgent(agent) }]),
         ],
         /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints — the
            other forms of the name are labelled and visible before the press, on the agent's own page. */

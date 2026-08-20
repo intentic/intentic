@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, ui, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
+import { appLink, Button, Card, ui, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
 import { isShotPath, storyDir, storyStanding } from "./runs";
@@ -92,11 +92,18 @@ const verdictBadge = (slug: string): { readonly label: string; readonly variant:
     return { label: agent.status, variant: `neutral` };
 };
 
-const openSession = (slug: string): void => {
+/* Both of these rows are PLACES — the agent's own session log, and the browser it drove — so both render as
+ * real links (appLink): an address under the pointer, the browser's own menu on them, and Ctrl/⌘-click opening
+ * one beside the report instead of on top of it. Each is only ever rendered where the id exists (`v-if`), so
+ * the empty fallback is unreachable and merely spares the template a narrowing it cannot do. */
+const sessionLink = (slug: string) => {
     const id = conversationOf(slug);
-    if (id !== undefined) {
-        api.navigate(`/agents/${encodeURIComponent(id)}`);
-    }
+    const path = id === undefined ? `/agents` : `/agents/${encodeURIComponent(id)}`;
+    return appLink(api.href(path), () => api.navigate(path));
+};
+const browserLink = (slug: string) => {
+    const path = `/browsers/${browserOf(slug)?.session ?? ``}`;
+    return appLink(api.href(path), () => api.navigate(path));
 };
 
 // Live only: a settled session has nothing to stop, and the button would then be an offer to do nothing.
@@ -273,13 +280,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <!-- The supervision button. Only while the daemon lists this session's Chromium: it opens
                          the Browsers area on the live screencast, where the view's own control offers the
                          keyboard and mouse if the user wants to intervene. -->
-                    <Button
-                        v-if="browserOf(story.slug)"
-                        label="Watch"
-                        size="small"
-                        severity="secondary"
-                        @click="api.navigate(`/browsers/${browserOf(story.slug)?.session ?? ``}`)"
-                    >
+                    <Button v-if="browserOf(story.slug)" label="Watch" size="small" severity="secondary" as="a" v-bind="browserLink(story.slug)">
                         <template #icon><Icon name="eye" /></template>
                     </Button>
                     <Button
@@ -292,7 +293,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     >
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
-                    <Button v-if="agentOf(story.slug)" label="Session" size="small" severity="secondary" @click="openSession(story.slug)">
+                    <Button v-if="agentOf(story.slug)" label="Session" size="small" severity="secondary" as="a" v-bind="sessionLink(story.slug)">
                         <template #icon><Icon name="comments" /></template>
                     </Button>
                     <Button v-if="isLive(story.slug)" label="Stop" size="small" severity="secondary" @click="halt(story.slug)">

@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import { ui, Modal, ResponsiveOverlay, SegmentedControl, useDevice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../composables/agents/agentStatus";
 import { createInlineRename } from "../composables/inlineRename";
@@ -220,14 +220,15 @@ const confirmDiscard = (): void => {
         <!-- A @container: the header thins out against ITS OWN width, which is the workspace pane's and not
              the window's — with the chat panel open the two are nowhere near each other. -->
         <div class="view-header @container flex items-center gap-2 border-b border-line px-3">
-            <button
-                type="button"
+            <!-- The board is a place, so the way back to it is a link — hoverable, copyable, and openable in
+                 a tab of its own beside the agent being read. -->
+            <RouterLink
+                to="/agents"
                 class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="router.push('/agents')"
                 aria-label="Back to agents"
             >
                 <Icon name="arrow-left" class="text-sm" />
-            </button>
+            </RouterLink>
             <input
                 v-if="edit.editing"
                 v-model="edit.draft"
@@ -261,13 +262,7 @@ const confirmDiscard = (): void => {
             >
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
-            <SessionChip
-                v-if="fleetAgent?.branch !== undefined && mobile"
-                :branch="fleetAgent.branch"
-                reveal
-                compact
-                @reveal="identityOpen = true"
-            />
+            <SessionChip v-if="fleetAgent?.branch !== undefined && mobile" :branch="fleetAgent.branch" reveal compact @reveal="identityOpen = true" />
             <!-- THE STATUS COMPRESSES TO ITS GLYPH IN A NARROW HEADER, and on mobile that is now the only
                  fixed-width thing left competing with the title — the Chat | Changes switch moved to a row of
                  its own below (see there for why). The words return the moment the HEADER, not the window, has
@@ -390,12 +385,7 @@ const confirmDiscard = (): void => {
 
         <!-- THE MID-WRITE LAND'S WARNING. It states the one real risk and both reasons it is survivable,
              because a warning that only says "are you sure" teaches people to click through it. -->
-        <Modal
-            :open="pendingForceLand"
-            size="sm"
-            header="Land while the agent is working?"
-            @update:open="pendingForceLand = false"
-        >
+        <Modal :open="pendingForceLand" size="sm" header="Land while the agent is working?" @update:open="pendingForceLand = false">
             <p class="text-xs text-content">
                 The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes — one side of a
                 rename, or three files of a larger edit.

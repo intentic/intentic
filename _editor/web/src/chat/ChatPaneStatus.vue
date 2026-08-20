@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatTokens, Icon, ProgressRing, useDevice } from "@intentic/ui";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
 import { useMembership } from "../composables/membership/useMembership";
 import { effectiveAccount } from "../composables/chat/providerAccounts";
@@ -29,7 +29,6 @@ const { contextUsage, provider, account } = usePaneView();
 const { showToolCalls } = useToolCalls();
 const { meter: creditMeter } = useMembership();
 const { mobile, keyboardInset } = useDevice();
-const router = useRouter();
 
 // Per-conversation context-window fill — a ring that warns as the chat approaches auto-compaction.
 const contextRing = computed(() => {
@@ -149,40 +148,36 @@ const creditChip = computed(() => {
             </span>
             <!-- The chip answers "am I about to get rate-limited" — hovering it opens the pool-by-pool card
                  beside the composer, and a click goes to the screen that answers "and what has it cost me". -->
-            <button
+            <RouterLink
                 v-if="usageChip"
-                type="button"
+                to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
-                @click="router.push('/sandbox/usage')"
             >
                 <UsageRing :headroom="usageChip.headroom"
                     ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
                 >
-            </button>
+            </RouterLink>
             <!-- What is left of today's membership allowance, once any of it has gone. The star is the
                  membership's glyph everywhere else in the app, which is what keeps this from reading as a third
                  rate limit; a click goes to the page that explains what a credit buys. Warning-tinted only when
                  the allowance is gone — and that is a statement, not an alarm: the money went to the people who
                  wrote what was used, which is what the membership is for. -->
-            <button
+            <RouterLink
                 v-if="creditChip"
-                type="button"
+                to="/settings/membership"
                 class="touch-target inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
                 :class="creditChip.spent ? `text-warning` : ``"
                 :aria-label="creditChip.hint"
                 v-tooltip.top="creditChip.hint"
-                @click="router.push('/settings/membership')"
             >
                 <Icon name="star" class="shrink-0 text-2xs" />
                 <span class="tabular-nums @max-xs:hidden">{{ creditChip.label }}</span>
-            </button>
-            <button
-                type="button"
-                class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
-                @click="router.push('/sandbox/agent')"
-            >
+            </RouterLink>
+            <!-- Every chip on this line names a page, so every one of them is a link: the address shows on
+                 hover, and Ctrl/⌘-click opens it without taking the conversation off screen. -->
+            <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
                 <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
-            </button>
+            </RouterLink>
         </div>
     </div>
 </template>

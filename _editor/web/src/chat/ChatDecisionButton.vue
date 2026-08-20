@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import type { IconName } from "@intentic/ui";
+import { type RouteLocationRaw, RouterLink } from "vue-router";
 
 /* The answer to a decision card — the plan's Approve, the question's Submit, the permission's Allow once, and
  * every No beside them. One component because the three cards ask the same shape of thing and must not drift:
@@ -24,15 +25,29 @@ import type { IconName } from "@intentic/ui";
  * WHAT STAYS HAND-WRITTEN IS ONLY THE TOUCH TARGET, and it is a deliberate exception rather than a leftover:
  * these buttons commit an agent to an action, so on a phone they get a full 44px regardless of which tone or
  * size the card called for. Everything else — the tint, the neutral fill, the radius, the two sizes — now comes
- * from the same place as the rest of the app. */
+ * from the same place as the rest of the app.
+ *
+ * `to` IS FOR THE ANSWER THAT IS A PLACE. Some of these cards answer with a journey rather than a decision —
+ * "Open the browser", "Open setup" — and those were <button>s that pushed the router, so the one control on
+ * the card that genuinely had an address was the one you could not hover to read it, could not Ctrl/⌘-click,
+ * and could not open beside the conversation it belongs to. Given `to` the same button renders as a real link
+ * and keeps every pixel of its appearance; the decisions around it stay buttons, because they are decisions. */
 
-const { tone, icon, compact } = defineProps<{ tone: "primary" | "secondary"; icon?: IconName; compact?: boolean }>();
+const { tone, icon, compact, to } = defineProps<{
+    tone: "primary" | "secondary";
+    icon?: IconName;
+    compact?: boolean;
+    /** Renders this answer as a link to somewhere in the app, instead of as a button. */
+    to?: RouteLocationRaw;
+}>();
 </script>
 
 <template>
     <!-- The icon rides INSIDE the default slot rather than in PrimeVue's `#icon` one: a default slot replaces
          the button's whole body, icon slot included, so an icon placed there would silently never render. -->
     <Button
+        :as="to === undefined ? undefined : RouterLink"
+        :to="to"
         :size="compact ? `small` : undefined"
         :severity="tone === `primary` ? undefined : `secondary`"
         class="font-semibold max-md:h-11 max-md:px-5"

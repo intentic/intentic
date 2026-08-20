@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import { ProgressRing, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../composables/agents/agentActions";
 import { useRole } from "../composables/sandbox/useRole";
 import OriginMark from "../components/OriginMark.vue";
@@ -91,7 +91,6 @@ const meta = computed(() => agentStatusMeta(props.agent.status));
 // The identity tile's category (sessionCategory over the title), undefined for a title that reads as nothing
 // — read here as well as inside IdentityTile because the tooltip (the colour's legend) is this card's to say.
 const category = computed(() => sessionCategory(props.agent.title));
-const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
 // What the live line says — the shared derivation (agentStatus.activityLine), because the rail's cards carry
@@ -670,20 +669,24 @@ const grab = (event: PointerEvent): void => {
                      everything the sandbox has ever spawned answers a question nobody asked here. The chip counts
                      live-of-total while any are working and settles to the lifetime total once none are — "3 / 5"
                      says something a bare "5" cannot, and only while it is true. -->
-                <button
+                <!-- A LINK, which is what it always looked like: it underlines on hover and tints when live, and
+                     it names a list with an address of its own. `.stop` keeps the card underneath from also
+                     opening; it needs no `.prevent`, because the anchor going where it says it goes is now the
+                     whole point — a Ctrl/⌘-click puts that list in its own tab. -->
+                <RouterLink
                     v-if="agent.subagents !== undefined"
-                    type="button"
+                    :to="{ name: `subagents`, query: { agent: agent.id } }"
                     class="touch-target cursor-pointer transition-colors hover:text-content hover:underline"
                     :class="{ 'text-link': agent.subagents.running > 0 }"
                     v-tooltip.top="
                         agent.subagents.running > 0 ? `${agent.subagents.running} of ${agent.subagents.total} still working` : 'Agents it started'
                     "
-                    @click.stop="router.push({ name: `subagents`, query: { agent: agent.id } })"
+                    @click.stop
                 >
                     <Icon name="users" class="mr-0.5 text-2xs" />{{
                         agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
                     }}
-                </button>
+                </RouterLink>
                 <span v-if="context !== undefined" class="inline-flex items-center gap-1">
                     <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
                     <span>{{ context }}%</span>

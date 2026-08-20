@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { type Persona, personaBounds } from "@intentic/sandbox-contract";
-import { PersonaFace, StatusBadge } from "@intentic/ui";
+import { browserOwnsClick, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 
 /* THE COMPOSER'S PERSONA PICKER — "who is this chat when it reaches the outside world".
@@ -25,7 +25,6 @@ import { usePersonas } from "../composables/sandbox/usePersonas";
 const { picked } = defineProps<{ picked?: string }>();
 const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
-const router = useRouter();
 const { personas, isConnected } = usePersonas();
 
 // Whether a card can act at all right now. One signed-in account is enough — a persona naming three and
@@ -38,9 +37,14 @@ const accountsOf = (persona: Persona): string => persona.capabilities.join(` · 
 
 const empty = computed(() => personas.value.length === 0);
 
-const openPersonas = (): void => {
-    void router.push(`/sandbox/personas`);
-    emit(`picked`, picked);
+/* The two rows that lead to the personas page are LINKS — the page has an address, so hovering one shows it,
+ * the browser's own menu can copy it, and Ctrl/⌘-click opens it beside the chat instead of navigating away
+ * from the message half-written in the composer. Re-emitting `picked` is only how this menu closes itself, so
+ * it happens on the plain click alone: a click that opens another tab must leave this one exactly as it was. */
+const closeMenu = (event: MouseEvent): void => {
+    if (!browserOwnsClick(event)) {
+        emit(`picked`, picked);
+    }
 };
 </script>
 
@@ -55,10 +59,14 @@ const openPersonas = (): void => {
                 No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person — with only
                 that person's accounts in reach.
             </p>
-            <button type="button" class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3" @click="openPersonas">
+            <RouterLink
+                to="/sandbox/personas"
+                class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                @click="closeMenu"
+            >
                 <Icon name="plus" class="shrink-0 text-xs text-subtle" />
                 <span class="text-sm text-content md:text-xs">Set up a persona</span>
-            </button>
+            </RouterLink>
         </template>
 
         <template v-else>
@@ -122,10 +130,14 @@ const openPersonas = (): void => {
             <!-- The way to the page that owns these cards, at the bottom where a list's "manage" always is: a
                  picker is where someone notices a persona is missing an account, and sending them hunting for
                  the sandbox hub from here is how a two-second fix becomes a task for later. -->
-            <button type="button" class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3" @click="openPersonas">
+            <RouterLink
+                to="/sandbox/personas"
+                class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                @click="closeMenu"
+            >
                 <Icon name="cog" class="shrink-0 text-xs text-subtle" />
                 <span class="text-2xs text-subtle">Manage personas</span>
-            </button>
+            </RouterLink>
         </template>
     </div>
 </template>
