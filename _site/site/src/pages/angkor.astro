@@ -215,7 +215,11 @@ const GITHUB_MARK =
                             this file narrows it to the reader's platform. With no JavaScript the label
                             and the link stay general, and both are still true. */}
                         <div class="a-hero-actions">
-                            <a class="a-btn a-btn-primary" href={APP_URL}>
+                            {/* `data-hero-cta` is watched by the script at the foot of the file: while this
+                                button is on screen the bar keeps its own copy of it hidden, and reveals it
+                                only once this one has scrolled away — so the page never shows the same call
+                                twice at once. */}
+                            <a class="a-btn a-btn-primary" href={APP_URL} data-hero-cta>
                                 Create your workspace
                             </a>
                             <a class="a-btn" href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(downloadTargets)}>
@@ -854,6 +858,28 @@ const GITHUB_MARK =
             window.addEventListener("scroll", lift, { passive: true });
         }
 
+        /* THE BAR'S CALL TO ACTION, held back while the hero's own is on screen. The two say the same
+           words, so showing both above the fold is one call printed twice; instead the bar keeps its copy
+           hidden until the hero button has scrolled off, then reveals it as the standing shortcut. Setting
+           `data-cta-managed` here — rather than in the markup — is what makes the no-JS fallback the safe
+           one: with the script blocked the attribute never lands and the button is simply always shown.
+           The negative top margin lets the reveal fire as the hero button slips under the fixed bar rather
+           than only once it is fully off the top. */
+        const heroCta = document.querySelector('[data-hero-cta]');
+        if (bar && heroCta && "IntersectionObserver" in window) {
+            bar.setAttribute("data-cta-managed", "");
+            const ctaObserver = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) bar.removeAttribute("data-cta-shown");
+                        else bar.setAttribute("data-cta-shown", "");
+                    }
+                },
+                { rootMargin: "-72px 0px 0px 0px", threshold: 0 },
+            );
+            ctaObserver.observe(heroCta);
+        }
+
         const reveals = document.querySelectorAll(".a-reveal");
         if ("IntersectionObserver" in window) {
             const observer = new IntersectionObserver(
@@ -908,7 +934,12 @@ const GITHUB_MARK =
         margin: 0.9rem 0 0;
         max-width: 24ch;
         font-size: clamp(1.9rem, 3.2vw, 2.75rem);
-        line-height: 1.16;
+        /* 1.24, not the 1.16 this used to run. Playfair's content box is ~1.33em and its descenders are
+           long, so a heading set tighter than ~1.2 loses the tail of a "g" or "y" — and here it loses it
+           outright rather than just tightly, because `.a-display` paints the letters as a background
+           clipped to their shape, and a background stops at the element's box. Anything the glyph reaches
+           below that box is unpainted, so a clipped line box is a clipped descender. This clears them. */
+        line-height: 1.24;
     }
     .a-page .a-lede {
         margin: 1rem 0 0;
@@ -988,12 +1019,14 @@ const GITHUB_MARK =
     }
 
     /* Sized against the full width of the screen rather than a column, because on this layout it has one.
-       THE LEADING IS 1.16, NOT THE 1.04 A DISPLAY SETTING USUALLY WANTS, and the reason is that these are
-       three SENTENCES rather than three lines of one. Each ends on its own full stop and each is a
-       separate claim, so they need the air between them that a paragraph break would give — set solid
-       they read as one phrase that happens to have wrapped, and the ember stops lose their beat.
-       Playfair's ascenders and descenders are long, which is what makes 1.04 look tight here where it
-       would look right on a face with shorter extenders. */
+       THE LEADING IS 1.24, NOT THE 1.04 A DISPLAY SETTING USUALLY WANTS, for two reasons that pull the
+       same way. These are three SENTENCES rather than three lines of one: each ends on its own full stop
+       and is a separate claim, so they need the air between them that a paragraph break would give — set
+       solid they read as one phrase that happens to have wrapped, and the ember stops lose their beat.
+       And Playfair's descenders are long enough that a tighter setting clips them: the letters are painted
+       as a background clipped to their shape (`.a-display`), and a background stops at the element's box,
+       so the tail of a "g" or "y" reaching below a too-short line box is simply not painted. 1.16 lost
+       them; 1.24 clears them and keeps the beats reading as separate claims. */
     /* THE FAMILY IS DECLARED ON THE <h1> ITSELF, not only on the spans that carry the stone texture.
        Visually this changes nothing — each beat is already wrapped in `.a-display`, which sets the same
        face. It matters because the h1 is the element every outside reader of this page inspects: search
@@ -1005,7 +1038,7 @@ const GITHUB_MARK =
         margin: 0;
         font-family: var(--a-font-display);
         font-size: clamp(2.55rem, 5.6vw, 4.6rem);
-        line-height: 1.16;
+        line-height: 1.24;
         font-weight: 600;
     }
     .a-page .a-headline-line {
@@ -1475,8 +1508,15 @@ const GITHUB_MARK =
         color: var(--a-subtle);
     }
     .a-page .a-account-tag {
+        /* Centre the caps in the bordered box. Left inline with the inherited 1.5 line-height, the tag's
+           letters sat visibly high — all-caps has no descenders, so the leading reserved below the
+           baseline was empty and pushed the word up. Flexing the box and trimming the leading to the
+           glyphs centres them between the rules. */
+        display: inline-flex;
+        align-items: center;
+        line-height: 1;
         border: 1px solid rgba(201, 160, 92, 0.3);
-        padding: 0.15rem 0.6rem;
+        padding: 0.28rem 0.6rem;
         font-size: 0.6875rem;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -1550,16 +1590,20 @@ const GITHUB_MARK =
         line-height: 1.65;
         color: var(--a-muted);
     }
-    /* A FIGURE IS READ, NOT ADMIRED, so it takes the titling face and a flat fill. Set in the display
-       face with the metal gradient it was a 25px number whose lower third faded to brown — the two
-       things a reader most needs to tell apart here are 1,577 and 1,775, and the gradient was dimming
-       exactly the strokes that distinguish them. */
+    /* A FIGURE IS READ, NOT ADMIRED, so it takes the display face and a FLAT fill. It sits in the titling
+       tier of this page's type — a 28px headline number belongs with the Playfair headings around it, not
+       in the rounded mark face (Baloo), whose fixed-width figures read as a terminal counter beside all
+       the carved serif type and are the one thing on the band that looks off-theme. What it must NOT take
+       is the stone gradient the headings wear: set in the display face WITH that metal fill it was a
+       number whose lower third faded to brown, dimming exactly the strokes that tell 1,577 and 1,775
+       apart. Display face for the theme, flat gold for legibility — the two concerns pull the same way
+       once the gradient is dropped. */
     /* `p.` earns this rule the element the sibling `.a-trust-card p` above already has, and without it
        that rule ties on specificity and wins on order — which is why the figure was silently rendering
        at body size in the muted grey, the exact opposite of a headline number. */
     .a-page .a-trust-card p.a-trust-stat {
         margin: 0.9rem 0 0;
-        font-family: var(--a-font-mark);
+        font-family: var(--a-font-display);
         font-size: 1.75rem;
         line-height: 1.2;
         font-weight: 600;

@@ -101,7 +101,7 @@ import Lotus from "./Lotus.astro";
             <a href={discordUrl} target="_blank" rel="noopener" class="a-bar-icon" aria-label="Discord community" title="Discord community">
                 <DiscordIcon size={17} />
             </a>
-            <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm">Create your workspace</a>
+            <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm a-bar-cta">Create your workspace</a>
         </div>
     </div>
 </header>
@@ -414,6 +414,33 @@ import Lotus from "./Lotus.astro";
     }
     .a-bar-icon:hover {
         color: var(--a-ember-bright);
+    }
+
+    /* THE BAR'S CALL IS A SECOND COPY of the hero's, so it earns its place only once the hero's own is
+       gone. While the first screen is up the two would stack the same words four inches apart; instead
+       this one is held back and slides in as the standing shortcut the moment the hero button scrolls
+       off — the page script flags the two states on the bar (`data-cta-managed` turns the behaviour on,
+       `data-cta-shown` is the reveal). Its width is reserved even while hidden, so the reveal is a fade
+       rather than a jump that shoves the icons sideways. With no script the button is simply always
+       shown: the fallback for a call to action is to be there. */
+    .a-bar[data-cta-managed] .a-bar-cta {
+        opacity: 0;
+        transform: translateY(-0.45rem);
+        pointer-events: none;
+        transition:
+            opacity 0.3s ease,
+            transform 0.3s ease;
+    }
+    .a-bar[data-cta-managed][data-cta-shown] .a-bar-cta {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .a-bar[data-cta-managed] .a-bar-cta {
+            transform: none;
+            transition: opacity 0.3s ease;
+        }
     }
 
     /* The bar holds six labels, two marks and a cartouche; below 68rem it cannot, so the labels go and

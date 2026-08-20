@@ -220,15 +220,17 @@ export const landingContent: LandingContent = {
     // everywhere, because no honest capture of an automations screen exists.
     verbs: {
         eyebrow: "A day at the board",
-        // The heading is a picture, not a to-do list. The previous version read "Run agents. Connect
-        // your tools. Read every change." — three verbs in a row that a stranger scanning the second
-        // screen took for a chore chart, which is the opposite of the excitement the page is trying to
-        // build. The heading now names the artefact the reader is about to see (a board) and the
-        // asymmetry that makes it interesting (many agents, one gatekeeper). The sub spends its line
-        // on the one mechanical fact that makes "many at once" believable, in the words a reader
-        // already holds rather than one they would have to look up.
-        heading: "One board holds every agent working for you.",
-        sub: "Each writes on a branch of its own, so many can share a repo without stepping on each other.",
+        // The heading is a scene, not a to-do list. Two versions preceded it and both read as a chore
+        // chart — the very thing this section was accused of. First it was three bare verbs in a row
+        // ("Run agents. Connect your tools. Read every change."); then it was "One board holds every
+        // agent working for you", which read fine on its own but said almost exactly what the first verb
+        // card below it already says ("One board shows every agent you have running…"), so the reader met
+        // the same sentence twice and the second screen felt like filing, not delegating. This names the
+        // feeling the five verbs add up to — a whole fleet at work, and you still holding the thread of
+        // it — and leaves the board itself to the Run card. The sub keeps the one mechanical fact that
+        // makes "a whole fleet" believable, in words a reader already holds.
+        heading: "A whole fleet at work, and you never lose the thread.",
+        sub: "Each agent works on a branch of its own, so many can share one repo without ever stepping on each other.",
         items: [
             {
                 verb: "Run",
