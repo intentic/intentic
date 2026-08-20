@@ -169,21 +169,52 @@ const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig.json";
  * out of the same file as `tempWorkspace`, compose objects in memory, and would be renamed to say they reach for
  * a machine they never touch. Production modules are not followed at all — they reach the machine by definition,
  * and one import of the daemon would mark every suite in it. */
+/* And a fixture is not always a file in the same package. A package publishes its own under the subpath the
+ * convention gives it (`@intentic/iq-engine/testing`), and a sibling that imports it by that specifier reaches
+ * exactly the same tmpdir tree and the same real git as a relative import would. Following only relative
+ * specifiers therefore left a hole the shape of a package boundary: `_search/iq`'s CLI suites build a fixture
+ * workspace and index it through `makeFixtureWorkspace`/`makeRecallFixture`, sat under the 5s detector, and
+ * broke main from a loaded runner — the very failure the paragraph above records, one import style over.
+ *
+ * Resolved from the CHECKOUT, never through `node_modules`: this runs before `pnpm install` in the preflight
+ * job and in the pre-push hook. Every workspace package's `exports` states an `@intentic/src` condition
+ * pointing at the .ts source (it is what lets vitest read a sibling's source rather than its last build), so
+ * the manifests already walked above are the whole resolver — shape again, not a list of packages. */
+const SOURCE_CONDITION = "@intentic/src";
+const byName = new Map(packages.map((entry) => [entry.pkg.name, entry]));
+const workspaceSource = (specifier) => {
+    const segments = specifier.split("/");
+    // A scoped name is two segments and a bare one is one; whatever follows is the export subpath.
+    const depth = specifier.startsWith("@") ? 2 : 1;
+    const owner = byName.get(segments.slice(0, depth).join("/"));
+    const subpath = segments.length > depth ? `./${segments.slice(depth).join("/")}` : ".";
+    const entry = owner?.pkg.exports?.[subpath];
+    const source = entry?.import?.[SOURCE_CONDITION] ?? entry?.[SOURCE_CONDITION];
+    return source === undefined ? undefined : join(owner.dir, source);
+};
+
 const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
 const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
 const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
 
-// The named bindings of each relative import, as `{ names, file }`. The repo writes ESM (`./testing.js` for
-// `testing.ts`), so the extension in the specifier is the one the compiler emits, not the one on disk.
-const IMPORTS = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.[^"']*)["']/g;
+// Where an import lands in this checkout: a relative specifier by the filesystem, a workspace one by the
+// manifest. The repo writes ESM (`./testing.js` for `testing.ts`), so the extension in a relative specifier is
+// the one the compiler emits, not the one on disk.
+const sourceOf = (file, specifier) => {
+    if (!specifier.startsWith(".")) {
+        return workspaceSource(specifier);
+    }
+    const path = join(dirname(file), specifier);
+    return [path.replace(/\.[cm]?js$/, ".ts"), path.replace(/\.[cm]?js$/, ".tsx"), `${path}.ts`].find((candidate) => existsSync(candidate));
+};
+
+// The named bindings of each import this checkout can resolve, as `{ names, file }`.
+const IMPORTS = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
 const importsOf = (file, source) =>
     [...source.matchAll(IMPORTS)].flatMap(([, clause, specifier]) => {
-        const path = join(dirname(file), specifier);
-        const target = [path.replace(/\.[cm]?js$/, ".ts"), path.replace(/\.[cm]?js$/, ".tsx"), `${path}.ts`].find((candidate) =>
-            existsSync(candidate),
-        );
-        return target === undefined
+        const target = sourceOf(file, specifier);
+        return target === undefined || !existsSync(target)
             ? []
             : [
                   {
