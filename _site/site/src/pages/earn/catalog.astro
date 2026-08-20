@@ -15,6 +15,27 @@ import Nav from "../../components/Nav.astro";
  * No fallback content: an unreachable endpoint says so instead of showing listings of unknown provenance. */
 
 const endpoint = `${API_URL}/pool/catalog`;
+
+/* HOW A RUN WORKS, DRAWN. The hero on /earn/ pairs every claim with a figure; the catalog stated the same
+ * model in prose and left its whole right column empty. So the metered-run lifecycle is drawn once, before the
+ * grid, so a reader holds the model while scanning listings: four steps down a spine, arrowed, with the money
+ * step tinted to carry the one promise the page is built on — a run is approved before it spends, and a failed
+ * run refunds itself. Static on purpose: nothing here is a live figure, so it needs no fetch and cannot rot. */
+const NODE_R = 13;
+const flowX = 30;
+const flowTop = 30;
+const flowGap = 76;
+const flowW = 384;
+const runSteps = [
+    { title: `Agent asks`, sub: `it arrives as an offer in your chat` },
+    { title: `You approve`, sub: `the Run button is the only thing that spends` },
+    { title: `It runs`, sub: `the platform calls it — you stay anonymous` },
+    { title: `Charged in credits`, sub: `or refunded automatically if it fails`, pay: true },
+];
+const runNodes = runSteps.map((step, i) => ({ ...step, n: i + 1, y: flowTop + i * flowGap }));
+const flowH = flowTop + (runSteps.length - 1) * flowGap + 30;
+// One short arrowed segment per gap, clear of both node circles, so the four steps read as a directed flow.
+const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3, y2: node.y + flowGap - NODE_R - 3 }));
 ---
 
 <BaseLayout>
@@ -23,18 +44,112 @@ const endpoint = `${API_URL}/pool/catalog`;
         <section class="relative overflow-hidden border-b border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/10 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="relative mx-auto max-w-7xl px-6 pt-28 pb-12 lg:pt-32">
-                <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The catalog</div>
-                <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every service, listed.</h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    These are the metered services a member's agent can ask to run — each run individually approved by its owner, priced in
-                    credits, and refunded automatically when a service fails to answer. Every listing's served and refunded runs are public,
-                    because behaviour is the only review a service ever gets.
-                </p>
-                <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
-                    Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a>, which is public and needs
-                    no login. Your browser is fetching it now; nothing on this page is typed by hand. Run something worth
-                    selling? <a href="/developers/services/">Listing it is self-serve.</a>
-                </p>
+                <div class="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14">
+                    <div>
+                        <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The catalog</div>
+                        <h1 class="mt-3 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">Every service, listed.</h1>
+                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
+                            These are the metered services a member's agent can ask to run — each run approved by its owner, priced in credits, and
+                            refunded automatically if the service fails to answer.
+                        </p>
+                        <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
+                            Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a> — public, no login — and if
+                            you run something worth selling, <a href="/developers/services/">listing it is self-serve.</a>
+                        </p>
+                    </div>
+
+                    {/* The model, drawn. Fills the column the copy used to leave empty, and lets the shortened intro
+                        stay short: the diagram carries the lifecycle the two paragraphs above used to spell out. */}
+                    <figure class="w-full lg:justify-self-end">
+                        <div class="relative overflow-hidden rounded-2xl border border-line bg-canvas/60">
+                            <div class="grid-overlay"></div>
+                            <div
+                                class="pointer-events-none absolute top-1/2 left-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                                style="background: radial-gradient(circle, color-mix(in srgb, var(--color-primary-500) 14%, transparent), transparent 70%)"
+                                aria-hidden="true"
+                            >
+                            </div>
+                            <div class="relative px-6 py-8 sm:px-8">
+                                <div class="eyebrow text-link">How a run works</div>
+                                <svg
+                                    viewBox={`0 0 ${flowW} ${flowH}`}
+                                    class="mt-4 h-auto w-full text-link"
+                                    role="img"
+                                    aria-label="How a run works: an agent offers a service in your chat, you approve it with the Run button, the platform runs it while you stay anonymous, and your credits are charged for the run — or refunded automatically if it fails."
+                                >
+                                    <defs>
+                                        <marker id="run-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                                            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                                        </marker>
+                                    </defs>
+                                    {
+                                        runArrows.map((arrow) => (
+                                            <line
+                                                x1={flowX}
+                                                y1={arrow.y1}
+                                                x2={flowX}
+                                                y2={arrow.y2}
+                                                stroke="currentColor"
+                                                stroke-opacity="0.4"
+                                                stroke-width="2"
+                                                marker-end="url(#run-arrow)"
+                                            />
+                                        ))
+                                    }
+                                    {
+                                        runNodes.map((node) => (
+                                            <Fragment>
+                                                <circle
+                                                    cx={flowX}
+                                                    cy={node.y}
+                                                    r={NODE_R}
+                                                    fill="var(--color-canvas)"
+                                                    stroke={node.pay ? `var(--color-success)` : `currentColor`}
+                                                    stroke-opacity={node.pay ? `0.9` : `0.4`}
+                                                    stroke-width="1.5"
+                                                />
+                                                <text
+                                                    x={flowX}
+                                                    y={node.y}
+                                                    text-anchor="middle"
+                                                    dominant-baseline="central"
+                                                    font-size="12.5"
+                                                    font-weight="600"
+                                                    style={`fill: ${node.pay ? `var(--color-success)` : `var(--color-link)`}`}
+                                                >
+                                                    {node.n}
+                                                </text>
+                                                <text
+                                                    x={flowX + NODE_R + 14}
+                                                    y={node.y - 6}
+                                                    dominant-baseline="central"
+                                                    font-size="14.5"
+                                                    font-weight="600"
+                                                    style="fill: var(--color-content)"
+                                                >
+                                                    {node.title}
+                                                </text>
+                                                <text
+                                                    x={flowX + NODE_R + 14}
+                                                    y={node.y + 12}
+                                                    dominant-baseline="central"
+                                                    font-size="11.5"
+                                                    style={`fill: ${node.pay ? `var(--color-success)` : `var(--color-subtle)`}`}
+                                                >
+                                                    {node.sub}
+                                                </text>
+                                            </Fragment>
+                                        ))
+                                    }
+                                </svg>
+                                <p class="mt-5 max-w-copy text-2xs leading-relaxed text-subtle">
+                                    Every run is approved before it spends, and a failed run refunds itself — so a service is judged only by the runs it
+                                    actually answers.
+                                </p>
+                            </div>
+                        </div>
+                    </figure>
+                </div>
             </div>
         </section>
 
