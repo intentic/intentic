@@ -3,7 +3,7 @@ import { CopyButton, Notice, noticeOf, Picker, type PickerGroup, SegmentedContro
 import Button from "primevue/button";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { pickTarget, type PreviewTarget } from "../composables/preview/previewModel";
+import { frameSandbox, pickTarget, type PreviewTarget } from "../composables/preview/previewModel";
 import { usePreviewTargets } from "../composables/preview/usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "../composables/preview/previewSurface";
 import { togglePreviewPopout, usePreviewPopout } from "../composables/preview/usePreviewPopout";
@@ -375,14 +375,15 @@ const fit = ref<`full` | `phone`>(`full`);
             <!-- The app itself: the real dev server through the tunnel — hot reload works; apps that forbid
                  framing (X-Frame-Options) stay blank here, and the new-tab link is the escape hatch. Mounted
                  only after the hostname probe succeeds, so the browser's DNS error page can never appear.
-                 The public page runs sandboxed (scripts, no same-origin): it is anyone-on-the-internet
-                 content, and it needs nothing of this app's. -->
+
+                 A SERVER GETS ITS OWN ORIGIN — see frameSandbox, which owns that rule and why the previous
+                 blanket sandbox left a dev server's own images 403ing inside its own preview. -->
             <div v-else-if="previewSrc" class="flex min-h-0 flex-1 justify-center overflow-hidden">
                 <iframe
                     :key="`${previewEpoch}-${previewSrc}`"
                     :src="previewSrc"
                     :title="`${target.label} preview`"
-                    :sandbox="target.kind === `public` || target.kind === `address` ? `allow-scripts allow-forms allow-popups` : undefined"
+                    :sandbox="frameSandbox(target.kind)"
                     class="h-full min-h-0 flex-1 bg-white"
                     :class="fit === `phone` ? `max-w-[390px] border-x border-line` : ``"
                 ></iframe>

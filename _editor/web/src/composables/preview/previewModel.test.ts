@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
     addressTarget,
     appTargets,
+    frameSandbox,
     mergeTargets,
     pickTarget,
     portTargets,
@@ -91,6 +92,20 @@ describe(`publicTarget`, () => {
         expect(publicTarget([file({ blocked: `secret-looking name` })])).toBeUndefined();
         expect(publicTarget([file({ path: `game.html`, url: `https://s.zone/game.html` })])?.url).toBe(`https://s.zone/game.html`);
         expect(publicTarget([file({ path: `game.html` }), file({ path: `index.html`, url: `https://s.zone/` })])?.url).toBe(`https://s.zone/`);
+    });
+});
+
+/* THE REGRESSION THAT MADE A PREVIEW A LIE: everything was framed with `sandbox`, which strips the page's own
+ * origin — so a dev server refused its own fonts (CORS) and its own images (403 on `/@fs`), and the panel
+ * showed a text-only ghost of the app it promised to show. */
+describe(`frameSandbox`, () => {
+    it(`leaves a real server its own origin, and keeps the agent-written outbox page without one`, () => {
+        expect(frameSandbox(`repo`)).toBeUndefined();
+        expect(frameSandbox(`app`)).toBeUndefined();
+        expect(frameSandbox(`port`)).toBeUndefined();
+        expect(frameSandbox(`address`)).toBeUndefined();
+        expect(frameSandbox(`public`)).toContain(`allow-scripts`);
+        expect(frameSandbox(`public`)).not.toContain(`allow-same-origin`);
     });
 });
 

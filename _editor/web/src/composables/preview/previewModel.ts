@@ -48,6 +48,23 @@ export interface PreviewTarget {
 
 export const repoTargetId = (repo: string): string => `repo:${repo}`;
 
+/* WHAT THE IFRAME'S `sandbox` ATTRIBUTE SAYS, and it is one decision worth writing down rather than nine
+ * characters of markup.
+ *
+ * `sandbox` WITHOUT `allow-same-origin` GIVES THE FRAMED PAGE AN OPAQUE ORIGIN — it stops being
+ * `localhost:4322` and becomes nobody. Every request it then makes leaves as `Origin: null` and is
+ * cross-origin to the very server that served it: fonts and modules are refused by CORS, and a dev server
+ * answers `/@fs` asset requests with 403 because a stranger is asking. A typed `localhost:4322` therefore
+ * rendered its text and none of its images. Nothing was bought by it: what protects this app is that the
+ * preview is a DIFFERENT ORIGIN, which a dev server, a forwarded port and somebody else's site all are, so
+ * the framed page cannot reach this window's DOM or storage however the attribute reads.
+ *
+ * The outbox page is the exception, and the exception is about ORIGIN rather than about trust: that HTML is
+ * written by an agent and served from the sandbox's own public host, which in a self-hosted deployment can be
+ * the host this app is served from — the one case the origin boundary does not cover. It is a single
+ * self-contained file by construction, so it has no subresources to lose. */
+export const frameSandbox = (kind: PreviewKind): string | undefined => (kind === `public` ? `allow-scripts allow-forms allow-popups` : undefined);
+
 /* Every runnable repository, MONOREPOS INCLUDED. A monorepo's root `dev` fans out across packages, so its
  * repo-level preview host answers for whichever of them bound the assigned port — imprecise, but it is what
  * the daemon actually serves, and the alternative (showing nothing) is what produced the empty screen this
