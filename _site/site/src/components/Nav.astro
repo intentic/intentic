@@ -8,7 +8,6 @@ import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 import MobileNav from "./MobileNav.astro";
-import ProductFigure from "./ProductFigure.astro";
 
 const currentPath = Astro.url.pathname;
 
@@ -57,16 +56,9 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
             {
                 navEntries.map((entry) => {
                     if (entry.type === "menu") {
-                        /* One entry per row that has something to show, in row order — a screenshot or, where
-                           the page is diagram-led, its figure. Both land in the same stack so the rail always
-                           has a picture for the row under the pointer, and never the last row's. */
                         const preview = entry.sections
                             .flatMap((section) => section.items)
-                            .flatMap((item) =>
-                                item.shot === undefined && item.figure === undefined
-                                    ? []
-                                    : [{ href: item.href, shot: item.shot, figure: item.figure }],
-                            );
+                            .flatMap((item) => (item.shot === undefined ? [] : [{ href: item.href, shot: item.shot }]));
                         return (
                             <li class="nav-item has-menu">
                                 <button type="button" class:list={["nav-link", { active: isActive(entry) }]} aria-expanded="false">
@@ -90,9 +82,7 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
                                                             <a
                                                                 href={item.href}
                                                                 class:list={["menu-item", { active: isCurrentPage(item.href) }]}
-                                                                data-preview={
-                                                                    item.shot === undefined && item.figure === undefined ? undefined : item.href
-                                                                }
+                                                                data-preview={item.shot === undefined ? undefined : item.href}
                                                                 target={item.external ? "_blank" : undefined}
                                                                 rel={item.external ? "noopener" : undefined}
                                                             >
@@ -108,38 +98,24 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
                                     {preview.length > 0 && (
                                         <div class="menu-preview">
-                                            {preview.map(({ href, shot, figure }, i) =>
-                                                shot ? (
-                                                    /* A fixed 34rem box: the menu only exists from lg up, so
-                                                       this is one width, not a viewport formula. The rail COVERS
-                                                       below, so a shot wider than the box paints wider than it
-                                                       too — 340px of box against a 16:9-ish capture is ~810 CSS
-                                                       px of image — and `sizes` follows what paints, not what
-                                                       the box measures, or every wide shot arrives soft. */
-                                                    <Image
-                                                        src={shotAsset(shot.name)}
-                                                        alt={shot.alt}
-                                                        widths={SHOT_WIDTHS}
-                                                        sizes="832px"
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                        class:list={["menu-preview-shot", { current: i === 0 }]}
-                                                        data-preview-for={href}
-                                                    />
-                                                ) : (
-                                                    /* The drawing, at the width it was drawn for and scaled to
-                                                       the box — see `.menu-preview-figure` below. It carries the
-                                                       shots' own class so one line of script swaps either kind. */
-                                                    <div
-                                                        class:list={["menu-preview-shot", "menu-preview-figure", { current: i === 0 }]}
-                                                        data-preview-for={href}
-                                                    >
-                                                        <div class="menu-preview-figure-inner">
-                                                            <ProductFigure figure={figure!} />
-                                                        </div>
-                                                    </div>
-                                                ),
-                                            )}
+                                            {preview.map(({ href, shot }, i) => (
+                                                /* A fixed 34rem box: the menu only exists from lg up, so
+                                                   this is one width, not a viewport formula. The rail COVERS
+                                                   below, so a shot wider than the box paints wider than it
+                                                   too — 340px of box against a 16:9-ish capture is ~810 CSS
+                                                   px of image — and `sizes` follows what paints, not what
+                                                   the box measures, or every wide shot arrives soft. */
+                                                <Image
+                                                    src={shotAsset(shot.name)}
+                                                    alt={shot.alt}
+                                                    widths={SHOT_WIDTHS}
+                                                    sizes="832px"
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    class:list={["menu-preview-shot", { current: i === 0 }]}
+                                                    data-preview-for={href}
+                                                />
+                                            ))}
                                         </div>
                                     )}
 
@@ -468,39 +444,6 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
 
     .menu-preview-shot.current {
         opacity: 1;
-    }
-
-    /* THE DIAGRAM-LED ROW'S PREVIEW. Not an image, so `object-fit` has nothing to work on: this centres the
-       figure instead and pads it off the rail's own border.
-
-       The inner box is 660px because that is where the drawing STOPS REFLOWING — its three columns are a `sm:`
-       breakpoint, so the markup laid out for a page column arrives here in its wide form whatever the rail
-       measures, and cramming that into 544px overlaps the arrow with the tiles. Rendering at the width it was
-       drawn for and scaling the result keeps the proportions the page has and only makes them smaller, which
-       is the same bargain the screenshots take. */
-    .menu-preview-figure {
-        overflow: hidden;
-    }
-
-    /* Centred by translate rather than by the parent, because the drawing is WIDER than the box it sits in
-       and grid centring does not survive that: an item bigger than its track gets flush-start alignment, so
-       the figure sat 71px right of centre and lost its outcome card off the edge. Half of its own width is a
-       number that holds however far it overflows. */
-    .menu-preview-figure-inner {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 660px;
-        transform: translate(-50%, -50%) scale(0.78);
-    }
-
-    /* The figure ships as a card because on its own page it sits in a column of prose and needs an edge. The
-       rail already IS that edge, so keeping it draws a box inside a box with a band of dead canvas between
-       them — and dead canvas in this rail is the exact thing the shots were re-cut to stop showing. */
-    .menu-preview-figure-inner :global(.card) {
-        border: none;
-        background: transparent;
-        padding: 0;
     }
 
     .menu-action {

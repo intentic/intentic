@@ -1,7 +1,7 @@
 import { apiDestinations, apiServicesDestination } from "./api";
 import { docsDestinations } from "./docs";
 import type { ShotImage } from "./landing";
-import { type ProductFigure, productHref, productPages } from "./product";
+import { productHref, productPages } from "./product";
 import { DEMO_PATH } from "./site";
 
 /* The site's navigation, as data.
@@ -40,13 +40,6 @@ export interface MenuItem {
     external?: boolean;
     /** Previewed in the panel's rail while this row is hovered. Product rows only. */
     shot?: ShotImage;
-    /* The same job as `shot`, for the row whose page has no screenshot to show. Automate is diagram-led —
-     * there is no captured automations screen and the site will not mock one up — so the rail draws its
-     * hero figure instead. Previously that row simply had no preview, which did NOT leave the rail blank:
-     * it left the PREVIOUS row's picture sitting there, so Automate showed you the capabilities catalog and
-     * quietly claimed it was a picture of automation. A row that owns the rail is the only way to be sure
-     * the rail is never about a different row. */
-    figure?: ProductFigure;
 }
 
 export interface MenuSection {
@@ -73,22 +66,20 @@ export type NavEntry =
  *
  * ONE COLUMN, no group labels: a verb is its own grouping, so the run/environment/extend headers that once
  * sorted seven surfaces would be more scaffolding than the rows under them. What the menu is FOR is the
- * preview rail beside it: a visitor who has installed nothing seeing the real surfaces. Every row fills that
- * rail — four with a screenshot, Automate with the drawing its own page leads with, because it is diagram-led
- * and there is no automations screen to shoot. */
+ * preview rail beside it: a visitor who has installed nothing seeing the real surfaces. EVERY row carries a
+ * shot, including the diagram-led one: a row without a picture does not blank the rail, it leaves the row
+ * above still showing, which is how Automate spent a while illustrated by the capabilities catalog. */
 const productItems = (): MenuItem[] =>
     productPages.map((page) => {
         /* The row's own preview where it has one, the page hero otherwise. A hero is framed for a page column
-         * and the rail is a 16:10 box, so two of the five pages carry a capture shot for the box instead —
-         * see `menuShot` in product.ts for which, and why the other three don't need one. */
+         * and the rail is a 16:10 box, so three of the five pages carry a capture shot for the box instead —
+         * see `menuShot` in product.ts for which, and why the other two don't need one. */
         const shot = page.menuShot ?? (page.hero && { name: page.hero.name, alt: page.hero.alt });
         return {
             label: page.navLabel,
             href: productHref(page.slug),
             description: page.menuBlurb,
             ...(shot ? { shot } : {}),
-            // Exactly one of the two, because a page leads with a screenshot or with a drawing, never both.
-            ...(shot === undefined && page.heroFigure ? { figure: page.heroFigure } : {}),
         };
     });
 

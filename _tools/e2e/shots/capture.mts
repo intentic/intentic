@@ -390,6 +390,24 @@ const SHOTS: Shot[] = [
      * They are still whole surfaces, shot from the live demo like every other shot here. What is chosen is the
      * MOMENT, not a crop: the one screen where the row's promise is legible at a glance. */
     {
+        /* "Start an agent automatically from a schedule or event" — the automations screen, which this repo
+         * spent a while insisting did not exist: the feature page is diagram-led on the recorded grounds that
+         * there was no screen to shoot. There is. It needs the FULL recording, because the curated one leaves
+         * the extension switched off and the route answers "intentic.automations is switched off" — which is a
+         * truthful screen and a terrible advertisement, and is presumably how the belief started.
+         *
+         * What it shows is the whole claim in one frame: a wake held for approval, two chores on a schedule and
+         * a land, three integrations firing from outside, each with when it last ran and a switch. */
+        name: "menu-automate",
+        path: "/ext/automations",
+        waitFor: "text=Wake your agent on a schedule",
+        settleMs: 1600,
+        clip: "area",
+        mode: "full",
+        viewport: { width: 1290, height: 900 },
+        stopAt: 500,
+    },
+    {
         /* "It proposes, you approve, and nothing is merged unread" — so: the change itself, open in the review
          * pane, file list beside it and nothing committed yet. The hero (`chat-plan`) is the same promise
          * mid-sentence — a chat still thinking, its Approve buttons below the fold and off the bottom of the

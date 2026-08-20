@@ -16,8 +16,9 @@ import type { ShotImage } from "./landing";
  * Every `src` here is still a file the screenshot harness wrote from the demo build
  * (`_tools/e2e/shots/capture.mts`), so a claim on these pages is a screen you can open in the live demo.
  * Where a surface has no honest screenshot yet, the page carries a DIAGRAM instead: never a mockup of a
- * screen that doesn't exist. Automate has no captured screen at all, so it is diagram-led: its hero is the
- * triggers figure, not an invented UI.
+ * screen that doesn't exist. Automate is the one diagram-led page, and no longer because it has to be: its
+ * screen exists and the menu previews it. The drawing stays because that page opens by explaining a machine,
+ * and the machine is not what a list of five already-configured automations is a picture of.
  */
 
 /** How a shot is framed on the page: a browser window, a phone, or the bare image. */
@@ -64,9 +65,9 @@ export interface ProductPage {
     heading: string;
     sub: string;
     /**
-     * The hero visual. A page leads with a real screenshot (`hero`) OR, where the surface has no honest
-     * screenshot, a diagram (`heroFigure`): exactly one is set. Automate is the only diagram-led page:
-     * there is no captured automations screen, and a mockup would be the one lie on the shelf.
+     * The hero visual. A page leads with a real screenshot (`hero`) OR, where a drawing explains the thing
+     * better than any one screen does, a diagram (`heroFigure`): exactly one is set. Automate is the only
+     * diagram-led page — see the note on its own entry for why the drawing outranks the screen it now has.
      */
     hero?: ProductShot;
     heroFigure?: ProductFigure;
@@ -78,7 +79,12 @@ export interface ProductPage {
      * chat shot 1:2 tall, previewing as a blown-up inch of its own header, and the other a 2.5:1 strip that
      * left a third of the frame empty.
      *
-     * So those two name their own capture, shot to the frame (`_tools/e2e/shots/capture.mts`, "menu-*"). Same
+     * Automate had no picture at all, being diagram-led, and a row with no picture does not leave the rail
+     * empty — it leaves the LAST row's picture in it, so Automate showed you the capabilities catalog. It gets
+     * a capture of its own screen, which is also what keeps the rail coherent: five rows, five screenshots,
+     * rather than four screenshots and a drawing floating in a box the others fill edge to edge.
+     *
+     * So those three name their own capture, shot to the frame (`_tools/e2e/shots/capture.mts`, "menu-*"). Same
      * demo, same rule as every other shot here: a real surface, not a mockup.
      *
      * Connect was given one too and had it taken away again, which is worth writing down: the narrow window
@@ -223,9 +229,16 @@ export const productPages: ProductPage[] = [
         menuBlurb: "Start an agent automatically from a schedule or event",
         heading: "Start an agent automatically.",
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
-        // Diagram-led: there is no captured automations screen, and a mockup would be the one lie on the
-        // shelf. The triggers figure IS the hero; a real screen (the fleet board) carries a block below.
+        /* Diagram-led BY CHOICE, not for want of a screen. This used to say there was no automations screen to
+         * shoot; there is one (`/ext/automations`, and the menu previews it), so what keeps the drawing here is
+         * that the page's first job is explaining a machine nobody has seen yet — six triggers, one optional
+         * check, a fresh session — which a list of five configured automations shows the RESULT of rather than
+         * the shape of. The triggers figure IS the hero; a real screen (the fleet board) carries a block below. */
         heroFigure: "triggers",
+        menuShot: {
+            name: "menu-automate",
+            alt: "The automations screen: one wake held for approval, two code chores triggered by a daily schedule and by work landing, and three integrations fired from Discord, a webchat and a webhook, each with when it last ran and a switch.",
+        },
         facts: [
             { value: "6 events", label: "push, alert, payment, email, chat or cron" },
             { value: "1 check", label: "an optional command approves or skips each run" },
