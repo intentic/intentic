@@ -10,7 +10,7 @@
     "workspaces": {
         ".": {
             "entry": ["_tools/scripts/*.sh"],
-            "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**"]
+            "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**", "_editor/ios-app/**", "_editor/android-app/**"]
         },
         "_editor/web": {
             "entry": [

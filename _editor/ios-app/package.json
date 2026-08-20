@@ -1,0 +1,21 @@
+{
+    "name": "@intentic/ios-app",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "cap": "cap",
+        "cap:add:ios": "cap add ios",
+        "cap:sync": "cap sync ios",
+        "cap:open": "cap open ios",
+        "cap:run": "cap run ios"
+    },
+    "dependencies": {
+        "@capacitor/core": "8.5.0",
+        "@capacitor/push-notifications": "8.1.2"
+    },
+    "devDependencies": {
+        "@capacitor/cli": "8.5.0",
+        "@capacitor/ios": "8.5.0"
+    }
+}

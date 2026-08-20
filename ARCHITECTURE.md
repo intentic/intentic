@@ -55,7 +55,12 @@ flowchart TB
   this product does. It is off unless the operator configures keys, every surface that offers it says so
   in the same words (`TRIAL_NOTICE`), and connecting any account moves the user onto the direct path
   permanently. Nothing else changes: the trial holds no ability to drive a sandbox, so the blast radius
-  below is unchanged.
+  below is unchanged. The **push relay** ([_platform/api/src/push-relay/](_platform/api/src/push-relay/))
+  is a narrower pass-through of the same kind, for notifications rather than turns: browsers get web push
+  straight from the daemon, but Apple only accepts pushes from the app's vendor, so the iOS shell's
+  notifications (a title and a body, never content — the daemon's payloads are pointers back into the
+  workspace) route daemon → relay → APNs. Off unless the operator configures the Apple key; it too can
+  drive nothing.
 - **Sandbox** — one per user, run **unprivileged by default**; container privileges come only from
   `# intentic:runtime` directives in the owner-approved overlay, applied by the allowlisted rebuild executors
   (the `docker` capability's `--privileged` wakes the image-baked, otherwise-dormant isolated Docker Engine so

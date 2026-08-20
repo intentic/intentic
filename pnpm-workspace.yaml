@@ -2,6 +2,12 @@ packages:
   - "_computers/*"
   - "_deploy/*"
   - "_editor/*"
+  # The store shells are deliberately NOT workspace packages: their dependencies are consumed by Xcode/
+  # CocoaPods on a Mac (ios-app) and by Bubblewrap's own JDK toolchain (android-app), never by this
+  # monorepo's node toolchain — each is installed standalone (`npm install` in its folder) on the machine
+  # that actually builds it, so the shared lockfile and turbo graph stay free of mobile toolchains.
+  - "!_editor/ios-app"
+  - "!_editor/android-app"
   - "_extensions/*"
   - "_platform/*"
   - "_sandbox/*"

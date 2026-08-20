@@ -410,8 +410,9 @@ export interface Services {
     // When each rule last did something (.intentic/local/rule-firings.json). Beside the settings rather than in them:
     // a firing is not an edit, so it must not make every push a write of the owner's configuration.
     readonly ruleFirings: RuleFiringsStore;
-    // Web-push state: this sandbox's VAPID keypair + one entry per subscribed browser. On the HISTORY volume,
-    // outside the agent's reach, because the private key can forge notifications to the owner's devices.
+    // Push state: this sandbox's VAPID keypair + one channel per registered device (browsers over web push,
+    // native installs through the platform relay). On the HISTORY volume, outside the agent's reach, because
+    // the private key and the relay secrets can forge notifications to the owner's devices.
     readonly push: PushStore;
     // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
     // actively watching; `notify` (the settings test button) always fires.

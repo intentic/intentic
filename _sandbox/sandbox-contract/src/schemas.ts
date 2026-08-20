@@ -3619,9 +3619,7 @@ export const EndpointConfigSchema = z.object({
  * `allow`/`deny` are hostname lists (comma- or newline-separated). Empty allow = any host, each behind its
  * card; deny wins over allow. One capability per sandbox (singleton card): a second balance would just be a
  * second opinion about the same owner's wallet. */
-const usdAmount = z
-    .string()
-    .regex(/^\d+(\.\d{1,6})?$/, "a USD amount like 0.50 (up to six decimals — USDC's own precision)");
+const usdAmount = z.string().regex(/^\d+(\.\d{1,6})?$/, "a USD amount like 0.50 (up to six decimals — USDC's own precision)");
 export const WalletNetworkSchema = z.enum(["eip155:8453", "eip155:84532"]);
 export type WalletNetwork = z.infer<typeof WalletNetworkSchema>;
 export const WalletConfigSchema = z.object({
@@ -6680,15 +6678,23 @@ export const PresenceReportSchema = z.object({
 });
 export type PresenceReport = z.infer<typeof PresenceReportSchema>;
 
-// ---- push: web-push notifications to the owner's devices ----
-// The daemon is the only tier that knows what the agent is doing, so it is the sender. Subscriptions are
-// per-BROWSER (the endpoint is minted by that browser's push service — Google's, Mozilla's, Apple's), which
-// is why they live here and not on the platform: the platform is off the command path and would have to be
-// told about every turn to be useful.
+// ---- push: notifications to the owner's devices ----
+// The daemon is the only tier that knows what the agent is doing, so it is the sender. A registration is
+// per-DEVICE and comes in two kinds, distinguished by who can be posted to directly:
+//   webpush  a browser (including the Android TWA, which IS Chrome). The endpoint is minted by that
+//            browser's push service and the daemon sends to it directly, end-to-end encrypted.
+//   relay    a native app install (the iOS shell), whose OS push service (APNs) only accepts sends from
+//            the app's vendor. The daemon posts plain JSON to the platform's push relay, which holds the
+//            vendor credential and forwards. The payload transits the relay readable — the price of Apple
+//            requiring the vendor in the loop — which is why the channel records WHERE to post (`url`)
+//            rather than the daemon knowing any platform by name.
+// Channels live here and not on the platform because the daemon is on the command path: the platform would
+// have to be told about every turn to be useful.
 
 // A browser's PushSubscription, in the exact shape `web-push` consumes — the browser produces it via
 // PushManager.subscribe() and the client posts it back verbatim, so the daemon never reshapes it.
-export const PushSubscriptionSchema = z.object({
+export const WebPushChannelSchema = z.object({
+    kind: z.literal("webpush"),
     endpoint: z.url(),
     keys: z.object({
         // The client's public key and auth secret for payload encryption (RFC 8291). Opaque base64url here.
@@ -6696,7 +6702,27 @@ export const PushSubscriptionSchema = z.object({
         auth: z.string().min(1),
     }),
 });
-export type PushSubscription = z.infer<typeof PushSubscriptionSchema>;
+export type WebPushChannel = z.infer<typeof WebPushChannelSchema>;
+
+// A native install, addressed through a push relay. `secret` is the send capability the relay minted at
+// registration — the daemon proves it may notify this device by presenting it; the relay never learns which
+// sandbox is calling. `deviceId` doubles as the channel's identity (see channelId below).
+export const RelayChannelSchema = z.object({
+    kind: z.literal("relay"),
+    // The absolute URL the daemon POSTs a send to — minted by the relay at registration, stored verbatim.
+    url: z.url(),
+    deviceId: z.string().min(1),
+    secret: z.string().min(1),
+});
+export type RelayChannel = z.infer<typeof RelayChannelSchema>;
+
+export const PushChannelSchema = z.discriminatedUnion("kind", [WebPushChannelSchema, RelayChannelSchema]);
+export type PushChannel = z.infer<typeof PushChannelSchema>;
+
+// The one identity every push route speaks: subscribe upserts by it, unsubscribe and the config probe name
+// devices by it. Shape-derived so the daemon and the web app can never disagree about what identifies a row —
+// a browser is its push endpoint, a native install is the deviceId its relay registration minted.
+export const channelId = (channel: PushChannel): string => (channel.kind === "webpush" ? channel.endpoint : channel.deviceId);
 
 // What the service worker renders. `url` is the in-app route the notification opens (the click handler
 // focuses an existing tab there rather than spawning a new one); `tag` collapses repeats — a second
@@ -6715,14 +6741,14 @@ export const PushNotificationSchema = z.object({
 });
 export type PushNotification = z.infer<typeof PushNotificationSchema>;
 
-// The VAPID public key a browser needs to subscribe, plus whether this browser's endpoint is already known —
-// so the settings toggle can render its true state instead of trusting the browser's permission alone (a
-// granted permission with no server-side row would notify nothing).
+// The VAPID public key a browser needs to subscribe (native shells ignore it), plus whether the asking
+// device's channel is already known — so the settings toggle can render its true state instead of trusting
+// the device's permission alone (a granted permission with no daemon-side row would notify nothing).
 export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
-export const PushEndpointSchema = z.object({ endpoint: z.url() });
-// The optional `endpoint` says WHICH browser is asking; without it `subscribed` could only speak for the
-// sandbox as a whole, which is never the question the settings toggle needs answered.
-export const PushConfigQuerySchema = z.object({ endpoint: z.url().optional() });
+export const PushChannelIdSchema = z.object({ id: z.string().min(1) });
+// The optional `id` says WHICH device is asking (see channelId); without it `subscribed` could only speak
+// for the sandbox as a whole, which is never the question the settings toggle needs answered.
+export const PushConfigQuerySchema = z.object({ id: z.string().min(1).optional() });
 
 // What a test send actually achieved. `{ ok: true }` would be a lie the one place it matters most: the button
 // exists to prove a chain the user cannot inspect, so "the daemon accepted the request" is not the answer to

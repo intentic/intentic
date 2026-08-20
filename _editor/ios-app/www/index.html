@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+    <!-- The offline fallback — the only page this app carries. The shell loads the hosted SPA
+         (capacitor.config.ts server.url); this is what the webview shows when that first load cannot
+         happen at all. Styled to match the app's manifest colors so the failure doesn't flash white. -->
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>intentic</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                background: #141210;
+                color: #e8e4de;
+                font-family: -apple-system, system-ui, sans-serif;
+                display: grid;
+                place-items: center;
+                text-align: center;
+            }
+            p {
+                margin: 0.4rem 0 0;
+                color: #a09a90;
+                font-size: 0.9rem;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>intentic</h1>
+            <p>Can't reach app.intentic.dev right now.</p>
+            <p>Check your connection, then reopen the app.</p>
+        </main>
+    </body>
+</html>

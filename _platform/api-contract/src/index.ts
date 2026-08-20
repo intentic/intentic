@@ -22,6 +22,10 @@ import {
     ProviderServicesStateSchema,
     PublisherClaimSchema,
     PublisherSlugSchema,
+    PushDeviceGrantSchema,
+    PushDeviceInputSchema,
+    PushSendSchema,
+    PushSentSchema,
     SandboxSummarySchema,
     ServiceListingInputSchema,
     ServiceProbeResultSchema,
@@ -286,6 +290,22 @@ export const creatorContract = {
     services: serviceContract,
 };
 
+/* THE PUSH RELAY — APNs on behalf of daemons that hold no vendor secret (schemas.ts explains the split).
+ *
+ * `register`/`unregister` require a session: they are the signed-in web app inside the iOS shell, and a device
+ * row belongs to the account that minted it. `send` is SESSIONLESS by design — the caller is a daemon on the
+ * owner's own hardware, which has no platform session and never will; the per-device secret from the grant is
+ * its whole proof. Expired, unknown, and wrong-secret sends share the daemon's own dead-channel codes (403/410)
+ * so one pruning rule works end to end, and everything else answers without an oracle. */
+export const pushRelayContract = {
+    register: oc.route({ method: "POST", path: "/push/register" }).input(PushDeviceInputSchema).output(PushDeviceGrantSchema),
+    unregister: oc
+        .route({ method: "POST", path: "/push/unregister" })
+        .input(z.object({ deviceId: z.string().min(1) }))
+        .output(z.object({ ok: z.boolean() })),
+    send: oc.route({ method: "POST", path: "/push/send" }).input(PushSendSchema).output(PushSentSchema),
+};
+
 // Aggregated contract router — consumed by the oRPC client (ContractRouterClient<typeof apiContract>)
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
@@ -295,4 +315,5 @@ export const apiContract = {
     desktop: desktopContract,
     pool: poolContract,
     creator: creatorContract,
+    push: pushRelayContract,
 };

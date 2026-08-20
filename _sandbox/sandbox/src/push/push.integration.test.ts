@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PushSubscription } from "@intentic/sandbox-contract";
+import type { RelayChannel, WebPushChannel } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { afterEach, expect, test, vi } from "vitest";
 import webpush, { WebPushError } from "web-push";
@@ -23,7 +23,18 @@ const storePath = async (): Promise<string> => {
     return join(dir, "push.json");
 };
 
-const subscription = (endpoint: string): PushSubscription => ({ endpoint, keys: { p256dh: "p256dh-key", auth: "auth-secret" } });
+const subscription = (endpoint: string): WebPushChannel => ({ kind: "webpush", endpoint, keys: { p256dh: "p256dh-key", auth: "auth-secret" } });
+
+const relayChannel = (deviceId: string): RelayChannel => ({
+    kind: "relay",
+    url: "https://platform.example/rpc/push/send",
+    deviceId,
+    secret: `secret-${deviceId}`,
+});
+
+// Endpoints only exist on web-push rows; a relay row identifies as its deviceId.
+const idsOf = (channels: readonly (WebPushChannel | RelayChannel)[]): string[] =>
+    channels.map((entry) => (entry.kind === "webpush" ? entry.endpoint : entry.deviceId));
 
 test("the VAPID keypair is generated once and reused across store instances", async () => {
     const path = await storePath();
@@ -65,19 +76,19 @@ test("subscriptions round-trip and survive a reload", async () => {
     await store.add(subscription("https://push.example/a"));
     await store.add(subscription("https://push.example/b"));
 
-    expect((await filePushStore(path).list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/a", "https://push.example/b"]);
+    expect(idsOf(await filePushStore(path).list())).toEqual(["https://push.example/a", "https://push.example/b"]);
 });
 
 test("re-subscribing the same endpoint replaces its row rather than duplicating it", async () => {
     const path = await storePath();
     const store = filePushStore(path);
     await store.add(subscription("https://push.example/a"));
-    await store.add({ endpoint: "https://push.example/a", keys: { p256dh: "rotated", auth: "rotated" } });
+    await store.add({ kind: "webpush", endpoint: "https://push.example/a", keys: { p256dh: "rotated", auth: "rotated" } });
 
     const list = await store.list();
     // Two rows would mean two notifications per event for one browser.
     expect(list).toHaveLength(1);
-    expect(list[0]?.keys.p256dh).toBe("rotated");
+    expect(list[0]?.kind === "webpush" && list[0].keys.p256dh).toBe("rotated");
 });
 
 test("concurrent subscribes do not lose one another", async () => {
@@ -98,7 +109,7 @@ test("unsubscribe removes only the named endpoint", async () => {
     await store.add(subscription("https://push.example/a"));
     await store.add(subscription("https://push.example/b"));
     await store.remove("https://push.example/a");
-    expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/b"]);
+    expect(idsOf(await store.list())).toEqual(["https://push.example/b"]);
 });
 
 test("a corrupt store file is replaced rather than crashing the daemon", async () => {
@@ -107,7 +118,7 @@ test("a corrupt store file is replaced rather than crashing the daemon", async (
     // Losing subscriptions is recoverable (each browser re-subscribes); refusing to boot is not.
     const keys = await filePushStore(path).keys();
     expect(keys.publicKey).not.toBe("");
-    expect(JSON.parse(await readFile(path, "utf8")).subscriptions).toEqual([]);
+    expect(JSON.parse(await readFile(path, "utf8")).channels).toEqual([]);
 });
 
 const silentLogger = { debug: () => undefined, warn: () => undefined } as unknown as Logger;
@@ -137,7 +148,7 @@ test("a 403 drops the subscription — a recreated sandbox's stale endpoints mus
 
     await createPushSender(store, silentLogger).notify(sample);
 
-    expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/live"]);
+    expect(idsOf(await store.list())).toEqual(["https://push.example/live"]);
 });
 
 test("a transient 500 keeps the subscription and does not fail the caller", async () => {
@@ -173,7 +184,77 @@ test("one dead endpoint does not stop the others being notified", async () => {
     await createPushSender(store, silentLogger).notify(sample);
 
     expect(vi.mocked(webpush.sendNotification)).toHaveBeenCalledTimes(2);
-    expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/live"]);
+    expect(idsOf(await store.list())).toEqual(["https://push.example/live"]);
+});
+
+// Stubs the relay's answer for every deviceId; the daemon only ever sees an HTTP status.
+const stubRelay = (statuses: Record<string, number>): ReturnType<typeof vi.spyOn> =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        const { deviceId } = JSON.parse(String(init?.body)) as { deviceId: string };
+        return new Response("{}", { status: statuses[deviceId] ?? 200 });
+    });
+
+test("a relay channel is posted to its recorded url with the send capability and the notification", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(relayChannel("device-1"));
+    const fetchSpy = stubRelay({});
+
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 1, failed: 0 });
+
+    // The daemon knows no platform by name: everything it can say is the url the registration recorded and
+    // the {deviceId, secret} capability the relay minted. The notification rides along verbatim.
+    expect(fetchSpy).toHaveBeenCalledWith(
+        "https://platform.example/rpc/push/send",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ deviceId: "device-1", secret: "secret-device-1", notification: sample }) }),
+    );
+});
+
+test("a relay 410 drops the channel — an uninstalled app must not be retried forever", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(relayChannel("gone"));
+    await store.add(relayChannel("live"));
+    stubRelay({ gone: 410 });
+
+    await createPushSender(store, silentLogger).notify(sample);
+
+    expect(idsOf(await store.list())).toEqual(["live"]);
+});
+
+test("a relay 500 keeps the channel and does not fail the caller", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(relayChannel("flaky"));
+    stubRelay({ flaky: 500 });
+
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
+    expect(await store.list()).toHaveLength(1);
+});
+
+test("a relay that cannot be reached at all is a transient, not a prune", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(relayChannel("unreachable"));
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    // The platform being down says nothing about the DEVICE — the row must survive to be sent to when the
+    // relay comes back, unlike a 410 which is the relay itself saying the device is gone.
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
+    expect(await store.list()).toHaveLength(1);
+});
+
+test("browsers and native installs are fanned out together, each over its own transport", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(subscription("https://push.example/browser"));
+    await store.add(relayChannel("phone"));
+    stubSends({});
+    const fetchSpy = stubRelay({});
+
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 2, failed: 0 });
+    expect(vi.mocked(webpush.sendNotification)).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
 test("a finished turn notification carries the prompt, trimmed at a word boundary", () => {

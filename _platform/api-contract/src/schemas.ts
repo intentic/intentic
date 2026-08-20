@@ -36,6 +36,7 @@ import {
     MemberRoleSchema,
     PanelSummarySchema,
     PushConfigSchema,
+    PushNotificationSchema,
     RepoAppSchema,
     RuleFiringsSchema,
     RuleMomentSchema,
@@ -1078,3 +1079,44 @@ export const ServiceListingInputSchema = z.object({
     sampleRequest: z.string().max(4000),
 });
 export type ServiceListingInput = z.infer<typeof ServiceListingInputSchema>;
+
+// ---- push relay: APNs on behalf of daemons that hold no vendor secret ----
+//
+// Apple only accepts pushes from the app's vendor, so a native install cannot be posted to directly the way a
+// browser's web-push endpoint can. The relay is the platform's answer: the signed-in web app registers the
+// shell's device token here, the grant it gets back is stored on the DAEMON as a relay channel
+// (@intentic/sandbox-contract RelayChannelSchema), and from then on the daemon posts plain JSON to `url` —
+// sessionless, proving itself with the per-device secret alone. The relay never learns which sandbox is
+// calling, and the daemon never learns the device token; each side holds exactly the half it needs.
+
+// The one platform the relay forwards to. Android deliberately absent: the Play-store app is a TWA — real
+// Chrome — so its pushes ride the daemon's own web-push transport and never pass through here.
+export const PushPlatformSchema = z.enum(["ios"]);
+export type PushPlatform = z.infer<typeof PushPlatformSchema>;
+
+export const PushDeviceInputSchema = z.object({
+    platform: PushPlatformSchema,
+    // The APNs device token as the shell reports it (hex). Opaque here; only the forwarder interprets it.
+    token: z.string().min(1).max(400),
+});
+
+// What a registration answers — verbatim the relay channel the web app stores on the daemon. `secret` is
+// returned exactly once and persisted only as a hash; `url` is absolute so the daemon needs no knowledge of
+// any platform's layout, and a self-hosted platform's grants point home automatically.
+export const PushDeviceGrantSchema = z.object({
+    deviceId: z.string(),
+    secret: z.string(),
+    url: z.url(),
+});
+export type PushDeviceGrant = z.infer<typeof PushDeviceGrantSchema>;
+
+// A daemon's send. The notification is the daemon's own wire shape, forwarded without reinterpretation.
+export const PushSendSchema = z.object({
+    deviceId: z.string().min(1),
+    secret: z.string().min(1),
+    notification: PushNotificationSchema,
+});
+
+// Whether APNs took the send. Parallel to the daemon's own delivery counting: a relay that swallowed a send
+// silently would defeat the settings page's test button, whose whole job is proving the chain end-to-end.
+export const PushSentSchema = z.object({ delivered: z.boolean() });

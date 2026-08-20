@@ -1,0 +1,33 @@
+{
+    "packageId": "dev.intentic.app",
+    "host": "app.intentic.dev",
+    "name": "intentic",
+    "launcherName": "intentic",
+    "display": "standalone",
+    "themeColor": "#141210",
+    "themeColorDark": "#141210",
+    "navigationColor": "#141210",
+    "navigationColorDark": "#141210",
+    "navigationDividerColor": "#141210",
+    "navigationDividerColorDark": "#141210",
+    "backgroundColor": "#141210",
+    "startUrl": "/chat",
+    "iconUrl": "https://app.intentic.dev/assets/intentic-logo-sized.png",
+    "maskableIconUrl": "https://app.intentic.dev/assets/intentic-logo-sized.png",
+    "appVersionName": "1.0.0",
+    "appVersionCode": 1,
+    "minSdkVersion": 21,
+    "orientation": "default",
+    "enableNotifications": true,
+    "isChromeOSOnly": false,
+    "isMetaQuest": false,
+    "fullScopeUrl": "https://app.intentic.dev/",
+    "fallbackType": "customtabs",
+    "features": {},
+    "enableSiteSettingsShortcut": true,
+    "signingKey": {
+        "path": "./android.keystore",
+        "alias": "android"
+    },
+    "shortcuts": []
+}

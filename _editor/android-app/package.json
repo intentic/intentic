@@ -1,0 +1,9 @@
+{
+    "name": "@intentic/android-app",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "twa:build": "npx @bubblewrap/cli@1.25.0 build",
+        "twa:update": "npx @bubblewrap/cli@1.25.0 update"
+    }
+}

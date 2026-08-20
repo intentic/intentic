@@ -14,6 +14,7 @@ import "./composables/sandbox/sandboxScreen";
 // Publishes the app's vue + extension-api instances for extension bundles (see the import map in index.html).
 import "./extension-host/hostModules";
 import { router } from "./router";
+import { installNotificationTaps } from "./shell/notificationTaps";
 import "./styles.css";
 
 // First: from here on, a startup crash wipes this origin's stored state and reloads once instead of leaving a
@@ -29,6 +30,10 @@ initAnalytics();
 // Before anything mounts, so the spans of a slow first paint are in the ring buffer too. `__intenticPerf` in
 // the console is the whole interface — see composables/perf.ts.
 installPerfConsole();
+
+// Inside the native iOS shell only (a no-op everywhere else): the tap that launched the app is queued until a
+// listener exists, so this must precede the mount to land the user where the notification pointed.
+installNotificationTaps(router);
 
 // Composition API + a single design-system plugin. No zone.js / providers ceremony: the router, PrimeVue
 // (via installUi), and vue-query are the only app-wide wiring; server state lives in useQuery/useMutation,

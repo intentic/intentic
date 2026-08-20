@@ -1,0 +1,5 @@
+# Standalone install (this folder is outside the pnpm workspace — see README).
+node_modules/
+# CocoaPods artifacts inside the generated native project; the project itself IS committed.
+ios/App/Pods/
+ios/DerivedData/

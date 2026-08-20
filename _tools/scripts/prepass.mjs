@@ -97,9 +97,32 @@ const WORKSPACES = readdirSync(root, { withFileTypes: true })
 const SKIP_DIRS = new Set(["node_modules", "dist", ".cache", ".turbo", "out-tsc", "generated", ".git"]);
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
+/* The workspace file's negations are part of the same discovery: a directory it excludes (the store shells —
+ * installed standalone on the machine that actually builds them, a Mac with Xcode or Bubblewrap's JDK) is not
+ * an importer, so the lockfile owes it nothing and its files belong to no type-check program here. Exact
+ * paths only, matching how the negations are written; a glob negation would be a shape this scanner does not
+ * recognize, and the package it hides would then fail invariant 3 loudly rather than pass in silence. */
+const EXCLUDED = new Set();
+{
+    let inPackages = false;
+    for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split("\n")) {
+        if (/^\S/.test(line)) {
+            inPackages = line.startsWith("packages:");
+            continue;
+        }
+        const negated = inPackages && /^\s*-\s*["']?!(.+?)["']?\s*$/.exec(line);
+        if (negated) {
+            EXCLUDED.add(negated[1]);
+        }
+    }
+}
+
 // Every workspace package, as `{ name: "_deploy/graph", dir, pkg }` — the one directory walk both checks read.
 const packages = WORKSPACES.flatMap((workspace) =>
     readdirSync(join(root, workspace)).flatMap((name) => {
+        if (EXCLUDED.has(`${workspace}/${name}`)) {
+            return [];
+        }
         const dir = join(root, workspace, name);
         const manifest = join(dir, "package.json");
         return existsSync(manifest) ? [{ name: `${workspace}/${name}`, dir, pkg: JSON.parse(readFileSync(manifest, "utf8")) }] : [];

@@ -345,6 +345,32 @@ export const configSchema = z.object({
             custodyKey: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    /* THE PUSH RELAY's forwarding credential — the FOURTH documented exception to the secret-free model
+     * (intenticCloudflare, trial.keys and hosted.flyApiToken are the others), and the narrowest: Apple only
+     * accepts pushes from the app's vendor, so a daemon on the owner's own hardware cannot notify the iOS
+     * shell without SOMEONE holding this key, and that someone can only be the platform. What passes through
+     * is a notification's title and body — never a transcript, never a diff (the daemon's payloads are
+     * pointers back into the workspace by design) — but it passes through READABLE, unlike web push, and the
+     * push-relay README states that trade in full.
+     *
+     * `keyP8` is the switch, exactly like trial.keys: empty (the default, and the right one for a platform
+     * that ships no iOS app) and the relay does not exist — /push routes 404, and the web app inside the
+     * shell reports notifications unsupported rather than half-working. */
+    apns: z
+        .object({
+            // The APNs auth key — the .p8 file's contents, literal "\n" escapes accepted. APNS_KEY_P8.
+            keyP8: z.string().default(``).meta({ secret: true }),
+            // The key's id (from the Apple developer portal) and the team it belongs to. APNS_KEY_ID,
+            // APNS_TEAM_ID.
+            keyId: z.string().default(``),
+            teamId: z.string().default(``),
+            // The iOS shell's bundle id — APNs routes on it (`apns-topic`). APNS_BUNDLE_ID.
+            bundleId: z.string().default(`dev.intentic.app`),
+            // Apple's production gateway; point at https://api.sandbox.push.apple.com for development builds
+            // (a token minted by a debug install is unknown to the production gateway). APNS_URL.
+            url: z.url().default(`https://api.push.apple.com`),
+        })
+        .prefault({}),
     // Pino logging. LOG_LEVEL sets verbosity; LOG_PRETTY toggles human-readable dev output (colorized,
     // in-process) vs. single-line JSON for prod. Defaults to pretty everywhere but production.
     log: z
@@ -376,6 +402,7 @@ export const CONFIG_SECRETS = [
     `zrok.adminToken`,
     `hosted.flyApiToken`,
     `trial.keys`,
+    `apns.keyP8`,
 ];
 
 export const loadConfig = (): Config => loadPuristicConfig(definition);

@@ -40,6 +40,7 @@ model User {
     payoutAccount    PayoutAccount?
     payouts          CreatorPayout[]
     wallets          Wallet[]
+    pushDevices      PushDevice[]
 
     @@map("user")
 }
@@ -740,4 +741,28 @@ model SandboxMember {
     // above leads with sandboxId, so it can't serve them.
     @@index([email])
     @@map("sandbox_member")
+}
+
+// A native install registered with the push relay — one row per (account, device token). The row is the
+// relay's HALF of a channel whose other half lives on the owner's daemon: the daemon holds {deviceId, secret},
+// this row holds the APNs token and the secret's HASH, and a send is the two halves meeting. The plaintext
+// secret exists only in the register response — a database read yields nothing that can send.
+model PushDevice {
+    id         String   @id @default(cuid())
+    userId     String
+    user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // "ios" — the forwarder this token belongs to. The Android app is a TWA riding web push, so it never
+    // registers here.
+    platform   String
+    // The APNs device token as the shell reported it. Rotates on reinstall; the unique key makes a
+    // re-registration replace the row rather than stack a second send per notification.
+    token      String
+    // SHA-256 of the send capability. Verified in constant time; never reversible into a working secret.
+    secretHash String
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+
+    @@unique([userId, token])
+    @@index([userId])
+    @@map("push_device")
 }
