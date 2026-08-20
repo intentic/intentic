@@ -4,27 +4,27 @@ import type { ResidentEngine, ResidentEngineMetrics, ResidentEngineOptions } fro
 import type { IndexStatus, QueryOutcome, QueryRequest } from "../types.js";
 import type { EngineAnswer, EngineEvent, EngineMetricsSnapshot, EngineRequest } from "./protocol.js";
 
-/* THE ENGINE, ONE PROCESS OVER — a ResidentEngine by interface, a proxy by implementation.
+/* THE ENGINE, ONE PROCESS OVER, a ResidentEngine by interface, a proxy by implementation.
  *
  * WHY. A resident engine is heavy by design and it is heavy in the WRONG PROCESS. Measured in the sandbox
  * daemon: ~2 GB RSS with only ~360 MB of V8 heap, the rest being this engine's two worker threads and their ML
  * models sharing the daemon's address space. On a memory-pressured host that means most of a gigabyte of the
- * DAEMON swapped out — and the daemon is the control plane, the thing every browser request, every agent turn
+ * DAEMON swapped out, and the daemon is the control plane, the thing every browser request, every agent turn
  * and every git poll goes through. Its symptoms were never search: 20–40 ms of baseline event-loop delay,
  * multi-second stalls with no I/O to blame, GC bursts of seconds per minute. A floor under everything.
  *
- * It is the same move exec.ts made for git and for the same reason — the daemon's own resident size is what
- * makes everything else expensive — except there the goal was cheap fork() and here it is a small hot set.
+ * It is the same move exec.ts made for git and for the same reason, the daemon's own resident size is what
+ * makes everything else expensive, except there the goal was cheap fork() and here it is a small hot set.
  *
  * WHAT THIS COSTS. One IPC round trip per query, and a structured clone of the result. Against a search that
- * does BM25, a semantic scan and a cross-encoder pass, that is noise; against the alternative — the daemon
- * paging in to answer a keystroke — it is not close.
+ * does BM25, a semantic scan and a cross-encoder pass, that is noise; against the alternative, the daemon
+ * paging in to answer a keystroke, it is not close.
  *
  * A CHILD THAT DIES is survivable, not fatal: the calls it was holding fail, the host hears about it through
- * onQueryError, and the next call starts a fresh one — which re-sweeps and re-claims the index, because that
+ * onQueryError, and the next call starts a fresh one, which re-sweeps and re-claims the index, because that
  * is what a new engine does. */
 
-/* The child's entry is BUILT javascript in every form this module runs in — from `dist/host/client.js` the
+/* The child's entry is BUILT javascript in every form this module runs in, from `dist/host/client.js` the
  * "../../dist" hop is the identity, and from `src/host/client.ts` (this package's own tests) it steps across
  * into the sibling build output, because a forked child has no TypeScript loader. Exactly what index.ts's
  * WORKER_URL does one level up, and why this package's `test` script builds first: the child a test drives has
@@ -63,7 +63,7 @@ const rebuild = (message: string, stack?: string): Error => {
 
 /* A ResidentEngine plus the one thing a host wants that an in-process engine has no answer for: WHICH process
  * is now holding the memory. The daemon logs it at boot, and it is what makes "the box is at 2 GB" a question
- * anyone can answer from the outside — `ps` sees several node children here and cannot say which is the engine.
+ * anyone can answer from the outside, `ps` sees several node children here and cannot say which is the engine.
  * `undefined` between a child dying and the next call bringing one up. */
 export interface EngineClient extends ResidentEngine {
     pid(): number | undefined;
@@ -145,7 +145,7 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
             onQueryError?.(error);
         });
         child = started;
-        // Sent before this function returns, so nothing can reach the child ahead of it — IPC preserves order.
+        // Sent before this function returns, so nothing can reach the child ahead of it. IPC preserves order.
         started.send({ type: "init", options: init } satisfies EngineRequest);
         return started;
     };
@@ -172,7 +172,7 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
                     reject(error);
                 }
             });
-            // A signal that was ALREADY aborted never fires its event — forward it once the request is on the
+            // A signal that was ALREADY aborted never fires its event, forward it once the request is on the
             // wire so the child does not start work the caller has given up on.
             if (signal?.aborted === true) {
                 abort();
@@ -215,8 +215,8 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
                 return;
             }
             /* The child closes the engine (releasing the index claim) and then disconnects, which is what ends
-             * it. Issued BEFORE the flag goes up — `closed` is what refuses new work, and setting it first
-             * would refuse this call too — and the flag then goes up synchronously, so the exit it causes is
+             * it. Issued BEFORE the flag goes up, `closed` is what refuses new work, and setting it first
+             * would refuse this call too, and the flag then goes up synchronously, so the exit it causes is
              * not reported to the host as a crash. Failure is not worth propagating: shutdown continues either
              * way, and the pid file a killed child leaves behind resolves to nothing on the next open. */
             const finished = call((id) => ({ type: "close", id })).catch(() => undefined);

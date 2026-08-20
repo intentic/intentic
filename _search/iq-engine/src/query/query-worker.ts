@@ -5,23 +5,23 @@ import { semanticSearch } from "../engines/semantic.js";
 import { openIndex } from "../store/db.js";
 import type { EngineHit } from "../types.js";
 
-/* ANSWERING A QUERY, OFF THE HOST'S EVENT LOOP — the counterpart to index-worker.ts, and the half that was
+/* ANSWERING A QUERY, OFF THE HOST'S EVENT LOOP, the counterpart to index-worker.ts, and the half that was
  * missing. That one moved the work of KEEPING the index current; this one moves the work of READING it.
  *
  * The daemon's thread used to run both model stages of every natural-language query itself. Measured against
  * this workspace's index (3.7k files, 58k chunks): ~300ms for the scan over every embedded chunk, ~400ms for
- * the cross-encoder over the 24 candidates, and the loop blocked for essentially all of both — node:sqlite is
+ * the cross-encoder over the 24 candidates, and the loop blocked for essentially all of both, node:sqlite is
  * synchronous, so the scan cannot yield, and transformers.js tokenizes in JS before ONNX ever sees the batch.
  * Agents search on every turn, so that is ~700ms of dead loop per turn on the thread that streams their output.
  *
  * READ-ONLY, and that is the whole concurrency story. The index worker writes; this side and the host only
  * read; WAL lets all three hold the file at once. Nothing here is stateful between requests either, so requests
- * need no ordering and no queue — each message is answered on its own, and `id` is what pairs an answer with
+ * need no ordering and no queue, each message is answered on its own, and `id` is what pairs an answer with
  * its question.
  *
  * The models load at startup rather than on first use. The host spawns this thread at boot, next to the index
  * worker, so the half-second of model loading overlaps the first index pass instead of landing on whoever
- * searches first — which, before this file existed, was a first query that paid it on the daemon's own thread. */
+ * searches first, which, before this file existed, was a first query that paid it on the daemon's own thread. */
 
 export interface QueryWorkerData {
     readonly indexDir: string;

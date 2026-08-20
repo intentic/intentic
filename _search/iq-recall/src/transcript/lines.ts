@@ -1,5 +1,5 @@
 // Tolerant readers over transcript JSONL lines. The format is undocumented and drifts across claude-code
-// versions (typed prompts were plain strings before v2.x, arrays now) — every accessor returns undefined on
+// versions (typed prompts were plain strings before v2.x, arrays now), every accessor returns undefined on
 // unexpected shape instead of throwing, so unknown line types and future fields pass through ingestion.
 
 export type Line = Record<string, unknown>;
@@ -33,7 +33,7 @@ export const timestampOf = (line: Line): number | undefined => {
     return Number.isNaN(ms) ? undefined : ms;
 };
 
-// Slash-command echoes and harness caveats — user lines, but not something the user typed as a prompt.
+// Slash-command echoes and harness caveats, user lines, but not something the user typed as a prompt.
 const isCommandText = (text: string): boolean => text.startsWith("<command-") || text.startsWith("<local-command-");
 
 // The prompt the user actually typed, or undefined for tool results, command echoes, and meta lines.
@@ -68,7 +68,7 @@ export const typedPromptOf = (line: Line): string | undefined => {
 };
 
 // The assistant text of this line, or undefined for tool-use-only lines, sidechains, and non-assistant lines.
-// Sidechains (subagent threads) are excluded — their text answers the subagent's prompt, not the user's turn.
+// Sidechains (subagent threads) are excluded, their text answers the subagent's prompt, not the user's turn.
 export const assistantTextOf = (line: Line): string | undefined => {
     if (typeOf(line) !== "assistant" || line["isSidechain"] === true) {
         return undefined;

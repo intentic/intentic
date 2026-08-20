@@ -4,7 +4,7 @@ import type { GithubReader, GithubRepo } from "./github.js";
 
 /* THE SCAN: discovery on one side, a decision on the other, and a pull request in between.
  *
- * Two ideas were on the table for opening the registry up — scan GitHub for a topic and list what it finds,
+ * Two ideas were on the table for opening the registry up, scan GitHub for a topic and list what it finds,
  * or take submissions through a form on the site. Neither survives alone. A topic is a namespace anybody can
  * join, so a live scan publishes the first malicious repo to push one; a form is a login, a moderation queue
  * and an admin panel, which is a strictly worse pull request. So the scan is the INBOX and the registry repo
@@ -14,12 +14,12 @@ import type { GithubReader, GithubRepo } from "./github.js";
  *
  * The output is deliberately split. `facts` is derived data that overwrites its file every night and needs no
  * review; `proposals` are listings, one pull request each, so a reviewer merges or closes them one at a time
- * and a slow decision on one never blocks the others. `warnings` are for the run summary — things a human
+ * and a slow decision on one never blocks the others. `warnings` are for the run summary, things a human
  * should look at, never something this job acts on by itself. Delisting stays manual on purpose: an author
  * whose repo went briefly private should come back to a listing, not to a deletion. */
 
 // Where an extension declares itself, at the repo root. A manifest in a subdirectory is a real shape (one repo,
-// several extensions) but not a discoverable one — there is nowhere to look without guessing, so those get
+// several extensions) but not a discoverable one, there is nowhere to look without guessing, so those get
 // listed by opening the pull request by hand, which the publish docs say.
 const MANIFEST_PATH = "intentic-extension.json";
 
@@ -50,7 +50,7 @@ export interface ScanResult {
 interface ListedEntry {
     readonly name: string;
     readonly ref: string | undefined;
-    // Where the extension sits inside the pinned tree — "" for a repo of its own, the subdir for a monorepo
+    // Where the extension sits inside the pinned tree, "" for a repo of its own, the subdir for a monorepo
     // source. The checks must read the manifest where an install would, or a valid listing reads as broken.
     readonly path: string;
 }
@@ -112,7 +112,7 @@ const inspectAtSha = async (fullName: string, sha: string, path: string, github:
 
 /* Read one candidate's manifest and turn it into a proposal, or into the reason it isn't one.
  *
- * The listing key is extensionIdOf(manifest) — `publisher.name`, the same identity the app installs under.
+ * The listing key is extensionIdOf(manifest), `publisher.name`, the same identity the app installs under.
  * Keying the registry by it rather than by a free-text label is what makes squatting a non-event: two
  * publishers can both ship an "incidents" extension without colliding, and a repo that copies somebody
  * else's manifest wholesale collides with the existing listing and gets refused here instead of proposed. */
@@ -146,7 +146,7 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
             trust: "listed",
             ...(repo.description !== undefined ? { description: repo.description } : {}),
             version: manifest.version,
-            /* Off the manifest, like the version — an author who has said how their extension should look has
+            /* Off the manifest, like the version, an author who has said how their extension should look has
              * said it once, in the file they own, and re-typing it into somebody else's registry repo is how
              * the two would end up disagreeing. Proposed, not enforced: it lands in a pull request a human
              * merges, so a listing can still have its mark struck out or corrected there. */
@@ -157,11 +157,11 @@ const propose = async (repo: GithubRepo, github: GithubReader, listed: Map<strin
     };
 };
 
-/* Reuse the cold inspection at the PINNED sha to answer what an installer would find there — the same questions the daemon's readiness
+/* Reuse the cold inspection at the PINNED sha to answer what an installer would find there, the same questions the daemon's readiness
  * check answers for an author before publishing, asked cold by a stranger holding nothing but the pointer. The
  * bundle rule is shared code (@intentic/extension-manifest), so the two judges cannot drift; what differs is
  * the vantage: the author's check describes the directory they ran it in, this describes the commit installs
- * actually follow. Nothing here is a verdict on trust — it is whether the thing at the pointer can load. */
+ * actually follow. Nothing here is a verdict on trust, it is whether the thing at the pointer can load. */
 const checkAtSha = async (fullName: string, entry: ListedEntry, github: GithubReader): Promise<RegistryChecks | undefined> => {
     const sha = entry.ref ?? "";
     return (await inspectAtSha(fullName, sha, entry.path, github)).checks;
@@ -174,7 +174,7 @@ export const scanRegistry = async (file: RegistryFile, github: GithubReader, sca
     const found = await github.searchByTopic(REGISTRY_TOPIC);
     const foundByRepo = new Map(found.map((repo) => [repo.fullName.toLowerCase(), repo]));
 
-    /* Facts for every listed entry, whether or not the topic found it — a listing arrived at by pull request
+    /* Facts for every listed entry, whether or not the topic found it, a listing arrived at by pull request
      * has no obligation to carry the topic, and dropping its stars because of that would rank it below
      * newcomers for a reason that has nothing to do with it. */
     const entries: RegistryFacts["entries"] = [];
@@ -189,7 +189,7 @@ export const scanRegistry = async (file: RegistryFile, github: GithubReader, sca
         }
         const checks = entry.ref === undefined ? undefined : await checkAtSha(repo.fullName, entry, github);
         /* A failing check is also a warning, because the facts file is read by browsers and the summary by the
-         * maintainer — and the maintainer is the one who can do something about a listing whose pinned commit
+         * maintainer, and the maintainer is the one who can do something about a listing whose pinned commit
          * no longer loads. "none" and "unchecked" are not failures: no bundle is a daemon-only extension, and
          * unchecked means the manifest problem above it already says everything. */
         if (checks !== undefined && checks.manifest !== "ok") {

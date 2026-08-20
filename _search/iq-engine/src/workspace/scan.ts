@@ -9,10 +9,10 @@ import { globToRegExp } from "./glob.js";
 const MAX_FILES = 100_000;
 
 // Stat-sweep the workspace: every file the ignore model admits, sorted by path for determinism. This list is the
-// single authority on what any engine may surface — ripgrep/git results are post-filtered against it.
+// single authority on what any engine may surface, ripgrep/git results are post-filtered against it.
 //
 // Every directory's entries are walked and stat'd CONCURRENTLY. Serially, this was thousands of round-trips
-// awaited one after another — measured at ~3s on a large workspace, paid inline by every CLI query before a
+// awaited one after another, measured at ~3s on a large workspace, paid inline by every CLI query before a
 // byte was searched, which is the latency that sent agents back to grep. Nothing about WHAT is admitted
 // changes: the final sort makes the result order-independent, so concurrency cannot alter the output.
 export const sweep = async (root: string, includeIgnored: boolean): Promise<FileEntry[]> => {
@@ -23,7 +23,7 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
         // A `.git` FILE is a repo boundary exactly like a `.git` dir: git worktrees, submodules, and any repo
         // created with --separate-git-dir (which is how the daemon versions /work itself) keep only a pointer
         // file in the worktree. Requiring a directory here left those repos with no `repo` on their entries, and
-        // every git-backed verb — churn, hotspots, recent, log, who — silently skipped them.
+        // every git-backed verb, churn, hotspots, recent, log, who, silently skipped them.
         const ownsGit = dirents.some((d) => d.name === ".git");
         const repoHere = ownsGit ? rel : repo;
         await Promise.all(
@@ -35,10 +35,10 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
                 // `.git` counts as the directory it stands in for. The ignore layer grays a `.git` DIR, but the
                 // repos here keep a one-line `gitdir:` POINTER FILE instead (see ownsGit above), and as a file it
                 // was admitted as ordinary text: it put a host path from outside the workspace into search
-                // results, and — because re-pointing a worktree changes its byte count — the reader's size diff
+                // results, and, because re-pointing a worktree changes its byte count, the reader's size diff
                 // called it stale on every pass. A transcript audit found two days of answers opening with a
                 // fixed "index 6 files behind", one per pointer file: the standing false alarm that teaches a
-                // reader to disbelieve the real one. Only the sweep's business — a portability bundle must still
+                // reader to disbelieve the real one. Only the sweep's business, a portability bundle must still
                 // carry these, so the shared ignore layer cannot be the place this happens.
                 const junkGit = dirent.isDirectory() || dirent.name === ".git";
                 if (isIqDenied(relPath) || (!includeIgnored && here.isIgnored(dirent.name, relPath, junkGit))) {
@@ -75,7 +75,7 @@ const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/
 const CLASS_DOCS = /(^|\/)(docs?\/)|\.(md|mdx|rst|txt)$/i;
 const CLASS_CONFIG = /(^|\/)[^/]*\.(json|jsonc|ya?ml|toml|ini)$|(^|\/)\.[^/]*rc[^/]*$|(^|\/)[^/]*\.config\.[^/.]+$/;
 
-// Which class a path belongs to — the same four buckets `--only` selects, as a total function so ranking can
+// Which class a path belongs to, the same four buckets `--only` selects, as a total function so ranking can
 // prefer implementation over its tests and docs without a second set of patterns to keep in step.
 export const classOf = (path: string): FileClass => {
     if (CLASS_TESTS.test(path)) {
@@ -105,7 +105,7 @@ const EXT_LANG: Record<string, string> = {
     go: "go",
     rs: "rust",
     java: "java",
-    // No ast-grep grammar of its own — symbol extraction lifts the <script> block and parses it as TypeScript
+    // No ast-grep grammar of its own, symbol extraction lifts the <script> block and parses it as TypeScript
     // (indexer/sfc.ts). Named here so `--lang vue` scopes and the "no X files in scope" diagnostic can say it.
     vue: "vue",
 };
@@ -114,11 +114,11 @@ export const langOf = (path: string): string | undefined => EXT_LANG[path.slice(
 
 const LANG_NAMES = new Set(Object.values(EXT_LANG));
 
-// Accepts extensions AND canonical names ("py" or "python") — user-facing lang tokens must never silently
+// Accepts extensions AND canonical names ("py" or "python"), user-facing lang tokens must never silently
 // mismatch the canonical values langOf() produces (benchmarked: "--lang py" used to filter out every .py file).
 export const canonicalLang = (token: string): string | undefined => EXT_LANG[token] ?? (LANG_NAMES.has(token) ? token : undefined);
 
-// Narrow the sweep to the request's scope. Pure path logic — the security floor already happened in the sweep.
+// Narrow the sweep to the request's scope. Pure path logic, the security floor already happened in the sweep.
 export const filterScope = (entries: readonly FileEntry[], scope: Scope): FileEntry[] => {
     const globs = scope.globs?.map(globToRegExp);
     const notGlobs = scope.notGlobs?.map(globToRegExp);

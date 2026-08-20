@@ -2,19 +2,19 @@
  *
  * Two shapes, and the difference between them matters:
  *
- *   `run`        — a program with an argument vector. No shell, so nothing this file passes can be re-parsed
+ *   `run`       , a program with an argument vector. No shell, so nothing this file passes can be re-parsed
  *                  by anything: a sandbox hostname with a space in it is one argument, not two.
- *   `powershell` — a SCRIPT, handed to Windows PowerShell 5.1.
+ *   `powershell`, a SCRIPT, handed to Windows PowerShell 5.1.
  *
  * 5.1 (`powershell.exe`) and not 7 (`pwsh.exe`), everywhere, because that is what the desktop app spawns and
  * what the site's one-liner lands in. A tier that verified the shipped scripts under 7 would be testing a
- * shell no user of this product runs — and the two differ in exactly the places these scripts live: native
+ * shell no user of this product runs, and the two differ in exactly the places these scripts live: native
  * stderr redirection under `$ErrorActionPreference = 'Stop'`, and `$PSNativeCommandUseErrorActionPreference`,
  * both of which `connect.ps1` opens by disarming.
  *
  * -EncodedCommand rather than -Command: the argument reaches PowerShell as UTF-16LE base64, so quoting is not
  * a thing that exists on the way in. Passing a script as text means every embedded quote is negotiated by
- * CreateProcess's own parser and then again by PowerShell's, and the failures that produces are silent — a
+ * CreateProcess's own parser and then again by PowerShell's, and the failures that produces are silent, a
  * probe that returns the empty string reads exactly like a probe that returned "no".
  */
 
@@ -41,7 +41,7 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const DEFAULT_MAX_BUFFER = 32 * 1024 * 1024;
 
 /* A non-zero exit is a RESULT, never a throw. Every caller here is asking a question the answer to which may
- * legitimately be "no" — is docker there, did the installer succeed, does the registry hold that key — and a
+ * legitimately be "no", is docker there, did the installer succeed, does the registry hold that key, and a
  * helper that threw would turn each of them into a try/catch at the call site. The Linux tier makes the same
  * choice with `|| true`; this is the same decision spelled once. */
 export const run = async (file: string, args: readonly string[], options: RunOptions = {}): Promise<RunResult> => {

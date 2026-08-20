@@ -6,7 +6,7 @@ import { createEngine, type IndexStatus } from "@intentic/iq-engine";
 import { type RepoLock, ReposLockSchema } from "./schema.js";
 
 export const packageRoot = findPackageRoot(import.meta.url);
-// The monorepo checkout doubles as the "intentic" benchmark repo — no clone step.
+// The monorepo checkout doubles as the "intentic" benchmark repo, no clone step.
 export const monorepoRoot = findRepoRoot(import.meta.url);
 export const cacheDir = join(packageRoot, ".cache");
 
@@ -43,7 +43,7 @@ export const repoRoot = (repoId: string): string => {
 export const headSha = (root: string): string => execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 
 // Embedding + reranker models (~57 MB), fetched once into .cache/models via iq-engine's own script.
-// Returns undefined when absent and unfetchable — semantic/rerank configs are then reported as skipped.
+// Returns undefined when absent and unfetchable, semantic/rerank configs are then reported as skipped.
 export const ensureModels = (): string | undefined => {
     const dir = process.env["IQ_MODEL_DIR"] ?? join(cacheDir, "models");
     if (existsSync(dir)) {
@@ -67,7 +67,7 @@ export const ensureIndex = async (repoId: string, root: string, models: string |
     const engine = createEngine({ root, indexDir, ...(models !== undefined ? { modelDir: models } : {}) });
     if (existsSync(indexDir)) {
         const status = await engine.indexStatus();
-        // Complete embeddings are part of the benchmark contract — a lazily half-embedded index is not.
+        // Complete embeddings are part of the benchmark contract, a lazily half-embedded index is not.
         if (models === undefined || status.embedded >= status.chunks) {
             return { status };
         }

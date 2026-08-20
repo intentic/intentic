@@ -41,7 +41,7 @@ const configTable = (rows: readonly CaseRow[]): string => {
 
 const LOSS_ROWS_CAP = 10;
 
-// Paired per-case comparison of every config against `full` — the decision view. Means at small N invite
+// Paired per-case comparison of every config against `full`, the decision view. Means at small N invite
 // over-reading; a stage's fate is decided by win/loss direction and the sign test, plus its recall/token cost.
 const configVsFull = (rows: readonly CaseRow[]): string => {
     const fullByCase = new Map(
@@ -128,7 +128,7 @@ const lcg = (seed: number): (() => number) => {
     };
 };
 
-// Percentile-bootstrap 95% CI on the mean of paired deltas — descriptive, not a significance claim.
+// Percentile-bootstrap 95% CI on the mean of paired deltas, descriptive, not a significance claim.
 const bootstrapCi = (deltas: readonly number[]): { lo: number; hi: number } | undefined => {
     if (deltas.length < 2) {
         return undefined;
@@ -176,7 +176,7 @@ const pairedBlock = (label: string, pairs: ReadonlyArray<{ a: RunRecord; b: RunR
     return lines;
 };
 
-// Hard rule: runs are grouped per vendor+model and only within-model deltas are stated — never cross-model
+// Hard rule: runs are grouped per vendor+model and only within-model deltas are stated, never cross-model
 // absolute comparisons (different tokenizers, pricing, scaffolds).
 export const renderAgentsReport = (records: readonly RunRecord[]): string => {
     if (records.length === 0) {

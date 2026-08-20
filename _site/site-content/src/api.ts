@@ -222,7 +222,7 @@ export const apiServicesDestination = {
  * system of its own with two audiences. The last step loops because Maintain makes the revenue renewable,
  * which is why it comes after Earn rather than before it.
  *
- * EVERY STEP IS NAMED FOR THE PAGE IT LINKS TO — Publish, not "List"; Maintain, not "Update" — because a chip
+ * EVERY STEP IS NAMED FOR THE PAGE IT LINKS TO. Publish, not "List"; Maintain, not "Update", because a chip
  * that says one word and lands on a page titled another teaches the reader that the site has two vocabularies. */
 export const extensionLifecycle: readonly { step: string; href: string; what: string; audience: "author" | "user" }[] = [
     { step: "Build", href: apiHref("build"), what: "A directory with a manifest, in your own repo.", audience: "author" },

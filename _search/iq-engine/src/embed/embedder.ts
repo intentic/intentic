@@ -13,7 +13,7 @@ export interface Embedder {
     embedQuery(query: string): Promise<Float32Array>;
 }
 
-// Loads the baked ONNX model from `modelDir` (offline only — the sandbox must never fetch at runtime).
+// Loads the baked ONNX model from `modelDir` (offline only, the sandbox must never fetch at runtime).
 // undefined when no model dir is configured or present: the semantic tier degrades, everything else works.
 export const loadEmbedder = async (modelDir: string | undefined): Promise<Embedder | undefined> => {
     if (modelDir === undefined || modelDir === "" || !existsSync(modelDir)) {

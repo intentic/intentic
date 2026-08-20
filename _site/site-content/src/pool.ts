@@ -20,7 +20,7 @@
 export const pool = {
     // The membership's monthly price in USD.
     priceUsd: 20,
-    /* What running the platform for one member costs — their hosted machine and its disk, above all — taken
+    /* What running the platform for one member costs, their hosted machine and its disk, above all, taken
      * off the price BEFORE the shares below apply. Published rather than absorbed silently, because it is
      * the base the 90% is 90% OF, and a share whose base a reader cannot see is not a disclosure. */
     infraUsd: 5,
@@ -69,7 +69,7 @@ export const demoServiceCredits = 5;
  * live values to a signed-in provider on the Offer a service screen; this is what a static page can state.
  *
  * They are here rather than typed into the page because the whole claim of rules-based admission is that the
- * rules are knowable in advance — a threshold quietly out of date on a public page is worse than no page. */
+ * rules are knowable in advance, a threshold quietly out of date on a public page is worse than no page. */
 export const admission = {
     // The price band a listing may publish inside, and the tighter ceiling probation holds it under.
     minCredits: 1,

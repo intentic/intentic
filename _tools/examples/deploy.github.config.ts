@@ -1,6 +1,6 @@
 // Example: deploy an app using GitHub as the source-control + CI backend.
 // Instead of self-hosting Forgejo, intentic uses GitHub repos, GitHub Actions, and GHCR. Komodo still runs
-// on the host as the deploy orchestrator — you own your infrastructure; GitHub owns the source pipeline.
+// on the host as the deploy orchestrator, you own your infrastructure; GitHub owns the source pipeline.
 
 import { env } from "@intentic/graph";
 import { defineIntent } from "@intentic/sdk";
@@ -23,7 +23,7 @@ export const intent = defineIntent((i) => {
 
     // What I want: an app. intentic derives a GitHub repo, a GitHub Actions workflow (build → GHCR →
     // notify Komodo), Komodo on the host rolling out the pushed image, and a Cloudflare tunnel + DNS route.
-    // No Forgejo, no self-hosted runner — and no host SSH key ever leaves for GitHub.
+    // No Forgejo, no self-hosted runner, and no host SSH key ever leaves for GitHub.
     i.want.app("my-app", {
         on: host,
         expose: cf,

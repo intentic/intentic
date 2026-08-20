@@ -33,8 +33,8 @@ export interface Certificate {
 
 /* The three names this world is reached by, all in one certificate.
  *
- * `host.docker.internal` is not decoration: it is how a container on some OTHER network — the sandbox the
- * compose file starts — reaches this platform, and it is one of the three hostnames the daemon will skip
+ * `host.docker.internal` is not decoration: it is how a container on some OTHER network, the sandbox the
+ * compose file starts, reaches this platform, and it is one of the three hostnames the daemon will skip
  * verification for. */
 const SUBJECT_ALT_NAMES = `DNS:localhost,DNS:host.docker.internal,IP:127.0.0.1`;
 

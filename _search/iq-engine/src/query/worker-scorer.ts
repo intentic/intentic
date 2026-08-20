@@ -14,7 +14,7 @@ export interface WorkerScorerOptions {
     readonly indexDir: string;
     readonly modelDir: string | undefined;
     // The thread died (OOM, a model that won't load). Queries in flight degrade and the next one respawns it,
-    // so this is a log line rather than a decision — but an unreported death would mean semantic search quietly
+    // so this is a log line rather than a decision, but an unreported death would mean semantic search quietly
     // stopped happening, which is the one thing a search engine must not do silently.
     readonly onError?: (error: Error) => void;
 }
@@ -29,14 +29,14 @@ export interface WorkerScorer extends QueryScorer {
  * NO IN-THREAD FALLBACK, deliberately. A worker dies when the box is out of memory or the model is broken, and
  * "run the 700ms of inference here instead" would put the stall back on the daemon's loop at the exact moment
  * the machine can least afford it. A dead worker degrades the query the way a host with no model dir already
- * does — BM25 alone, and the capsule says so — and the next query gets a fresh thread. */
+ * does. BM25 alone, and the capsule says so, and the next query gets a fresh thread. */
 export const workerScorer = (options: WorkerScorerOptions): WorkerScorer => {
     const pending = new Map<number, (response: QueryWorkerResponse | undefined) => void>();
     let worker: Worker | undefined;
     let nextId = 0;
     let closed = false;
 
-    // Settles everything in flight as "no answer" — callers degrade rather than hang.
+    // Settles everything in flight as "no answer", callers degrade rather than hang.
     const settleAll = (): void => {
         const waiting = [...pending.values()];
         pending.clear();
@@ -73,7 +73,7 @@ export const workerScorer = (options: WorkerScorerOptions): WorkerScorer => {
             abandon(spawned, error);
         });
         spawned.on("exit", () => {
-            // Only reachable for an exit nobody asked for — close() drops the reference before terminating.
+            // Only reachable for an exit nobody asked for, close() drops the reference before terminating.
             if (worker === spawned) {
                 abandon(spawned, new Error("iq query worker exited"));
             }

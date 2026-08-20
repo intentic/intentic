@@ -1,5 +1,5 @@
 /* Asking the machine under test what is true. Every function here is the IO half of a pure function in
- * `parse.ts` — the shell round trip lives here, the reading of its answer lives there.
+ * `parse.ts`, the shell round trip lives here, the reading of its answer lives there.
  *
  * Nothing in this file asserts. A probe answers a question; whether the answer is a pass is the tier's
  * business, and keeping that line means a probe can be reused by a tier that expects "no" (the doctor's
@@ -11,7 +11,7 @@ import { asList, dockerOsType, installedApp, titled, webView2Version, type Insta
 import { powershell, run } from "./run.js";
 
 /* Where Windows lists what is installed. Both hives, because `installMode: currentUser` in the bundle config
- * puts the app in HKCU — but an installer run elevated, or a future switch to a per-machine install, lands in
+ * puts the app in HKCU, but an installer run elevated, or a future switch to a per-machine install, lands in
  * HKLM, and a probe that reads one hive would report a perfectly good install as absent. */
 const UNINSTALL_KEYS = [
     `HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*`,
@@ -38,7 +38,7 @@ export const findInstalledApp = async (displayName: string): Promise<InstalledAp
  *
  * The registry is read rather than a link being fired, because these are two different questions and the tier
  * asks both: this one is "is the scheme registered, and to what", which has a meaningful answer BEFORE the app
- * has ever run — the state a user who just installed is in, and the state in which the Linux equivalent of
+ * has ever run, the state a user who just installed is in, and the state in which the Linux equivalent of
  * this chain was broken for months while every after-launch assertion passed. */
 export const schemeCommand = async (scheme: string): Promise<string | undefined> => {
     const result = await powershell(
@@ -55,7 +55,7 @@ export const schemeCommand = async (scheme: string): Promise<string | undefined>
     return command === `` ? undefined : command;
 };
 
-/** The WebView2 runtime's version, or `undefined` on a machine that has none — Windows Server's usual state. */
+/** The WebView2 runtime's version, or `undefined` on a machine that has none. Windows Server's usual state. */
 export const webView2 = async (): Promise<string | undefined> => {
     const result = await powershell(
         `$ErrorActionPreference='SilentlyContinue'
@@ -84,7 +84,7 @@ export const userInteractive = async (): Promise<boolean> => {
 /** Whether a docker CLI is on PATH and its daemon answers. Separate from `dockerContainerOs` on purpose. */
 export const dockerReachable = async (): Promise<boolean> => (await run(`docker`, [`info`, `--format`, `{{.OSType}}`])).code === 0;
 
-/** `linux` or `windows` — which kind of container this daemon can run. See `parse.ts` for why it is asked. */
+/** `linux` or `windows`, which kind of container this daemon can run. See `parse.ts` for why it is asked. */
 export const dockerContainerOs = async (): Promise<string | undefined> => {
     const result = await run(`docker`, [`info`, `--format`, `{{.OSType}}`]);
     return result.code === 0 ? dockerOsType(result.stdout) : undefined;
@@ -113,19 +113,19 @@ export const removeContainer = async (container: string): Promise<void> => {
 /* The window layer. `@intentic/desktop` rather than a P/Invoke of our own: it is this repo's own answer to
  * "drive a Windows desktop from Node", it is the exact counterpart of the `xdotool` the Linux tier leans on,
  * and using it here means the installer tier is also the only place that runs it against a real Windows
- * session — which no unit test of it can be. */
+ * session, which no unit test of it can be. */
 const screen = desktop();
 
 export const windows = async (): Promise<WindowInfo[]> => await screen.windows();
 
 export const windowTitles = async (): Promise<string[]> => (await screen.windows()).map((window) => window.title);
 
-/* THE APP'S OWN WINDOWS, BY THE PROGRAM THAT OWNS THEM — never by title.
+/* THE APP'S OWN WINDOWS, BY THE PROGRAM THAT OWNS THEM, never by title.
  *
  * Every window question this tier asks is about the app under test, and the title is only ever which SCREEN is
  * up. Selecting by title conflates the two, and on any desktop that is not empty it silently answers about
  * somebody else's window: a browser tab reading the product's docs is titled `Intentic …`, which is enough to
- * make "the app closed" never come true and "one window, not two" count to three. It also cuts the other way —
+ * make "the app closed" never come true and "one window, not two" count to three. It also cuts the other way,
  * on a machine where only the browser is open, "the workspace window opened" passes with no app at all.
  *
  * `app` is the process name Windows reports for the window's owning process (`intentic-desktop`), so this is
@@ -154,7 +154,7 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
  * IT ANSWERS WITH WHY, NOT WITH FALSE. A keystroke that was never delivered is invisible from here on: the
  * assertions after it wait out their deadlines on a screen that was never going to come, and the log blames
  * the setup screen for a Return that landed on somebody's browser. `focusWindow` is the one step that CAN
- * tell, so its refusal is carried out to the tier verbatim rather than collapsed into a boolean — the
+ * tell, so its refusal is carried out to the tier verbatim rather than collapsed into a boolean, the
  * difference between "this machine would not give the dialog the keyboard" and thirty seconds of silence.
  *
  * AND FOCUS ALONE IS NOT ENOUGH TO TELL, WHICH IS WHY THE DIALOG GOING AWAY IS THE PROOF. `focusWindow`
@@ -164,13 +164,13 @@ export const appWindowTitled = async (app: string, fragment: string): Promise<bo
  * window maps a second or two later and takes the keyboard with it. The Return then lands in the workspace,
  * the dialog stays up untouched, and every assertion after it fails describing a product that was never asked.
  * That is a race, not a machine that refused, so the answer is to look and press again rather than to give up
- * — and the only reading that settles it is the dialog being gone. */
+ *, and the only reading that settles it is the dialog being gone. */
 const ANSWER_ATTEMPTS = 3;
 const ANSWER_SETTLE_MS = 3_000;
 const ANSWER_POLL_MS = 250;
 
 /* The window layer the loop below drives, named so it can be handed a fake. The loop is the only thing in this
- * file that is a DECISION rather than a round trip — when to press again, and which silence is a pass — and
+ * file that is a DECISION rather than a round trip, when to press again, and which silence is a pass, and
  * `createHarness` sets the precedent for injecting the clock and the sleep to test one. */
 export interface ConfirmOps {
     /** The dialog's window id, or `undefined` when no window of the app's is showing that title. */
@@ -224,7 +224,7 @@ export const answerConfirm = async (
     return refusal;
 };
 
-/** Fire a link at the OS the way a browser does — `Start-Process`, resolved through the registered handler. */
+/** Fire a link at the OS the way a browser does, `Start-Process`, resolved through the registered handler. */
 export const openLink = async (link: string): Promise<void> => {
     await screen.launch(link);
 };

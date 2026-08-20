@@ -3,13 +3,13 @@
  * material change (intentic-app stamps the accepted version on the user record).
  *
  * THESE ARE WRITTEN AGAINST THE CODE, and that is the only reason they can be this specific. Every window,
- * region, size and data category below was read out of the implementation — the retention sweep, the hosted
- * provisioner's region pick, the trial's per-account meter, the pool's Stripe wiring — rather than guessed at
+ * region, size and data category below was read out of the implementation, the retention sweep, the hosted
+ * provisioner's region pick, the trial's per-account meter, the pool's Stripe wiring, rather than guessed at
  * from what a service like this usually does. The corollary is a maintenance duty: a change to any of those
  * makes a sentence here false, and a false privacy statement is a regulatory problem rather than stale copy.
  *
  * NOTE: drafted from the code-verified data flows. A Polish lawyer must review these before the hosted lane
- * opens to the public — in particular the liability caps (the operator is a sole trader with unlimited
+ * opens to the public, in particular the liability caps (the operator is a sole trader with unlimited
  * personal liability) and the DPA, which is a contract the operator offers rather than merely a disclosure. */
 
 import {
@@ -44,7 +44,7 @@ export interface LegalDoc {
 
 /* The operator's identification, assembled from whatever is actually filled in. EU e-commerce law wants the
  * name, the address and the registration number published; the constants ship with the last two blank, and a
- * missing clause is dropped rather than rendered as an empty promise — see the note on those constants. */
+ * missing clause is dropped rather than rendered as an empty promise, see the note on those constants. */
 const operatorIdentity = (): string => {
     const parts = [`${LEGAL_ENTITY_NAME}, a sole trader established in ${LEGAL_ENTITY_COUNTRY}`];
     if (LEGAL_ENTITY_ADDRESS !== ``) {
@@ -447,7 +447,7 @@ export const dpaDoc: LegalDoc = {
 
 /* Third-party works whose licences ask for credit. Persona avatars use the Adventurer style, a set of
  * illustrated face components drawn by Lisa Wischofsky and remixed by DiceBear under CC BY 4.0, which
- * requires "appropriate credit" and a link to the licence. This page satisfies that — and is the single
+ * requires "appropriate credit" and a link to the licence. This page satisfies that, and is the single
  * place to add future attributions if another dependency asks for one. */
 export const creditsDoc: LegalDoc = {
     title: "Credits",

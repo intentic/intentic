@@ -1,6 +1,6 @@
 import type { Marketplace } from "@intentic-app/api-contract";
 
-/* THE REGISTRY THE DEMO BROWSES — what the Sandbox screen's Discover row shows.
+/* THE REGISTRY THE DEMO BROWSES, what the Sandbox screen's Discover row shows.
  *
  * The real thing is a git repository the daemon clones; there is no daemon here, so this stands in for the two
  * JSON files it would have read, already joined into the browse shape. Every row is a real published extension
@@ -98,7 +98,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`5b17f40bca49dd2a29c88ccf32b7215d`), manifest: `ok`, bundle: `ok` },
         },
-        // Premium — the creator-pool listing, badged before the click on both surfaces.
+        // Premium, the creator-pool listing, badged before the click on both surfaces.
         {
             name: `northbound.oncall`,
             kind: `extension`,
@@ -133,7 +133,7 @@ export const demoRegistry = (): Marketplace => ({
             checks: { sha: sha(`b41c9e75d208af36e5107cb92da4f8e3`), manifest: `ok`, bundle: `ok` },
         },
         /* A listing whose author never pinned a commit. It reads, it links out, and it cannot be installed in a
-         * click — which is the pressure that makes authors pin, and is worth a visitor seeing stated. */
+         * click, which is the pressure that makes authors pin, and is worth a visitor seeing stated. */
         {
             name: `hollowpeak.timesheets`,
             kind: `extension`,
@@ -148,7 +148,7 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
         },
         /* Blocked, and STILL LISTED. Deleting the row would hide it from people browsing and tell the people who
-         * already installed it nothing, which is backwards — they are the ones at risk. */
+         * already installed it nothing, which is backwards, they are the ones at risk. */
         {
             name: `driftwood.autocommit`,
             kind: `extension`,

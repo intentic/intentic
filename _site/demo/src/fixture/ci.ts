@@ -1,11 +1,11 @@
 import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
 
 /* THE PIPELINES BOARD: acme-shop's two repos on two different hosts, because that is the fact the view exists
- * to flatten — `web` on GitHub, `api` on GitLab, one board, one vocabulary. A visitor who runs both sees their
+ * to flatten, `web` on GitHub, `api` on GitLab, one board, one vocabulary. A visitor who runs both sees their
  * own situation; one who runs either sees theirs.
  *
  * The runs are a plausible afternoon on a HEALTHY workspace: one still going, five green behind it, and one
- * that broke. That balance is the honest picture of CI on a repo whose agents land reviewed work — and it is
+ * that broke. That balance is the honest picture of CI on a repo whose agents land reviewed work, and it is
  * what the board has to show, because a board that is mostly red teaches the reader that the product's output
  * does not pass, which is the opposite of the claim it sits under.
  *
@@ -15,7 +15,7 @@ import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic
  *
  * There is deliberately no REPEATED failure any more. The streak analysis (useFailureHistory) needs the same
  * job red in consecutive runs, and buying that costs a second red row plus a red banner across the top of the
- * board — a price the whole rest of the picture then pays. The analysis is exercised by its own unit tests
+ * board, a price the whole rest of the picture then pays. The analysis is exercised by its own unit tests
  * (ciStreaks.test.ts), which is where a rule belongs; this fixture's job is to be a truthful afternoon.
  *
  * Two shapes of job list, deliberately. GitLab reports a `stage` per job, so the api runs carry stages and the
@@ -138,7 +138,7 @@ const ciRuns = (now: number): PipelineRun[] => [
     },
 ];
 
-/* One run's jobs, fetched when a row expands. Keyed by repo + the vendor's run id — the same pair rerun and
+/* One run's jobs, fetched when a row expands. Keyed by repo + the vendor's run id, the same pair rerun and
  * cancel address a run by, so a job list can't drift onto the wrong row. */
 const gitlabJobs = (base: number, failing: boolean): PipelineJob[] => [
     { name: `lint`, status: `success`, stage: `build`, startedAt: base, finishedAt: base + 41_000, durationSeconds: 41 },
@@ -158,7 +158,7 @@ const gitlabJobs = (base: number, failing: boolean): PipelineJob[] => [
 
 /* A workflow that BRANCHES, because a straight line is the one shape the job graph cannot teach anything with.
  * `needs` is what the daemon resolves out of the real workflow file (sandbox: ci/workflowGraph.ts) and it is
- * what the graph is drawn from — fan-out from install, a matrix of e2e legs, and a deploy that waits on all of
+ * what the graph is drawn from, fan-out from install, a matrix of e2e legs, and a deploy that waits on all of
  * them. The timestamps deliberately do NOT tell the same story: the legs here start one after another, so the
  * old wave layering would still render this as a queue. It branches because the workflow says so. */
 const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
@@ -189,7 +189,7 @@ const githubJobs = (base: number, failing: boolean): PipelineJob[] => [
     },
 ];
 
-/* A run still going has its jobs mid-flight, which is the one case the row's graph animates — and the one
+/* A run still going has its jobs mid-flight, which is the one case the row's graph animates, and the one
  * where a declared graph earns its keep twice over, since the jobs that have not started yet have no
  * timestamps to be layered by at all. `deploy preview` is placed by what it waits on, not by when it ran. */
 const runningJobs = (base: number): PipelineJob[] => [
@@ -217,7 +217,7 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
 };
 
 // When the owner last read the board. Older than the failure above, so the rail badge that brought them
-// here is telling the truth — and `POST /ci/seen` clears it, exactly as it does against a real daemon.
+// here is telling the truth, and `POST /ci/seen` clears it, exactly as it does against a real daemon.
 export const ciRunsResponse = (now: number, seenAt: number | undefined): CiRunsResponse => ({
     repos: CI_REPOS,
     runs: ciRuns(now),

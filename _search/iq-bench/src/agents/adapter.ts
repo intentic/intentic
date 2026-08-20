@@ -12,7 +12,7 @@ interface AgentRunOptions {
     readonly env: NodeJS.ProcessEnv;
 }
 
-// Optional metrics stay absent when a vendor doesn't report them — the report renders "—", never fabricates.
+// Optional metrics stay absent when a vendor doesn't report them, the report renders "—", never fabricates.
 export interface AgentRunResult {
     readonly answer: string;
     readonly turns?: number;
@@ -21,7 +21,7 @@ export interface AgentRunResult {
     readonly cacheReadTokens?: number;
     readonly costUsd?: number;
     readonly exitCode: number;
-    // Full raw stdout — saved as the run transcript.
+    // Full raw stdout, saved as the run transcript.
     readonly raw: string;
 }
 

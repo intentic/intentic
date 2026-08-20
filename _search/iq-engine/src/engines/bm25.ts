@@ -5,7 +5,7 @@ import type { EngineHit } from "../types.js";
 const TOP_K = 50;
 
 // Query text → FTS5 MATCH expression: identifier-friendly terms, stopword-stripped, each double-quoted (so user
-// input can never be parsed as MATCH syntax), OR'd — BM25 does the term weighting.
+// input can never be parsed as MATCH syntax), OR'd. BM25 does the term weighting.
 export const toMatch = (query: string): string | undefined => {
     const terms = [...new Set(query.toLowerCase().match(/[a-z0-9_$][\w$]+/g) ?? [])].filter((term) => !STOPWORDS.has(term));
     if (terms.length === 0) {

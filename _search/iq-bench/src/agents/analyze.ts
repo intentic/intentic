@@ -5,7 +5,7 @@ import { packageRoot } from "../repos.js";
 import { type RunRecord, RunRecordSchema } from "../schema.js";
 
 // Where the tokens actually go: mined from the stream-json transcripts each run already saves. The categories
-// drive three decision metrics — reads-after-search (the round-trip `pack` must delete), search thrash, and
+// drive three decision metrics, reads-after-search (the round-trip `pack` must delete), search thrash, and
 // iq-adoption failures (arm b/c runs that never called iq).
 type Category = "iq" | "search" | "read" | "probe" | "test" | "git" | "edit" | "other";
 
@@ -51,7 +51,7 @@ export interface ToolEvent {
     readonly category: Category;
     // Bash only: "<verb> <query…>" of an iq invocation.
     readonly iqCall?: string;
-    // iq calls only, from the tool result: returned nothing / errored — the hardening KPI.
+    // iq calls only, from the tool result: returned nothing / errored, the hardening KPI.
     readonly iqZeroHit?: boolean;
     readonly iqUsageError?: boolean;
 }
@@ -167,10 +167,10 @@ export const toolEvents = (transcript: string): ToolEvent[] => {
 export interface RunAnalytics {
     readonly counts: Readonly<Record<Category, number>>;
     readonly iqCalls: readonly string[];
-    // Read-class call immediately following an iq / non-iq search call — the round-trip pack should remove.
+    // Read-class call immediately following an iq / non-iq search call, the round-trip pack should remove.
     readonly readsAfterIq: number;
     readonly readsAfterSearch: number;
-    // Bursts of ≥3 consecutive search/probe calls with no read/edit between — the grep-loop signature.
+    // Bursts of ≥3 consecutive search/probe calls with no read/edit between, the grep-loop signature.
     readonly thrashBursts: number;
     // Hardening KPI: iq calls that returned nothing or errored (target <5% of iq calls).
     readonly iqZeroHits: number;

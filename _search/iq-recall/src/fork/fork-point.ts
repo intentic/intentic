@@ -15,7 +15,7 @@ export interface ForkPoint {
 
 // Pick the user-turn prefix of a past session that maximizes still-valid relevant context per token:
 // score(P_k) = (Σ idf(fresh relevant files) − 1.5 × Σ idf(stale relevant files)) / sqrt(tokens + 1000).
-// Stale reads are penalized harder than missing ones — a fork that believes outdated file contents is worse
+// Stale reads are penalized harder than missing ones, a fork that believes outdated file contents is worse
 // than one that has to re-read. All prefixes ≤ 0 → no fork point beats starting fresh.
 export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, prompt?: string): ForkPoint | undefined => {
     const session = db.get("SELECT id FROM sessions WHERE session_id = ?", sessionId);
@@ -61,7 +61,7 @@ export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, p
         try {
             return statSync(join(root, path)).mtimeMs;
         } catch {
-            // Deleted since the session — its remembered content is as misleading as a stale read.
+            // Deleted since the session, its remembered content is as misleading as a stale read.
             return Number.MAX_SAFE_INTEGER;
         }
     };

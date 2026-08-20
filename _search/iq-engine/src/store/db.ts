@@ -3,16 +3,16 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getLoadablePath } from "sqlite-vec";
 
-// Bumped on any table/column change OR extraction-logic change that must reindex — mismatch drops and recreates
+// Bumped on any table/column change OR extraction-logic change that must reindex, mismatch drops and recreates
 // everything (the index is a pure cache).
 const SCHEMA_VERSION = "7";
 
 // Vectors are stored quantized to one signed byte per dimension instead of a four-byte float. The model's
-// output is normalized, so cosine — which divides the length back out — is unaffected by the scaling that
+// output is normalized, so cosine, which divides the length back out, is unaffected by the scaling that
 // quantizing needs, and the ranking it produces is the same ranking the float vectors produced: measured over
 // this workspace's index and 30 natural-language queries, 97.4% of the top 24 and 100% of the top hit are
 // identical, with scores differing by at most 0.005 (a displayed score is rounded to 0.01). What it buys is
-// the four-fold shrink — 98 MB of vectors become 27 MB — and a search that no longer reads them all.
+// the four-fold shrink — 98 MB of vectors become 27 MB, and a search that no longer reads them all.
 const EMBEDDING_DIM = 384;
 
 // Reclaim only when fragmentation is material. Incremental auto-vacuum moves live pages and truncates the file,
@@ -125,8 +125,8 @@ export const compactIndex = (db: IndexDb): boolean => {
     return true;
 };
 
-// How this handle intends to use the index. "read" is a genuinely read-only SQLite connection — not a promise
-// to behave — so a caller that is not the index's writer (see indexer-lock.ts) cannot contend for the write
+// How this handle intends to use the index. "read" is a genuinely read-only SQLite connection, not a promise
+// to behave, so a caller that is not the index's writer (see indexer-lock.ts) cannot contend for the write
 // lock even by accident, and a stray write is a loud error here rather than a lost race in production.
 export type IndexMode = "write" | "read";
 
@@ -149,7 +149,7 @@ const wrap = (db: DatabaseSync): IndexDb => ({
     close: () => db.close(),
 });
 
-// vec0 is a loadable extension, so every handle has to load it before it can so much as name chunk_vectors —
+// vec0 is a loadable extension, so every handle has to load it before it can so much as name chunk_vectors,
 // readers included, because the KNN query is theirs. The door is shut again immediately: the only extension
 // this process ever wants is this one, and leaving loading enabled would let any later SQL string open a shared
 // library. sqlite-vec ships prebuilt per platform and picks the right binary itself.
@@ -167,17 +167,17 @@ const open = (dir: string, mode: IndexMode): IndexDb => {
         readOnly.exec("PRAGMA busy_timeout = 5000;");
         loadVectorExtension(readOnly);
         // No DDL and no schema check: creating the schema is the writer's job, and a reader that reached this
-        // point was told by the lock that a live writer owns the file — which means the schema is that writer's.
+        // point was told by the lock that a live writer owns the file, which means the schema is that writer's.
         return wrap(readOnly);
     }
-    // The index dir itself, so the open below has somewhere to put index.db — and ONLY that. The spool used to be
+    // The index dir itself, so the open below has somewhere to put index.db, and ONLY that. The spool used to be
     // created here too, which left every workspace holding an empty `spool/` from its first search until its
     // first continuation cursor, and holding one again after each prune; writeSpool creates it when it has
     // something to write, which is the only moment it means anything.
     mkdirSync(dir, { recursive: true });
     const db = new DatabaseSync(join(dir, "index.db"), { allowExtension: true });
     // busy_timeout FIRST, alone: everything after it wants the write lock (journal_mode rewrites the header, the
-    // DDL takes a schema lock), and until the timeout is set the default is zero — so an index another process
+    // DDL takes a schema lock), and until the timeout is set the default is zero, so an index another process
     // is mid-write on failed the OPEN instantly, before any of the contention handling below could apply.
     db.exec("PRAGMA busy_timeout = 5000;");
     // Must be configured before the first table is created. Do not write this pragma on every open: diagnostic
@@ -211,7 +211,7 @@ export const isIndexBusy = (error: unknown): boolean =>
 
 // Open the index at `<dir>/index.db`, treating corruption or schema drift as cache loss: delete the whole index
 // dir and start fresh. A held write lock is contention from a concurrent opener (another iq process mid-write),
-// NOT corruption — dropping the dir there would nuke an index that process is building, so it propagates. A
+// NOT corruption, dropping the dir there would nuke an index that process is building, so it propagates. A
 // "read" open never recreates anything: the writer owns that, and rebuilding under it is precisely the collision
 // the mode exists to avoid.
 export const openIndex = (dir: string, mode: IndexMode): IndexDb => {

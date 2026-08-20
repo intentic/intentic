@@ -23,13 +23,13 @@ import { STORAGE_STATE, writeWorldFile } from "./world-file.js";
 
 const tier = e2eTier(`intentic onboarding journey`, { enabledBy: `INTENTIC_E2E_ONBOARDING` });
 
-/* Every server in this world rides a certificate minted for the run, which no root store has heard of — and is
+/* Every server in this world rides a certificate minted for the run, which no root store has heard of, and is
  * not meant to (certs.ts). The browser is told to ignore it by the Playwright config; this is the same
  * instruction for the setup process's own fetches, which is how it waits for services and proves the session
  * cookie recipe before any spec runs. */
 process.env[`NODE_TLS_REJECT_UNAUTHORIZED`] = `0`;
 
-/* Playwright reads `storageState` from a fixed path in the config, before any of this has run — so the file
+/* Playwright reads `storageState` from a fixed path in the config, before any of this has run, so the file
  * has to exist even when the tier stands down, or every spec fails on a missing file instead of skipping with
  * the reason. An empty state is the honest content for a run with no signed-in account. */
 const writeStorageState = (state: object): void => {
@@ -56,7 +56,7 @@ export default async (): Promise<(() => Promise<void>) | void> => {
     const world = await startWorld();
 
     try {
-        /* Sign-in, seeded — and the seam where the real one goes. See seed.ts: the recipe is proven against the
+        /* Sign-in, seeded, and the seam where the real one goes. See seed.ts: the recipe is proven against the
          * running server here, so a Better Auth upgrade fails with a sentence rather than as a blank login
          * page in every journey. */
         const session = await seedSession(world.databaseUrl, world.betterAuthSecret);

@@ -5,7 +5,7 @@ import { DAEMON_CONTAINER } from "../stack.js";
 // The terminal pop-out journey: docked panel → right-click the strip → its menu's pop-out row → a real browser
 // window → resize it → dock back. The panel's live xterm moves documents wholesale (the shell's Teleport), so
 // the regression surface is the remount: the fit must re-measure in the pop-out window and the PTY must follow
-// every step. The machinery under test is per-window (the fit ResizeObserver, the post-move redraw jiggle) —
+// every step. The machinery under test is per-window (the fit ResizeObserver, the post-move redraw jiggle),
 // when a document move goes undetected, fits silently stop, tmux stays at the docked grid, and the prompt
 // strands mid-window. The bar also turns into a left rail out there, which is why the pane is measured in the
 // pop-out window rather than assumed to be the full width.
@@ -16,7 +16,7 @@ declare global {
     }
 }
 
-// Every resize frame the client sends, straight off the wire — ground truth for "did the fit reach the PTY".
+// Every resize frame the client sends, straight off the wire, ground truth for "did the fit reach the PTY".
 // Recorded in the MAIN page: the panel's JS never leaves this realm, only its DOM does.
 const recordResizeFrames = `
     window.__termFrames = [];
@@ -38,13 +38,13 @@ const recordResizeFrames = `
 // rather than popping out on the spot, so every pop-out here goes through this row.
 const popoutRow = (page: Page): Locator => page.locator(`.p-contextmenu-item`, { hasText: `Move panel into new window` });
 
-// The daemon's view of the attach client — the end-to-end proof a fit actually landed.
+// The daemon's view of the attach client, the end-to-end proof a fit actually landed.
 const tmuxClient = (session: string): string =>
     execFileSync(`docker`, [`exec`, DAEMON_CONTAINER, `tmux`, `list-clients`, `-t`, session, `-F`, `#{client_width}x#{client_height}`], {
         encoding: `utf8`,
     }).trim();
 
-// Right-click the bar's empty space (the flex-1 spacer) for its own menu, then take the pop-out row — the
+// Right-click the bar's empty space (the flex-1 spacer) for its own menu, then take the pop-out row, the
 // click on the row is what carries the user activation window.open needs to escape the popup blocker. The
 // window it opens arrives as a new page on the context.
 const popOut = async (page: Page): Promise<Page> => {
@@ -62,7 +62,7 @@ const popOut = async (page: Page): Promise<Page> => {
 test(`popping the terminal panel out refits the grid to the floating window and back`, async ({ page }) => {
     await page.addInitScript(recordResizeFrames);
     await page.goto(`/workspace`);
-    // Open the terminal via the shell's keybinding dispatcher (a synthetic keydown is enough — only the
+    // Open the terminal via the shell's keybinding dispatcher (a synthetic keydown is enough, only the
     // pop-out gesture below needs real user activation).
     await page.waitForTimeout(3_000);
     await page.evaluate(() => window.dispatchEvent(new KeyboardEvent(`keydown`, { key: `\``, code: `Backquote`, ctrlKey: true })));
@@ -83,12 +83,12 @@ test(`popping the terminal panel out refits the grid to the floating window and 
     expect(popped!.rows).toBeGreaterThan((poppedBody!.height - 16) / 17 - 2);
     expect(tmuxClient(popped!.session!)).toBe(`${popped!.cols}x${popped!.rows}`);
     // The grown screen stays top-anchored: a PTY born at the wrong size (xterm's 80x24 default) banks blank
-    // rows in tmux's pane history, and the pop-out grow resurrects them ABOVE the prompt — the "shifted
+    // rows in tmux's pane history, and the pop-out grow resurrects them ABOVE the prompt, the "shifted
     // terminal". A top row holding the prompt proves the birth grid was right.
     const pane = execFileSync(`docker`, [`exec`, DAEMON_CONTAINER, `tmux`, `capture-pane`, `-p`, `-t`, popped!.session!], { encoding: `utf8` });
     expect(pane.split(`\n`)[0]!.trim()).not.toBe(``);
     // And the CLIENT paints it there too: xterm parks its helper textarea on the cursor cell, so a fresh
-    // prompt's cursor must sit in the top rows of the pane — junk rows shifting the live screen down (stale
+    // prompt's cursor must sit in the top rows of the pane, junk rows shifting the live screen down (stale
     // xterm scrollback surviving the move) land it much lower.
     const cursorTop = await popup.evaluate(() => {
         const textarea = document.querySelector(`.xterm-helper-textarea`);
@@ -98,7 +98,7 @@ test(`popping the terminal panel out refits the grid to the floating window and 
     expect(cursorTop).toBeGreaterThanOrEqual(0);
     expect(cursorTop).toBeLessThan(5 * 17);
 
-    // The window is the user's to resize, maximize and full-screen — the fit observer must live in IT for
+    // The window is the user's to resize, maximize and full-screen, the fit observer must live in IT for
     // those layout changes to reach the grid at all. Headless windows ignore resizeTo, so drive the same path
     // through the panel's layout instead.
     await popup.evaluate(() => {
@@ -110,7 +110,7 @@ test(`popping the terminal panel out refits the grid to the floating window and 
     expect(tmuxClient(shrunk!.session!)).toBe(`${shrunk!.cols}x${shrunk!.rows}`);
 
     // Dock back by closing the window (its beforeunload is what hands the panel home): the panel returns to
-    // the main grid and the PTY follows back down — the re-docked screen fills the docked pane short of at
+    // the main grid and the PTY follows back down, the re-docked screen fills the docked pane short of at
     // most one row.
     await popup.close({ runBeforeUnload: true });
     await page.waitForTimeout(2_000);
@@ -123,7 +123,7 @@ test(`popping the terminal panel out refits the grid to the floating window and 
     expect(docked.screenHeight).toBeGreaterThan(docked.cellHeight - 26);
     expect(tmuxClient(docked.frame!.session!)).toBe(`${docked.frame!.cols}x${docked.frame!.rows}`);
 
-    // Pop out AGAIN — the second cycle is where cumulative per-window state (observers, renderer realm
+    // Pop out AGAIN, the second cycle is where cumulative per-window state (observers, renderer realm
     // bindings) historically rotted, leaving the fit dead and the grid frozen at the docked size.
     const popup2 = await popOut(page);
     await page.waitForTimeout(3_000);

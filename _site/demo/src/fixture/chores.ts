@@ -1,19 +1,19 @@
 import { assessReport, digestOf, ledgerKey } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract";
 
-/* MAINTENANCE, RECORDED — the evidence `GET /chores` carries for acme-shop, and the ledger of what has already
+/* MAINTENANCE, RECORDED, the evidence `GET /chores` carries for acme-shop, and the ledger of what has already
  * been done about it.
  *
  * The daemon measures and the browser decides: this route answers with MEASUREMENTS (probe results, package
  * facts, the hotspot ranking) and never with verdicts, because the chore book that turns those into "due" or
  * "clear" ships in the app. So the fixture's job is to be a plausible repository, not to choose what the panel
- * says — every row a visitor reads is computed from the numbers below by the same function that runs against a
+ * says, every row a visitor reads is computed from the numbers below by the same function that runs against a
  * real daemon.
  *
  * WHAT THE NUMBERS ARE CHOSEN TO PRODUCE is one row of each kind the surface distinguishes, because the
  * distinctions are the design:
  *   due            a high advisory reaching production, two majors waiting, dead code, a tangled hotspot
- *   snoozed        the API's dependency drift — the owner said "not this cycle"
+ *   snoozed        the API's dependency drift, the owner said "not this cycle"
  *   clear          duplication in the API, checked by an agent that reported the findings did not hold up
  *   unavailable    knip is not a devDependency of the API, so its dead code is UNMEASURED, not clean
  *   not applicable no Dockerfile in the storefront, no packages to document one by one, no docs in the API
@@ -21,7 +21,7 @@ import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sand
  * The two `clear` states are the ones worth having: a maintenance panel that can only show complaints cannot be
  * used to check that there are none. */
 
-// What this sandbox runs. A supported LTS, so the runtime chore reads `clear` — a recording that opened on an
+// What this sandbox runs. A supported LTS, so the runtime chore reads `clear`, a recording that opened on an
 // end-of-life warning would be shouting about the box rather than about the code.
 const NODE = `v22.14.0`;
 
@@ -37,7 +37,7 @@ const probe = (id: ProbeResult["id"], ranAtDaysAgo: number, tookMs: number, fact
 
 /* THE STOREFRONT'S EVIDENCE. Two majors waiting behind a long tail of ordinary drift, one advisory that actually
  * reaches a running page, some code nothing references any more, and a checkout panel that both churns and is
- * imported by everything — which is the shape of a repository somebody is actively shipping. */
+ * imported by everything, which is the shape of a repository somebody is actively shipping. */
 const webRepo = (now: number) => ({
     repo: `web`,
     probes: [
@@ -117,7 +117,7 @@ const webRepo = (now: number) => ({
          * into the markup on the pages that were in a hurry.
          *
          * The clone above between PricingPage and LegacyPlanTable is deliberately left in the jscpd result rather
-         * than restated here — both sides are in the inventory below, which is exactly how component-overlap
+         * than restated here, both sides are in the inventory below, which is exactly how component-overlap
          * turns a generic duplication finding into a front-end one. */
         probe(
             `ui`,
@@ -149,7 +149,7 @@ const webRepo = (now: number) => ({
             now,
         ),
         // One vendor chunk carrying two thirds of the download, which is what a Vite app looks like before anyone
-        // has split a route — and the reason this reads off disk is that nobody rebuilt anything to find out.
+        // has split a route, and the reason this reads off disk is that nobody rebuilt anything to find out.
         probe(
             `bundle`,
             0.3,
@@ -183,7 +183,7 @@ const webRepo = (now: number) => ({
             lockfile: true,
             packageManifest: true,
             // A React storefront on Tailwind, which is what makes the four front-end chores apply here at all.
-            // Read from the root manifest rather than from `packages` above — which is empty, and would have
+            // Read from the root manifest rather than from `packages` above, which is empty, and would have
             // left every one of them silently dark in exactly the kind of repository they were written for.
             deps: [`react`, `react-dom`, `react-router`, `tailwindcss`, `vite`, `image-resize`, `esbuild`],
         },
@@ -193,7 +193,7 @@ const webRepo = (now: number) => ({
             { path: `src/lib/api.ts`, commits: 12, adds: 190, dels: 84, complexity: 11, score: 0.38, latestMs: now - 6 * DAY },
             { path: `tests/signup.spec.ts`, commits: 9, adds: 260, dels: 180, complexity: 8, score: 0.29, latestMs: now - 2 * DAY },
         ],
-        // CheckoutPanel is in both rankings — it churns AND everything imports it, which is the one shape the
+        // CheckoutPanel is in both rankings, it churns AND everything imports it, which is the one shape the
         // complexity chore reports rather than laundering a leaderboard into a to-do list.
         keyModules: [
             { path: `src/pricing/CheckoutPanel.tsx`, exports: 6 },
@@ -205,7 +205,7 @@ const webRepo = (now: number) => ({
 });
 
 /* THE API'S EVIDENCE. Quieter, and unmeasured in one place on purpose: knip is not a devDependency here, so its
- * dead-code chore has no answer at all — which the panel renders greyed and can never badge. */
+ * dead-code chore has no answer at all, which the panel renders greyed and can never badge. */
 const apiRepo = (now: number) => ({
     repo: `api`,
     probes: [
@@ -223,14 +223,14 @@ const apiRepo = (now: number) => ({
             },
             now,
         ),
-        // Measured, and genuinely clean — the state this surface most needs to be able to show.
+        // Measured, and genuinely clean, the state this surface most needs to be able to show.
         probe(`audit`, 0.6, 7_400, { id: `audit` as const, advisories: [] }, now),
         {
             id: `knip` as const,
             state: `unavailable` as const,
             ranAt: now - 0.6 * DAY,
             tookMs: 120,
-            // Verbatim what the daemon records for an unavailable probe — the spec's own `unavailable` clause.
+            // Verbatim what the daemon records for an unavailable probe, the spec's own `unavailable` clause.
             reason: `knip is not a devDependency`,
         },
         probe(
@@ -256,7 +256,7 @@ const apiRepo = (now: number) => ({
         // No architecture documents in the repo: the API's set is still a DRAFT (fixture/docs.ts), so the
         // documentation-drift survey has nothing to re-read and says so rather than firing on its cadence.
         // No UI framework here, so the four front-end chores read "not applicable" against the API and the
-        // footer says why — the same distinction the missing Dockerfile draws for the storefront.
+        // footer says why, the same distinction the missing Dockerfile draws for the storefront.
         shape: {
             docs: [],
             dockerfiles: [`Dockerfile`],
@@ -271,7 +271,7 @@ const apiRepo = (now: number) => ({
         ],
         keyModules: [{ path: `src/db/migrations.ts`, exports: 3 }],
         // Under the cross-cutting-patterns floor (25 indexed files), so that survey reads "not applicable here"
-        // — a repository this small has one way of doing things because there is barely more than one place.
+        //, a repository this small has one way of doing things because there is barely more than one place.
         totals: { files: 18, symbols: 142, complexity: 38, hotspots: 2 },
         indexed: true,
     },
@@ -279,11 +279,11 @@ const apiRepo = (now: number) => ({
 
 const evidence = (now: number): ChoresReport["repos"] => [webRepo(now), apiRepo(now)];
 
-/* THE LEDGER — what has already been run, and the one snooze the owner set.
+/* THE LEDGER, what has already been run, and the one snooze the owner set.
  *
  * Seeded from the verdicts the evidence above actually produces, never from hand-typed digests: a digest that
  * misses is invisible (the row simply reads as never-run), and the two entries that matter here are the two
- * whose whole point is that the digest MATCHES — the settled `clean` verdict and the snooze. Deriving them with
+ * whose whole point is that the digest MATCHES, the settled `clean` verdict and the snooze. Deriving them with
  * the same function the panel uses is the only way that cannot rot when a number above changes. */
 const seedLedger = (now: number): ChoreLedgerEntry[] => {
     const verdicts = assessReport({ repos: evidence(now), ledger: [], running: [], node: NODE }, now);
@@ -305,7 +305,7 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
         ...extra,
     });
     return [
-        // Surveys that were read recently enough to be clear — and whose rows say when, which is the only thing
+        // Surveys that were read recently enough to be clear, and whose rows say when, which is the only thing
         // "nothing to do" can honestly mean for a review that measures nothing.
         entry(`web`, `standardize-patterns`, 12, `reported`),
         entry(`web`, `deprecated-apis`, 34, `reported`),
@@ -315,13 +315,13 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
         // The agent looked at exactly this duplication and reported it was generated code and deliberately
         // repetitive tests. `clean` is what makes that verdict stick until the evidence moves.
         entry(`api`, `duplication`, 3, `clean`),
-        // "Not this cycle" — the drizzle major is a project, and the owner said so from the panel.
+        // "Not this cycle", the drizzle major is a project, and the owner said so from the panel.
         entry(`api`, `dependencies-outdated`, 8, `reported`, { snoozedUntil: now + 22 * DAY }),
     ];
 };
 
 // Built once and then LIVE: snoozing from the panel and promoting a finished run both write here, and every
-// later read reflects it — a fixture that answered read-only would have controls that spring back on next poll.
+// later read reflects it, a fixture that answered read-only would have controls that spring back on next poll.
 let ledger: ChoreLedgerEntry[] | undefined;
 
 // Nothing measuring: the demo has no runner behind it, and a spinner that never resolves is a worse tour of the
@@ -333,7 +333,7 @@ export const choresReport = (now: number): ChoresReport => ({
     node: NODE,
 });
 
-/** POST /chores/ledger — record a run, or snooze. One row per repo + chore, newest write wins. */
+/** POST /chores/ledger, record a run, or snooze. One row per repo + chore, newest write wins. */
 export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {
     const rows = (ledger ??= seedLedger(now));
     const index = rows.findIndex((row) => ledgerKey(row.repo, row.chore) === ledgerKey(written.repo, written.chore));
@@ -344,12 +344,12 @@ export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {
     rows[index] = written;
 };
 
-/* THE RUN HISTORY — a chore turn that already happened, as the files it leaves behind. The manifest is what makes
+/* THE RUN HISTORY, a chore turn that already happened, as the files it leaves behind. The manifest is what makes
  * a run discoverable and the result is what the agent wrote when it finished; the panel promotes the pair into a
  * ledger row itself, which is exactly what it will do on this recording's first poll.
  *
  * Its digest is the evidence as it stood THEN, and the storefront's dead code has moved since (the agent deleted
- * two files, knip now reports different ones) — so the row shows what was done without the chore going quiet
+ * two files, knip now reports different ones), so the row shows what was done without the chore going quiet
  * about what is true now. */
 export const choreFiles = (now: number): [string, string][] => {
     const createdAt = now - 2 * DAY;

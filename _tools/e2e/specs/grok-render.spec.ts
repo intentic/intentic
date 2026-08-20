@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // Grok chat must render a streamed turn without crashing the assistant bubble. This is the regression guard for
 // the `undefined is not an object (evaluating 'W.type')` class of failure: the Grok adapter streams chunky
-// PARTIAL-markdown snapshots, and ChatMessageView re-runs the markdown renderer on every delta — so a single
+// PARTIAL-markdown snapshots, and ChatMessageView re-runs the markdown renderer on every delta, so a single
 // throw in that render path blanks the turn. The daemon is fully mocked here (no real xAI account, no live
 // agent): we drive the real Vue app + real render pipeline against canned Grok frames that deliberately stress
 // the renderer with mid-table / unclosed-code-fence / mid-list partial states.
@@ -81,7 +81,7 @@ test("a streamed Grok turn renders (partial markdown, table, code, tool) without
     // The tool card rendered too (Grok's tool/tool_result frames).
     await expect(page.getByText("echo hi")).toBeVisible();
 
-    // No red error line, and — the point of this test — no render crash surfaced anywhere.
+    // No red error line, and, the point of this test, no render crash surfaced anywhere.
     await expect(page.locator("p.text-danger")).toHaveCount(0);
     expect(pageErrors, `uncaught page errors:\n${pageErrors.join("\n")}`).toEqual([]);
     expect(vueErrors, `Vue render/lifecycle errors:\n${vueErrors.join("\n")}`).toEqual([]);

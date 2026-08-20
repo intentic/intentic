@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Verbs whose output is ranked groups — the only ones golden-anchor scoring makes sense for.
+// Verbs whose output is ranked groups, the only ones golden-anchor scoring makes sense for.
 // Anchor/git verbs (outline, context, recent, log, who) are excluded on purpose.
 const SEARCH_VERBS = ["q", "find", "files", "def", "refs", "sym", "ast"] as const;
 
@@ -35,7 +35,7 @@ export const QueryDatasetSchema = z.object({
     // Matches repos.lock.json id; "intentic" = this monorepo checkout, no clone step.
     repo: z.string().min(1),
     // Merged into every case's scope (case fields win). The intentic dataset uses notGlobs here to keep the
-    // bench's own dataset files — which contain the query strings verbatim — out of the searched corpus.
+    // bench's own dataset files, which contain the query strings verbatim, out of the searched corpus.
     scope: ScopeSchema.optional(),
     cases: z.array(QueryCaseSchema).min(1),
 });
@@ -69,7 +69,7 @@ export const TaskSchema = z.object({
     repo: z.string().min(1),
     type: z.enum(["locate", "fix"]),
     prompt: z.string().min(1),
-    // Applied to the worktree before the agent starts (both arms) — e.g. a bug-introducing patch for fix tasks.
+    // Applied to the worktree before the agent starts (both arms), e.g. a bug-introducing patch for fix tasks.
     setup: z.object({ patch: z.string().min(1) }).optional(),
     grader: z.discriminatedUnion("kind", [AnchorsGraderSchema, TestGraderSchema]),
     caps: z.object({
@@ -82,7 +82,7 @@ export type Task = z.infer<typeof TaskSchema>;
 const VENDORS = ["claude", "codex", "grok"] as const;
 export type Vendor = (typeof VENDORS)[number];
 
-// One agent run = (task × vendor × arm). Optional metrics stay absent when a vendor doesn't report them —
+// One agent run = (task × vendor × arm). Optional metrics stay absent when a vendor doesn't report them,
 // the report renders "—", never fabricates.
 export const RunRecordSchema = z.object({
     runId: z.string(),

@@ -1,15 +1,15 @@
 import type { Automation, AutomationApproval, AutomationSummary } from "@intentic/sandbox-contract";
 
-/* THE AUTOMATIONS acme-shop runs while nobody is watching — the surface that turns a sandbox from a place you
+/* THE AUTOMATIONS acme-shop runs while nobody is watching, the surface that turns a sandbox from a place you
  * open into a colleague that works overnight. One of each kind the trigger union can be, because the page's
  * whole claim is that they are the same machine:
  *
- *   schedule  — the nightly dependency audit (a code CHORE: maintenance of this codebase), and its runs are
+ *   schedule , the nightly dependency audit (a code CHORE: maintenance of this codebase), and its runs are
  *               the fleet card the board shows as an automation's overnight pass.
- *   listener  — Discord: @mention the agent in #eng-alerts and it answers there, as a participant.
- *   listener  — the Front Desk webchat on the marketing site, held for approval because it is driven by strangers.
- *   workspace — a land into the main tree wakes the doc-check chore.
- *   event     — CI: a red pipeline wakes an agent with the failed job's log already in hand.
+ *   listener . Discord: @mention the agent in #eng-alerts and it answers there, as a participant.
+ *   listener , the Front Desk webchat on the marketing site, held for approval because it is driven by strangers.
+ *   workspace, a land into the main tree wakes the doc-check chore.
+ *   event    . CI: a red pipeline wakes an agent with the failed job's log already in hand.
  *
  * `runs` are what make a row honest: an automation with no history is a promise, and one with a `skipped` and an
  * `error` in its last five is what running unattended actually looks like. The approvals queue holds one wake,
@@ -106,8 +106,8 @@ export const automationsList = (now: number): AutomationSummary[] => state(now);
 export const automationApprovals = (now: number): AutomationApproval[] => heldState(now);
 
 /* A save is real, which is what makes the page's switch and its New automation dialog worth clicking: the row
- * flips (or appears) and stays that way. Everything a save cannot fake — the cron that fires it, the Discord
- * bot that hears it — is the sandbox's half, and the demo says so in the refusals below. */
+ * flips (or appears) and stays that way. Everything a save cannot fake, the cron that fires it, the Discord
+ * bot that hears it, is the sandbox's half, and the demo says so in the refusals below. */
 export const saveAutomation = (now: number, automation: Automation): void => {
     const all = state(now);
     const index = all.findIndex((candidate) => candidate.id === automation.id);
@@ -124,7 +124,7 @@ export const deleteAutomation = (now: number, id: string): void => {
     automations = state(now).filter((automation) => automation.id !== id);
 };
 
-/** Approving or rejecting a held wake empties the queue row — the one thing the approvals list is for. */
+/** Approving or rejecting a held wake empties the queue row, the one thing the approvals list is for. */
 export const resolveApproval = (now: number, id: string): void => {
     approvals = heldState(now).filter((approval) => approval.id !== id);
 };

@@ -1,5 +1,5 @@
 // The canonical on-disk layout of an intentic workspace. Both the CLI (lib/artifact.ts) and the sandbox daemon
-// (workspace.ts, config-store.ts, secrets.routes.ts) share these constants — they MUST agree on filenames and
+// (workspace.ts, config-store.ts, secrets.routes.ts) share these constants, they MUST agree on filenames and
 // directory roles, and this module is the single source of truth. The scaffold package already owns the shape
 // of a scaffolded workspace (intent-repo.ts) so these live beside it.
 
@@ -7,7 +7,7 @@
 export type RepoRole = "intent" | "desired-state" | "app";
 export const REPO_ROLES: readonly RepoRole[] = ["intent", "desired-state", "app"];
 
-// Well-known directory names — used as the on-disk dir (relative to the workspace root)
+// Well-known directory names, used as the on-disk dir (relative to the workspace root)
 // AND as control-plane repo names.
 export const INTENT_DIR = "intent";
 export const TARGET_DIR = "desired-state";

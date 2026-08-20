@@ -2,7 +2,7 @@ import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract
 
 /* A WORKSPACE THAT ACTIVATES EVERY EXTENSION VIEW AT ONCE.
  *
- * Views are not always-on: each `detect(repos, capabilities)` fires on evidence — a repo containing
+ * Views are not always-on: each `detect(repos, capabilities)` fires on evidence, a repo containing
  * deploy.config.ts, a connected komodo CLI, a docs/user-stories directory. A real fresh sandbox has an empty
  * workspace and no connected capabilities, so most of the rail does not exist there. "Every view loads" is
  * therefore a property of a SEEDED workspace, and this file is that seed: the smallest set of facts under which
@@ -15,7 +15,7 @@ import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract
  * (`preview`) and the claimers (`apps`, `dependencies`, `directory-ui`, `infrastructure`, `live-status`) all
  * visible in the same run.
  *
- * Kept as WIRE-SHAPED records typed by the daemon's own summaries rather than by the narrower `RepoFacts` —
+ * Kept as WIRE-SHAPED records typed by the daemon's own summaries rather than by the narrower `RepoFacts`,
  * that is what the browser actually receives, so a required field added to the schema fails here at compile
  * time instead of at `PanelsListSchema.parse` inside the running app. */
 
@@ -45,13 +45,13 @@ export const FIXTURE_PANELS: PanelSummary[] = [
     repo(`platform`, { monorepo: true, vitest: true, userStories: true }),
     // → `preview`. Deliberately NOT a monorepo and NOT vitest: preview is a `fallback` view, so this repo has
     // to stay unclaimed by anything else or its activation is dropped and the view never renders. Left NOT
-    // running, because usePanels polls every 4s while any panel is — a perpetual request loop the specs would
+    // running, because usePanels polls every 4s while any panel is, a perpetual request loop the specs would
     // then have to race.
     repo(`site`, { hasPanel: true }),
     // → `directory-ui` (a repo shipping .intentic/ui/index.html).
     repo(`designer`, { directoryUi: true }),
     // → `apps` again, through its OTHER branch: vitest without monorepo. That branch returns an activation with
-    // no `repo` field, so it claims nothing — a difference worth exercising rather than assuming.
+    // no `repo` field, so it claims nothing, a difference worth exercising rather than assuming.
     repo(`tools`, { vitest: true }),
 ];
 
@@ -60,7 +60,7 @@ const capability = (id: string, provider: string): CapabilitySummary => ({
     kind: `cli`,
     status: { state: `active` },
     config: { provider },
-    // The credential keys this connection holds — none here, because activation turns on the provider alone and
+    // The credential keys this connection holds, none here, because activation turns on the provider alone and
     // an edit form is not what these specs mount.
     secrets: [],
 });
@@ -75,16 +75,16 @@ export const FIXTURE_CAPABILITIES: CapabilitySummary[] = [
     capability(`discord`, `discord`),
 ];
 
-/* THE INVENTORY — every activation the fixture above must produce.
+/* THE INVENTORY, every activation the fixture above must produce.
  *
  * Written out rather than derived from the running app: the registry is module state inside the SPA with no
  * runtime introspection hook, and adding one to be testable would be a worse trade than maintaining this list.
- * The list is also the point — a view added without a line here fails the rail-inventory check in
+ * The list is also the point, a view added without a line here fails the rail-inventory check in
  * extension-views.spec.ts, which is what makes "every view" hold as views are added, and mirrors the
  * same-commit rule RAIL_GROUPS already states in registry.ts. */
 export interface ExpectedActivation {
     readonly id: string;
-    // The activation key — the `/ext/:ext/:key?` segment. Equal to the view id for a singleton, in which case
+    // The activation key, the `/ext/:ext/:key?` segment. Equal to the view id for a singleton, in which case
     // `extensionPath` drops the segment entirely.
     readonly key: string;
     readonly surface: `rail` | `directory` | `sandbox`;
@@ -108,7 +108,7 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `pipelines`, key: `pipelines`, surface: `rail`, why: `a github CLI capability is connected` },
     { id: `workflows`, key: `workflows`, surface: `rail`, why: `always on` },
 
-    // ── directory extensions (per repo — the Workspace tree's panels, not the rail) ──
+    // ── directory extensions (per repo, the Workspace tree's panels, not the rail) ──
     { id: `apps`, key: `platform`, surface: `directory`, why: `platform is a pnpm+turbo monorepo` },
     { id: `apps`, key: `tools`, surface: `directory`, why: `tools has vitest but is not a monorepo` },
     { id: `dependencies`, key: `platform`, surface: `directory`, why: `platform is a monorepo` },
@@ -124,10 +124,10 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
 ];
 
 // The deep-link path for an activation, mirroring `extensionPath` in the app: a singleton view names its sole
-// activation after itself, and that segment would just repeat the view id — so it is dropped.
+// activation after itself, and that segment would just repeat the view id, so it is dropped.
 export const activationPath = ({ id, key }: ExpectedActivation): string => (key === id ? `/ext/${id}` : `/ext/${id}/${encodeURIComponent(key)}`);
 
-// Every rail tile the fixture should produce, in no particular order — the exhaustiveness guard's expectation.
+// Every rail tile the fixture should produce, in no particular order, the exhaustiveness guard's expectation.
 export const EXPECTED_RAIL_IDS: readonly string[] = EXPECTED_ACTIVATIONS.filter((activation) => activation.surface === `rail`).map(
     (activation) => activation.id,
 );

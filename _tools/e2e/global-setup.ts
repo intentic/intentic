@@ -72,9 +72,9 @@ export default async (): Promise<void> => {
     await run(`docker`, [`compose`, `up`, `-d`, `--wait`, `postgres`], { cwd: root }).catch(() => undefined);
     await run(`pnpm`, [`--filter`, `@intentic-app/prisma`, `migrate:deploy`], { cwd: root, env: { ...process.env, DATABASE_URL } });
 
-    // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL —
+    // The daemon under test: the published sandbox image in loopback (no GOOGLE_CLIENT_ID / PLATFORM_URL,
     // that IS the mode). CONNECT_TOKEN + ZONE make GET /system/sync report an sshHostname, which the desktop-
-    // sync card requires before it offers Enable — and that same token is what the daemon's auth floor reads as
+    // sync card requires before it offers Enable, and that same token is what the daemon's auth floor reads as
     // "reachable from outside", so SANDBOX_ALLOW_UNAUTHENTICATED is the acknowledgement that lets this pair boot
     // (env.config.ts carries the note; without it the daemon exits 78 and this waits out its 180s).
     if (!(await up(`${DAEMON_URL}/health`))) {
@@ -99,7 +99,7 @@ export default async (): Promise<void> => {
         await waitUp(`${DAEMON_URL}/health`, `sandbox daemon (${DAEMON_IMAGE})`, `docker logs ${DAEMON_CONTAINER}`, 180_000);
     }
 
-    // The API (bun, https via the minted cert — the exact dev shape, so the session cookie is __Secure-).
+    // The API (bun, https via the minted cert, the exact dev shape, so the session cookie is __Secure-).
     if (!(await up(`${API_URL}/api/auth/ok`))) {
         state.apiPid = spawnServer(`api`, `bun`, [`./src/main.ts`], join(root, `_platform/api`), {
             DATABASE_URL,
@@ -108,7 +108,7 @@ export default async (): Promise<void> => {
             WEB_ORIGIN: WEB_URL,
             // The minted pair, from the package that mints it. It used to be named by a path inside that
             // package, and the certificate has since moved OUT of the repository to the OS's per-user data
-            // directory (localhost-https/paths.mjs says at length why) — leaving this pointing at a file
+            // directory (localhost-https/paths.mjs says at length why), leaving this pointing at a file
             // nothing writes any more, so the API died on ENOENT before a single spec ran.
             API_HTTPS_KEY: LEAF_KEY,
             API_HTTPS_CERT: LEAF_CRT,
@@ -125,7 +125,7 @@ export default async (): Promise<void> => {
 
     writeFileSync(join(cacheDir, `stack-state.json`), JSON.stringify(state));
 
-    // Seed, then prove the cookie recipe against the real server BEFORE any spec runs — a Better Auth upgrade
+    // Seed, then prove the cookie recipe against the real server BEFORE any spec runs, a Better Auth upgrade
     // that changes the signing fails here with a clear message, not as a blank login page in every spec.
     const { sessionToken } = await seed();
     const cookieValue = signedSessionCookie(sessionToken);

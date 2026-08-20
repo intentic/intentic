@@ -29,7 +29,7 @@ export const makeFixtureWorkspace = async (): Promise<{ root: string; cleanup: (
     await mkdir(join(root, `${STATE_DIR}/local/cache/iq/spool`), { recursive: true });
     await writeFile(join(root, `${STATE_DIR}/local/cache/iq/decoy.txt`), "index dir contents must never be surfaced\n");
     const alpha = join(root, "alpha");
-    // The .gitignore'd build artifact — synthesized (alpha's own .gitignore keeps it out of THIS repo too, so it
+    // The .gitignore'd build artifact, synthesized (alpha's own .gitignore keeps it out of THIS repo too, so it
     // can't ship as a committed fixture file). Written before `git add` so the fixture repo also ignores it.
     await mkdir(join(alpha, "dist"), { recursive: true });
     await writeFile(join(alpha, "dist/decoy.js"), "export const IGNORED_BUILD_ARTIFACT = true;\n");

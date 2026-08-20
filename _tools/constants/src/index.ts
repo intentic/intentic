@@ -6,20 +6,20 @@ export * from "./provider-logos.js";
 
 /* THE FOUR FIXED DIRECTORY LAYOUTS, for the same reason the ports below are here: a location spelled in two
  * files is a location that will eventually be two different locations. These are the ones that cross a package
- * boundary — the container's own dirs, the state folder inside a workspace, and the state root on a
- * provisioned host — each of which was previously typed out by hand in dozens of places with nothing linking
+ * boundary, the container's own dirs, the state folder inside a workspace, and the state root on a
+ * provisioned host, each of which was previously typed out by hand in dozens of places with nothing linking
  * the copies, so a rename fixed some and silently orphaned the rest.
  *
  * These are VALUES, not lookups: this module stays importable from the browser (Setup.vue reads
- * PLATFORM_WEB_ORIGIN), so nothing here may touch node:fs. Code that has to DISCOVER a directory — the repo
- * root, a package root — imports the node-only helpers from `@intentic/constants/node` instead.
+ * PLATFORM_WEB_ORIGIN), so nothing here may touch node:fs. Code that has to DISCOVER a directory, the repo
+ * root, a package root, imports the node-only helpers from `@intentic/constants/node` instead.
  *
  * WORKSPACE_ROOT and HISTORY_ROOT are DEFAULTS, not laws. The daemon's env.config takes both as overridable
  * settings and a running daemon must read them from its config, because an isolated turn re-points them; these
  * constants are what that config defaults to, and what code with no config in reach (contracts, docs strings,
  * the sync bridge's remote end) names. Anything holding a Config should prefer the config value. */
 
-// The project workspace dir inside the sandbox container — the three repos are cloned under <root>/<role>.
+// The project workspace dir inside the sandbox container, the three repos are cloned under <root>/<role>.
 export const WORKSPACE_ROOT = "/work";
 
 // The daemon-owned snapshot history + protected repo git dirs, deliberately OUTSIDE WORKSPACE_ROOT so agent
@@ -29,7 +29,7 @@ export const HISTORY_ROOT = "/history";
 /* The daemon's own state folder, relative to whichever workspace root is in force. Never join this by hand
  * where a typed helper exists: the daemon's `statePath()` takes the literal union of the files the state table
  * declares, so a store can only name a file that table knows about. This constant is for the callers OUTSIDE
- * that table — extensions writing under `.intentic/local/runtime`, ignore lists, path classifiers. */
+ * that table, extensions writing under `.intentic/local/runtime`, ignore lists, path classifiers. */
 export const STATE_DIR = ".intentic";
 
 // Where the deploy CLI and providers keep per-service state on a PROVISIONED HOST (a server reached over ssh),
@@ -38,13 +38,13 @@ export const HOST_STATE_ROOT = "/opt/intentic";
 
 // The clickwrap legal version: the platform (@intentic-app/api) stamps the accepted version on each account
 // at sign-up; intentic.dev renders the /terms and /privacy documents under it. Bump on any material change
-// to the terms or privacy policy — one edit, both sides move together.
+// to the terms or privacy policy, one edit, both sides move together.
 export const LEGAL_VERSION = "2026-08-13";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 /* WHO THE COUNTERPARTY IS, in the words a contract needs. EU e-commerce law (Directive 2000/31 Art. 5, and in
  * Poland ustawa o świadczeniu usług drogą elektroniczną) requires a service provider to publish its name,
- * its registered address and its registration number where a recipient can find them without asking — so
+ * its registered address and its registration number where a recipient can find them without asking, so
  * these are not decoration on the legal pages, they are the pages' compliance.
  *
  * LEGAL_ENTITY_ADDRESS and LEGAL_ENTITY_TAX_ID are BLANK ON PURPOSE and the documents omit the lines they
@@ -56,7 +56,7 @@ export const LEGAL_ENTITY_COUNTRY = "Poland";
 export const LEGAL_ENTITY_ADDRESS = "";
 export const LEGAL_ENTITY_TAX_ID = "";
 
-/* Where the platform's OWN servers stand — the account database and the API, as opposed to the hosted
+/* Where the platform's OWN servers stand, the account database and the API, as opposed to the hosted
  * sandboxes, whose region the provisioner decides per user and the privacy policy states outright.
  *
  * Blank for the same reason as the two above, and with more at stake: "our database is in the EU" is a
@@ -66,29 +66,29 @@ export const LEGAL_ENTITY_TAX_ID = "";
  * rather than guessing. */
 export const PLATFORM_HOSTING_LOCATION = "";
 
-/* The hosted web app's origin — the ONE browser origin a sandbox daemon expects to be called from, and
+/* The hosted web app's origin, the ONE browser origin a sandbox daemon expects to be called from, and
  * therefore the default its CORS is scoped to (sandbox env.config `webOrigin`).
  *
- * It is a security default, not a convenience one. The daemon's authenticated routes don't need CORS — a
- * caller without a bearer gets nothing — but /health is deliberately unauthenticated and answers with the
+ * It is a security default, not a convenience one. The daemon's authenticated routes don't need CORS, a
+ * caller without a bearer gets nothing, but /health is deliberately unauthenticated and answers with the
  * sandbox id, and the loopback listener sits on a 127.0.0.1 port derived from that same id. With a wildcard
  * ACAO, any page in the user's browser can walk that port range, read the id off /health, and derive the
  * sandbox's preview hostnames from it. Naming the origin is what closes that, and it costs nothing: the
  * hosted SPA is the only browser origin that ever legitimately calls a daemon.
  *
  * Self-hosters serving the SPA elsewhere set WEB_ORIGIN (comma-separated for several), the same way they
- * already set GOOGLE_CLIENT_ID. connect.{sh,ps1} keep their own literal copy — a shell script can't import
- * this — so the two are commented as a matched pair, like the Google client id above them. */
+ * already set GOOGLE_CLIENT_ID. connect.{sh,ps1} keep their own literal copy, a shell script can't import
+ * this, so the two are commented as a matched pair, like the Google client id above them. */
 export const PLATFORM_WEB_ORIGIN = "https://app.intentic.dev";
 
 /* THE FOUR FIXED IN-CONTAINER PORTS: the daemon (oRPC + preview proxy front), the app dev-server preview
  * origin, the loopback listener, and the bundled translator. The daemon binds them, the CLI/platform route
- * Cloudflare ingress to them, and the state-resolver emits them into the workspace node — one source so
+ * Cloudflare ingress to them, and the state-resolver emits them into the workspace node, one source so
  * container bind, ingress, and graph agree.
  *
  * ALL FOUR BELONG HERE, including the one nothing outside the container ever dials. The translator's port was
  * picked in the Dockerfile instead, as a literal inside TRANSLATOR_URL; when the loopback listener later
- * claimed the next number up, the two collided on 8788 and nothing could see it — the daemon won the bind and
+ * claimed the next number up, the two collided on 8788 and nothing could see it, the daemon won the bind and
  * cli-proxy-api died on arrival on every sandbox, taking every routed (Codex/Grok/Gemini) turn with it. A port
  * that is not in this file is a port the next pick cannot avoid, so a fixed bind anywhere in the container is
  * declared here and asserted distinct (sandbox app, container-ports.test.ts). */
@@ -100,13 +100,13 @@ export const PREVIEW_PORT = 5173;
  *
  * Separate from DAEMON_PORT because the two speak different protocols. The tunnel connector's ingress dials
  * `http://intentic-sandbox-workspace:8787` in plain HTTP over the container network, so 8787 can never carry
- * TLS — while the loopback listener MUST, or Safari refuses it as mixed content (WebKit 171934). One port per
+ * TLS, while the loopback listener MUST, or Safari refuses it as mixed content (WebKit 171934). One port per
  * job, and neither constrains the other. */
 export const LOCAL_PORT = 8788;
 
 /* The bundled translator (CLIProxyAPI), which re-serves the user's Codex/Grok/Gemini subscriptions behind an
  * Anthropic-compatible endpoint for the Claude Code harness (sandbox app agent/translator.ts). Loopback-only
- * and never routed: the daemon dials it, and the agent CLIs it spawns point ANTHROPIC_BASE_URL at it — all
+ * and never routed: the daemon dials it, and the agent CLIs it spawns point ANTHROPIC_BASE_URL at it, all
  * three inside this container. The Dockerfile bakes it into TRANSLATOR_URL, which is why the value has to be
  * legible from here rather than only from there. */
 export const TRANSLATOR_PORT = 8789;

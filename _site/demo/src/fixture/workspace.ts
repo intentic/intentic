@@ -23,12 +23,12 @@ import { CONFLICT_AGENT_ID, REVIEW_AGENT_ID } from "./fleet";
 
 /* THE WORKSPACE the demo's sandbox holds: `acme-shop`, a two-repo product (a web front end and its API), with
  * a handful of dirty files so the Changes review has something to show and three agents' names to attribute
- * them to. Small on purpose — a tree with 4,000 nodes proves nothing a tree with forty doesn't. */
+ * them to. Small on purpose, a tree with 4,000 nodes proves nothing a tree with forty doesn't. */
 
 export const REPOS = [`web`, `api`] as const;
 
 /* WHERE THOSE TWO REPOS LIVE ONLINE. Only the publisher claim reads this, and it reads it to recognise one of
- * its own listed repositories in the workspace — so `web` is deliberately an `acme/…` project matching the
+ * its own listed repositories in the workspace, so `web` is deliberately an `acme/…` project matching the
  * registry fixture, and `api` deliberately is not. That pairing is what puts BOTH halves of the claim step on
  * screen at once: a repository open here (one press) and one that is not (a line to paste). */
 export const REMOTE_REPOS = [
@@ -53,14 +53,14 @@ export const PUBLISH_REFUSAL = {
  *
  * Paths here are REPO-relative, which is the one thing about this shape that is easy to get wrong: the panel
  * composes `repo` and `path` itself, so a root-relative path renders as `api/api/src/db/schema.ts`. Tool-call
- * locations and the workspace tree are the opposite — root-relative — because they address the whole /work drop.
+ * locations and the workspace tree are the opposite, root-relative, because they address the whole /work drop.
  *
  * `origins` is per repo and maps a path to the agents that landed it; `originAgents` (once, on the response)
  * says who those ids ARE. Both halves or neither: an id in one and not the other is an unattributed chip.
  *
  * NOTHING HERE IS ATTRIBUTED, and that is the point of the demo's Land: what is dirty before a visitor presses
  * anything is the owner's own uncommitted work, so the panel's legend reads "you 5" and no row carries a chip.
- * Press Land now and the soft-deletes agent's files arrive WITH one — the contrast is what makes attribution
+ * Press Land now and the soft-deletes agent's files arrive WITH one, the contrast is what makes attribution
  * legible, where a tree that was already covered in chips only made it wallpaper. */
 const BASE_CHANGES: RepoChanges[] = [
     {
@@ -81,7 +81,7 @@ const BASE_CHANGES: RepoChanges[] = [
         staged: [],
         unstaged: [
             { path: `src/routes/checkout.ts`, status: `added`, additions: 38, deletions: 0 },
-            // The owner's own edit — which is what makes the auth agent's land refuse on it below.
+            // The owner's own edit, which is what makes the auth agent's land refuse on it below.
             { path: `src/db/schema.ts`, status: `modified`, additions: 12, deletions: 2 },
         ],
     },
@@ -93,7 +93,7 @@ const ORIGIN_AGENTS: Record<string, { title: string; provider: string }> = {
 
 /* EVERY AGENT'S CUMULATIVE DELTA, which two surfaces read: the review panel (GET /agents/{id}/diff) and, once
  * it lands, the main tree's Changes panel. One table for both, because in the product they are one fact seen
- * from two sides — the whole point of "Land now" is watching a row cross from here to there. */
+ * from two sides, the whole point of "Land now" is watching a row cross from here to there. */
 const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
     [REVIEW_AGENT_ID]: [
         {
@@ -127,7 +127,7 @@ const AGENT_DELTAS: Record<string, AgentRepoChanges[]> = {
     ],
 };
 
-/* WHY THE AUTH AGENT'S LAND REFUSES, in the shape the daemon reports it — and with both halves of the report,
+/* WHY THE AUTH AGENT'S LAND REFUSES, in the shape the daemon reports it, and with both halves of the report,
  * because they are what the panel's button ladder is built on: `diverged` is the agent's to rebase away (the
  * main line moved under it), `workspace` is the owner's own uncommitted edit on schema.ts above, which no
  * rebase can reach. A demo that only ever showed a clean land would be showing the easy half of landing. */
@@ -187,7 +187,7 @@ export const agentChanges = (agentId: string): AgentChanges => {
 
 /* LAND NOW. The recording's answer to the one press the fleet exists for: the agent's delta stops being a
  * proposal and becomes the tree's uncommitted work, attributed to it. An agent the fixture records a conflict
- * for refuses instead, exactly as the daemon does — nothing is applied, the worktree keeps everything, and the
+ * for refuses instead, exactly as the daemon does, nothing is applied, the worktree keeps everything, and the
  * report the panel renders is the same one that came back here. */
 export const landAgentDelta = (agentId: string): LandResult => {
     const conflicts = CONFLICTS[agentId];
@@ -215,7 +215,7 @@ const SOFT_DELETE_AFTER = `export const users = pgTable("users", {
     email: text("email").notNull().unique(),
     name: text("name").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    // Soft delete: rows are retired, never removed — every read filters on this.
+    // Soft delete: rows are retired, never removed, every read filters on this.
     deletedAt: timestamp("deleted_at"),
 });
 
@@ -223,7 +223,7 @@ export const liveUsers = () => db.select().from(users).where(isNull(users.delete
 `;
 
 /* THE CHECKOUT STORY, in full. These four are the files the featured run works on, so they are the ones a
- * visitor is most likely to open a diff for — the chat names each of them while it writes them, and the Changes
+ * visitor is most likely to open a diff for, the chat names each of them while it writes them, and the Changes
  * panel then has to show the same edit the transcript just described. turn.ts reads the same constants, so the
  * tool card and the diff row cannot drift apart. */
 export const CHECKOUT_LIB_BEFORE = `export const checkout = async (priceId: string) => {
@@ -279,7 +279,7 @@ import { Spinner } from "../common/Spinner";
 import { checkout } from "../lib/checkout";
 import type { Plan } from "./plans";
 
-// Stripe takes a moment to answer, and a CTA that still looks idle while it does is one people press twice — so
+// Stripe takes a moment to answer, and a CTA that still looks idle while it does is one people press twice, so
 // the button owns the whole redirect: pending, failed, and the way back out of a failure.
 type Status = "idle" | "pending" | "failed";
 
@@ -316,7 +316,7 @@ export const CheckoutPanel = ({ plan }: { plan: Plan }) => {
 };
 `;
 
-// The three the run's last todo covers — the redirect, the failure path, and the button that must not be
+// The three the run's last todo covers, the redirect, the failure path, and the button that must not be
 // pressable twice. Their names are what the terminal prints when the run's \`pnpm test\` goes green.
 const CHECKOUT_SPEC = `import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -372,9 +372,9 @@ const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
 };
 `;
 
-// Keyed `<repo>/<repo-relative path>` — the two file-diff routes are addressed by that pair, and the join is
+// Keyed `<repo>/<repo-relative path>`, the two file-diff routes are addressed by that pair, and the join is
 // what keeps `src/db/schema.ts` in two repos from being one entry.
-// A file the tree ADDED has no before side, exactly as the daemon reports it — the left pane is empty and the
+// A file the tree ADDED has no before side, exactly as the daemon reports it, the left pane is empty and the
 // whole file reads as an addition.
 const DIFFS: Record<string, FileDiff> = {
     "api/src/db/schema.ts": { before: SOFT_DELETE_BEFORE, after: SOFT_DELETE_AFTER },
@@ -385,8 +385,8 @@ const DIFFS: Record<string, FileDiff> = {
     "web/tests/checkout.spec.ts": { after: CHECKOUT_SPEC },
 };
 
-/* A file the recording does not carry a diff for still has to open — a review panel whose rows go nowhere is
- * worse than one with fewer rows — so it says so in the file it opens, in place of pretending to a change.
+/* A file the recording does not carry a diff for still has to open, a review panel whose rows go nowhere is
+ * worse than one with fewer rows, so it says so in the file it opens, in place of pretending to a change.
  *
  * It says so as an ADDITION, and in prose, because both halves of that are what make it visible at all. A note
  * carried identically on BOTH sides is not a change, so the diff has nothing to render; and a note written as a
@@ -412,12 +412,12 @@ Start a sandbox on your own machine and the same surfaces point at your repos.
 /* ---- THE RECORDING'S FILESYSTEM ------------------------------------------------------------------------------
  *
  * One flat table, root-relative, and the only place a demo file is declared. The tree, every directory listing,
- * every read, the content search and every write derive from it — so a file added here appears in all five with
+ * every read, the content search and every write derive from it, so a file added here appears in all five with
  * nothing else to keep in step.
  *
  * A STRING is the file's body. A NUMBER is a file the tree lists but the recording does not carry: the size it
  * claims, with a body that says as much when it is opened. That distinction is what lets acme-shop look like a
- * checkout somebody works in — forty files, plausible sizes — while only the ones a visitor actually reads are
+ * checkout somebody works in, forty files, plausible sizes, while only the ones a visitor actually reads are
  * written out in full.
  *
  * A path that is NOT here answers 404, exactly as the daemon does, and that matters more than it sounds: half
@@ -426,7 +426,7 @@ Start a sandbox on your own machine and the same surfaces point at your repos.
  * them yes.
  *
  * It is MUTABLE, because the surfaces that read it also write: acknowledging evidence in Maintenance, saving a
- * story in Acceptance, publishing a document set. A write lands here and every later read sees it — real until
+ * story in Acceptance, publishing a document set. A write lands here and every later read sees it, real until
  * the tab is reloaded, which is the promise the rest of this fixture makes too. */
 
 /** Built once at page load, so a run recorded "42 minutes ago" is 42 minutes before the visitor arrived. */
@@ -484,7 +484,7 @@ const sizeOf = (entry: string | number): number => (typeof entry === `number` ? 
 const isIgnored = (path: string): boolean => path.split(`/`).some((segment) => IGNORED_DIRS.has(segment));
 
 // One entry while the walk is still building it. Structurally a WorkspaceTreeEntry with a mutable `children`,
-// because folding a flat table into a tree means pushing into that array — and the contract's entry is readonly
+// because folding a flat table into a tree means pushing into that array, and the contract's entry is readonly
 // all the way down, which is right for everyone who only reads it.
 interface TreeNode {
     name: string;
@@ -495,17 +495,17 @@ interface TreeNode {
     children?: TreeNode[];
 }
 
-// Directories first, then by name — the order every file tree is read in, and the one the daemon's walk returns.
+// Directories first, then by name, the order every file tree is read in, and the one the daemon's walk returns.
 const ordered = (entries: TreeNode[]): TreeNode[] =>
     entries.toSorted((left, right) => (left.type === right.type ? left.name.localeCompare(right.name) : left.type === `dir` ? -1 : 1));
 
 /* The nested tree `GET /workspace/tree` answers with. An ignored directory is LISTED but carries no `children`,
- * which is the contract's way of saying "not descended into" — the client then lazy-loads it on expand, and the
+ * which is the contract's way of saying "not descended into", the client then lazy-loads it on expand, and the
  * two states (not loaded yet / genuinely empty) stay distinguishable. */
 export const workspaceTree = (): WorkspaceTree => {
     const roots: TreeNode[] = [];
     const folders = new Map<string, TreeNode>();
-    // The array a path's children go in — undefined when an ancestor is ignored, and therefore never descended.
+    // The array a path's children go in, undefined when an ancestor is ignored, and therefore never descended.
     const childrenAt = (path: string): TreeNode[] | undefined => {
         if (path === ``) {
             return roots;
@@ -533,7 +533,7 @@ export const workspaceTree = (): WorkspaceTree => {
     return { root: WORKSPACE_ROOT, hidden: 0, tree: ordered(roots) };
 };
 
-/** One directory's immediate children — the lazy-load behind an ignored dir, and how every extension walks. */
+/** One directory's immediate children, the lazy-load behind an ignored dir, and how every extension walks. */
 export const workspaceChildren = (path: string): WorkspaceChildren => {
     const prefix = `${path}/`;
     const entries = new Map<string, TreeNode>();
@@ -564,7 +564,7 @@ export const fileBody = (path: string): string | undefined => {
     return entry === undefined ? undefined : typeof entry === `number` ? unrecordedBody(path) : entry;
 };
 
-/* GET /workspace/file — the whole file as one window, which is what every read in this recording is. A path the
+/* GET /workspace/file, the whole file as one window, which is what every read in this recording is. A path the
  * recording does not carry answers `present: false`, exactly as the daemon does: half the surfaces here read a
  * file to find out whether something EXISTS, and that answer is not a failure. */
 export const readFile = (
@@ -576,12 +576,12 @@ export const readFile = (
         : { present: true, path, content, size: content.length, offset: 0, bytes: content.length, shared: true };
 };
 
-/** POST /workspace/upload — the writes the panels make: an acknowledgement, a story, a published document. */
+/** POST /workspace/upload, the writes the panels make: an acknowledgement, a story, a published document. */
 export const writeFile = (path: string, content: string): void => {
     FILES.set(path, content);
 };
 
-/** DELETE /workspace/entry — a file, or a directory and everything under it. */
+/** DELETE /workspace/entry, a file, or a directory and everything under it. */
 export const deleteEntry = (path: string): void => {
     FILES.delete(path);
     for (const candidate of FILES.keys()) {
@@ -592,7 +592,7 @@ export const deleteEntry = (path: string): void => {
 };
 
 /* The sessions window: the conversations this sandbox has had. More than the fleet board shows, because the
- * board is today's work and this is the whole history — which is the distinction the window exists to make. */
+ * board is today's work and this is the whole history, which is the distinction the window exists to make. */
 export const sessions = (now: number): SessionSummary[] => {
     const hour = 3_600_000;
     return [
@@ -611,13 +611,13 @@ export const sessions = (now: number): SessionSummary[] => {
     ];
 };
 
-/* Content search over the files the recording carries — the fixture's answer to GET /workspace/search.
+/* Content search over the files the recording carries, the fixture's answer to GET /workspace/search.
  *
  * It is a real text search, because that is what the panel's Text scope IS: one pattern (literal, or a regex
  * with .*), case-insensitive unless asked, every occurrence on a line reported as a span so the results mark
  * them. What the recording cannot do is the Smart scope's ranking, which needs an index of the reader's own
- * code — so Smart answers with the same matcher and says so in the note the panel renders. */
-// What there is to search: the files the recording carries a BODY for, ignored paths excluded — the same two
+ * code, so Smart answers with the same matcher and says so in the note the panel renders. */
+// What there is to search: the files the recording carries a BODY for, ignored paths excluded, the same two
 // rules the daemon's search follows (it cannot match text it does not have, and it skips node_modules by
 // default), so a hit here is a hit a real workspace would also produce.
 const searchablePaths = (include: string): string[] => {
@@ -626,7 +626,7 @@ const searchablePaths = (include: string): string[] => {
 };
 
 /* The panel's second field, answered from the SAME reading of what was typed as the real daemon's: includeGlobs
- * (the contract) expands the field into path globs, and only the MATCHING of those globs is local here — for
+ * (the contract) expands the field into path globs, and only the MATCHING of those globs is local here, for
  * the same reason the text matcher above is local, this fixture holds a few dozen paths and no search engine. */
 // One glob token → one regex, everything else escaped as itself. A globstar before a slash spans whole
 // directories and may span none (so `*.ts` finds a file at the root); at the end it is the rest of the path.
@@ -654,7 +654,7 @@ const includeFilter = (include: string): ((path: string) => boolean) => {
     return (path) => (admits.length === 0 || admits.some((glob) => glob.test(path))) && !denies.some((glob) => glob.test(path));
 };
 
-// Fixed text unless the .* switch is on, and an unparseable regex falls back to matching itself — the same
+// Fixed text unless the .* switch is on, and an unparseable regex falls back to matching itself, the same
 // recovery the daemon's engine does, and the same note it reports for it.
 const matcher = (query: string, options: SearchOptions): { regex: RegExp; note?: string } => {
     const escaped = query.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);

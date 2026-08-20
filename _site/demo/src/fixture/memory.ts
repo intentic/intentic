@@ -1,11 +1,11 @@
 import type { MemoryFile, MemoryFileEntry } from "@intentic/ext-memory";
 
-/* WHAT THE AGENT REMEMBERS about acme-shop, across sessions — the markdown files under the workspace's
+/* WHAT THE AGENT REMEMBERS about acme-shop, across sessions, the markdown files under the workspace's
  * `.intentic/records/sessions/claude/projects/<project>/memory`, which is the one part of an agent's context the owner can read
  * and correct rather than infer.
  *
  * The notes are the demo's argument for the surface: they are the kind of thing a colleague learns in a first
- * week and nobody writes down — the CI incantation, the migration rule, the reviewer's standing objection. Each
+ * week and nobody writes down, the CI incantation, the migration rule, the reviewer's standing objection. Each
  * one reads as something the agent was told once, and one of them is deliberately a little wrong, because the
  * view's point is that memory is editable and forgettable, not that it is always right.
  *
@@ -83,7 +83,7 @@ export const memoryFile = (now: number, project: string, name: string): MemoryFi
         : { project: PROJECT, name: note.name, content: note.content, sizeBytes: note.content.length, modifiedAt: note.modifiedAt };
 };
 
-/** Write a note — an edit through the view's own editor, or a new file. */
+/** Write a note, an edit through the view's own editor, or a new file. */
 export const saveMemoryFile = (now: number, name: string, content: string): void => {
     const all = state(now);
     const index = all.findIndex((note) => note.name === name);
@@ -95,7 +95,7 @@ export const saveMemoryFile = (now: number, name: string, content: string): void
     all[index] = written;
 };
 
-/** Forget one — the affordance the whole surface exists for. */
+/** Forget one, the affordance the whole surface exists for. */
 export const deleteMemoryFile = (now: number, name: string): void => {
     notes = state(now).filter((note) => note.name !== name);
 };

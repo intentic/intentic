@@ -1,11 +1,11 @@
 import type { WebchatChallenge, WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract";
 
 /* The widget's half of the wire. Four calls, all against the sandbox daemon's public /webchat routes, all
- * subject to its origin allowlist — a rejected origin is the FIRST thing a misconfigured embed hits, so every
+ * subject to its origin allowlist, a rejected origin is the FIRST thing a misconfigured embed hits, so every
  * failure here carries the server's own sentence rather than a status code. */
 
 // The daemon answers a message with SSE over POST, which EventSource cannot do (it only GETs). So the reply is
-// read off the fetch body directly — which is also what lets one function own the whole request/response pair.
+// read off the fetch body directly, which is also what lets one function own the whole request/response pair.
 export interface SseFrame {
     readonly event: string;
     readonly data: string;
@@ -23,7 +23,7 @@ export const parseSseBlock = (block: string): SseFrame | undefined => {
             continue;
         }
         if (line.startsWith("data:")) {
-            // Exactly one optional leading space is part of the framing, per the spec — anything beyond it is
+            // Exactly one optional leading space is part of the framing, per the spec, anything beyond it is
             // the agent's own indentation and must survive.
             const value = line.slice("data:".length);
             data.push(value.startsWith(" ") ? value.slice(1) : value);
@@ -40,7 +40,7 @@ export const splitSseBlocks = (buffer: string): { blocks: string[]; rest: string
     return { blocks: parts.slice(0, -1).filter((block) => block.trim() !== ""), rest: parts.at(-1) ?? "" };
 };
 
-// What the server said when it refused. The daemon answers every refusal as {"error": "..."} — the widget shows
+// What the server said when it refused. The daemon answers every refusal as {"error": "..."}, the widget shows
 // that sentence verbatim, because "origin not allowed" tells the site owner exactly what to fix and any wording
 // invented here would not.
 export class WebchatError extends Error {
@@ -73,7 +73,7 @@ export const fetchConfig = async (endpoint: Endpoint): Promise<WebchatPublicConf
     return (await response.json()) as WebchatPublicConfig;
 };
 
-// The challenge is minted FOR one visitor thread — the daemon signs the conversation id into the salt, so a
+// The challenge is minted FOR one visitor thread, the daemon signs the conversation id into the salt, so a
 // solution can't be carried to another thread. Hence the id in the query rather than a bare GET.
 export const fetchChallenge = async (endpoint: Endpoint, conversationId: string): Promise<WebchatChallenge> => {
     const response = await fetch(`${url(endpoint, "challenge")}?conversation=${encodeURIComponent(conversationId)}`);
@@ -86,9 +86,9 @@ export const fetchChallenge = async (endpoint: Endpoint, conversationId: string)
 export interface ReplySink {
     // One chunk of the agent's answer, as it is written.
     readonly delta: (text: string) => void;
-    // The turn is being held for the owner's approval — nothing will stream. Carries the server's own wording.
+    // The turn is being held for the owner's approval, nothing will stream. Carries the server's own wording.
     readonly pending: (notice: string) => void;
-    /* The turn reached an agent and produced no answer — a wake that errored, one a guard skipped, one dropped
+    /* The turn reached an agent and produced no answer, a wake that errored, one a guard skipped, one dropped
      * as overlapping. Carries the server's own wording, which is deliberately generic here: the real reason is
      * about the site owner's credentials or scripts and is kept for them (see the daemon's sse-stream.ts).
      *
@@ -98,7 +98,7 @@ export interface ReplySink {
 }
 
 /* Send one message and pump the reply into `sink` until the stream ends. Resolves when the turn is over, so
- * the caller can re-enable its composer on the same await — a thrown WebchatError means the message never
+ * the caller can re-enable its composer on the same await, a thrown WebchatError means the message never
  * reached an agent, which is a different thing to say than an empty reply. */
 export const sendMessage = async (endpoint: Endpoint, message: WebchatMessage, sink: ReplySink): Promise<void> => {
     const response = await fetch(url(endpoint, "message"), {
@@ -142,7 +142,7 @@ export const sendMessage = async (endpoint: Endpoint, message: WebchatMessage, s
         }
         buffer += decoder.decode(value, { stream: true });
         if (drain()) {
-            // The turn ended. Let the body go rather than reading to EOF — the daemon closes right after.
+            // The turn ended. Let the body go rather than reading to EOF, the daemon closes right after.
             await reader.cancel().catch(() => undefined);
             return;
         }

@@ -35,7 +35,7 @@ const spoolDir = (indexDir: string): string => join(indexDir, "spool");
 export const writeSpool = (indexDir: string, id: string, spool: Spool): void => {
     const dir = spoolDir(indexDir);
     mkdirSync(dir, { recursive: true });
-    // Prune stale spools opportunistically — the spool dir is inside the self-excluded index dir.
+    // Prune stale spools opportunistically, the spool dir is inside the self-excluded index dir.
     for (const name of readdirSync(dir)) {
         const path = join(dir, name);
         const age = Date.now() - (statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? Date.now());

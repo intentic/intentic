@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
 
-/* THE IMAGES THIS TIER RUNS, BUILT FROM THE BRANCH — not pulled as `:latest`.
+/* THE IMAGES THIS TIER RUNS, BUILT FROM THE BRANCH, not pulled as `:latest`.
  *
  * A gate that tests the last release is not a gate. So the api and the web SPA are built here from exactly the
  * same two Dockerfiles the release uses, with the push left off. That costs almost nothing to do honestly:
@@ -51,7 +51,7 @@ export const buildImages = async (): Promise<void> => {
         return;
     }
 
-    // No dependencies, no build step — each stand-in is the stock node base with two files copied in.
+    // No dependencies, no build step, each stand-in is the stock node base with two files copied in.
     await exec(
         `docker`,
         [`build`, `--provenance=false`, `-t`, IMAGES.upstream, `.`],
@@ -69,7 +69,7 @@ export const buildImages = async (): Promise<void> => {
         `building the platform's api and web bundles`,
     );
 
-    /* The api's context is a PRUNED tree — a flat, symlink-free production install that the Dockerfile copies
+    /* The api's context is a PRUNED tree, a flat, symlink-free production install that the Dockerfile copies
      * whole. `-f Dockerfile` is explicit because that tree carries its own copy of it. */
     const apiDir = join(root, `_platform/api`);
     await rm(join(apiDir, `deploy`), { recursive: true, force: true });

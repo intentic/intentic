@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test";
 
 // The model picker must list xAI's live catalog, and it must self-heal a catalog that loaded empty before
 // the account connected. Every provider's list is daemon-owned (fetched from /{provider}/models into a shared
-// record by loadProviderModels; Claude falls back to its static tier aliases until then) — Grok's stays [] until
+// record by loadProviderModels; Claude falls back to its static tier aliases until then). Grok's stays [] until
 // a fetch succeeds. The regression this guards: a catalog that loaded empty at startup showed NO Grok models
 // until a reload; the unified picker refetches every provider's catalog on open (loadAllProviderModels), so the
 // list heals on the very next open. The daemon is fully mocked here (no real xAI account); we drive the real
-// Vue app + real picker wiring. Claude's and Codex's catalog routes are left unmocked — their failed fetches must
+// Vue app + real picker wiring. Claude's and Codex's catalog routes are left unmocked, their failed fetches must
 // degrade to the static floor (Claude's aliases) without breaking the page.
 
 // The Grok "swirl" mark's path starts with this; the old placeholder was a diagonal bar "M6 3h4l8 18h-4z".
@@ -46,7 +46,7 @@ test("the model picker lists Grok's live catalog and shows the real Grok logo", 
     await page.goto("/workspace");
     await expect(page.locator('textarea[name="draft"]')).toBeVisible({ timeout: 30_000 });
 
-    // The composer chip shows the model NAME, not just the Grok icon — the reported "icon, no name" bug. Once the
+    // The composer chip shows the model NAME, not just the Grok icon, the reported "icon, no name" bug. Once the
     // catalog loads, the empty grok selection is repointed to the default ("grok-4" → "Grok 4").
     await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("Grok 4", { timeout: 15_000 });
 
@@ -72,7 +72,7 @@ test("opening the picker refetches the catalogs, self-healing an empty Grok list
     const { pageErrors, vueErrors } = collectErrors(page);
 
     // Claude + Grok both connected, so the composer opens on Claude (the default) and Grok is switchable. The
-    // Grok catalog is withheld until `grokReady` flips — so it can ONLY appear via the picker's on-open refetch.
+    // Grok catalog is withheld until `grokReady` flips, so it can ONLY appear via the picker's on-open refetch.
     // Without loadAllProviderModels on mount, grokModels stays [] (loaded empty at startup) and this fails.
     let grokReady = false;
     await page.route("**/providers/grok/models", (route) => route.fulfill({ json: grokReady ? CATALOG : { models: [] } }));
@@ -90,7 +90,7 @@ test("opening the picker refetches the catalogs, self-healing an empty Grok list
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("option", { name: "Grok 3", exact: true })).toBeVisible();
 
-    // Picking the freshly-discovered model switches the conversation to Grok — one atomic row click.
+    // Picking the freshly-discovered model switches the conversation to Grok, one atomic row click.
     await page.getByRole("option", { name: "Grok 4", exact: true }).click();
     await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("Grok 4", { timeout: 15_000 });
 

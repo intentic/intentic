@@ -74,11 +74,11 @@ export interface ResidentEngineOptions extends EngineOptions {
     // disk with nothing in the log to say so.
     readonly onIndexError?: (error: Error) => void;
     // The query worker died or refused a request. Queries degrade to BM25 and the next one gets a fresh thread,
-    // so nothing here decides anything — but semantic search going missing is exactly the kind of quiet
+    // so nothing here decides anything, but semantic search going missing is exactly the kind of quiet
     // half-working a host should be able to see in its log.
     readonly onQueryError?: (error: Error) => void;
     // How much of the embedding backlog is left, after every slice of it. A cold index spends half an hour of
-    // CPU here and says nothing on its own — a host that cannot see this reads the machine as mysteriously busy
+    // CPU here and says nothing on its own, a host that cannot see this reads the machine as mysteriously busy
     // and the index as hung, which is exactly the diagnosis this seam exists to prevent.
     readonly onIndexProgress?: (remaining: number) => void;
 }
@@ -91,7 +91,7 @@ export interface ResidentEngineMetrics {
     readonly revalidated: boolean;
     readonly sweepAgeMs: number | undefined;
     // Chunks still waiting for a vector. 0 is both "semantic coverage is complete" and "no model configured";
-    // the two are indistinguishable here on purpose — neither is work in flight.
+    // the two are indistinguishable here on purpose, neither is work in flight.
     readonly embedBacklog: number;
     readonly queryWorker: { readonly live: boolean; readonly pendingRequests: number };
 }
@@ -99,18 +99,18 @@ export interface ResidentEngineMetrics {
 // A long-lived engine for hosts that serve other traffic (the sandbox daemon): one open DB, the sweep cached in
 // memory, and revalidation driven by filesystem-change notifications instead of paid inline by every query.
 export interface ResidentEngine {
-    // Serves from the current in-memory sweep + index — no per-query sweep or revalidation. Awaits only the
+    // Serves from the current in-memory sweep + index, no per-query sweep or revalidation. Awaits only the
     // FIRST sweep (a query before it has no admitted-paths authority to filter against). `signal` aborts
     // cancellable work (the rg child) when the caller's request dies.
     run(request: QueryRequest, signal?: AbortSignal): Promise<QueryOutcome>;
-    // One repository's health in numbers (churn × complexity, index totals, the import graph's top modules) —
+    // One repository's health in numbers (churn × complexity, index totals, the import graph's top modules),
     // the same rankings `hotspots` and `map` render as text, for a host that plots them instead. Reads the same
     // resident sweep + index as run(), plus one `git log` per scoped repo.
     health(request: HealthRequest): Promise<CodebaseHealth>;
-    // Filesystem changed — the worker picks it up; bursts coalesce into one extra pass.
+    // Filesystem changed, the worker picks it up; bursts coalesce into one extra pass.
     markDirty(): void;
     // Boot warmup: first index pass + the full embedding backlog. Queries may run concurrently throughout, and
-    // so may everything else this process serves — none of it runs on this thread.
+    // so may everything else this process serves, none of it runs on this thread.
     warm(): Promise<IndexStatus>;
     // Cheap resident-state cardinalities for the host's resource time series. These name whether heap growth
     // tracks the cached workspace sweep or queued semantic work without walking either structure again.
@@ -120,7 +120,7 @@ export interface ResidentEngine {
 }
 
 // What a query can honestly say about the index it just searched. Having revalidated it ourselves, "fresh" is a
-// fact; having only read it, the answer is the file-level diff — which is also a better answer than the
+// fact; having only read it, the answer is the file-level diff, which is also a better answer than the
 // unconditional "fresh" this reported back when writing was the only path through here.
 const freshnessOf = (db: IndexDb, entries: FileEntry[], sweepStart: number, wrote: boolean): WorkspaceSearchFreshness => {
     const ageMs = Date.now() - sweepStart;
@@ -138,7 +138,7 @@ export const createEngine = (options: EngineOptions): Engine => {
     let rerankerPromise: Promise<Reranker | undefined> | undefined;
     const getReranker = (): Promise<Reranker | undefined> => (rerankerPromise ??= loadReranker(options.modelDir));
     // Same lazy shape as the models, for the same reason: only a query that actually writes vectors (top-up, or
-    // the explicit rebuild) should pay the open. Lives outside indexDir, so indexDrop below never clears it —
+    // the explicit rebuild) should pay the open. Lives outside indexDir, so indexDrop below never clears it,
     // vectors are keyed by model + content, and neither is what a drop is about.
     let cacheOpened = false;
     let cacheHandle: VectorCache | undefined;
@@ -153,7 +153,7 @@ export const createEngine = (options: EngineOptions): Engine => {
     /* THE INDEX THIS QUERY WILL SEARCH, and whether this process is allowed to bring it up to date.
      *
      * A one-shot engine indexes inline: it sweeps, revalidates, and then queries what it just wrote. That is the
-     * right shape when it is the only thing here — and the wrong one in a sandbox, where the daemon's resident
+     * right shape when it is the only thing here, and the wrong one in a sandbox, where the daemon's resident
      * engine already keeps the index in step with disk on a worker thread. Two writers on one SQLite file is
      * SQLITE_BUSY for whoever loses, which turned every `iq` call in a sandbox into an exit-2 "database is
      * locked" while the daemon was mid-sweep, doing the very work this pass would have repeated.
@@ -162,7 +162,7 @@ export const createEngine = (options: EngineOptions): Engine => {
      * it is a read-only walk, it is what path/rg results are filtered against, and it is what makes the lag
      * measurement below possible.
      *
-     * The busy fallback is the same rule applied to the case the lock cannot cover — two CLI processes (parallel
+     * The busy fallback is the same rule applied to the case the lock cannot cover, two CLI processes (parallel
      * agents, a shell loop) racing with no daemon to arbitrate. The loser stops trying to write and searches
      * what is there, because a search tool that fails while another process improves its index is worse than a
      * search tool that answers from a slightly older index and says so. */
@@ -243,7 +243,7 @@ export const createEngine = (options: EngineOptions): Engine => {
         async indexRebuild(onProgress) {
             // Dropping the dir out from under a live indexer is the one operation that cannot degrade politely:
             // it would leave that process writing into unlinked files, and the workspace with no index at all.
-            // Whoever owns the index rebuilds it — say so instead of doing the damage.
+            // Whoever owns the index rebuilds it, say so instead of doing the damage.
             if (indexerAlive(indexDir)) {
                 throw new Error("another process owns this index (the sandbox daemon keeps it current) — it cannot be rebuilt from here");
             }
@@ -254,7 +254,7 @@ export const createEngine = (options: EngineOptions): Engine => {
                 onProgress?.(`indexed ${entries.length} files`);
                 const embedder = await getEmbedder();
                 if (embedder !== undefined) {
-                    // Full embedding pass — this is the boot-time warmup path, no cap.
+                    // Full embedding pass, this is the boot-time warmup path, no cap.
                     const remaining = await embedPending(db, embedder, getCache(), Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
                     onProgress?.(remaining === 0 ? "embeddings complete" : `embeddings incomplete: ${remaining} chunks pending`);
                 }
@@ -271,24 +271,24 @@ export const createEngine = (options: EngineOptions): Engine => {
 
 // The worker's entry is BUILT javascript in every form this module runs in: from `dist/index.js` the "../dist"
 // hop is the identity, and from `src/index.ts` (this package's own tests) it steps across into the sibling build
-// output — a raw worker thread has no TypeScript loader. That is why this package's `test` script builds first:
+// output, a raw worker thread has no TypeScript loader. That is why this package's `test` script builds first:
 // the worker a test drives has to be this working tree's, not whatever was last compiled.
 const WORKER_URL = new URL("../dist/indexer/index-worker.js", import.meta.url);
 
 export const createResidentEngine = (options: ResidentEngineOptions): ResidentEngine => {
     const indexDir = options.indexDir ?? join(options.root, IQ_DIR);
     // Opened here, BEFORE the worker exists, because openIndex is the one operation that can delete and recreate
-    // the index dir (schema drift, corruption) — two threads racing to do that would have one of them building
+    // the index dir (schema drift, corruption), two threads racing to do that would have one of them building
     // into a directory the other just unlinked. The write mode is for exactly that: the schema and the drop-and-
     // recreate belong to this open, and from here on the handle only reads (every write to the index belongs to
     // the worker, and WAL is what lets these queries run straight through them).
     const db = openIndex(indexDir, "write");
-    // This process now owns writing this index — claimed AFTER the open that may have recreated the dir, so the
+    // This process now owns writing this index, claimed AFTER the open that may have recreated the dir, so the
     // pid file cannot be one of the things that open deletes. One-shot engines (the `iq` CLI) read this and
     // query read-only instead of racing the worker below for the write lock.
     claimIndexer(indexDir);
     // Neither model is loaded on THIS thread. Both live on the query worker, which answers the semantic scan and
-    // the cross-encoder for every query this engine serves — the ~700ms of blocking CPU that used to land on
+    // the cross-encoder for every query this engine serves, the ~700ms of blocking CPU that used to land on
     // whatever loop happened to call run(). Memory is unchanged by the move: the same two models were resident
     // here before, one thread over.
     const scorer = workerScorer({
@@ -300,7 +300,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     let entries: FileEntry[] = [];
     let sweepStart = 0;
     let generation = 0;
-    // True once the index has caught up with disk at least once — before that, queries report "building".
+    // True once the index has caught up with disk at least once, before that, queries report "building".
     let revalidatedOnce = false;
     // Monotonic change counter vs. the highest the worker has finished indexing. See the worker's header for why
     // freshness is a comparison of two numbers rather than a flag either side could clear at the wrong moment.
@@ -310,7 +310,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     // on a host with no model.
     let embedBacklog = 0;
 
-    // The sweep publishes before revalidation finishes, so the first query waits only for the file walk — it
+    // The sweep publishes before revalidation finishes, so the first query waits only for the file walk, it
     // searches against whatever index exists (rg hits are always live) while the parse/chunk pass catches up.
     let publishFirstSweep!: () => void;
     let failFirstSweep!: (error: Error) => void;
@@ -330,13 +330,13 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     void firstSweep.catch(() => undefined);
     void warmed.catch(() => undefined);
 
-    // Holds the host process open until close(), like any other live handle — deliberately not unref'd, which
+    // Holds the host process open until close(), like any other live handle, deliberately not unref'd, which
     // would let the process exit out from under a pass mid-write.
     const worker = new Worker(WORKER_URL, {
         workerData: { root: options.root, indexDir, modelDir: options.modelDir } satisfies IndexWorkerData,
     });
 
-    // warm()'s promise IS the report channel until it settles — routing the first failure to onIndexError as
+    // warm()'s promise IS the report channel until it settles, routing the first failure to onIndexError as
     // well would log one boot failure twice, under two different descriptions.
     let warmSettled = false;
     const fail = (error: Error): void => {
@@ -433,12 +433,12 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
         async close() {
             // Terminated mid-write on purpose: WAL makes an interrupted transaction a rollback on next open, so
             // there is nothing to drain, and waiting out an embedding batch would hold up the daemon's shutdown.
-            // The query worker only ever read, so it has even less to lose — a search in flight is abandoned
+            // The query worker only ever read, so it has even less to lose, a search in flight is abandoned
             // along with the request that asked for it.
             await Promise.all([worker.terminate(), scorer.close()]);
             db.close();
             // Ownership ends with the writer, so the next one-shot engine indexes inline again. A process killed
-            // without reaching this is covered too — the pid it left behind resolves to nothing.
+            // without reaching this is covered too, the pid it left behind resolves to nothing.
             releaseIndexer(indexDir);
         },
     };

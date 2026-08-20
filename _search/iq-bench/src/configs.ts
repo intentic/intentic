@@ -31,5 +31,5 @@ export const CONFIGS: readonly BenchConfig[] = [
 ];
 
 // Configs keeping semantic/rerank stages need the embedding models on disk; without them the engine would
-// silently degrade — the bench marks such configs "skipped" instead.
+// silently degrade, the bench marks such configs "skipped" instead.
 export const needsModels = (bench: BenchConfig): boolean => bench.features.has("semantic") || bench.features.has("rerank");

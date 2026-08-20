@@ -30,10 +30,10 @@ export interface DispatchContext {
     readonly indexDir: string;
     readonly db: IndexDb;
     readonly generation: number;
-    // How current the index is relative to disk, as of this query — the caller knows (the CLI just revalidated:
+    // How current the index is relative to disk, as of this query, the caller knows (the CLI just revalidated:
     // fresh; the resident engine may be mid-revalidation: building/stale).
     readonly freshness: WorkspaceSearchFreshness;
-    // The semantic scan and the cross-encoder — the two stages heavy enough that the host decides which thread
+    // The semantic scan and the cross-encoder, the two stages heavy enough that the host decides which thread
     // they run on. See query/scorer.ts.
     readonly scorer: QueryScorer;
     readonly features: ReadonlySet<Feature>;
@@ -48,15 +48,15 @@ interface VerbPlan {
     readonly style: "hits" | "paths" | "plain";
     readonly showTags: boolean;
     readonly hint?: string;
-    // How the query was READ when that differs from how it was written — a pattern rerun as literal text,
+    // How the query was READ when that differs from how it was written, a pattern rerun as literal text,
     // grep escapes rewritten, a language filter that matched nothing. Rendered above the results AND handed to
     // JSON callers, because it is about their query.
     readonly headerNote?: string;
-    // Run provenance: which retrieval stages ran and what state the index was in. Text surface only — a GUI
+    // Run provenance: which retrieval stages ran and what state the index was in. Text surface only, a GUI
     // that showed "reranked" beside every answer would be reporting normal operation as if it were news.
     readonly provenance?: string;
     readonly related?: string[];
-    // Whether the response opens with an `answer:` anchor — see RenderRequest.lead.
+    // Whether the response opens with an `answer:` anchor, see RenderRequest.lead.
     readonly lead?: boolean;
     readonly confidence?: "confident" | "ambiguous";
     // Whether the top groups should be delivered as code rather than as anchors (the `pack` stage).
@@ -125,7 +125,7 @@ const enclosingSymbol = (db: IndexDb, cache: Map<string, FileSymbolRange[]>, pat
         .filter((symbol) => symbol.line <= line && symbol.endLine >= line)
         .toSorted((a, b) => a.endLine - a.line - (b.endLine - b.line))[0];
 
-// symctx: parent-document context — every line-anchored hit learns its enclosing symbol, so the reading agent
+// symctx: parent-document context, every line-anchored hit learns its enclosing symbol, so the reading agent
 // often needs no follow-up `iq context`/Read. Def-tagged hits skip it (they ARE the symbol).
 const enrichContext = (db: IndexDb, groups: readonly RankedGroup[]): void => {
     const cache = new Map<string, FileSymbolRange[]>();
@@ -146,12 +146,12 @@ const RELATED_TOP = 3;
 
 const isCall = (ref: EngineHit): boolean => ref.tags.some((tag) => tag.kind === "call");
 
-// graph: code-graph neighbors of the answer — the top hits' enclosing symbols as definition anchors, each with its
+// graph: code-graph neighbors of the answer, the top hits' enclosing symbols as definition anchors, each with its
 // strongest caller RESOLVED rather than suggested (GraphRAG-lite over the symbol table plus one rg per symbol).
 // A bare `refs: iq refs X` spent the agent's next turn re-asking iq for something iq already knew, and the caller
 // is usually the other half of the answer: the public entry point that reaches the implementation just found.
 /* A NAME THIS STAGE CAN SEARCH FOR. The symbol table is built by extractors over every indexed language, and a
- * template-heavy file (`.vue`, `.md` fences) can hand back a "name" that spans lines — at which point this stage
+ * template-heavy file (`.vue`, `.md` fences) can hand back a "name" that spans lines, at which point this stage
  * puts a raw newline into an rg pattern and rg refuses the whole invocation:
  *
  *     Command failed, ripgrep: the literal '"\n"' is not allowed in a regex
@@ -183,7 +183,7 @@ const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Om
             const refs = await refsOf(db, anchor.name, undefined, rgBase).catch(() => undefined);
             // The guardrail behind the guard above: this stage is an enhancement on an answer that is already
             // computed and already paid for, so ANY failure in it costs its own line and nothing else. The
-            // alternative — which is what shipped — is a query that dies after doing all of its real work.
+            // alternative, which is what shipped, is a query that dies after doing all of its real work.
             if (refs === undefined) {
                 return undefined;
             }
@@ -222,12 +222,12 @@ const chunkAt = (db: IndexDb, path: string, line: number): Chunk | undefined => 
 };
 
 const PACK_TOP = 2;
-// Ceiling on one packed symbol — past this the slice stops being an answer and starts being a file.
+// Ceiling on one packed symbol, past this the slice stops being an answer and starts being a file.
 const PACK_MAX_LINES = 120;
 // …and a second ceiling, in tokens, because PACK_MAX_LINES alone is budget-blind: a 107-line pager implementation
 // packed at rank 1 spent a 1500-token budget by itself, so the ranked candidates underneath it never made the
 // answer at all (benchmarked: it evicted the case's expected file from the result entirely). Packing may take at
-// most this share of the budget across all packed groups — the rest belongs to the candidates it should not hide.
+// most this share of the budget across all packed groups, the rest belongs to the candidates it should not hide.
 const PACK_SHARE = 0.5;
 // Floor on a packed slice. A one-line const IS its whole definition, but a single line with nothing around it
 // reads as less than the chunk this replaced; short symbols get their neighbourhood too.
@@ -237,7 +237,7 @@ const PACK_WINDOW = 8;
 
 // Which lines of the enclosing symbol to deliver. Whole body when it fits; otherwise the declaration plus as
 // much as fits, unless the anchor sits beyond that, in which case the window centres on the anchor. The anchor
-// is always inside the span — a packed slice that omits the matching line would be a worse answer than a
+// is always inside the span, a packed slice that omits the matching line would be a worse answer than a
 // pointer to it.
 const packSpan = (symbol: FileSymbolRange, anchorLine: number): { from: number; to: number } => {
     const span = symbol.endLine - symbol.line + 1;
@@ -255,12 +255,12 @@ const packSpan = (symbol: FileSymbolRange, anchorLine: number): { from: number; 
     return { from: anchorLine - half, to: Math.min(symbol.endLine, anchorLine - half + PACK_MAX_LINES - 1) };
 };
 
-// pack: the top groups arrive as the actual code, not a pointer — each group's best hit is replaced by its
+// pack: the top groups arrive as the actual code, not a pointer, each group's best hit is replaced by its
 // enclosing symbol's LIVE body, read from disk. Transcript analytics found a follow-up Read after 54% of answers,
 // 78% of them re-opening a file iq had just named, which is exactly the read this is meant to save.
 //
 // Live text, never the indexed chunk: a chunk's stored text is prefixed with a synthetic `path § label` line, so
-// slicing it shifted every line number by one and presented that marker as the file's first line of code — a
+// slicing it shifted every line number by one and presented that marker as the file's first line of code, a
 // packed answer whose anchors did not match the file it came from. Anchors are the one thing a search tool cannot
 // get wrong. Hits with no enclosing symbol (a chunk-aligned semantic hit, an unparsed language) get a window
 // around the anchor instead, which is the same answer `iq context` would give.
@@ -294,7 +294,7 @@ const packGroups = async (db: IndexDb, root: string, groups: readonly RankedGrou
         groups.map(async (group, index): Promise<RankedGroup> => {
             // Only implementation is worth a body. A test that places in the top two still spends the pack budget
             // on 40 lines of assertions nobody asked to read, and that budget is what shows the ranked files under
-            // it — benchmarked: a packed test at rank 2 pushed the query's own answer out of the shown set.
+            // it, benchmarked: a packed test at rank 2 pushed the query's own answer out of the shown set.
             // Its anchors stay, which for a test is the useful part: where the thing under test is exercised.
             if (index >= PACK_TOP || classOf(group.path) !== "src") {
                 return group;
@@ -332,19 +332,19 @@ const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who"
 // test coverage named every one of them and cost more than the answer underneath.
 const NOTE_PATHS = 5;
 
-// grep escapes metachars that rust regex takes literally — `a\|b` matches the text "a|b", not "a or b". Agents
+// grep escapes metachars that rust regex takes literally, `a\|b` matches the text "a|b", not "a or b". Agents
 // reflexively write this (benchmarked: the single most common wasted query), so it's worth catching proactively.
 const GREP_DIALECT = /\\[|+?(){}]/;
 const GREP_DIALECT_NOTE = "pattern has grep-style escapes — iq uses rust regex: alternation is a|b (no backslash); literal text: --literal";
 
-// The verbs that match a name or a pattern literally. A question in prose cannot match any of them — only the
+// The verbs that match a name or a pattern literally. A question in prose cannot match any of them, only the
 // semantic pipeline behind a bare query reads intent.
 const EXACT_VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast"]);
-// Deliberate regex, which is a pattern however many words it spans — `a|b`, `foo.*bar`, a character class. The
+// Deliberate regex, which is a pattern however many words it spans, `a|b`, `foo.*bar`, a character class. The
 // escaped-metachar case is caught earlier by GREP_DIALECT; this is the unescaped one.
 const REGEX_INTENT = /[|()[\]*+?^$\\]/;
 // A phrase, not a name: two or more whitespace-separated words. `iq find 'exact text'` is a legitimate way to
-// spell a literal string, and it lands here too — but that only happens once the literal already missed, and
+// spell a literal string, and it lands here too, but that only happens once the literal already missed, and
 // asking semantically is the right next move either way.
 const isPhrase = (query: string): boolean => {
     // A terminal question mark is punctuation on the most obvious prose shape, not the regex quantifier. Keep
@@ -362,7 +362,7 @@ const isPhrase = (query: string): boolean => {
     return !REGEX_INTENT.test(candidate) && candidate.split(/\s+/).length > 1;
 };
 
-// Zero hits must never be a dead end — benchmarked at a 31% zero-hit rate, each one a wasted agent turn.
+// Zero hits must never be a dead end, benchmarked at a 31% zero-hit rate, each one a wasted agent turn.
 // Diagnose the probable cause in priority order: grep-dialect regex, wrong verb, over-narrow scope, rephrasing.
 const zeroHitHint = (request: QueryRequest): string | undefined => {
     if (ANCHOR_VERBS.has(request.verb)) {
@@ -371,7 +371,7 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
     if (GREP_DIALECT.test(request.query)) {
         return `0 hits and the ${GREP_DIALECT_NOTE}`;
     }
-    // Before scope, because a phrase given to an exact verb matches nothing at any scope — widening cannot save
+    // Before scope, because a phrase given to an exact verb matches nothing at any scope, widening cannot save
     // it. Transcript analytics found this the single most repeated zero-hit shape (`iq find "file tree explorer
     // sidebar"`, `iq find "capabilities page route view"`), and the generic "rephrase" hint below sent every one
     // of them back to grep: it named the verb they were already misusing and never mentioned the one that works.
@@ -386,12 +386,12 @@ const zeroHitHint = (request: QueryRequest): string | undefined => {
         return `0 hits — names are exact here; try iq sym '${request.query}*' or iq find ${request.query}`;
     }
     // A bare query that reaches zero has already been through both the exact engines and the semantic pipeline
-    // (see the escalation in `q`), so there is no other iq verb left to suggest — only different words.
+    // (see the escalation in `q`), so there is no other iq verb left to suggest, only different words.
     return "0 hits — rephrase, or search literal text with iq find 'exact text'";
 };
 
 const RERANK_TOP = 32;
-// RRF constant for blending the fused order with the cross-encoder order — same k as plan/fuse.ts.
+// RRF constant for blending the fused order with the cross-encoder order, same k as plan/fuse.ts.
 const RERANK_RRF_K = 60;
 // Below this sigmoid gap between the best and second-best passage, the field is flat enough to tell the model so.
 const CONFIDENCE_MARGIN = 0.05;
@@ -399,11 +399,11 @@ const CONFIDENCE_MARGIN = 0.05;
 const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
 
 // Cross-encoder pass over the fused top hits: score each candidate's full chunk text against the query, then
-// BLEND that ordering with the fused one via RRF — the web-trained cross-encoder is a strong reorderer but a
+// BLEND that ordering with the fused one via RRF, the web-trained cross-encoder is a strong reorderer but a
 // poor judge of code irrelevance (it prefers prose about a thing over the thing), so it votes, never dictates:
 // benchmarked, rerank-dominates cost 0.10 recall@10 by evicting correct code below the cutoff. Hits beyond the
 // rerank window keep their fused order after the blended ones.
-// undefined when this host has no cross-encoder (no baked model dir, or its worker is down) — the fused order
+// undefined when this host has no cross-encoder (no baked model dir, or its worker is down), the fused order
 // stands and the caller says nothing about reranking, because none happened.
 const rerankGroups = async (
     db: IndexDb,
@@ -454,7 +454,7 @@ const rerankGroups = async (
         return group;
     });
     // Confidence is RELATIVE, not absolute: ms-marco scores correct code low across the board, so "does the best
-    // passage stand out from the field" (margin) separates a clear winner from a flat, genuinely-ambiguous set —
+    // passage stand out from the field" (margin) separates a clear winner from a flat, genuinely-ambiguous set,
     // whereas the raw top score flags even a correct rank-1 answer.
     const sorted = scores.map(sigmoid).toSorted((a, b) => b - a);
     return { groups: regrouped, margin: (sorted[0] ?? 0) - (sorted[1] ?? 0) };
@@ -462,7 +462,7 @@ const rerankGroups = async (
 
 // The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, a cross-encoder rerank, and
 // code-graph neighbours. Every query whose words are not already a symbol, a path or a regex arrives here, and so
-// does an exact query that found nothing — which is why there is no separate verb for it. Traces recorded one
+// does an exact query that found nothing, which is why there is no separate verb for it. Traces recorded one
 // `ask` in 245 calls against ~90 bare natural-language queries: the split was never learned, it only decided
 // which callers got a reranked answer and which got raw BM25.
 const naturalPlan = async (
@@ -501,7 +501,7 @@ const naturalPlan = async (
         groups = reranked.groups;
         notes.push("reranked");
         // A flat field means no clear winner. Say which of the two it is on the answer line: "confident" is
-        // permission to stop reading, "ambiguous" points at the candidates — never out of iq into a grep spiral
+        // permission to stop reading, "ambiguous" points at the candidates, never out of iq into a grep spiral
         // (benchmarked: the old "try iq find" note made models abandon a correct rank-1 hit).
         if (on("confidence")) {
             confidence = reranked.margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
@@ -544,7 +544,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             ...(request.options.word ? { word: true } : {}),
             ...(request.options.caseSensitive ? { caseSensitive: true } : {}),
         };
-        // Recover instead of hinting — a hint costs the agent a whole retry turn, a rerun costs milliseconds.
+        // Recover instead of hinting, a hint costs the agent a whole retry turn, a rerun costs milliseconds.
         // A pattern rust regex rejects (`foo({`) reruns literally; grep-style escapes (`a\|b`) that matched
         // nothing rerun with the escapes stripped. The note names what ran so the next call is canonical.
         let found: RgResult;
@@ -566,7 +566,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
                 note = `grep-style escapes rewritten to rust regex — matched: ${rewritten}`;
             }
         }
-        // Warn about grep-dialect escapes up front — even when they accidentally matched something — so the agent
+        // Warn about grep-dialect escapes up front, even when they accidentally matched something, so the agent
         // doesn't have to hit zero results to learn the pattern was wrong.
         if (note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             note = GREP_DIALECT_NOTE;
@@ -602,7 +602,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             const groups = toGroups([{ engine: "symbols", hits }], request.query, entries, context.features);
             return { groups, unit: "definitions", style: "hits", showTags: true, lead: true, hint: `refs: iq refs ${request.query}` };
         }
-        // No exact definition — fall back to a fuzzy symbol match instead of a dead end (the query is often a
+        // No exact definition, fall back to a fuzzy symbol match instead of a dead end (the query is often a
         // concept, not a symbol, or a near-miss on the name). Empty here means genuinely nothing.
         const fuzzy = symSearch(context.db, request.query, undefined, allowed);
         const groups = groupByPath(fuzzy);
@@ -699,7 +699,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             return { path: file.path, score, hits: [{ path: file.path, line: 1, text: `${file.hops} hop   ${role}`, tags: [], score }] };
         });
         // Everything the walk could not answer is said out loud. A short list that looks complete is the exact
-        // failure this verb exists to avoid — but saying it must not itself cost the budget the verb is here to
+        // failure this verb exists to avoid, but saying it must not itself cost the budget the verb is here to
         // save, so the named paths are capped and the remainder is counted rather than spelled out.
         const some = (paths: readonly string[]): string =>
             paths.length <= NOTE_PATHS ? paths.join(", ") : `${paths.slice(0, NOTE_PATHS).join(", ")} +${paths.length - NOTE_PATHS} more`;
@@ -777,7 +777,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             return { groups, unit: "hits", style: "hits", showTags: true, lead: true };
         }
         // Nothing matched that name, path or pattern exactly. A zero here was the most expensive outcome in the
-        // traces — one wasted turn per occurrence — and the words are usually a concept rather than an identifier.
+        // traces, one wasted turn per occurrence, and the words are usually a concept rather than an identifier.
         // Answer it semantically instead of spending the agent's next turn on a hint telling it to.
         const escalated = await naturalPlan(context, request, entries, allowed);
         // The escalation is a reading of the QUERY, so it rides headerNote and reaches JSON callers; the
@@ -824,7 +824,7 @@ const toResult = (
         groups: shownGroups,
         freshness,
         truncated: rendered.truncated,
-        // `total` is a floor whenever any file's matches ran past the per-file cap — over the WHOLE match set,
+        // `total` is a floor whenever any file's matches ran past the per-file cap, over the WHOLE match set,
         // not just this page, since that is what the number counts.
         ...(plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
@@ -840,7 +840,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     const scopeKey = JSON.stringify(request.scope);
     const id = cursorId(request.echo, scopeKey);
     // Set by a caller that renders its own rows. It decides the page, and it turns off everything that only ever
-    // fed the text capsule — see RenderOptions.list.
+    // fed the text capsule, see RenderOptions.list.
     const list = request.render.list;
 
     let plan: VerbPlan | undefined;
@@ -852,7 +852,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
             throw new Error(`iq: invalid cursor: ${request.render.after}`);
         }
         offset = decoded.offset;
-        // A list caller never spooled, so there is nothing to replay and nothing has gone wrong — re-running IS
+        // A list caller never spooled, so there is nothing to replay and nothing has gone wrong, re-running IS
         // how its cursor works, and saying "stale" would put a warning on a working Load-more.
         const spool = list === undefined ? readSpool(context.indexDir, decoded.id) : undefined;
         if (spool !== undefined && spool.generation === context.generation) {
@@ -867,7 +867,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         const baseEntries = request.scope.ignored === true ? await sweep(context.root, true) : defaultEntries;
         const entries = filterScope(baseEntries, request.scope);
         // --lang mismatch: a language filter that emptied an otherwise non-empty scope is almost always the wrong
-        // language for this repo (e.g. `--lang ts` on a Python repo) — name the languages that ARE present rather
+        // language for this repo (e.g. `--lang ts` on a Python repo), name the languages that ARE present rather
         // than returning a silent, indistinguishable zero.
         if (entries.length === 0 && request.scope.langs !== undefined) {
             const { langs: _langs, ...scopeSansLang } = request.scope;
@@ -884,13 +884,13 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         }
         plan = await runVerb(context, request, entries);
         // Before packing, never after: pack copies the anchor hit into a run of plain lines, and enriching those
-        // would label every line of a body with the symbol that body already is. A list caller renders neither —
+        // would label every line of a body with the symbol that body already is. A list caller renders neither,
         // this was a symbol-table lookup per hit across EVERY matched file, on every keystroke, discarded.
         if (list === undefined && context.features.has("symctx") && ["find", "q", "refs"].includes(request.verb)) {
             enrichContext(context.db, plan.groups);
         }
         // Show-don't-point applies only where the agent's next move would be a Read: natural-language answers,
-        // including an exact query that escalated into one. Cursor replays skip this — spooled groups are packed.
+        // including an exact query that escalated into one. Cursor replays skip this, spooled groups are packed.
         // A list caller opts out: a packed body's plain lines would show up there as hits of a query that never
         // matched them.
         if (list === undefined && context.features.has("pack") && plan.pack === true) {
@@ -930,7 +930,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
                   cursorId: id,
               });
 
-    // A list caller's continuation re-runs instead — spooling every group of a keystroke-driven search would put
+    // A list caller's continuation re-runs instead, spooling every group of a keystroke-driven search would put
     // a megabyte of synchronous JSON on the daemon's event loop per typed character.
     if (rendered.truncated && list === undefined) {
         writeSpool(context.indexDir, id, {

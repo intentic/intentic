@@ -11,17 +11,17 @@ export interface TurnExcerpt {
     readonly turnUuid: string;
     readonly score: number;
     readonly prompt: string;
-    // FTS5's best snippet window over the turn's stored response — the answer fragment, "…"-elided.
+    // FTS5's best snippet window over the turn's stored response, the answer fragment, "…"-elided.
     readonly fragment: string;
     // How many OTHER turns ran a near-identical prompt and were folded into this one. 0 for a one-off; large
-    // for a nightly automation, where it is the useful fact — "this is a recurring job" rather than ten rows.
+    // for a nightly automation, where it is the useful fact, "this is a recurring job" rather than ten rows.
     readonly repeats: number;
     // The session this turn sits in, as its own shape: what it opened with and what it ended on.
     readonly bookends: SessionBookends | undefined;
 }
 
 // A hit says what matched; the bookends say what the conversation it lives in was ABOUT. Without them a
-// mid-session hit is a sentence with no provenance — the model can see its own words came back but not whether
+// mid-session hit is a sentence with no provenance, the model can see its own words came back but not whether
 // the session that produced them was the throwaway one or the one that got it right, and it re-reads the whole
 // transcript to find out. Borrowed from hermes-agent's session_search, which returns the same pair for the
 // same reason (it calls them bookend_start / bookend_end).
@@ -44,18 +44,18 @@ type RankedTurn = Omit<TurnExcerpt, "repeats" | "bookends">;
 const BOOKEND_CHARS = 200;
 
 /* THE KEY REPEATED PROMPTS COLLAPSE ON. Lowercased, whitespace-collapsed, and with every run of digits
- * flattened — because the thing that varies between two fires of the same scheduled job is almost always a
+ * flattened, because the thing that varies between two fires of the same scheduled job is almost always a
  * number: the date in "daily audit for 2026-08-01", a run counter, an hour.
  *
  * This is the index-native form of a problem hermes-agent solves with a source column ("cron sessions
  * accumulate repetitive vocabulary and starve interactive sessions out of the top N under bare BM25"). We have
- * no such column and should not grow one — the recall index is a pure cache over Claude Code transcripts, and
+ * no such column and should not grow one, the recall index is a pure cache over Claude Code transcripts, and
  * teaching it which conversations the daemon started would couple this island to the daemon it deliberately
  * knows nothing about. Keying on the repetition ITSELF needs no provenance and catches the same hazard from
  * any source: a scheduled automation, a /loop, or a human who pastes the same question every morning. */
 const repeatKey = (prompt: string): string => prompt.toLowerCase().replaceAll(/\d+/g, "#").replaceAll(/\s+/g, " ").trim();
 
-// Feature C: ranked conversation excerpts for a topic — the recall analogue of a code-search hit list. BM25
+// Feature C: ranked conversation excerpts for a topic, the recall analogue of a code-search hit list. BM25
 // over prompts+responses × recency decay; each hit carries the typed prompt and the answer's snippet, plus
 // session/turn coordinates so callers can fork or read the transcript for full context.
 export const grabExcerpts = (db: RecallDb, query: string, options: GrabOptions = {}): TurnExcerpt[] => {
@@ -138,7 +138,7 @@ const withBookends = (db: RecallDb, hits: readonly Omit<TurnExcerpt, "bookends">
             turns: Number(row["turns"]),
         });
     }
-    // A one-turn session's bookends ARE the hit — saying it twice is noise, so it carries none.
+    // A one-turn session's bookends ARE the hit, saying it twice is noise, so it carries none.
     return hits.map((hit) => {
         const bookends = bySession.get(hit.sessionId);
         return { ...hit, bookends: bookends === undefined || bookends.turns <= 1 ? undefined : bookends };

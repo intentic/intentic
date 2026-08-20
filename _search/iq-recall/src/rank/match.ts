@@ -21,12 +21,12 @@ export interface SessionMatch {
 export interface MatchOptions {
     readonly days?: number;
     readonly excludeSessionId?: string;
-    // Files already known relevant to the new prompt (e.g. from rankFilesForTopic) — enables the overlap term.
+    // Files already known relevant to the new prompt (e.g. from rankFilesForTopic), enables the overlap term.
     readonly files?: readonly string[];
 }
 
-// Feature B: rank recent sessions against a new session's first prompt. Purely statistical — BM25 over
-// prompts/titles + recency decay + optional file overlap — so it works without any LLM access.
+// Feature B: rank recent sessions against a new session's first prompt. Purely statistical. BM25 over
+// prompts/titles + recency decay + optional file overlap, so it works without any LLM access.
 export const matchSessions = (db: RecallDb, prompt: string, options: MatchOptions = {}): SessionMatch[] => {
     const fts = ftsQueryOf(prompt);
     if (fts === undefined) {
@@ -75,7 +75,7 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
             bm25: (bestTurn.get(sessionRowId) ?? 0) + 0.5 * (titles.get(sessionRowId) ?? 0),
         });
     }
-    // Reduced, not spread — candidates grows with the transcript corpus, and a spread argument list that long
+    // Reduced, not spread, candidates grows with the transcript corpus, and a spread argument list that long
     // overflows the stack (see the same fix in iq-engine's fuse).
     const maxBm25 = candidates.reduce((max, candidate) => (candidate.bm25 > max ? candidate.bm25 : max), 0);
     if (maxBm25 === 0) {

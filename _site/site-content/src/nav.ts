@@ -72,7 +72,7 @@ export type NavEntry =
 const productItems = (): MenuItem[] =>
     productPages.map((page) => {
         /* The row's own preview where it has one, the page hero otherwise. A hero is framed for a page column
-         * and the rail is a 16:10 box, so three of the five pages carry a capture shot for the box instead —
+         * and the rail is a 16:10 box, so three of the five pages carry a capture shot for the box instead,
          * see `menuShot` in product.ts for which, and why the other two don't need one. */
         const shot = page.menuShot ?? (page.hero && { name: page.hero.name, alt: page.hero.alt });
         return {
@@ -88,8 +88,8 @@ export const navEntries: NavEntry[] = [
         /* "Features", not "Product": the site's own copy says free and open source, MIT on GitHub, platform
          * included, and a bar that then says "Product" is reading from a SaaS vendor's script beside it.
          *
-         * AND THE PATH SAYS IT TOO. The label and the URL used to disagree — "Features" over /product/, "Run"
-         * over /product/orchestrate/ — on the theory that a label is a word while a URL is a promise already
+         * AND THE PATH SAYS IT TOO. The label and the URL used to disagree, "Features" over /product/, "Run"
+         * over /product/orchestrate/, on the theory that a label is a word while a URL is a promise already
          * linked to. That gets the trade backwards: a URL is also read, and a visitor who clicks Run and lands
          * on "orchestrate" has been handed a second vocabulary to learn for no benefit. The old paths are
          * forwarded (see worker.ts), so the links other people made still arrive. */

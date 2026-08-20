@@ -1,14 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
-/* A STAND-IN FOR THE MODEL THE FREE TRIAL SPENDS — Google's two surfaces, served locally, deterministically.
+/* A STAND-IN FOR THE MODEL THE FREE TRIAL SPENDS. Google's two surfaces, served locally, deterministically.
  *
  * The platform's trial is the one place this product sits on the command path, and until now nothing exercised
  * it end to end: `trial.routes.ts` was covered by unit tests with an injected `fetch`, which proves the routing
  * and proves nothing about the wire. This serves the wire. `TRIAL_BASE_URL` is already config and already
  * documented as "any OpenAI-compatible upstream", so pointing the platform here needs NO product change.
  *
- * It mirrors Google's URL SHAPE rather than inventing one, because the shape is load-bearing: `nativeModelsUrl`
+ * It mirrors Google's URL SHAPE rather than inventing one, because the shape is relied on: `nativeModelsUrl`
  * derives the native listing by stripping a trailing `/openai` from the configured base, so a stand-in served
  * at some flat `/v1` would silently take the "upstream will not say what its models can do" branch and the
  * discovery path this exists to cover would never run. Base is `/v1beta/openai`; the native listing sits one
@@ -28,7 +28,7 @@ export const DEFAULT_REPLY = `Hello from the intentic test upstream.`;
 export const DEFAULT_MODELS: readonly string[] = [`fake-flash-latest`];
 
 export interface FakeUpstreamOptions {
-    /** 0 (the default) takes any free port and reports it back — the only safe choice when tests run in parallel. */
+    /** 0 (the default) takes any free port and reports it back, the only safe choice when tests run in parallel. */
     readonly port?: number;
     readonly models?: readonly string[];
     readonly reply?: string;
@@ -40,7 +40,7 @@ export interface FakeUpstream {
     /** What to set TRIAL_BASE_URL to. Ends in `/openai` so the platform derives the native listing beside it. */
     readonly baseUrl: string;
     readonly port: number;
-    /** Every chat body this upstream was sent, in order — what a test asserts the prompt actually reached. */
+    /** Every chat body this upstream was sent, in order, what a test asserts the prompt actually reached. */
     readonly received: readonly string[];
     close(): Promise<void>;
 }
@@ -118,7 +118,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                     models: models.map((id) => ({
                         name: `models/${id}`,
                         // The capability the trial actually spends. Without it the platform reads the model as
-                        // one that cannot be chatted with and drops it — the filter this fake exists to feed.
+                        // one that cannot be chatted with and drops it, the filter this fake exists to feed.
                         supportedGenerationMethods: [`generateContent`, `countTokens`],
                     })),
                 });
@@ -163,7 +163,7 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
                 }
                 /* Streamed as SSE, because the trial route pipes upstream's body straight through and the agent
                  * on the far end reads frames. A fake that only ever answered plain JSON would leave the whole
-                 * streaming path — the one a user actually watches — uncovered. */
+                 * streaming path, the one a user actually watches, uncovered. */
                 response.writeHead(200, { "content-type": `text/event-stream`, "cache-control": `no-cache`, connection: `keep-alive` });
                 response.write(chunk(model, { role: `assistant`, content: `` }, null));
                 response.write(chunk(model, { content: reply }, null));

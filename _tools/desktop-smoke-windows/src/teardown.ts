@@ -6,7 +6,7 @@
  * correct on the machines that have one.
  *
  * It NEVER fails the job. A teardown that can go red gives a green run a way to turn red for something that
- * already worked — and there is nothing here whose failure is news: the app not being installed and the
+ * already worked, and there is nothing here whose failure is news: the app not being installed and the
  * container not existing are both the state this is trying to reach.
  */
 
@@ -31,7 +31,7 @@ export const runTeardown = async (harness: Harness): Promise<void> => {
     }
     await uninstallSilently(installed.uninstallString);
     // The registration outlives a failed uninstall, and a leftover one satisfies the install tier's own
-    // "is the scheme registered" assertion — which would then be passing on yesterday's evidence.
+    // "is the scheme registered" assertion, which would then be passing on yesterday's evidence.
     await powershell(
         `$ErrorActionPreference='SilentlyContinue'
          Remove-Item -Recurse -Force 'Registry::HKEY_CURRENT_USER\\Software\\Classes\\intentic'`,

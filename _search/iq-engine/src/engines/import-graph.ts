@@ -1,7 +1,7 @@
 import { type IndexDb, openIndex } from "../store/db.js";
 
 // The resolved import graph, shared by every engine that needs to know which file reaches which. This is not a
-// verb — nothing here answers a query. It is the one place the raw specifier rows become edges, because
+// verb, nothing here answers a query. It is the one place the raw specifier rows become edges, because
 // resolution needs the whole file set and the indexer only ever sees one file at a time.
 //
 // Both directions are built together and returned together. `imports` (A → what A pulls in) is what ranking
@@ -21,7 +21,7 @@ export interface ImportGraph {
     readonly importedBy: ReadonlyMap<number, ReadonlySet<number>>;
 }
 
-// First chunk per file — where a generated banner sits, and where a package.json's "name" is. Callers that need
+// First chunk per file, where a generated banner sits, and where a package.json's "name" is. Callers that need
 // heads for their own reasons pass the same map back in, so one scan serves both.
 export const fileHeads = (db: IndexDb): Map<number, string> =>
     new Map(
@@ -70,7 +70,7 @@ const candidatesFor = (base: string): string[] => {
 };
 
 // Workspace package name → its directory, read from each package.json's "name". Lets a cross-package import
-// (`@intentic/sdk`) resolve to that package's entry file — without it the graph fragments into one island per
+// (`@intentic/sdk`) resolve to that package's entry file, without it the graph fragments into one island per
 // package, which in a monorepo loses exactly the structure this exists to show.
 const packageDirs = (db: IndexDb, heads: ReadonlyMap<number, string>): Map<string, string> => {
     const dirs = new Map<string, string>();

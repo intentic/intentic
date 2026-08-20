@@ -41,7 +41,7 @@ export interface RevalidateResult {
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
 
 // A model swap invalidates every stored vector, never the chunks themselves. A WRITE, so it belongs to whoever
-// owns writing the index — the CLI engine's own revalidation pass, or the daemon's index worker.
+// owns writing the index, the CLI engine's own revalidation pass, or the daemon's index worker.
 export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
     if (modelDir === undefined) {
         return;
@@ -52,24 +52,24 @@ export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
     }
 };
 
-// The cheap "already indexed" test — mtime+size, no read. The WRITER's test: a file it rejects is re-hashed on
+// The cheap "already indexed" test, mtime+size, no read. The WRITER's test: a file it rejects is re-hashed on
 // the next pass, and a hash match makes that pass a no-op, so being too eager here costs a read, never an error.
 const indexed = (entry: FileEntry, previous: StoredFile | undefined): boolean =>
     previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size;
 
 // What a READER may honestly call stale, and deliberately not the writer's test. One index serves every agent
-// worktree of a repo — they share `.intentic/local/cache/iq` — and `git worktree add` stamps a fresh mtime on every file it
+// worktree of a repo, they share `.intentic/local/cache/iq`, and `git worktree add` stamps a fresh mtime on every file it
 // checks out. Under the writer's test that reads as "nothing is indexed" in a tree that is byte-identical to
 // the indexed one, so every answer an agent ever saw opened with "index 2253 files behind": a permanent alarm
 // about a correct result, which is the thing that sends a model back to grep. Size is the half of the cheap
 // test a checkout does not disturb.
 //
 // The asymmetry is deliberate and one-directional: an edit that keeps the byte count is missed HERE and still
-// caught by the writer, so the index is rebuilt exactly as before and only the banner is optimistic — beside
+// caught by the writer, so the index is rebuilt exactly as before and only the banner is optimistic, beside
 // which it already says text matches are live.
 const knownStale = (entry: FileEntry, previous: StoredFile | undefined): boolean => previous === undefined || entry.size !== previous.size;
 
-// How many files the index does not match — new, changed, or gone. The freshness signal for an engine that does
+// How many files the index does not match, new, changed, or gone. The freshness signal for an engine that does
 // NOT own writing the index (see indexer-lock.ts): it cannot ask the writer how far behind it is, but it can
 // compare the sweep it just did against the rows that are there. Pure reads, so a read-only handle answers it.
 export const indexLag = (db: IndexDb, entries: readonly FileEntry[]): number => {
@@ -111,10 +111,10 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
         );
         changed++;
     };
-    // Apply one read file — hash/parse/sqlite are all synchronous, so results land strictly in entry order.
+    // Apply one read file, hash/parse/sqlite are all synchronous, so results land strictly in entry order.
     const applyRead = (entry: FileEntry, previous: ReturnType<(typeof stored)["get"]>, buf: Buffer | undefined): void => {
         const lang = buf === undefined ? undefined : langOf(entry.path);
-        // A recognized source file is text with a stray NUL, not a binary — skipping it would make the file
+        // A recognized source file is text with a stray NUL, not a binary, skipping it would make the file
         // invisible to def/ask/find alike (ripgrep already goes blind on it; the index must not).
         if (buf === undefined || (isBinary(buf) && lang === undefined)) {
             skipEntry(entry);
@@ -149,7 +149,7 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
         toRead.push({ entry, previous, read: undefined });
     }
     // Bounded read-ahead: keep up to READ_AHEAD readFile()s in flight while results are consumed in order. On a
-    // cold build (or a PARSER_VERSION bump) this reads the entire workspace — serial reads dominate that path,
+    // cold build (or a PARSER_VERSION bump) this reads the entire workspace, serial reads dominate that path,
     // while an unbounded fan-out would hold every file buffer in memory at once.
     const READ_AHEAD = 16;
     for (const [index, item] of toRead.entries()) {

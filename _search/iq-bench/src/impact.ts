@@ -2,16 +2,16 @@ import { execFileSync } from "node:child_process";
 import { type ImpactDirection, type ImpactedFile, type ImpactResult, type ImportGraph, impactOf, loadImportGraph } from "@intentic/iq-engine";
 import { ensureIndex, indexDirFor, repoRoot } from "./repos.js";
 
-// Tier 1b — does impact analysis actually predict what a change touches?
+// Tier 1b, does impact analysis actually predict what a change touches?
 //
 // THE GROUND TRUTH IS GIT, NOT THE GRAPH. Show the predictor ONE file from a past commit and ask which other
 // files that commit touched. The author already answered; we only check. This is the test the tool that
-// inspired the feature could not pass — its published recall of 1.0 was measured against a set derived from
+// inspired the feature could not pass, its published recall of 1.0 was measured against a set derived from
 // the same graph doing the predicting, which cannot fail by construction and therefore proves nothing.
 //
 // TWO BASELINES, BOTH OF WHICH MUST BE BEATEN. `same-dir` uses no graph at all: it names the seed's folder
 // siblings. Co-change is strongly local, so this is a genuinely hard bar and the honest thing to publish next
-// to a graph result. `hops-1` is the reach we already have today via the related line — if the transitive walk
+// to a graph result. `hops-1` is the reach we already have today via the related line, if the transitive walk
 // does not beat one hop, the walk is not worth its cost and this feature does not ship.
 //
 // WHAT THIS DOES NOT MEASURE: co-change is a proxy. Two files edited together are usually related, but authors
@@ -28,7 +28,7 @@ const CODE = /\.(ts|tsx|mts|js|jsx|mjs|vue|py|go|rs|java)$/;
 
 export interface ImpactStrategy {
     readonly name: string;
-    // 0 means the graph is not consulted at all — the folder-siblings baseline.
+    // 0 means the graph is not consulted at all, the folder-siblings baseline.
     readonly maxHops: number;
     readonly cap: number;
     readonly direction: ImpactDirection;
@@ -76,7 +76,7 @@ export interface ImpactMeta {
     readonly repo: string;
     readonly commitsScanned: number;
     readonly commitsUsable: number;
-    // A commit whose code files the current index does not know — renamed, deleted, or moved since. The graph
+    // A commit whose code files the current index does not know, renamed, deleted, or moved since. The graph
     // describes the working tree, so these cannot be graded soundly either way.
     readonly droppedNotIndexed: number;
     readonly droppedTooSmall: number;
@@ -140,7 +140,7 @@ const siblingIndex = (graph: ImportGraph): Map<string, string[]> => {
 };
 
 // Sharing a folder is weaker evidence than a written import edge and stronger than a two-step chain, so
-// siblings sort between hop 1 and hop 2. Fixed a priori rather than tuned against these results — a ranking
+// siblings sort between hop 1 and hop 2. Fixed a priori rather than tuned against these results, a ranking
 // fitted to the test set is how a benchmark stops measuring anything.
 const SIBLING_RANK = 1.5;
 

@@ -7,7 +7,7 @@ import type { ListingProposal, ScanResult } from "./scan.js";
  *
  * Everything that needs to understand JSON happens here; the workflow that calls it only moves files and
  * talks to `gh`. So a proposal is materialised as a COMPLETE candidate marketplace.json with exactly one
- * entry added, next to the pull request's title and body — the workflow copies the file over, commits, opens
+ * entry added, next to the pull request's title and body, the workflow copies the file over, commits, opens
  * the pull request, and never has to edit JSON in bash. */
 
 const OUT_DIR = ".scan";
@@ -53,7 +53,7 @@ export const writeScanOutputs = async (root: string, file: RegistryFile, result:
     await writeJson(join(root, REGISTRY_FACTS_FILE), result.facts);
 
     // Rebuilt every run: a proposal that has since been merged or closed must not linger as a stale branch. The
-    // mkdir is not redundant with writeJson's — a run that proposes nothing (the steady state, once every tagged
+    // mkdir is not redundant with writeJson's, a run that proposes nothing (the steady state, once every tagged
     // repo is listed) writes no proposal directory, and summary.md below still has to land somewhere.
     const out = join(root, OUT_DIR);
     await rm(out, { recursive: true, force: true });

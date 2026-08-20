@@ -29,16 +29,16 @@ export const IGNORED_DIRS = new Set([
 ]);
 
 // The workspace's reference shelf: a reserved TOP-LEVEL directory where the agent or the user drops material
-// that is consulted, not worked on — a third-party repo cloned to compare against, vendored docs, a tarball.
+// that is consulted, not worked on, a third-party repo cloned to compare against, vendored docs, a tarball.
 // Everything under it stays readable and addressable by full path, but it is out of the workspace's focus:
 // grayed + lazy-loaded in the tree, skipped by default search, never discovered as a workspace repo, never
 // dependency-scanned or remote-synced, never snapshotted by history. The classification is an ATTENTION
-// boundary, not an access one — same philosophy as the rest of this package.
+// boundary, not an access one, same philosophy as the rest of this package.
 export const REFERENCE_DIR = "refs";
 
 /* The workspace's OUTBOX, and the reference shelf's mirror image: a reserved TOP-LEVEL directory whose files
  * the sandbox serves on the public internet. Where `refs/` is what the world sends in, this is what the work
- * sends out — the process-free half of preview (a panel needs a running dev server; a file needs nothing), and
+ * sends out, the process-free half of preview (a panel needs a running dev server; a file needs nothing), and
  * the file-shaped way an agent hands a result to someone who has no Intentic account.
  *
  * Unlike the shelf it is NOT ensured at boot, and that asymmetry is the whole safety story: its EXISTENCE is
@@ -47,13 +47,13 @@ export const REFERENCE_DIR = "refs";
  * daemon can leave one lying around; a directory that is public by definition is the one thing nobody should
  * ever find by accident.
  *
- * In every OTHER respect it is ordinary workspace content — searched, watched, ungrayed in the tree — because
+ * In every OTHER respect it is ordinary workspace content, searched, watched, ungrayed in the tree, because
  * what you published is precisely what you want to be able to find again. The one exception is repo discovery,
  * which reserves the name: a folder of artifacts is not a project. */
 export const PUBLIC_DIR = "public";
 
 // Root-relative paths only: both predicates match the FIRST segment, so a repo's own `refs/` or `public/` subdir
-// ("myrepo/public" — Vite, Next and Laravel all ship one) stays ordinary content. Callers holding an absolute
+// ("myrepo/public". Vite, Next and Laravel all ship one) stays ordinary content. Callers holding an absolute
 // path must relativize first (toRelPath).
 const firstSegment = (relPath: string): string | undefined => relPath.split(/[\\/]/).find((segment) => segment.length > 0);
 export const isReferencePath = (relPath: string): boolean => firstSegment(relPath) === REFERENCE_DIR;
@@ -61,10 +61,10 @@ export const isPublicPath = (relPath: string): boolean => firstSegment(relPath) 
 
 // The persisted browser-login profiles (.intentic/local/browser/<capability>) are a Chromium user-data dir: thousands of
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
-// subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are
+// subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block, its files are
 // served on demand like any other ignored path.
 /* The group folder the profiles sit in, spelled here rather than imported. This file is the BROWSER-SAFE half of
- * the package — no node imports, and no @intentic/sandbox-contract either, since the whole point is that the
+ * the package, no node imports, and no @intentic/sandbox-contract either, since the whole point is that the
  * platform's web bundle can take it without dragging zod and the contract surface along. The cost of that is one
  * copy of a name, and the thing that keeps the copy honest lives on the other side: workspace-state.test.ts pins
  * the browser entry's full path and names this file in the failure, so moving the group breaks a test that says
@@ -78,7 +78,7 @@ export const isBrowserProfilePath = (path: string): boolean => {
 };
 
 // Agent worktrees (<repo>/.claude/worktrees/<name>) are throwaway full checkouts of their repo. Not junk by
-// name — the rest of .claude (skills, settings) is real config — but walking a checkout duplicates every
+// name, the rest of .claude (skills, settings) is real config, but walking a checkout duplicates every
 // project in the tree, lets vitest-project detection list a stale copy of the whole monorepo, and burns the
 // walk's entry budget. Treated as ignored so the subtree grays + lazy-loads and the watcher skips its churn.
 export const isAgentWorktreePath = (path: string): boolean => {

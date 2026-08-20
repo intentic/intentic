@@ -76,16 +76,16 @@ import { json, refuse } from "./transport";
 
 /* THE DAEMON, as a fetch handler in the tab.
  *
- * Every route below answers in the shape the contract declares for it — the handlers are annotated with the
+ * Every route below answers in the shape the contract declares for it, the handlers are annotated with the
  * contract's own types, so a shape that drifts is a build error rather than a demo that quietly renders
  * nothing. What it deliberately is NOT is an oRPC server: the daemon's real `OpenAPIHandler` would want
  * `@orpc/server` in the browser bundle to re-validate payloads this file is the only writer of.
  *
  * Three classes of mutation, decided per route:
- *   real     — rename, archive, seen, sending a message: the fixture is mutable state and the UI is honest.
- *   refused  — land, push, discard, secrets: `refuse()` gives the app the daemon's own error shape, so the
+ *   real    , rename, archive, seen, sending a message: the fixture is mutable state and the UI is honest.
+ *   refused , land, push, discard, secrets: `refuse()` gives the app the daemon's own error shape, so the
  *              message lands where a real refusal would instead of failing silently.
- *   missing  — everything not listed: a 404 the app already knows how to narrate.
+ *   missing , everything not listed: a 404 the app already knows how to narrate.
  */
 
 const STARTED_AT = Date.now();
@@ -93,11 +93,11 @@ const STARTED_AT = Date.now();
 /* The roster is live state: rename/archive/seen write it, and every write bumps `rev` and re-broadcasts, which
  * is exactly the contract the real registry has with the board (snapshot-not-diff, newest rev wins).
  *
- * How much of the cast it starts with is the demo mode's call (mode.ts) — the fleet fixture stays the whole
+ * How much of the cast it starts with is the demo mode's call (mode.ts), the fleet fixture stays the whole
  * roster, and a mode is a view onto it. */
 const roster = { agents: fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true), rev: 1 };
 // When the pipelines board was last read. Seeded just before the newest breakage, so the rail badge a visitor
-// arrives to is honest — and opening the view stamps it away, as it does against a real daemon.
+// arrives to is honest, and opening the view stamps it away, as it does against a real daemon.
 let ciSeenAt = STARTED_AT - 35 * 60_000;
 const listeners = new Set<(event: SystemEvent) => void>();
 const runs = new Map<string, Run>();
@@ -112,7 +112,7 @@ const broadcastRoster = (): void => {
 
 /* The recorded workflow run, as far as THIS board can see it. The fleet view draws a run's group card from
  * /workflows/runs rather than from the roster (useWorkflowRuns.ts), so a mode whose board does not carry the
- * two review agents must not be told about the run they are steps of — the card would be a doorway to cards
+ * two review agents must not be told about the run they are steps of, the card would be a doorway to cards
  * that are not there. Keyed on the live steps, because a finished step's conversation is history either way. */
 const runsOnBoard = (now: number): WorkflowRun[] =>
     demoRuns(now).filter((run) =>
@@ -131,7 +131,7 @@ const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | un
     return next;
 };
 
-// Who is in the workspace. The second one is the whole sharing story told in one frame — and the first thing a
+// Who is in the workspace. The second one is the whole sharing story told in one frame, and the first thing a
 // minimal recording drops, because an avatar nobody asked for is furniture.
 const OWNER: PresenceUser = { clientId: `demo-owner`, email: `ada@acme.dev`, name: `Ada Lovelace`, role: `owner`, idle: false, view: `workspace` };
 const TEAMMATE: PresenceUser = {
@@ -147,7 +147,7 @@ const TEAMMATE: PresenceUser = {
  * roster and the presence of whoever this mode has in the workspace.
  *
  * `routes` is deliberately omitted from the hello. useDaemonRoutes reads its absence as "assume supported", so
- * no feature gates itself off on a daemon that never advertised — and the fixture doesn't have to keep a list
+ * no feature gates itself off on a daemon that never advertised, and the fixture doesn't have to keep a list
  * of route names in step with the contract. (SANDBOX_ROUTE_NAMES is imported only for the `info` build string,
  * so the count in the UI is honest about how much surface this fixture stands in for.) */
 const HEARTBEAT_MS = 2_000;
@@ -156,7 +156,7 @@ const HEARTBEAT_MS = 2_000;
  *
  * The real daemon watches its own tmux, sockets and registries and pushes `runtimeChanged` when what it sees
  * changes; those views hold no timer of their own any more. This fixture's rosters are CONSTANTS built against
- * the moment they are read (`activityAt: now - 4_000`), so with nothing pushing they would freeze — a browser
+ * the moment they are read (`activityAt: now - 4_000`), so with nothing pushing they would freeze, a browser
  * the demo shows as running, last active five minutes ago. Standing in for the real feed keeps the recording
  * honest and costs one small frame every few seconds. */
 const RUNTIME_TICK_MS = 10_000;
@@ -205,7 +205,7 @@ const attach = async (request: Request): Promise<Response> => {
     }
     const run = runFor(conversationId);
     if (run === undefined) {
-        // Nothing is running on this conversation — the same empty stream a real daemon answers with.
+        // Nothing is running on this conversation, the same empty stream a real daemon answers with.
         return eventStream(request, (sink) => {
             sink.emit({ kind: `end` });
             sink.close();
@@ -221,7 +221,7 @@ const attach = async (request: Request): Promise<Response> => {
 /* The conversation-id prefixes the rail's own areas derive their fan-outs from: `xt-` an acceptance run, `dg-` a
  * documentation run, `mt-` a chore turn. A visitor pressing Run there is asking for N isolated agents against a
  * checkout that does not exist here, so the turn is refused in the daemon's own error shape and the extension
- * shows the reason where it shows any other refusal. The visitor's OWN chat turn — no prefix — still runs. */
+ * shows the reason where it shows any other refusal. The visitor's OWN chat turn, no prefix, still runs. */
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
 const startTurn = async (request: Request): Promise<Response> => {
@@ -252,11 +252,11 @@ const reply = async (request: Request): Promise<Response> => {
     return json({ ok: true });
 };
 
-/* LAND NOW — the press the whole fleet board is pointed at, and the one mutation here that changes more than
+/* LAND NOW, the press the whole fleet board is pointed at, and the one mutation here that changes more than
  * one surface. A clean land moves the agent's delta into the main tree (fixture/workspace.ts), so the card
  * crosses into Finished, the review's rows flip to "landed", the Changes panel grows the files with this
  * agent's chip on them, and `workspaceChanged` tells every open panel to re-read. A refused one changes
- * nothing at all, which is exactly the promise `check` makes — the card goes back to conflict carrying the
+ * nothing at all, which is exactly the promise `check` makes, the card goes back to conflict carrying the
  * report the panel then offers to hand to the agent. */
 const land = (id: string): Response => {
     const result = landAgentDelta(id);
@@ -324,19 +324,19 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         `/system/browsers/{name}`,
         () => refuse(`This is the demo workspace — the browser you are watching is a recording, so there is nothing to close.`),
     ],
-    // `sessions`, not `subagents` — SubagentsListSchema's field, which the client parses and the rail counts.
+    // `sessions`, not `subagents`. SubagentsListSchema's field, which the client parses and the rail counts.
     // Under the wrong key every read threw and vue-query retried it, so the one roster the demo has nothing to
     // show for was also the busiest thing on its network tab.
     [`GET`, `/system/subagents`, () => json({ sessions: [] } satisfies SubagentsList)],
 
-    // `held` is the same approvals queue /automations/pending serves, projected onto the board — so the demo's
+    // `held` is the same approvals queue /automations/pending serves, projected onto the board, so the demo's
     // "needs you" wake sits beside the running cards, as it does in the real fleet.
     [`GET`, `/agents`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/archived`, () => json({ agents: [], rev: roster.rev, held: [] } satisfies AgentsList)],
     [`GET`, `/agents/search`, ({ url }) => json(searchAgents(url.searchParams.get(`query`) ?? ``, url.searchParams.get(`caseSensitive`) === `true`))],
     [`POST`, `/agents/seen`, () => json({ agents: roster.agents, rev: roster.rev, held: automationApprovals(Date.now()) } satisfies AgentsList)],
     [`GET`, `/agents/{id}/diff`, ({ param }) => json(agentChanges(param(`id`)))],
-    // Opening a card that is NOT mid-turn reads its transcript rather than attaching — so the one agent holding
+    // Opening a card that is NOT mid-turn reads its transcript rather than attaching, so the one agent holding
     // a finished delta carries the conversation that produced it (fixture/transcripts.ts).
     [`GET`, `/agents/{id}/transcript`, ({ param }) => json(transcriptFor(param(`id`)))],
     [`GET`, `/agents/{id}/{repo}/file-diff`, ({ url, param }) => json(fileDiff(param(`repo`), url.searchParams.get(`path`) ?? ``))],
@@ -364,7 +364,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/sessions/{id}`, () => json({ messages: [] })],
 
     /* The recording's filesystem (fixture/workspace.ts), served the way the daemon serves /work: a tree, a lazy
-     * listing per directory, a read that says "nothing there" for a path that is not there — and real WRITES,
+     * listing per directory, a read that says "nothing there" for a path that is not there, and real WRITES,
      * because the surfaces reading these files also acknowledge, author and publish through them. What a visitor
      * writes holds until the tab is reloaded. */
     [`GET`, `/workspace/tree`, () => json(workspaceTree())],
@@ -401,7 +401,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/git/{repo}/push`, () => refuse(`This is the demo workspace — there is no remote to push to.`)],
     /* Where each repo lives online. This is what the publisher-claim step matches against the registry's list,
      * so `web` being an `acme/…` project is what makes the demo show the one-click path rather than the
-     * paste-a-line fallback — the more interesting of the two, and the one worth having on screen. */
+     * paste-a-line fallback, the more interesting of the two, and the one worth having on screen. */
     [`GET`, `/git/remote-repos`, () => json({ repos: REMOTE_REPOS })],
     // The claim's one press. Refused for the same reason commit and push are: the demo has no remote, and a
     // fixture that answered `ok` would be showing a success the product could not have produced.
@@ -412,7 +412,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
      * connected Claude subscription and one Codex account is the honest shape of a working sandbox. */
     [`GET`, `/claude/accounts`, () => json({ accounts: [DEMO_CLAUDE_ACCOUNT] } satisfies OauthAccountList)],
     [`GET`, `/grok/accounts`, () => json({ accounts: [] } satisfies OauthAccountList)],
-    // Codex authenticates ONLY through the translator (see access.ts), so this — not an oauth account — is what
+    // Codex authenticates ONLY through the translator (see access.ts), so this, not an oauth account, is what
     // makes the fleet's two Codex agents legible: a connected ChatGPT subscription their turns ran on.
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
     // One route for every provider's catalog, as the daemon serves it. A provider the demo has not connected
@@ -427,7 +427,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
 
     /* CI. The board is real data (fixture/ci.ts) and its read state is real state: opening the view stamps
      * `/ci/seen`, which is what clears the rail's breakage badge. What a recording cannot do is act on someone
-     * else's pipeline, so rerun, cancel and Fix-with-agent refuse in the daemon's own error shape — the view
+     * else's pipeline, so rerun, cancel and Fix-with-agent refuse in the daemon's own error shape, the view
      * renders that line above the board, which is the whole point of refusing rather than pretending. */
     [`GET`, `/ci/runs`, () => json(ciRunsResponse(Date.now(), ciSeenAt))],
     [`POST`, `/ci/runs/jobs`, ciJobsRoute],
@@ -440,7 +440,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         () => refuse(`This is the demo workspace — a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
     ],
 
-    /* MAINTENANCE. `GET /chores` carries measurements, never verdicts — the chore book that decides what is due
+    /* MAINTENANCE. `GET /chores` carries measurements, never verdicts, the chore book that decides what is due
      * ships in the app, so every row a visitor reads here is computed in the browser from the numbers in
      * fixture/chores.ts. The ledger is real state (a snooze holds, a finished run promotes into a row); what
      * refuses is re-running a probe, because that is a subprocess in a box this recording does not have. */
@@ -448,7 +448,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/chores/ledger`, choresLedger],
     [`POST`, `/chores/probe`, () => refuse(`This is the demo workspace — a probe runs pnpm audit or knip against a real checkout.`)],
 
-    /* Automations — the sandbox working while nobody watches. Enabling, editing and deleting a row are real
+    /* Automations, the sandbox working while nobody watches. Enabling, editing and deleting a row are real
      * (the fixture is the store), and so is clearing a held wake; what refuses is FIRING one, because a wake is
      * an agent turn against a repo the recording doesn't have. */
     [`GET`, `/automations`, () => json({ automations: automationsList(Date.now()) })],
@@ -463,7 +463,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`POST`, `/automations/pending/{id}/reject`, ({ param }) => okAfter(() => resolveApproval(Date.now(), param(`id`)))],
 
-    /* Workflows — a designed graph of sessions, with one run of it going on right now. Reading is real (the
+    /* Workflows, a designed graph of sessions, with one run of it going on right now. Reading is real (the
      * designer opens on the saved graph, the run page draws the run the board's two review cards are steps
      * of); what refuses is RUNNING one, because a run is several agent sessions against a real tree. Saving and
      * deleting refuse for the same reason the run does: a design the demo let you keep would be a design that
@@ -475,7 +475,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/workflows/{id}/run`, () => refuse(`This is the demo workspace — running a workflow starts several agent sessions on a real tree.`)],
     [`POST`, `/workflows/runs/{runId}/stop`, () => refuse(`This is the demo workspace — nothing is really running to stop.`)],
     // Archiving a run takes its step SESSIONS off the board with it, and this fixture's archive is a one-way
-    // disappearance rather than a list you can open — so it refuses, in the demo's own voice, instead of
+    // disappearance rather than a list you can open, so it refuses, in the demo's own voice, instead of
     // swallowing four conversations the visitor could never get back.
     [
         `POST`,
@@ -484,16 +484,16 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     [`POST`, `/workflows/runs/{runId}/unarchive`, () => refuse(`This is the demo workspace — nothing has been archived to restore.`)],
 
-    /* Saved loops — the workflows page's second kind of design, and the other half of the composer's
+    /* Saved loops, the workflows page's second kind of design, and the other half of the composer's
      * run-through picker. Reading is real, so the picker shows what it is actually for: two ways for a message
      * to be run over and over, each saying what stops it. Saving and deleting refuse for the reason every
-     * design here refuses — a loop the demo let you keep would vanish on reload, which teaches worse than a
+     * design here refuses, a loop the demo let you keep would vanish on reload, which teaches worse than a
      * clear no. */
     [`GET`, `/loops/designs`, () => json({ designs: demoLoops() })],
     [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
     [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace — saved loops are read-only here.`)],
 
-    /* Memory: what the agent carries between sessions, readable and — the point of the surface — editable. The
+    /* Memory: what the agent carries between sessions, readable and, the point of the surface, editable. The
      * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded.
      *
      * Served under the memory extension's OWN namespace, because that is where its backend half lives now and
@@ -504,7 +504,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`PUT`, `${MEMORY_BASE}/memory/file`, memoryWrite],
     [`DELETE`, `${MEMORY_BASE}/memory/file`, memoryForget],
 
-    /* Knowledge: the notes about things around the code — people, projects, decisions, words — and the graph they
+    /* Knowledge: the notes about things around the code, people, projects, decisions, words, and the graph they
      * already form. Served under the extension's own namespace, like memory above.
      *
      * The answers are computed by the extension's OWN engine over the fixture's raw markdown (fixture/knowledge.ts),
@@ -517,11 +517,11 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `${KNOWLEDGE_BASE}/graph`, ({ url }) => json(knowledgeGraph(url.searchParams))],
     [`PUT`, `${KNOWLEDGE_BASE}/note`, knowledgeWrite],
     [`DELETE`, `${KNOWLEDGE_BASE}/note`, knowledgeForget],
-    // The demo knowledge base is already started, so this only ever answers "nothing to write" — which is the honest
+    // The demo knowledge base is already started, so this only ever answers "nothing to write", which is the honest
     // answer and the same one a real started knowledge base gives.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
-    /* THE CARDS THIS SANDBOX CAN SEND AS — the composer's persona picker, the personas page, and the chat
+    /* THE CARDS THIS SANDBOX CAN SEND AS, the composer's persona picker, the personas page, and the chat
      * rail's Personas column all read this one route. Three people make the point without turning the column
      * into a directory: customer care, growth, and operations, each with the accounts their job reaches. */
     [
@@ -537,7 +537,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
                 connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`],
             }),
     ],
-    /* Browsing a registry — what the Sandbox screen's Discover row renders. The real route clones a git repo
+    /* Browsing a registry, what the Sandbox screen's Discover row renders. The real route clones a git repo
      * and reads two JSON files out of it; this answers with them already joined. Every registry URL gets the
      * same answer, which is honest enough for a demo: pointing the field at an internal repo is a real feature
      * and there is no internal repo here to point it at. */
@@ -545,19 +545,19 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/usage/rollup`, () => json({ rows: demoUsageRollup(STARTED_AT) })],
     [`GET`, `/secrets/inventory`, () => json({ secrets: [] })],
     [`GET`, `/ports`, () => json({ ports: [] })],
-    // What each repository IS — the facts every extension's detect() runs over, and therefore which tiles the
+    // What each repository IS, the facts every extension's detect() runs over, and therefore which tiles the
     // rail carries. Starting a dev server refuses: there is no checkout here to run one from.
     [`GET`, `/panels`, () => json({ panels: demoPanels() })],
     [`POST`, `/panels/{repo}/start`, () => refuse(`This is the demo workspace — a dev server needs the repository on your own machine.`)],
     [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace — nothing is running to stop.`)],
-    // `invalid` is not optional in the contract, and answering without it fails the whole list to parse — which
+    // `invalid` is not optional in the contract, and answering without it fails the whole list to parse, which
     // reads as "couldn't list this sandbox's extensions" over an empty tab. Nothing here is unreadable: every
     // extension is compiled into this build.
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions(), invalid: [] })],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
     /* An extension's own settings, which the host loads BEFORE calling activate() so `api.settings.get` is
      * synchronous from the first line of it. Missing here, the load rejected and the extension never activated
-     * — a whole surface silently absent from the demo, with nothing in the console but a routine "no fixture
+     *, a whole surface silently absent from the demo, with nothing in the console but a routine "no fixture
      * route" line. Answered as the defaults (empty), because a demo visitor configures nothing. */
     [`GET`, `/extensions/{id}/settings`, () => json({ settings: {}, secretsSet: [] })],
     [`POST`, `/extensions/{id}/settings`, () => json({ ok: true })],
@@ -608,7 +608,7 @@ const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
 };
 
 // The sandbox-wide agent settings the chat and the hub read. An EMPTY rule table is what puts a finished agent
-// in "Ready to land" — with no rule saying otherwise, work waits on its branch, which is the state the demo's
+// in "Ready to land", with no rule saying otherwise, work waits on its branch, which is the state the demo's
 // review panel exists to show.
 const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
 
@@ -677,8 +677,8 @@ function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
 }
 
 /* The four filesystem handlers. A read of a path the recording does not carry answers "nothing there" rather
- * than a placeholder, because half the surfaces above read a file to find out whether something EXISTS — an
- * acknowledgement, a staged document set, a run's result — and a fixture that answered every read would be
+ * than a placeholder, because half the surfaces above read a file to find out whether something EXISTS, an
+ * acknowledgement, a staged document set, a run's result, and a fixture that answered every read would be
  * telling all of them yes. It says so the way the daemon does, in a 200 body: a demo whose console fills with
  * failed requests looks broken to the one audience that reads consoles. */
 const workspaceRead = (path: string): Response => json(readFile(path));
@@ -727,7 +727,7 @@ const knowledgeRead = (url: URL): Response => {
     return note === undefined ? refuse(`No such note.`, 404) : json(note);
 };
 
-// Refuses exactly what the real backend refuses — a path that leaves the knowledge folder, or one that is not a note — so
+// Refuses exactly what the real backend refuses, a path that leaves the knowledge folder, or one that is not a note, so
 // the demo's error state is the product's rather than an optimistic success.
 function knowledgeWrite({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => {
@@ -803,7 +803,7 @@ const match = (pattern: string, path: string): Record<string, string> | undefine
     return params;
 };
 
-/** How much of the real daemon this fixture stands in for — reported once at boot, so the gap is visible. */
+/** How much of the real daemon this fixture stands in for, reported once at boot, so the gap is visible. */
 export const coverage = (): { served: number; contract: number } => ({ served: ROUTES.length, contract: SANDBOX_ROUTE_NAMES.length });
 
 export const daemon = async (request: Request, url: URL): Promise<Response> => {

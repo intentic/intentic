@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { DAEMON_CONTAINER, unseed } from "./stack.js";
 
 // Undo exactly what global-setup started: kill the spawned server process groups, remove the daemon container,
-// drop the seeded rows. Postgres (compose) is left running — it's the same dev database `pnpm dev` uses.
+// drop the seeded rows. Postgres (compose) is left running, it's the same dev database `pnpm dev` uses.
 
 const run = promisify(execFile);
 const cacheDir = join(import.meta.dirname, `.cache`);

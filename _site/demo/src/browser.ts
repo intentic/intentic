@@ -3,18 +3,18 @@ import { checkoutPage, DOC_STEPS, docsPage, pricingPage } from "./fixture/storef
 import type { DemoSession, DemoSocket } from "./transport";
 
 /* THE AGENT'S BROWSER, RECORDED. `/system/browser-view` is a WebSocket of JSON frames whose `data` is a
- * base64 image, and the view is an <img> pointed at whatever the last frame carried — so a stream of drawn
+ * base64 image, and the view is an <img> pointed at whatever the last frame carried, so a stream of drawn
  * frames is, to that view, indistinguishable from a Chromium screencast. This is the checkout agent verifying
  * its own work: it opens the pricing page, presses the CTA it just wired, and watches the Stripe session it
  * created come back.
  *
- * The pages themselves are fixture/storefront.ts — the recorded product's screens, shared with the screenshots
+ * The pages themselves are fixture/storefront.ts, the recorded product's screens, shared with the screenshots
  * an acceptance run's report carries, because those are pictures of the same three pages. `format` rides each
  * frame (screencast.ts switches between jpeg and webp for real), so `svg+xml` needs no cooperation from the
  * client.
  *
  * The page tabs work: the view sends `bind` when the visitor clicks one, this answers by playing THAT page's
- * loop, and an unbound stream follows the agent — the same contract the daemon's screencast has. */
+ * loop, and an unbound stream follows the agent, the same contract the daemon's screencast has. */
 
 const FRAME_MS = 900;
 
@@ -50,7 +50,7 @@ const LOOPS: Record<string, (step: number) => string> = {
 
 const STEPS: Record<string, number> = { page_pricing: 4, page_checkout: 4, page_docs: DOC_STEPS };
 
-// The page an unbound stream follows — the one the agent is driving, which is the one the roster marks active.
+// The page an unbound stream follows, the one the agent is driving, which is the one the roster marks active.
 const FOLLOWING = `page_checkout`;
 
 const encode = (svg: string): string => btoa(String.fromCharCode(...new TextEncoder().encode(svg)));

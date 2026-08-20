@@ -7,7 +7,7 @@ export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "ou
 
 export type FileClass = "tests" | "src" | "docs" | "config";
 
-// Scope narrowing shared by every verb. `ignored` lifts the junk/.gitignore layers only — never the security floor.
+// Scope narrowing shared by every verb. `ignored` lifts the junk/.gitignore layers only, never the security floor.
 export interface Scope {
     readonly paths?: readonly string[];
     readonly repo?: string;
@@ -28,7 +28,7 @@ export interface RenderOptions {
     readonly after?: string;
     /* Set by a caller that renders its OWN result list (the workspace panel) instead of the text capsule, and
      * sizes the page for it: rows, not tokens. Everything the capsule needs is then skipped, because all of it
-     * was being built and thrown away — the text itself, the `pack` stage (whose non-matching body lines would
+     * was being built and thrown away, the text itself, the `pack` stage (whose non-matching body lines would
      * be listed as if they were hits), the symbol-context enrichment (a list shows the line, not its enclosing
      * symbol), and the continuation spool (megabytes of groups written to disk on every keystroke). A `--after`
      * page re-runs the search instead of replaying that spool; for a list caller the search is the cheap part. */
@@ -41,7 +41,7 @@ export interface ListPage {
     readonly files: number;
 }
 
-// Verb-specific knobs, flattened — each verb reads only its own.
+// Verb-specific knobs, flattened, each verb reads only its own.
 export interface VerbOptions {
     readonly literal?: boolean;
     readonly word?: boolean;
@@ -63,7 +63,7 @@ export interface QueryRequest {
     readonly scope: Scope;
     readonly render: RenderOptions;
     readonly options: VerbOptions;
-    // The verb + args as the user typed them (minus output flags) — echoed in the truncation footer's
+    // The verb + args as the user typed them (minus output flags), echoed in the truncation footer's
     // continuation command.
     readonly echo: string;
     /* THIS QUERY'S PIPELINE, when it is not the engine's. A resident engine serves several callers off one
@@ -98,10 +98,10 @@ export interface EngineHit {
     readonly line: number;
     readonly text: string;
     // Char spans of `text` that matched, in order. Absent for every engine that matches a LINE rather than a
-    // span of one (bm25, semantic, symbols, git) — only the lexical engine can say where in the line it hit.
+    // span of one (bm25, semantic, symbols, git), only the lexical engine can say where in the line it hit.
     readonly spans?: readonly WorkspaceSearchSpan[];
     readonly tags: readonly WorkspaceSearchTag[];
-    // Enclosing symbol ("createWidget (fn)") — filled by the symctx enrichment stage.
+    // Enclosing symbol ("createWidget (fn)"), filled by the symctx enrichment stage.
     context?: string;
 }
 
@@ -121,7 +121,7 @@ export interface RankedGroup {
     readonly path: string;
     readonly score: number;
     readonly hits: readonly RankedHit[];
-    // This file had more matches than the engine kept — its hit count, and any total built from it, is a floor.
+    // This file had more matches than the engine kept, its hit count, and any total built from it, is a floor.
     readonly capped?: boolean;
 }
 

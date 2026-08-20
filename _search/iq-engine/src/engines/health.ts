@@ -5,21 +5,21 @@ import { filterScope } from "../workspace/scan.js";
 import { type HotspotFile, rankHotspots } from "./hotspots.js";
 import { repoMap } from "./map.js";
 
-/* One repository's health as NUMBERS rather than terminal lines — what the `hotspots` and `map` verbs rank,
+/* One repository's health as NUMBERS rather than terminal lines, what the `hotspots` and `map` verbs rank,
  * shaped for a panel that plots it. The daemon serves this at /workspace/health and the browser draws it beside
  * the repo's management panel and git history; the verbs keep rendering the same rankings as text for the agent.
  *
  * Every figure here is a count you can go and recount in the files themselves (branch points, symbols, commits)
- * — deliberately not a composite "maintainability score", which is unfalsifiable and not comparable between
+ *, deliberately not a composite "maintainability score", which is unfalsifiable and not comparable between
  * projects. The reader's judgement is the thing being served, so the panel must not launder counts into a grade. */
 
 export interface HealthTotals {
-    // Indexed files in scope — the sweep's admitted set, so ignored/junk paths are already gone.
+    // Indexed files in scope, the sweep's admitted set, so ignored/junk paths are already gone.
     readonly files: number;
     readonly symbols: number;
     // Summed branch points (indexer/complexity.ts) over the scoped files.
     readonly complexity: number;
-    // Files carrying BOTH churn and branch points — the risk surface `hotspots` ranks. The list below is capped;
+    // Files carrying BOTH churn and branch points, the risk surface `hotspots` ranks. The list below is capped;
     // this is how many there are.
     readonly hotspots: number;
 }
@@ -32,12 +32,12 @@ export interface KeyModule {
 }
 
 // The arrays are freshly built per call and go straight onto the wire (the daemon's /workspace/health), so they
-// are plain arrays rather than readonly views — the contract schema is the authority on this shape.
+// are plain arrays rather than readonly views, the contract schema is the authority on this shape.
 export interface CodebaseHealth {
     readonly totals: HealthTotals;
     readonly hotspots: HotspotFile[];
     readonly modules: KeyModule[];
-    // How current the index these figures came from is — a panel drawn mid-build would otherwise read as a
+    // How current the index these figures came from is, a panel drawn mid-build would otherwise read as a
     // codebase with no symbols rather than one that hasn't been indexed yet.
     readonly freshness: WorkspaceSearchFreshness;
 }
@@ -46,7 +46,7 @@ export interface HealthRequest {
     readonly scope: Scope;
     // Churn window; omitted means all of history, exactly as the verb defaults.
     readonly since?: string;
-    // How many hotspot files and key modules to return — the panel shows a leaderboard, not the whole repo.
+    // How many hotspot files and key modules to return, the panel shows a leaderboard, not the whole repo.
     readonly limit: number;
 }
 

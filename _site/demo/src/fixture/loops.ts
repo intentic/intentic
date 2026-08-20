@@ -1,10 +1,10 @@
 import type { LoopDesign } from "@intentic/sandbox-contract";
 
-/* THE SAVED LOOPS the demo workspace keeps — the other half of the composer's run-through picker.
+/* THE SAVED LOOPS the demo workspace keeps, the other half of the composer's run-through picker.
  *
  * A loop and a workflow are the two answers to "what is this message run THROUGH", and the composer offers
  * them in one list under two headings. A demo daemon that served only the workflows half showed a visitor a
- * control with one section and no hint that the other exists — which teaches the opposite of what the merged
+ * control with one section and no hint that the other exists, which teaches the opposite of what the merged
  * picker is for.
  *
  * TWO, and deliberately one of each KIND OF ENDING, because that is the distinction the picker's per-row line

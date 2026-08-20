@@ -39,7 +39,7 @@ export interface OutputFlags {
 
 export type SearchFlags = ScopeFlags & OutputFlags;
 
-// Shared parameter fragments — spread into each command's `parameters.flags` so every verb narrows and renders
+// Shared parameter fragments, spread into each command's `parameters.flags` so every verb narrows and renders
 // identically. The kebab scanner maps --not-glob → notGlob, --files-only → filesOnly, --context-lines (-C).
 export const scopeFlagParameters = {
     in: { kind: "parsed", parse: String, variadic: true, optional: true, brief: "Restrict to subtree(s); repeatable" },
@@ -66,7 +66,7 @@ export const outputFlagParameters = {
 
 export const outputAliases = { C: "contextLines" } as const;
 
-// Agents address paths in whatever frame they were thinking in — root-relative (the canonical form),
+// Agents address paths in whatever frame they were thinking in, root-relative (the canonical form),
 // cwd-relative (they just cd'd into a subdirectory), or absolute (a subagent handed one over). Transcript
 // mining showed all three in live use, the latter two silently zero-hitting under a misleading "scope too
 // narrow" hint. Resolve every frame to root-relative; a path that resolves nowhere is a loud usage error,
@@ -91,7 +91,7 @@ export const rootRelativePath = (raw: string, root: string): string => {
 export const rootRelativePaths = (paths: readonly string[], root: string): string[] =>
     paths.map((path) => rootRelativePath(path, root)).filter((path) => path !== "");
 
-// outline/context/who address `path` or `path:line[-line]` — resolve the path part, keep the anchor.
+// outline/context/who address `path` or `path:line[-line]`, resolve the path part, keep the anchor.
 export const rootRelativeAnchor = (raw: string, root: string): string => {
     const match = /^(.*?)(:\d+(?:-\d+)?)?$/.exec(raw)!;
     return `${rootRelativePath(match[1]!, root)}${match[2] ?? ""}`;
@@ -119,7 +119,7 @@ export const toRender = (flags: OutputFlags): RenderOptions => ({
 
 const quote = (value: string): string => (/^[\w./:@*?[\]-]+$/.test(value) ? value : `"${value.replaceAll('"', '\\"')}"`);
 
-// The verb + args echoed into truncation footers as the literal continuation command. Scope + verb flags only —
+// The verb + args echoed into truncation footers as the literal continuation command. Scope + verb flags only,
 // output flags (budget/after/json) are the caller's per-invocation choice.
 export const echoOf = (verb: Verb, query: string, flags: ScopeFlags, options: VerbOptions): string => {
     const parts = [verb === "q" ? quote(query) : `${verb} ${quote(query)}`];

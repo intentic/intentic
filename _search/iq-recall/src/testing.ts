@@ -7,7 +7,7 @@ import { slugOf } from "./transcript/slug.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Copies the committed fixture workspace + transcript templates into a tmp dir. Templates carry __ROOT__
-// (absolute workspace root), __TS_<n>D__ (ISO timestamp n days before now — so recency assertions don't rot
+// (absolute workspace root), __TS_<n>D__ (ISO timestamp n days before now, so recency assertions don't rot
 // as the repo ages), and __PAD_40K__ (~40 KB filler making session A's second turn visibly token-expensive).
 // Workspace file mtimes are backdated 30 days so fixture touches are fresh by default; staleness tests bump
 // files forward.

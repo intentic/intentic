@@ -1,20 +1,20 @@
 import { STATE_DIR } from "@intentic/constants";
 import { cartPage, checkoutPage, pricingPage } from "./storefront";
 
-/* ACCEPTANCE, RECORDED — acme-shop's user stories and the run that walked three of them through the app.
+/* ACCEPTANCE, RECORDED, acme-shop's user stories and the run that walked three of them through the app.
  *
  * Everything this surface shows is FILES, which is the whole reason it can be fixtured at all: the stories are
  * markdown in the repos (`docs/user-stories/**`), and a run is a directory under `.intentic/records/artifacts/acceptance/` holding
  * one manifest plus a result, a report and its screenshots per story. So this module contributes paths and
- * bodies to the recording's filesystem (workspace.ts) and nothing else — no route, no state, no special case in
+ * bodies to the recording's filesystem (workspace.ts) and nothing else, no route, no state, no special case in
  * the daemon. The extension walks the same directories it would walk against a real sandbox.
  *
  * THE RUN IS DELIBERATELY MIXED: one story passed, one failed with a defect, one was blocked before it could be
  * judged, and a fourth story has never been run at all. A recording where everything is green shows none of the
- * distinctions this surface exists to make — `blocked` is not `fail`, and "never tested" is not "passing".
+ * distinctions this surface exists to make, `blocked` is not `fail`, and "never tested" is not "passing".
  *
  * The screenshots are the same storefront pages the agent's browser view plays (storefront.ts), stored as files
- * the report references relatively — which is exactly how a real run's shots reach the report. */
+ * the report references relatively, which is exactly how a real run's shots reach the report. */
 
 // The story files, repo-relative under each repo's docs/user-stories. A file is one story: one test session, one
 // agent, one report. Subdirectories are groups, and a group is what an address is resolved per.
@@ -78,7 +78,7 @@ several times. The subscription must be created once regardless.
 - [ ] An event with a bad signature is refused with 400 and logged
 `;
 
-/* The repo's own note to whoever tests it — `docs/user-stories/.acceptance.md`, inlined into every brief. It
+/* The repo's own note to whoever tests it, `docs/user-stories/.acceptance.md`, inlined into every brief. It
  * exists so a repository can tune the instructions without forking the extension, and the demo carries one
  * because it is the difference between a generic tester and one that knows the test card and the seeded login. */
 const WEB_BRIEF = `Use the seeded account **ada@acme.dev** / \`demo-password\` wherever a story needs someone signed in.
@@ -94,7 +94,7 @@ clicking anything, or you will report a bug that is only a race in the test.
 
 const RUNS_DIR = `${STATE_DIR}/records/artifacts/acceptance`;
 
-// The stories that run covered — the slug is what `slugOf` derives from the filename, and the conversation id is
+// The stories that run covered, the slug is what `slugOf` derives from the filename, and the conversation id is
 // `xt-<runId>-<slug>`. Both are stored in the manifest rather than re-derived, exactly as a real run stores them.
 const RUN_STORIES = [
     { slug: `01-buy-a-plan`, repo: `web`, group: `checkout`, path: `web/docs/user-stories/checkout/01-buy-a-plan.md`, title: `Buy a plan` },

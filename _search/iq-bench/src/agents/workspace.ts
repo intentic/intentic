@@ -13,7 +13,7 @@ export type Arm =
     { readonly name: string; readonly kind: "baseline" } | { readonly name: string; readonly kind: "iq"; readonly config?: BenchConfig };
 
 // Source the iq teaching from the shipped plugin (_search/iq/plugin) so the bench measures exactly what the
-// sandbox bakes and external users install — the skill body plus the plugin's SessionStart nudge, no bespoke
+// sandbox bakes and external users install, the skill body plus the plugin's SessionStart nudge, no bespoke
 // copy. Frontmatter is stripped (the notes file needs the body, not the skill's YAML header).
 const skillNotes = (): string => {
     const pluginRoot = join(monorepoRoot, "_search/iq/plugin");

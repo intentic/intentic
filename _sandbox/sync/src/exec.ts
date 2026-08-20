@@ -1,22 +1,22 @@
 import { spawn } from "node:child_process";
 
-/* RUNNING A CHILD PROCESS WITHOUT STOPPING THIS ONE — and in the mirror watcher, that distinction is the whole
+/* RUNNING A CHILD PROCESS WITHOUT STOPPING THIS ONE, and in the mirror watcher, that distinction is the whole
  * difference between a sync that works and one that cannot.
  *
  * The watcher is not merely a process that shells out. It is also the process that HOLDS THE SSH TRANSPORT every
  * one of those children rides: the sandbox's sshd reaches this machine as a loopback listener served by this
- * agent's own event loop (tunnel.ts). `spawnSync` blocks that loop completely — so a `mutagen sync create`, a
+ * agent's own event loop (tunnel.ts). `spawnSync` blocks that loop completely, so a `mutagen sync create`, a
  * `mutagen forward create` or the git bridge's `ssh` would open a TCP connection to a listener that had stopped
  * accepting, wait for a banner nobody could send, and time out. Every one of them, every time, against perfectly
  * healthy sandboxes:
  *
- *   file sync   — "unable to receive server magic number: EOF … Connection timed out during banner exchange"
- *   port mirror — "mutagen forward exited with code 1", and localhost stayed empty
- *   git bridge  — the full 120s exec timeout per pass, per unreachable-looking repo listing
+ *   file sync  , "unable to receive server magic number: EOF … Connection timed out during banner exchange"
+ *   port mirror, "mutagen forward exited with code 1", and localhost stayed empty
+ *   git bridge , the full 120s exec timeout per pass, per unreachable-looking repo listing
  *
  * A deadlock, not a flake: the command's only route to the sandbox is the loop the command is blocking. It was
  * invisible in review because each call site looked like ordinary synchronous shelling-out, and it stayed
- * invisible in the logs because every symptom reads as "the sandbox is not answering" — which is exactly what the
+ * invisible in the logs because every symptom reads as "the sandbox is not answering", which is exactly what the
  * user is told, about a sandbox that is up.
  *
  * So the watcher's children are spawned ASYNCHRONOUSLY, always, and the loop keeps serving the transport while
@@ -24,7 +24,7 @@ import { spawn } from "node:child_process";
  * hold no listener, so nothing of theirs is waiting on them. */
 
 export interface ExecResult {
-    // null when the process was killed (our timeout, or a signal) — never conflated with a real non-zero exit.
+    // null when the process was killed (our timeout, or a signal), never conflated with a real non-zero exit.
     readonly status: number | null;
     readonly stdout: string;
     readonly stderr: string;
@@ -37,7 +37,7 @@ export const runProcess = async (
 ): Promise<ExecResult> =>
     await new Promise<ExecResult>((resolve) => {
         /* `windowsHide` because the watcher runs detached and therefore console-less on Windows, and Windows
-         * gives a console child of a console-less process a new console WITH a window — a black window popping up
+         * gives a console child of a console-less process a new console WITH a window, a black window popping up
          * on an idle desktop every tick, forever. */
         const child = spawn(command, [...args], {
             ...(options.cwd === undefined ? {} : { cwd: options.cwd }),

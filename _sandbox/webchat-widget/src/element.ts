@@ -4,7 +4,7 @@ import { renderGoogleSignIn, resetConversation, storeDisplayName, storedDisplayN
 import { styles } from "./styles.js";
 import { type Endpoint, fetchChallenge, sendMessage, WebchatError } from "./transport.js";
 
-/* <intentic-front-desk> — the whole visible widget: a launcher in a corner, and a panel holding the thread.
+/* <intentic-front-desk>, the whole visible widget: a launcher in a corner, and a panel holding the thread.
  *
  * Everything renders into a shadow root so the host page's CSS cannot reach it and ours cannot leak out. The
  * ONE exception is the gate area (Google's sign-in button, Turnstile's checkbox): those are third-party iframes
@@ -119,7 +119,7 @@ export class FrontDeskElement extends HTMLElement {
             this.refreshSendState();
         });
         this.composer.addEventListener("keydown", (event) => {
-            // Enter sends, Shift+Enter breaks the line — the convention every chat on the web shares.
+            // Enter sends, Shift+Enter breaks the line, the convention every chat on the web shares.
             if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void this.submit();
@@ -253,7 +253,7 @@ export class FrontDeskElement extends HTMLElement {
         this.log.scrollTop = this.log.scrollHeight;
     }
 
-    /* Ask for a name once, inline, before the first message goes out — a modal would be a bigger interruption
+    /* Ask for a name once, inline, before the first message goes out, a modal would be a bigger interruption
      * than the question deserves, and the answer is cosmetic anyway. */
     private captureName(): void {
         if (!this.config.requireName || this.displayName !== undefined) {
@@ -278,7 +278,7 @@ export class FrontDeskElement extends HTMLElement {
         this.refreshSendState();
         this.appendTurn("visitor", content);
 
-        // A placeholder that becomes the agent's bubble on the first delta — so the panel shows something is
+        // A placeholder that becomes the agent's bubble on the first delta, so the panel shows something is
         // happening from the moment the message leaves.
         const bubble = document.createElement("div");
         bubble.className = "msg agent";
@@ -309,7 +309,7 @@ export class FrontDeskElement extends HTMLElement {
                     bubble.remove();
                     this.notice(notice, "notice");
                 },
-                // The turn answered with nothing. Said out loud, in the same place a transport failure is said —
+                // The turn answered with nothing. Said out loud, in the same place a transport failure is said,
                 // silently dropping the bubble (which is what happened before there was a frame for this) leaves
                 // the visitor staring at their own message wondering whether it sent.
                 failed: (notice) => {

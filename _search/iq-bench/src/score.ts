@@ -10,10 +10,10 @@ export interface RankedAnchor {
     readonly lines: readonly number[];
 }
 
-// Groups are already relevance-ranked and each is one rank — the unit an agent decides to open. `related`
-// definition anchors ("name — def path:line · called from …") count as extra ranks after the groups, and so do the
+// Groups are already relevance-ranked and each is one rank, the unit an agent decides to open. `related`
+// definition anchors ("name, def path:line · called from …") count as extra ranks after the groups, and so do the
 // `candidates` anchors: all three are printed in one response, above the code, and each is a `path:line` the reader
-// can open without asking iq anything else. Scoring only the groups charged iq for spending its budget on code —
+// can open without asking iq anything else. Scoring only the groups charged iq for spending its budget on code,
 // a file the candidates line anchored but did not show counted as not found, which is not what the agent sees.
 export const rankedAnchors = (result: WorkspaceSearchResult): RankedAnchor[] => {
     const ranked: RankedAnchor[] = result.groups.map((group) => ({ file: group.path, lines: group.hits.map((hit) => hit.line) }));
@@ -54,7 +54,7 @@ export interface RetrievalScore {
 }
 
 // Best ranks are computed per expected anchor independently (a single file group may satisfy several expected
-// anchors — it is one retrieval unit), so binary nDCG is clamped to 1 when ranks coincide.
+// anchors, it is one retrieval unit), so binary nDCG is clamped to 1 when ranks coincide.
 export const scoreCase = (expected: readonly Anchor[], predicted: readonly RankedAnchor[]): RetrievalScore => {
     const ranks = expected.map((anchor) => {
         const index = predicted.findIndex((candidate) => matches(anchor, candidate));

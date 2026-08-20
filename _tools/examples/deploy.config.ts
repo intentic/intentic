@@ -38,7 +38,7 @@ export const intent = defineIntent((i) => {
         domain: "signoz.example.com",
     });
 
-    // What I want (backing capabilities): a database (Postgres) and a cache (Valkey), both internal-only —
+    // What I want (backing capabilities): a database (Postgres) and a cache (Valkey), both internal-only,
     // intentic deploys each onto the host and an app consumes them via `use` below. There is no domain: apps
     // reach them over the host's internal network, never a public route. The catalog maps the abstract
     // capability to its concrete provider, so the intent never names Postgres/Valkey.
@@ -46,7 +46,7 @@ export const intent = defineIntent((i) => {
     const cache = i.want.cache("cache", { on: host });
 
     // What I want (more backing capabilities): single sign-on (Authentik) and object storage (Garage). auth
-    // always routes — the OIDC issuer must be a public HTTPS URL — so it takes a domain; objectStorage is
+    // always routes, the OIDC issuer must be a public HTTPS URL, so it takes a domain; objectStorage is
     // internal-only unless given one. An app that `use`s auth gets a per-app OIDC client (OIDC_ISSUER /
     // OIDC_CLIENT_ID / OIDC_CLIENT_SECRET injected); one that uses objectStorage gets a per-app bucket + key
     // (S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_BUCKET).
@@ -54,7 +54,7 @@ export const intent = defineIntent((i) => {
     const store = i.want.objectStorage("store", { on: host, expose: cf, domain: "s3.example.com" });
 
     // What I want (the AI-agent workspace): a per-host sandbox for the project's repos that serves live
-    // previews. It takes no domain — previews are served at the wildcard
+    // previews. It takes no domain, previews are served at the wildcard
     // `*.preview.<zone>` derived from the discovered zone. The browser drives the agent in it directly.
     i.want.workspace("workspace", { on: host, expose: cf });
 
@@ -66,8 +66,8 @@ export const intent = defineIntent((i) => {
     const platform = i.want.team("platform", { members: [alice, bob], komodo: "execute" });
 
     // What I want (an app): shipped to two environments. The tool derives the needs (source control, Docker
-    // registry, infra control, deployment target, domain) and the support stack that meets them — on the host
-    // I declared, exposed through the Cloudflare I declared — and exports the app's telemetry to `obs`. The
+    // registry, infra control, deployment target, domain) and the support stack that meets them, on the host
+    // I declared, exposed through the Cloudflare I declared, and exports the app's telemetry to `obs`. The
     // `platform` team owns the app: its org owns the repo (the repo + image namespace) and its members get
     // write on the repo + Komodo execute on the deployments.
     // `use` wires the backing capabilities: intentic mints a per-app database + role and a per-app Valkey ACL

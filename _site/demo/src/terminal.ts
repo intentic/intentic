@@ -2,7 +2,7 @@ import type { TerminalServerMessage } from "@intentic/sandbox-contract";
 import type { DemoSession, DemoSocket } from "./transport";
 
 /* THE TERMINAL, recorded. `/system/terminal` is a WebSocket of JSON frames (TerminalServerMessage), and xterm
- * renders whatever bytes arrive — so a replay is indistinguishable from a live pty as far as the panel is
+ * renders whatever bytes arrive, so a replay is indistinguishable from a live pty as far as the panel is
  * concerned, escape codes and all. This is the agent's own tmux session for the featured turn: the test run its
  * Bash tool call makes, as the visitor would have watched it happen. */
 

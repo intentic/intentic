@@ -1,6 +1,6 @@
 // Grep-dialect argv, absorbed before stricli parses it. Transcript mining (207 calls): `iq search` alone was 44
 // calls, 37 of them hard failures; --include/--path/--max-results account for most of the rest. A redirect
-// message costs the agent a retry turn — a rewrite costs nothing, and the stderr note still teaches the
+// message costs the agent a retry turn, a rewrite costs nothing, and the stderr note still teaches the
 // canonical form for the next call.
 const VERB_REWRITES: Record<string, string> = {
     search: "q",
@@ -9,8 +9,8 @@ const VERB_REWRITES: Record<string, string> = {
     // but do not charge a retry for guessing the descriptive noun instead of the route name.
     skeleton: "outline",
     // `ask` shipped as its own verb before the natural-language pipeline became what a bare query does. Removing
-    // it must not turn a habit into an exit-2: the rewrite is the same trade as `search` — free here, one wasted
-    // turn otherwise — and the note teaches the spelling that survives.
+    // it must not turn a habit into an exit-2: the rewrite is the same trade as `search`, free here, one wasted
+    // turn otherwise, and the note teaches the spelling that survives.
     ask: "q",
 };
 
@@ -70,8 +70,8 @@ export interface NormalizedArgv {
 }
 
 // `find` means filenames to the shell and content to iq, and the collision costs a turn: a session ran
-// `iq find 'Row.vue'`, got the eight files that IMPORT it, and went back to grep. Not a rewrite — searching for
-// the text "Row.vue" is a legitimate thing to ask — so the answer still comes, with the other verb named beside
+// `iq find 'Row.vue'`, got the eight files that IMPORT it, and went back to grep. Not a rewrite, searching for
+// the text "Row.vue" is a legitimate thing to ask, so the answer still comes, with the other verb named beside
 // it. A bare filename is the only shape this fires on: an extension, no separator, no regex metacharacter.
 const BARE_FILENAME = /^[\w-]+\.[a-z]{1,5}$/i;
 const filenameHint = (verb: string | undefined, pattern: string | undefined): string | undefined =>

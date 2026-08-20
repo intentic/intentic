@@ -5,7 +5,7 @@ import { langOf } from "../workspace/scan.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 
-// `iq ast '<pattern>'` — ast-grep metavariable pattern ($X one node, $$$ any) over files of one language,
+// `iq ast '<pattern>'`, ast-grep metavariable pattern ($X one node, $$$ any) over files of one language,
 // parsed live so results are never stale.
 export const astSearch = async (pattern: string, lang: string, entries: readonly FileEntry[]): Promise<EngineHit[]> => {
     if (LANGUAGES[lang] === undefined) {

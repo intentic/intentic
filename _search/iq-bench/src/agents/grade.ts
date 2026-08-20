@@ -9,7 +9,7 @@ export interface Verdict {
 const LINE_WINDOW = 48;
 const DEFAULT_TOLERANCE = 15;
 
-// The agent may print absolute or relative paths — match on the last two segments.
+// The agent may print absolute or relative paths, match on the last two segments.
 const mentionOf = (file: string): string => file.split("/").slice(-2).join("/");
 
 export const anchorHit = (answer: string, anchor: Anchor): boolean => {
@@ -23,7 +23,7 @@ export const anchorHit = (answer: string, anchor: Anchor): boolean => {
     }
     const tolerance = anchor.tolerance ?? DEFAULT_TOLERANCE;
     while (index !== -1) {
-        // ":42", "#L42", "L42", "line 42", "Line 42", "lines 42-51" — anywhere in a short window after the mention.
+        // ":42", "#L42", "L42", "line 42", "Line 42", "lines 42-51", anywhere in a short window after the mention.
         const window = answer.slice(index + mention.length, index + mention.length + LINE_WINDOW);
         for (const match of window.matchAll(/(?:[:#]L?|\blines? |\bL)(\d+)/gi)) {
             if (Math.abs(Number(match[1]) - anchor.line) <= tolerance) {

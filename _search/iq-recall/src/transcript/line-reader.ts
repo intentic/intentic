@@ -6,12 +6,12 @@ const MAX_LINE_BYTES = 10 * 1024 * 1024;
 
 export interface TranscriptLine {
     readonly json: string;
-    // Absolute byte offset just past this line's terminating "\n" — the resume point after consuming it.
+    // Absolute byte offset just past this line's terminating "\n", the resume point after consuming it.
     readonly endByte: number;
 }
 
 // Streams complete lines of an append-only JSONL file from `fromByte` (which must sit on a line boundary).
-// A trailing line without "\n" is never yielded — it is still being written; the caller resumes from the
+// A trailing line without "\n" is never yielded, it is still being written; the caller resumes from the
 // last endByte on the next pass. Offsets are byte-accurate under multibyte UTF-8.
 export async function* readLines(path: string, fromByte: number): AsyncGenerator<TranscriptLine> {
     let offset = fromByte;

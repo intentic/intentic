@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Anchor, QueryCase } from "./schema.js";
 
-/* A `def`/`sym` case names a symbol, so its ground truth is wherever the tree declares that symbol — a fact the
+/* A `def`/`sym` case names a symbol, so its ground truth is wherever the tree declares that symbol, a fact the
  * checkout already carries, and therefore one the dataset must not repeat. Repeating it made every such anchor
  * decay with the file: the intentic corpus IS this monorepo, and three of its seven def/sym anchors had already
  * slid off their recorded line (one of them clean out of its tolerance window). A stale anchor scores zero for
- * every config at once, which reads as a hard case rather than as a broken label — the failure is silent where
+ * every config at once, which reads as a hard case rather than as a broken label, the failure is silent where
  * it matters most. Resolving instead reproduced all twelve hand-picked lines in the SHA-pinned repos exactly,
  * so nothing is lost by deriving what was previously typed in.
  *

@@ -38,7 +38,7 @@ export const parseClaudeStream = (stdout: string): Omit<AgentRunResult, "exitCod
         return {
             answer: event.data.result ?? "",
             ...(event.data.num_turns !== undefined ? { turns: event.data.num_turns } : {}),
-            // input_tokens excludes cache reads/writes — count all prompt-side tokens the model saw.
+            // input_tokens excludes cache reads/writes, count all prompt-side tokens the model saw.
             ...(usage?.input_tokens !== undefined ? { tokensIn: usage.input_tokens + (cacheRead ?? 0) + (cacheCreate ?? 0) } : {}),
             ...(usage?.output_tokens !== undefined ? { tokensOut: usage.output_tokens } : {}),
             ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
@@ -65,7 +65,7 @@ export const claudeAdapter: AgentAdapter = {
             "--verbose",
             "--max-turns",
             String(options.maxTurns),
-            // Hermeticity: no MCP servers from user/project config, no web/subagent tools — tasks are local and
+            // Hermeticity: no MCP servers from user/project config, no web/subagent tools, tasks are local and
             // self-contained, and both arms get identical restrictions so the pairing stays clean.
             "--strict-mcp-config",
             "--disallowedTools",

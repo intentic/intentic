@@ -1,8 +1,8 @@
-/* ONE CONDITION LANGUAGE, WRITTEN AS A STRING — the thing a surface can put in a manifest and a different
+/* ONE CONDITION LANGUAGE, WRITTEN AS A STRING, the thing a surface can put in a manifest and a different
  * tier can evaluate.
  *
  * Every conditional affordance in this product used to invent its own shape. Capability fields gated on
- * `{ key, value }` — a single equality, and the check was written TWICE, once in the web form and once in the
+ * `{ key, value }`, a single equality, and the check was written TWICE, once in the web form and once in the
  * daemon's install validation, which is two copies of one rule with nothing holding them together. Commands
  * gated on a `(event) => boolean` closure, which cannot be written down: an extension declares its
  * contributions in JSON, so a predicate that only exists as JavaScript in the shell meant extension commands
@@ -110,7 +110,7 @@ const scan = (source: string): Token[] => {
                 end += 1;
             }
             const word = source.slice(at, end);
-            // `true`/`false` are values wherever they appear, and `in`/`not` are operators — a key may not be
+            // `true`/`false` are values wherever they appear, and `in`/`not` are operators, a key may not be
             // spelled any of them, which is why they are decided here rather than by the parser peeking.
             if (word === "true" || word === "false") {
                 tokens.push({ kind: "literal", value: word === "true", at });
@@ -185,8 +185,8 @@ class Parser {
         return this.tail(token.text);
     }
 
-    // What follows a key decides which of the three shapes it is: a comparison, a membership test, or — when
-    // nothing follows that belongs to it — the bare truthiness test.
+    // What follows a key decides which of the three shapes it is: a comparison, a membership test, or, when
+    // nothing follows that belongs to it, the bare truthiness test.
     private tail(key: string): WhenExpression {
         for (const op of ["==", "!=", ">=", "<=", ">", "<"] as const) {
             if (this.eat(op)) {
@@ -249,7 +249,7 @@ class Parser {
 export const parseWhen = (source: string): WhenExpression => new Parser(scan(source), source).parse();
 
 /* Truthiness for a context key, spelled out because the interesting cases are the falsy ones. An ABSENT key is
- * false — a condition naming a key nobody publishes is a condition that does not hold, never a crash, which is
+ * false, a condition naming a key nobody publishes is a condition that does not hold, never a crash, which is
  * what lets an extension name a key a newer host would have. Empty string and 0 are false for the same reason
  * they are in JavaScript: a surface publishing `selectionSize: 0` means "nothing selected", and having to
  * write `selectionSize > 0` for that would be a trap rather than a distinction. */
@@ -257,14 +257,14 @@ const truthy = (value: unknown): boolean => value !== undefined && value !== nul
 
 /* Comparison across the type boundary, because context values are whatever a surface publishes and literals
  * are whatever an author typed. `mode == 'strict'` must hold for the string, and `enabled == true` for the
- * boolean — but so must `count == 3` when a surface publishes the number and the author wrote the number.
+ * boolean, but so must `count == 3` when a surface publishes the number and the author wrote the number.
  * Same type compares directly; mixed types compare their string forms, which is the only reading of
  * `enabled == 'true'` that isn't a silent no. */
 const equal = (actual: unknown, expected: WhenValue): boolean =>
     typeof actual === typeof expected ? actual === expected : String(actual) === String(expected);
 
 // Ordering only means something between two numbers. A `>` against anything else (an absent key, a string) is
-// false rather than a coercion — `version > 3` on a missing key must not read as `NaN > 3` throwing, nor as
+// false rather than a coercion, `version > 3` on a missing key must not read as `NaN > 3` throwing, nor as
 // JavaScript's `'10' > '9' === false`, which is the bug this refuses to have.
 const ordered = (actual: unknown, expected: WhenValue, op: CompareOp): boolean => {
     if (typeof actual !== "number" || typeof expected !== "number") {
@@ -310,7 +310,7 @@ export const evaluateWhen = (expression: WhenExpression, context: WhenContext): 
     return ordered(context[expression.key], expression.value, expression.op);
 };
 
-/* Whether a string is a condition this module can evaluate — the shape a schema wants, where the parse error
+/* Whether a string is a condition this module can evaluate, the shape a schema wants, where the parse error
  * itself is not the message to show. Used by the manifest schemas so an extension declaring a broken
  * condition is refused at install with the field named, rather than installed with a gate that never opens. */
 export const isWhenExpression = (source: string): boolean => {

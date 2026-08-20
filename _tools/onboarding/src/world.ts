@@ -7,19 +7,19 @@ import { dockerAvailable, freePort, HOST, plainUrlFor, requireLoopback, urlFor }
 import { IMAGES } from "./images.js";
 
 /* THE HALF OF THE WORLD EVERY ONBOARDING PATH SHARES: postgres, the stand-in model, the platform api, and the
- * SPA. What differs between the four paths a user can take is only how they end up with a connected sandbox —
+ * SPA. What differs between the four paths a user can take is only how they end up with a connected sandbox,
  * so that is a provisioner, and this is everything underneath it, stood up once.
  *
  * The api and the SPA are the BRANCH's images (images.ts), because a gate that tests the last release is not a
  * gate. Everything else is a published image pinned the way the rest of the repository pins them.
  */
 
-// Pinned the way the self-hosted platform's compose file pins it — the same database this product is run on.
+// Pinned the way the self-hosted platform's compose file pins it, the same database this product is run on.
 /* The SPA is served through a TLS front rather than straight off its own image.
  *
  * The image serves plain http on 80 and is fronted by a TLS terminator in production; here that terminator is
  * this container. It exists because the api MUST be https (certs.ts says why) and same-site comparison
- * includes the scheme — so an http SPA calling an https api would be cross-site, and the session cookie would
+ * includes the scheme, so an http SPA calling an https api would be cross-site, and the session cookie would
  * stop riding. The product's own nginx still serves every byte; this only wraps it.
  */
 const NGINX_IMAGE = `nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46`;
@@ -41,7 +41,7 @@ const POSTGRES_IMAGE = `postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fd
 // Not secrets: this database exists for the length of one run, on a network of its own.
 const DB = { user: `app`, password: `app`, name: `app` } as const;
 
-/* The trial's switch. Any non-empty value turns it ON — the platform reads it as a pool of keys to spend, and
+/* The trial's switch. Any non-empty value turns it ON, the platform reads it as a pool of keys to spend, and
  * the stand-in upstream accepts any key not in its refusal list, so the value only has to be a value. The trial
  * is OFF by default in this product, which is exactly why the world has to say this: without it every model
  * list is empty and the journey's last step has nothing to send to.
@@ -49,7 +49,7 @@ const DB = { user: `app`, password: `app`, name: `app` } as const;
 const TRIAL_KEY = `onboarding-trial-key`;
 /* The hub's admin token is ALSO the switch that decides whether this platform mints addresses at all: without
  * it every setup code is refused and no installer path reaches its second step. `.test` is an RFC 2606
- * reserved TLD — resolvable by nobody, so a run that accidentally reaches for a real address fails loudly
+ * reserved TLD, resolvable by nobody, so a run that accidentally reaches for a real address fails loudly
  * instead of leaking traffic. */
 const ZROK_ADMIN_TOKEN = `onboarding-zrok-admin`;
 export const SANDBOX_ZONE = `sbx.onboarding.test`;
@@ -59,12 +59,12 @@ export const TRIAL_REPLY = `The onboarding journey reached the model.`;
 
 export interface World {
     readonly apiUrl: string;
-    /** The platform api as a container on ITS OWN network reaches it — what the compose bootstrap curls. */
+    /** The platform api as a container on ITS OWN network reaches it, what the compose bootstrap curls. */
     readonly apiHostUrl: string;
     readonly webUrl: string;
     readonly databaseUrl: string;
     readonly networkName: string;
-    /** The api as a CONTAINER reaches it — what a provisioned sandbox is told to announce to. */
+    /** The api as a CONTAINER reaches it, what a provisioned sandbox is told to announce to. */
     readonly apiInternalUrl: string;
     readonly betterAuthSecret: string;
     stop(): Promise<void>;
@@ -72,7 +72,7 @@ export interface World {
 
 /* Wait for a service to answer, and give up the moment waiting has stopped being useful.
  *
- * Bounded, naming what it waited for and what it last saw — every wait in this package does, because a gate
+ * Bounded, naming what it waited for and what it last saw, every wait in this package does, because a gate
  * that blocks a release has to be fixable and a timeout with no subject is the opposite of that. `container`
  * is what makes the budget generous without being slow: an exited container is checked for on every poll and
  * reported immediately with its log, so a crash reads as a crash instead of as a service that "never started".
@@ -145,7 +145,7 @@ export const startWorld = async (): Promise<World> => {
         });
         started.push(names.postgres);
 
-        /* The tier's one environmental requirement, checked once against the first container up — so an
+        /* The tier's one environmental requirement, checked once against the first container up, so an
          * environment that cannot meet it says so here rather than as four services that never started. */
         await requireLoopback(dbPort, `postgres`);
         const apiUrl = urlFor(apiPort);
@@ -192,7 +192,7 @@ export const startWorld = async (): Promise<World> => {
                 API_URL: apiUrl,
                 WEB_ORIGIN: webUrl,
                 // The trial, switched on. Its base ends in `/openai` so the platform derives the native model
-                // listing beside it — the discovery path the stand-in exists to feed.
+                // listing beside it, the discovery path the stand-in exists to feed.
                 TRIAL_KEYS: TRIAL_KEY,
                 TRIAL_BASE_URL: `http://upstream:8099/v1beta/openai`,
                 TRIAL_MODELS: TRIAL_MODEL,
@@ -204,10 +204,10 @@ export const startWorld = async (): Promise<World> => {
                 ZROK_API_ENDPOINT: `http://zrok:8098`,
                 ZROK_AGENT_ENDPOINT: `http://host.docker.internal:${zrokPort}`,
                 ZROK_ZONE: SANDBOX_ZONE,
-                // SECRETS_KEY stays unset so a sandbox's connect token is stored in plain text — the seed and
+                // SECRETS_KEY stays unset so a sandbox's connect token is stored in plain text, the seed and
                 // the provisioners read it back, exactly as the browser tier's stack does.
                 LOG_PRETTY: `false`,
-                // The api serves its own TLS, exactly as a dev run does. Nothing verifies this pair — see certs.ts.
+                // The api serves its own TLS, exactly as a dev run does. Nothing verifies this pair, see certs.ts.
                 API_HTTPS_KEY: `/tls/key.pem`,
                 API_HTTPS_CERT: `/tls/cert.pem`,
             },
@@ -217,7 +217,7 @@ export const startWorld = async (): Promise<World> => {
         started.push(names.api);
         /* Generous, because this is not waiting for a boot. The image applies every migration in the repository
          * to an empty database before it serves a single request, and then proves the result matches the schema
-         * it was compiled against — on a cold run that is minutes, and all of it is work the image is supposed
+         * it was compiled against, on a cold run that is minutes, and all of it is work the image is supposed
          * to be doing. The ceiling is here to catch a hang. */
         await waitForHttp(`${apiUrl}/api/auth/ok`, `the platform api`, 420_000, names.api);
 
@@ -227,7 +227,7 @@ export const startWorld = async (): Promise<World> => {
             network: networkName,
             ip: IPS.web,
             alias: `web`,
-            // Substituted into the served env.js at container start — the api origin the SPA calls.
+            // Substituted into the served env.js at container start, the api origin the SPA calls.
             env: { API_URL: apiUrl },
         });
         started.push(names.web);

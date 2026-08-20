@@ -1,7 +1,7 @@
 /* Who the visitor is, in the two forms the daemon distinguishes: a THREAD key (ephemeral, minted here, not a
  * claim about anybody) and, when the site asks for sign-in, a Google ID token the daemon verifies itself.
  *
- * The typed name is deliberately NOT part of identity — it rides the message as `displayName` and the daemon
+ * The typed name is deliberately NOT part of identity, it rides the message as `displayName` and the daemon
  * hands it to the model tagged unverified. Anyone can type "admin"; only Google's signature says who someone is. */
 
 // localStorage keys are namespaced per automation: two Front Desks on one site are two threads, and clearing one
@@ -9,7 +9,7 @@
 const key = (automationId: string, name: string): string => `intentic.front-desk.${automationId}.${name}`;
 
 // localStorage throws in Safari's private mode and wherever the site blocks storage. A visitor with no storage
-// still gets a working chat — just a fresh thread per page load, which is the honest degradation.
+// still gets a working chat, just a fresh thread per page load, which is the honest degradation.
 const read = (name: string): string | undefined => {
     try {
         return window.localStorage.getItem(name) ?? undefined;
@@ -22,7 +22,7 @@ const write = (name: string, value: string): void => {
     try {
         window.localStorage.setItem(name, value);
     } catch {
-        /* no storage — the caller keeps the value in memory for this page load */
+        /* no storage, the caller keeps the value in memory for this page load */
     }
 };
 
@@ -42,7 +42,7 @@ export const visitorConversationId = (automationId: string): string => {
 export const storedDisplayName = (automationId: string): string | undefined => read(key(automationId, "name"));
 export const storeDisplayName = (automationId: string, name: string): void => write(key(automationId, "name"), name);
 
-// Start a new thread — the visitor pressed "New chat". Only the conversation id is dropped; a typed name and a
+// Start a new thread, the visitor pressed "New chat". Only the conversation id is dropped; a typed name and a
 // Google session are properties of the person, not of the thread.
 export const resetConversation = (automationId: string): string => {
     const minted = crypto.randomUUID();
@@ -58,7 +58,7 @@ export const resetConversation = (automationId: string): string => {
  *
  * The button is RENDERED (not One Tap): One Tap is unavailable in enough embedded contexts to be a support
  * burden, while renderButton only needs a container. That container is a light-DOM element the widget slots
- * into its panel — see element.ts — because Google's iframe belongs in the document, not in a shadow root. */
+ * into its panel, see element.ts, because Google's iframe belongs in the document, not in a shadow root. */
 
 interface GoogleIdentityServices {
     accounts: {
@@ -94,7 +94,7 @@ const loadGis = async (): Promise<GoogleIdentityServices> => {
             document.head.append(script);
             return;
         }
-        // Already on the page and possibly already loaded — a `load` listener added after the fact never fires.
+        // Already on the page and possibly already loaded, a `load` listener added after the fact never fires.
         if ((window as unknown as { google?: GoogleIdentityServices }).google !== undefined) {
             settle();
         }
@@ -107,7 +107,7 @@ export interface GoogleSignIn {
 }
 
 // Render Google's button into `container` and resolve with the ID token once the visitor signs in. Never
-// resolves if they don't — the caller keeps the panel open and the composer disabled, which is the whole point
+// resolves if they don't, the caller keeps the panel open and the composer disabled, which is the whole point
 // of an access-gated Front Desk.
 export const renderGoogleSignIn = async (container: HTMLElement, clientId: string): Promise<GoogleSignIn> => {
     const gis = await loadGis();

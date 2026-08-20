@@ -2,7 +2,7 @@
  *
  * Everything here DISCOVERS rather than assumes. The install location comes from the registry, the executable
  * comes from listing the install directory, the uninstaller comes from the `UninstallString` Windows itself
- * recorded. The alternative — hardcoding `%LOCALAPPDATA%\Intentic\Intentic.exe` — is a tier that keeps
+ * recorded. The alternative, hardcoding `%LOCALAPPDATA%\Intentic\Intentic.exe`, is a tier that keeps
  * passing when the bundler renames something and keeps failing when it does not, because "the path I guessed
  * is not there" and "the install did nothing" produce the same missing file.
  */
@@ -17,7 +17,7 @@ const INSTALL_TIMEOUT_MS = 15 * 60 * 1_000;
 /* Silent install through `Start-Process -Wait`, not by executing the installer directly.
  *
  * NSIS's `/S` returns control to the caller before the install has finished whenever the installer hands off to
- * a second process — which Tauri's does when the WebView2 bootstrapper has to run. A direct spawn therefore
+ * a second process, which Tauri's does when the WebView2 bootstrapper has to run. A direct spawn therefore
  * exits 0 onto a machine where nothing is installed yet, and every assertion after it fails naming the wrong
  * thing. `-Wait` waits for the whole tree; `-PassThru` is what makes an exit code available at all.
  */
@@ -31,7 +31,7 @@ export const installSilently = async (installer: string): Promise<RunResult> =>
 
 /* The uninstall, run the way Windows itself recorded it.
  *
- * `UninstallString` is a command line, not a path — it may carry arguments and may or may not be quoted — so it
+ * `UninstallString` is a command line, not a path, it may carry arguments and may or may not be quoted, so it
  * is handed back to a shell that knows how to read one rather than being split here. `/S` is appended for the
  * silent run; the app's own pre-uninstall hook ends a running instance first, which is the behaviour this
  * exercises (the tray is where the app lives once its window is closed, so "running with nothing on screen" is
@@ -45,7 +45,7 @@ export const uninstallSilently = async (uninstallString: string): Promise<RunRes
         { timeoutMs: INSTALL_TIMEOUT_MS },
     );
 
-/** The app's own executable inside an install directory — everything but the uninstaller. */
+/** The app's own executable inside an install directory, everything but the uninstaller. */
 export const appExecutable = async (installLocation: string): Promise<string | undefined> => {
     const entries = await readdir(installLocation, { withFileTypes: true });
     const executable = entries.find(
@@ -54,7 +54,7 @@ export const appExecutable = async (installLocation: string): Promise<string | u
     return executable === undefined ? undefined : join(installLocation, executable.name);
 };
 
-/* Start the app the way a person does — through the shell, detached, with this process not waiting on it.
+/* Start the app the way a person does, through the shell, detached, with this process not waiting on it.
  *
  * `-WindowStyle Hidden` applies to the PowerShell that starts it and not to the app, which manages its own
  * window; without it a console flashes on the CI desktop and can take focus off the window an assertion is
@@ -77,7 +77,7 @@ export const appRunning = async (executable: string): Promise<boolean> => {
  *
  * Asserted rather than assumed by the caller, because it is the precondition the COLD link tiers rest on: every
  * assertion in this package reads window titles, and a setup screen left over from the phase before satisfies
- * the next search instantly — so a cold-start tier that never actually started anything cold reports a pass.
+ * the next search instantly, so a cold-start tier that never actually started anything cold reports a pass.
  * The Linux tier says the same thing at the top of its own `quit_app`.
  */
 export const quitApp = async (executable: string): Promise<void> => {

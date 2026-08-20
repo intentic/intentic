@@ -4,7 +4,7 @@
  * JSON, `event: done` ends the iteration, `event: error` throws into the consumer.
  *
  * Written out here rather than imported from `@orpc/standard-server` (which exports `encodeEventMessage`)
- * because that package is a transitive dependency of the client, not one web declares — and three lines of
+ * because that package is a transitive dependency of the client, not one web declares, and three lines of
  * framing is a smaller thing to own than a dependency the app itself never needs. JSON.stringify emits no raw
  * newlines, so a value is always a single `data:` line. */
 
@@ -21,7 +21,7 @@ export interface StreamSink {
 /* An event-iterator response whose producer runs for as long as the consumer holds the body open.
  *
  * `start` gets the sink and returns its teardown (timers to clear). Teardown runs exactly once, on whichever
- * comes first: the producer closing, the consumer cancelling the body, or the request's signal aborting — which
+ * comes first: the producer closing, the consumer cancelling the body, or the request's signal aborting, which
  * is the one that matters most here, because that abort IS how the app drops a stream (a sandbox switch, a
  * reconnect, a chat tab closing). */
 export const eventStream = (request: Request, start: (sink: StreamSink) => () => void): Response => {

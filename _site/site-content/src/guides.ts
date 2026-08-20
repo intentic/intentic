@@ -297,7 +297,7 @@ export const guidePages: GuidePage[] = [
                 points: [
                     "Set a spend limit before the run, not after.",
                     "Give the agent its own branch and no push access to the default branch.",
-                    "Keep credentials scoped to the job, so an unattended mistake has a small blast radius.",
+                    "Keep credentials scoped to the job, so an unattended mistake has limited reach.",
                     "Make sure the run leaves a log you can read afterwards to see what it did.",
                 ],
             },
@@ -422,7 +422,7 @@ export const guidePages: GuidePage[] = [
                 heading: "What isolation buys you",
                 body: [
                     "A container per agent changes the question from whether an agent will make a mistake to how far it reaches. An agent with a staging credential and no route to production cannot cause a production incident, whatever it does.",
-                    "This is also what makes running several agents at once tolerable. Without isolation, every agent shares one environment and one set of keys, so the blast radius of any single task is the whole machine.",
+                    "This is also what makes running several agents at once tolerable. Without isolation, every agent shares one environment and one set of keys, so any single task can affect the whole machine.",
                 ],
             },
         ],

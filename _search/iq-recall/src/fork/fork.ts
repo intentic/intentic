@@ -28,7 +28,7 @@ export interface ForkResult {
     readonly keptLines: number;
     readonly droppedLines: number;
     readonly leafUuid: string;
-    // Absolute paths the kept prefix read whose disk content changed since — the fork's beliefs about them
+    // Absolute paths the kept prefix read whose disk content changed since, the fork's beliefs about them
     // are outdated; re-read before trusting.
     readonly staleFiles: readonly string[];
 }
@@ -38,7 +38,7 @@ export interface ForkResult {
 const DROPPED_TYPES = new Set(["queue-operation", "file-history-snapshot", "mode", "ai-title", "last-prompt"]);
 
 // Synthesize a forked transcript: the root→fork-point slice of a session under a fresh session id, written
-// next to the source so `claude --resume <id>` opens it. Conversation uuids are kept — they only need to be
+// next to the source so `claude --resume <id>` opens it. Conversation uuids are kept, they only need to be
 // unique within one file.
 export const materializeFork = async (options: ForkOptions): Promise<ForkResult> => {
     interface Entry {

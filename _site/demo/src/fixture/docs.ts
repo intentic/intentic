@@ -1,19 +1,19 @@
 import { STATE_DIR } from "@intentic/constants";
-/* DOCUMENTATION, RECORDED — what agents wrote about acme-shop, and one draft still waiting to be read.
+/* DOCUMENTATION, RECORDED, what agents wrote about acme-shop, and one draft still waiting to be read.
  *
  * Like every other surface in this recording, the documents ARE the state: a published set is
  * `<repo>/docs/architecture/**` (in the repo, reviewable in the same diff as the code it describes) and a draft
  * is `.intentic/config/docs/<repo>/**` mirroring the same tails. So this module contributes files and nothing else, and
  * the extension reads them exactly as it would against a real sandbox.
  *
- * BOTH TREES ARE PRESENT ON PURPOSE. `web` is published — it is what the area looks like once a set has landed:
+ * BOTH TREES ARE PRESENT ON PURPOSE. `web` is published, it is what the area looks like once a set has landed:
  * a map, a reading order, a page per part, and one page marked stale because the code moved under it (the
  * checkout agent is editing that very directory in the fleet board next door). `api` is staged, which is what
  * makes the rail badge and the draft banner real: an agent generated it, nobody has read it, and the choice to
  * publish is still the owner's.
  *
  * WHAT IS DELIBERATELY ABSENT is a run manifest. A run that is still in flight is one the extension would try to
- * ADVANCE — starting a turn per undocumented package, which is the one thing a recording must never do. The
+ * ADVANCE, starting a turn per undocumented package, which is the one thing a recording must never do. The
  * documents are the finished artifact; the run that made them is over. */
 
 const ARCHITECTURE = `docs/architecture`;
@@ -231,7 +231,7 @@ for exactly this and is the reason the fixture waits on a rendered price rather 
     },
 ];
 
-/* The index is GENERATED in a real repository — `intentic-docs check` reads each README and the package graph and
+/* The index is GENERATED in a real repository, `intentic-docs check` reads each README and the package graph and
  * writes this. The recording has no tool run, so it is authored here, but every field is one the tool would have
  * computed: the one-liners come from the pages above, and the measures are what the app draws its figures from. */
 const WEB_INDEX = (generatedAt: number): string =>
@@ -251,7 +251,7 @@ const WEB_INDEX = (generatedAt: number): string =>
                     readmeRev: WEB_REV,
                     updatedAt: generatedAt,
                     // The one page the recording marks stale, because the fleet board next door is editing exactly
-                    // this directory — which is what staleness looks like when it is honest rather than decorative.
+                    // this directory, which is what staleness looks like when it is honest rather than decorative.
                     stale: true,
                     reason: `3 commits have touched this package since its README was written`,
                     behind: 3,
@@ -468,7 +468,7 @@ const API_INDEX = (generatedAt: number): string =>
  * this data comes from, and it means the fixture's index cannot disagree with its pages.
  *
  * The one-liner goes directly under the heading, which is the position the parser takes it from, and the anchors
- * become a `## Key files` section with package-relative links — the same links that have to work on GitHub. */
+ * become a `## Key files` section with package-relative links, the same links that have to work on GitHub. */
 const pageFiles = (base: string, pages: readonly { readonly dir: string; readonly doc: PageDoc; readonly prose: string }[]) =>
     pages.map((page): [string, string] => {
         const [heading, ...rest] = page.prose.split(`\n\n`);
@@ -489,7 +489,7 @@ export const documentationFiles = (now: number): [string, string][] => {
         [`web/${ARCHITECTURE}/repo.json`, WEB_REPO_DOC(published)],
         [`web/${ARCHITECTURE}/repo.md`, WEB_REPO_PROSE],
         [`web/${ARCHITECTURE}/index.json`, WEB_INDEX(published)],
-        // A PUBLISHED package page sits on the package, not under the docs directory — that is the layout.
+        // A PUBLISHED package page sits on the package, not under the docs directory, that is the layout.
         ...pageFiles(`web`, WEB_PAGES),
 
         [`${STAGING}/api/repo.json`, API_REPO_DOC(drafted)],

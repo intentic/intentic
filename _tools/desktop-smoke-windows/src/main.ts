@@ -11,7 +11,7 @@
  * `setup` needs a Docker daemon; `agents` needs a connected account. Collapsing them would mean the cheapest
  * and most valuable tier could only run where the most expensive one can.
  *
- * The exit code is the harness's count and nothing else — a tier that threw is a failure of this file, and one
+ * The exit code is the harness's count and nothing else, a tier that threw is a failure of this file, and one
  * that failed an assertion is a failure of the product; keeping those apart is why nothing here catches.
  */
 

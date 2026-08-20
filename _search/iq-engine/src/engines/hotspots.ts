@@ -2,7 +2,7 @@ import type { IndexDb } from "../store/db.js";
 import type { FileEntry, RankedGroup } from "../types.js";
 import { churnOf, type ChurnOptions } from "./git.js";
 
-// `iq hotspots` — the files that are BOTH frequently changed and structurally tangled. Either signal alone
+// `iq hotspots`, the files that are BOTH frequently changed and structurally tangled. Either signal alone
 // misleads: a churning config file is trivial, and a gnarly file nobody touches costs nobody anything. Their
 // product is where defects and reading time concentrate, and it is the one ranking neither the file tree nor
 // the dependency graph can produce.
@@ -15,7 +15,7 @@ export interface HotspotOptions extends ChurnOptions {
     readonly pattern?: string;
 }
 
-// One ranked file, in numbers rather than a rendered line — the terminal verb formats these, and the daemon's
+// One ranked file, in numbers rather than a rendered line, the terminal verb formats these, and the daemon's
 // codebase-health panel plots them (engines/health.ts). One ranking, two presentations.
 export interface HotspotFile {
     readonly path: string;

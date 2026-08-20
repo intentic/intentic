@@ -1,8 +1,8 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
 /* THE FLEET the demo opens on: one plausible afternoon in a two-repo product team, with a card in every state
- * the board is designed to distinguish. Every lane has to be occupied — a board with nothing in Attention says
- * the wrong thing about what the board is for — so the roster is built around `laneOf`:
+ * the board is designed to distinguish. Every lane has to be occupied, a board with nothing in Attention says
+ * the wrong thing about what the board is for, so the roster is built around `laneOf`:
  *
  *   attention  awaiting (a question is parked) · conflict (a land hit an overlap)
  *   active     running, one of them delegating to subagents
@@ -13,7 +13,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 // The conversation whose transcript and scripted turn the chat opens (see turn.ts). Named because three
 // surfaces have to agree on it: the roster, the transcript route, and the attach stream.
 export const FEATURED_AGENT_ID = `cnv_checkout_stripe`;
-// The agent parked on a question — the fleet badge's reason to exist, and the card that proves the point.
+// The agent parked on a question, the fleet badge's reason to exist, and the card that proves the point.
 export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
 // The agent holding a finished delta on its branch: the one the review panel opens on, and the one "Land now"
 // is demonstrated with (see workspace.ts).
@@ -127,7 +127,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 2,
         toolUses: 19,
     },
-    /* TWO STEPS OF ONE WORKFLOW RUN, fanned out and running side by side — the case WorkflowMark exists for.
+    /* TWO STEPS OF ONE WORKFLOW RUN, fanned out and running side by side, the case WorkflowMark exists for.
      * They are ordinary agents in every other respect (own branch, own worktree, own spend), which is exactly
      * why the run's name has to be on them: without it these are two unrelated cards that happen to have
      * started in the same second. */

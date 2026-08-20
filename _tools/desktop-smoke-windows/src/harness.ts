@@ -1,19 +1,19 @@
-/* The assertion harness the three Windows tiers share — the direct counterpart of the `pass` / `fail` /
+/* The assertion harness the three Windows tiers share, the direct counterpart of the `pass` / `fail` /
  * `until_true` trio at the top of `_tools/desktop-smoke/smoke.sh`, and deliberately the same shape, because the
  * two tiers assert the same journey on two operating systems and a reader should be able to hold one model.
  *
  * Three rules carried over from the Linux tier, each of which it learned the hard way:
  *
- *   • EVERY ASSERTION HAS ITS OWN DEADLINE. Nothing here is synchronous — an install, a window mapping, a link
+ *   • EVERY ASSERTION HAS ITS OWN DEADLINE. Nothing here is synchronous, an install, a window mapping, a link
  *     delivered through a second process. A fixed sleep is either flaky or slow, and on Windows it is both:
  *     a cold first launch of a WebView2 app is seconds slower than every launch after it.
  *   • A FAILURE DOES NOT STOP THE RUN. One tier reports every assertion it could make, because the second
- *     failure is usually what explains the first — "no window" plus "the process exited" is a crash, "no
+ *     failure is usually what explains the first, "no window" plus "the process exited" is a crash, "no
  *     window" alone is a hang.
  *   • THE COUNT IS THE EXIT CODE'S ONLY INPUT. A tier ends by reporting, and reporting is the only thing that
  *     decides whether it passed. There is no `exit 1` scattered through the assertions.
  *
- * `sleep` is injected rather than imported so the polling loop can be tested without spending real seconds —
+ * `sleep` is injected rather than imported so the polling loop can be tested without spending real seconds,
  * the deadline arithmetic is the part worth asserting, and it is exactly the part a real timer hides.
  */
 
@@ -30,13 +30,13 @@ export interface HarnessOptions {
 export interface Harness {
     pass: (description: string) => void;
     fail: (description: string, detail?: string) => void;
-    /** Prints a section heading — the `==> …` lines the Linux tier's log is read by. */
+    /** Prints a section heading, the `==> …` lines the Linux tier's log is read by. */
     section: (description: string) => void;
     /** Verbatim diagnostic output (a log tail, a command's stderr), indented under the last line. */
     detail: (text: string) => void;
     /**
      * Poll `predicate` until it answers true or the deadline passes, then record one assertion either way.
-     * A predicate that throws counts as false — every probe here shells out, and "the command failed" and
+     * A predicate that throws counts as false, every probe here shells out, and "the command failed" and
      * "the command said no" are the same answer to the question being asked.
      */
     untilTrue: (seconds: number, description: string, predicate: () => boolean | Promise<boolean>) => Promise<boolean>;
@@ -83,7 +83,7 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
                     pass(description);
                     return true;
                 }
-                // Checked AFTER the probe, so a zero-second deadline still gets one attempt — the caller asked
+                // Checked AFTER the probe, so a zero-second deadline still gets one attempt, the caller asked
                 // for a fact, not for a delay.
                 if (now() >= deadline) {
                     fail(`${description} (waited ${seconds}s)`);

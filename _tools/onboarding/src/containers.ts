@@ -97,7 +97,7 @@ export const logsOf = async (name: string): Promise<string> =>
  * Worth asking on every poll of a wait, because the two ways a service fails to answer need completely
  * different reports and only one of them is worth waiting out. A container that is still starting deserves the
  * full budget; a container that has EXITED will never answer, and waiting the remaining minutes for it turns a
- * one-line crash into a timeout that names nothing. That is not a hypothetical — the api's first run here died
+ * one-line crash into a timeout that names nothing. That is not a hypothetical, the api's first run here died
  * on a missing module and spent three minutes looking exactly like a slow boot.
  */
 export const isRunning = async (name: string): Promise<boolean> =>

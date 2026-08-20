@@ -5,15 +5,15 @@ import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePat
 
 // The single source of "what the workspace views gray out". Both the file tree (walkWorkspaceTree) and content
 // search (searchWorkspaceFiles) build an IgnoreScope from here and consult it per entry, so the two views agree on
-// exactly which paths are ignored — grayed (still listed + openable) in the tree, skipped by default in search.
+// exactly which paths are ignored, grayed (still listed + openable) in the tree, skipped by default in search.
 //
 // This is NOT a security boundary: nothing is hidden, and nothing is blocked from being read or written. "Ignored"
-// means only "not part of the tracked project" — junk/generated dirs, .gitignore'd paths, and the heavy
+// means only "not part of the tracked project", junk/generated dirs, .gitignore'd paths, and the heavy
 // browser-profile subtree. A role-based access floor will layer on top later. In the tree, ignored directories are
 // listed but not eagerly walked (they lazy-load their children on expand), so a giant node_modules / .git can't
 // blow the walk's entry budget.
 
-// IGNORED_DIRS + the path predicates (browser profiles, agent worktrees) are the browser-safe ignore constants —
+// IGNORED_DIRS + the path predicates (browser profiles, agent worktrees) are the browser-safe ignore constants,
 // they live in ./constants (no node deps) so the platform's browser bundle can import them via
 // `@intentic/workspace-ignore/constants`. Re-exported here so the daemon keeps importing from the package root,
 // and the node-based .gitignore scope layers on top.
@@ -72,5 +72,5 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
 // walkers descend() on the root dir before reading its entries). Paths passed to isIgnored are root-relative.
 export const createIgnoreScope = (): IgnoreScope => makeScope([]);
 
-// Root-relative, forward-slash path for `abs` under `base` — the path space the tree/search/file routes speak.
+// Root-relative, forward-slash path for `abs` under `base`, the path space the tree/search/file routes speak.
 export const toRelPath = (base: string, abs: string): string => relative(base, abs).split(sep).join("/");

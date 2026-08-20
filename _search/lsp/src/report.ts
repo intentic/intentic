@@ -3,7 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 /* What a check can say, and how the compiler's stdout becomes it.
  *
  * A report distinguishes three states per file, and the caller must keep them apart: diagnostics (a verdict),
- * absence from both lists ("checked, and clean" — also a verdict), and an `unavailable` entry (the checker
+ * absence from both lists ("checked, and clean", also a verdict), and an `unavailable` entry (the checker
  * refusing: it could not load the file's project well enough to vouch for anything, so nothing was checked and
  * nothing should be relayed as if it had been). */
 
@@ -28,7 +28,7 @@ export interface DiagReport {
     readonly unavailable: readonly Unavailable[];
 }
 
-// `path(line,col): category TScode: message` — the compiler's own machine format (`--pretty false`). A line
+// `path(line,col): category TScode: message`, the compiler's own machine format (`--pretty false`). A line
 // that starts with whitespace continues the previous diagnostic's message (related-information indents).
 const DIAGNOSTIC_LINE = /^(.+)\((\d+),(\d+)\): (error|warning|suggestion|message) TS(\d+): (.*)$/;
 // Config-level faults print without a location: `error TS5083: Cannot read file '...'`.

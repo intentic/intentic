@@ -50,7 +50,7 @@ export const docsBook: Book = {
                             },
                         },
                         {
-                            /* ON THE FIRST SHELF, because the words are load-bearing from the second page onwards.
+                            /* ON THE FIRST SHELF, because the words are relied on from the second page onwards.
                              * "daemon" appeared 92 times across 14 pages and was defined nowhere; "land", "worktree"
                              * and "harness" were each first used a shelf before the page that explains them, and
                              * searching for "glossary" returned nothing at all. */

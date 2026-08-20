@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { randomBytes } from "node:crypto";
 
-/* A STAND-IN FOR THE TUNNEL HUB — the three calls the platform makes to zrok, and nothing else.
+/* A STAND-IN FOR THE TUNNEL HUB, the three calls the platform makes to zrok, and nothing else.
  *
  * Reachability is the one thing standing between a hermetic test and the whole install path. Every installer
  * lane begins the same way: the wizard asks the platform for a setup code, and the platform refuses to mint one
@@ -10,7 +10,7 @@ import { randomBytes } from "node:crypto";
  * of the four onboarding paths, and this exists to answer that question rather than to be a tunnel.
  *
  * IT DOES NOT TUNNEL ANYTHING, and nothing downstream needs it to. The sandbox's own `zrok2 enable` against
- * this will fail, and the daemon's entrypoint treats that as non-fatal on purpose (docker-entrypoint.sh) — it
+ * this will fail, and the daemon's entrypoint treats that as non-fatal on purpose (docker-entrypoint.sh), it
  * logs and serves anyway. The browser then reaches the box the way a browser on the same machine always
  * prefers to: the loopback port the container publishes, which is a hop away and needs no fabric at all.
  *
@@ -18,7 +18,7 @@ import { randomBytes } from "node:crypto";
  * config, and the token is also the switch that decides whether this platform mints addresses at all.
  */
 
-// The hub's own media type, not `application/json` — zrok's v2 API declares it on every operation, and the
+// The hub's own media type, not `application/json`, zrok's v2 API declares it on every operation, and the
 // platform's client sends it. Answering in it is what keeps this a faithful stand-in rather than a lenient one.
 const MEDIA_TYPE = `application/zrok.v1+json`;
 
@@ -31,7 +31,7 @@ export interface FakeZrokOptions {
 export interface FakeZrok {
     readonly endpoint: string;
     readonly port: number;
-    /** Accounts minted, by email — what a test asserts the platform actually provisioned. */
+    /** Accounts minted, by email, what a test asserts the platform actually provisioned. */
     readonly accounts: ReadonlyMap<string, string>;
     close(): Promise<void>;
 }
@@ -86,7 +86,7 @@ export const startFakeZrok = async (options: FakeZrokOptions = {}): Promise<Fake
                 if (email === ``) {
                     return send(response, 400, { message: `email is required` });
                 }
-                /* A DUPLICATE answers 500, which is not sloppiness — it is what the real hub does, and the
+                /* A DUPLICATE answers 500, which is not sloppiness, it is what the real hub does, and the
                  * platform's one retry (delete, then create again) exists solely because of it. A stand-in
                  * that happily re-created would leave that recovery path unrun. */
                 if (accounts.has(email)) {
@@ -100,7 +100,7 @@ export const startFakeZrok = async (options: FakeZrokOptions = {}): Promise<Fake
             if (route === `DELETE /api/v2/account`) {
                 const body = await readBody(request);
                 const email = typeof body[`email`] === `string` ? body[`email`] : ``;
-                // 404 for an account already gone — the platform reads that as success, so removal is idempotent.
+                // 404 for an account already gone, the platform reads that as success, so removal is idempotent.
                 return accounts.delete(email) ? send(response, 200, undefined) : send(response, 404, { message: `no such account` });
             }
 

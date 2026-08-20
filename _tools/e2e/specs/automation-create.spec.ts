@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { DAEMON_URL } from "../stack.js";
 
 // The automations journey: the create dialog's form (hand-mirrored Zod schemas in api-contract) must round-trip
-// through the daemon's POST /automations and come back in the list — the drift guard for the mirrored shapes.
+// through the daemon's POST /automations and come back in the list, the drift guard for the mirrored shapes.
 test(`a schedule automation created in the UI lands in the daemon's manifest and is listed back`, async ({ page }) => {
     await page.goto(`/automations`);
     await page.getByRole(`button`, { name: `New automation` }).click();

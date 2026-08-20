@@ -62,15 +62,15 @@ export const embedPending = async (
 
 /* Rank inside SQLite, then read only what is shown.
  *
- * The shape this replaced pulled every embedded chunk — vector AND text — into JavaScript and scored them in a
+ * The shape this replaced pulled every embedded chunk, vector AND text, into JavaScript and scored them in a
  * loop, which on this workspace's index meant 98MB of vectors and 30MB of text read per query to return 24 rows
  * of answer. Three quarters of the 286ms that cost was the reading alone, and the garbage it made accounted for
  * 14.6% of the time. Here the vector table does the ranking and hands back 24 chunk ids; the text those need is
  * a second lookup of 24 rows, and the whole query is 31ms.
  *
  * Scope is pushed into that ranking rather than applied after it. Filtering the top 24 of the whole workspace
- * down to the ones in scope would answer a different question — the scoped top 24 can be nowhere near the
- * global one — so `allowed` becomes a file-id restriction the ranking itself honours. When every indexed file
+ * down to the ones in scope would answer a different question, the scoped top 24 can be nowhere near the
+ * global one, so `allowed` becomes a file-id restriction the ranking itself honours. When every indexed file
  * is in scope, which is the ordinary case, there is no restriction to apply and none is built. */
 export const semanticSearch = (db: IndexDb, queryVec: Float32Array, allowed: ReadonlySet<string>): EngineHit[] => {
     const files = db.all("SELECT id, path FROM files");

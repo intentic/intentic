@@ -12,7 +12,7 @@ export interface KindRule {
 }
 
 export interface LanguageConfig {
-    // The id handed to ast-grep's parse() — a Lang enum value for built-ins, the registered name for packs.
+    // The id handed to ast-grep's parse(), a Lang enum value for built-ins, the registered name for packs.
     readonly astLang: string;
     readonly rules: readonly KindRule[];
 }
@@ -94,7 +94,7 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
 };
 
 // Docs/config/markup hold no definitions and no code paths. Both the heuristic symbol patterns and the lexical
-// complexity fallback are keyword scans, and on this kind of file they read the CONTENT as if it were code — a
+// complexity fallback are keyword scans, and on this kind of file they read the CONTENT as if it were code, a
 // pnpm-lock.yaml scores 300+ branch points purely on `\bfor\b` matching inside hyphenated package names.
 export const NON_CODE = /\.(md|mdx|rst|txt|json|jsonc|ya?ml|toml|ini|lock|csv|html|xml|svg|css|scss)$/i;
 

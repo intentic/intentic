@@ -1,5 +1,5 @@
 /* The strings the three tiers agree on. Kept together because two of them are also written down in
- * `_tools/desktop-smoke/smoke.sh` — the Linux tier asserts the same journey, and the day the two disagree about
+ * `_tools/desktop-smoke/smoke.sh`, the Linux tier asserts the same journey, and the day the two disagree about
  * what the setup screen is called is the day one of them is silently testing nothing.
  */
 
@@ -23,7 +23,7 @@ export const SETUP_LINK = `${SCHEME}://setup?code=windows-smoke-code&name=Window
  *
  * The confirmation is the better proof of the two and is asserted first: it is a window that exists for no
  * other reason, where the setup screen has to be told apart from "the link was dropped and the app opened on
- * the workspace" — a window appears either way, and only the title says which. */
+ * the workspace", a window appears either way, and only the title says which. */
 export const CONFIRM_TITLE = `Set up a sandbox on this computer`;
 export const SETUP_TITLE = `Setting up`;
 export const WORKSPACE_TITLE = `Intentic`;
@@ -34,7 +34,7 @@ export const WORKSPACE_TITLE = `Intentic`;
 export const SANDBOX_HOSTNAME = `winsmoke.e2e.test`;
 export const PLATFORM_URL_UNREACHABLE = `https://platform.e2e.test`;
 
-/** The direct-token path's stand-in credentials — see `connect.sh`'s own documentation of the codeless flow. */
+/** The direct-token path's stand-in credentials, see `connect.sh`'s own documentation of the codeless flow. */
 export const CONNECT_TOKEN = `windows-setup-smoke-token`;
 export const ZROK_TOKEN = `dummy-zrok-token`;
 /* The hub the in-box agent would enable against, on the same unroutable TLD: the dummy grant cannot work, and

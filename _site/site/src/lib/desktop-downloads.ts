@@ -45,7 +45,7 @@ export interface DesktopRoute {
 }
 
 /* What each vanity path resolves to. Read by the worker, which serves these paths in production, and by the
- * dev server, which stands in for it (astro.config.mjs) — one table, because a path that works on the deployed
+ * dev server, which stands in for it (astro.config.mjs), one table, because a path that works on the deployed
  * site and 404s on a developer's machine is how a broken download link reaches production unnoticed. */
 export const DESKTOP_ROUTES: Record<string, DesktopRoute> = {
     "/desktop": { staged: "Intentic-setup.exe", asset: (v) => `Intentic-${v}-x64-setup.exe` },

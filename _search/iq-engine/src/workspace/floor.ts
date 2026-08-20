@@ -4,7 +4,7 @@ import { SEARCHABLE_STATE_PATHS, WORKSPACE_STATE_FILES } from "@intentic/sandbox
 // Where the index lives, root-relative. Inside the denied-by-default state dir, so it can never surface itself.
 export const IQ_DIR = `${STATE_DIR}/local/cache/iq`;
 
-/* THE AGENT PLANE IS OUT OF SCOPE BY DEFAULT — an allow-list over `.intentic`, not a deny-list.
+/* THE AGENT PLANE IS OUT OF SCOPE BY DEFAULT, an allow-list over `.intentic`, not a deny-list.
  *
  * This floor used to enumerate what to hide (the index, auth, sessions, artifacts, runtime, browser) and let
  * everything else under `.intentic` rank as workspace content. That is the hand-kept-list failure the state
@@ -14,10 +14,10 @@ export const IQ_DIR = `${STATE_DIR}/local/cache/iq`;
  * escaped the index's own self-exclusion.
  *
  * So the question is inverted and the answer imported: `SEARCHABLE_STATE_PATHS` is the table's own derivation
- * of the slice a person or agent WROTE — reviewable config (`versioned`) plus authored content (`authored`:
+ * of the slice a person or agent WROTE, reviewable config (`versioned`) plus authored content (`authored`:
  * drafts, staged docs, workspace extensions). Those stay searchable because excluding them would trade one
- * blind spot for another — "find the reddit draft" and "edit the automation" are ordinary asks. Everything
- * else under `.intentic` — every ledger, cache, profile, checkout, and every store ADDED LATER — is out of
+ * blind spot for another, "find the reddit draft" and "edit the automation" are ordinary asks. Everything
+ * else under `.intentic`, every ledger, cache, profile, checkout, and every store ADDED LATER, is out of
  * scope by construction, the same default-deny the portability classes are built on. This also stops the index
  * copying capability tokens into search text: `capabilities.json` is `secret` and unversioned, so it fell out
  * of scope the moment the list was derived instead of remembered. */
@@ -32,7 +32,7 @@ const isAllowedTail = (tail: string): boolean =>
 
 /* Matched at ANY depth, not just the workspace root: a workspace can contain checkouts that are themselves
  * intentic workspaces, and a root-only test let a nested one's index (a multi-gigabyte index.db plus its
- * spool) rank as a search result. The engine's always-on floor — every engine (sweep, ripgrep, git, cursor
+ * spool) rank as a search result. The engine's always-on floor, every engine (sweep, ripgrep, git, cursor
  * replay) filters emitted paths through it, and `--ignored` never lifts it. */
 export const isIqDenied = (relPath: string): boolean => {
     const segments = relPath.split("/").filter((segment) => segment !== "");
@@ -41,12 +41,12 @@ export const isIqDenied = (relPath: string): boolean => {
         return false;
     }
     const tail = segments.slice(index + 1).join("/");
-    // The state dir itself descends — pruning here would hide the allowed slice along with the rest.
+    // The state dir itself descends, pruning here would hide the allowed slice along with the rest.
     return tail !== "" && !isAllowedTail(tail);
 };
 
 /* The rg prune, derived from the same table: one `!` glob per non-searchable entry, so ripgrep never walks the
- * heavy subtrees (sessions, browser profiles, caches) at all. An OPTIMISATION, not the authority — a store the
+ * heavy subtrees (sessions, browser profiles, caches) at all. An OPTIMISATION, not the authority, a store the
  * table doesn't know (a stray file at the `.intentic` root, tomorrow's undeclared tree) is not in these globs,
  * and the post-filter above is what actually keeps it out of results. */
 export const DENIED_GLOBS = intenticTails(WORKSPACE_STATE_FILES.map((file) => file.path))

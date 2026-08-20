@@ -15,7 +15,7 @@ test(`a file uploaded through the workspace UI round-trips to the daemon's disk`
         buffer: Buffer.from(content),
     });
 
-    // The tree row appears only after the daemon accepted the write and the tree query refetched — the full
+    // The tree row appears only after the daemon accepted the write and the tree query refetched, the full
     // browser→daemon→disk→daemon→browser loop.
     await expect(page.getByRole(`treeitem`, { name: `e2e-upload.txt` })).toBeVisible({ timeout: 30_000 });
 

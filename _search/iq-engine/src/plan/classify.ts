@@ -15,7 +15,7 @@ const compiles = (pattern: string): boolean => {
 // path-shaped → identifier → regex → natural language.
 export const classify = (query: string): QueryKind => {
     const trimmed = query.trim();
-    // Dots, stars and question marks are path-normal (extensions, globs) — only other regex metachars disqualify.
+    // Dots, stars and question marks are path-normal (extensions, globs), only other regex metachars disqualify.
     if (!/\s/.test(trimmed) && (trimmed.includes("/") || /[*?]/.test(trimmed)) && !REGEX_META.test(trimmed.replace(/[*?.]/g, ""))) {
         return "path";
     }

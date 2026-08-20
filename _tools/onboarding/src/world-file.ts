@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 /* WHAT THE SPECS ARE TOLD ABOUT THE WORLD, and why it is a file rather than a variable.
  *
  * Playwright's global setup runs in the runner process and the specs run in workers, so nothing an object holds
- * survives the trip. Every address in this tier is also decided at run time — ports are reserved rather than
- * fixed, and the host they sit on is probed for (docker.ts) — so there is no constant a spec could import.
+ * survives the trip. Every address in this tier is also decided at run time, ports are reserved rather than
+ * fixed, and the host they sit on is probed for (docker.ts), so there is no constant a spec could import.
  *
  * A stood-down run writes this file too, carrying the reason. That is what lets a spec say "no Docker here" in
  * its own skip message rather than failing on an address that was never going to exist.
@@ -23,7 +23,7 @@ export interface WorldFile {
     /** Set when the tier did not run. Every spec skips with this sentence as its reason. */
     readonly standDown?: string;
     readonly apiUrl?: string;
-    /** The api as a container elsewhere on this machine reaches it — what the compose bootstrap curls. */
+    /** The api as a container elsewhere on this machine reaches it, what the compose bootstrap curls. */
     readonly apiHostUrl?: string;
     readonly webUrl?: string;
     readonly databaseUrl?: string;

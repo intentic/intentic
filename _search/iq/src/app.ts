@@ -28,7 +28,7 @@ const formatException = (exc: unknown): string => {
     return String(exc);
 };
 
-// The agent-facing contract, kept under ~400 tokens — this is what `iq --help` prints.
+// The agent-facing contract, kept under ~400 tokens, this is what `iq --help` prints.
 const HELP = `One search tool, intent-first. A bare query auto-detects intent, fuses engines, and answers
 natural language semantically — there is no second verb for questions:
   iq "where do we enforce the secrets floor?"

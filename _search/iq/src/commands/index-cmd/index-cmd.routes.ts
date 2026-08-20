@@ -33,7 +33,7 @@ const drop = buildCommand({
     },
 });
 
-// Ops escape hatch only — the index self-manages in the happy path.
+// Ops escape hatch only, the index self-manages in the happy path.
 export const indexCommand = buildRouteMap({
     routes: { status, rebuild, drop },
     docs: { brief: "Index lifecycle (self-managing; use only when results look stale)" },

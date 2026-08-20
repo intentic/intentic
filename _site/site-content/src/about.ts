@@ -117,8 +117,8 @@ export const trustCards: TrustCard[] = [
 ];
 
 /* Read top to bottom as a spine rather than five bullets: the marker is what the timeline prints in the
- * margin, so the eye gets a span before it gets a sentence. Ordered as a career runs — the degree it started
- * from, the work, the shape of the work, and what all of it left behind — not as a ranked list of claims. */
+ * margin, so the eye gets a span before it gets a sentence. Ordered as a career runs, the degree it started
+ * from, the work, the shape of the work, and what all of it left behind, not as a ranked list of claims. */
 export const background: BackgroundItem[] = [
     { marker: "Education", lead: "CS degree", body: "from the Polish-Japanese Academy of Information Technology (PJATK), Warsaw." },
     {

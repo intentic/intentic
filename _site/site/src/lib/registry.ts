@@ -77,7 +77,7 @@ export const sourceHref = (entry: RegistryEntry): string | undefined => entry.in
  * visitor. So the glyph tier DEGRADES here to the tier below it, and every card with neither art nor a logo
  * wears its initials.
  *
- * ART IS THE EASIEST TIER FOR THIS PAGE, not the hardest — the one place where the site is better off than the
+ * ART IS THE EASIEST TIER FOR THIS PAGE, not the hardest, the one place where the site is better off than the
  * app. The document is already in the row, so drawing it costs no dependency, no CDN and no request: it inlines
  * into the built HTML and is correct for a visitor whose network blocks the icon CDN. That it arrived last is
  * an accident of when it was added, not an order of preference.
@@ -102,7 +102,7 @@ export const markLogoUrl = (entry: RegistryEntry): string | undefined =>
  *
  * The same gate and the same encoding the app applies (<BrandMark>'s artSrc), deliberately kept as a second
  * copy for the reason markInitials is one: there is no dependency edge from this site to @intentic/ui and one
- * should not be added for a few lines of string handling. Both halves matter — the `#` in every fill has to be
+ * should not be added for a few lines of string handling. Both halves matter, the `#` in every fill has to be
  * escaped or the URI ends at the first colour, and a truncated document has to answer `undefined` or the card
  * paints a broken image where a mark should be. Keep them in step by hand.
  *

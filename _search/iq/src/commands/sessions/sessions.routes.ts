@@ -109,7 +109,7 @@ const readStdin = (): Promise<string> =>
     });
 
 // The prompt is "first" when the session transcript doesn't exist yet, or its only typed prompt is the one
-// being submitted (the hook may fire before or after claude-code appends it — both orders occur).
+// being submitted (the hook may fire before or after claude-code appends it, both orders occur).
 const isFirstPrompt = async (transcriptPath: string, prompt: string): Promise<boolean> => {
     let seen = 0;
     try {
@@ -139,7 +139,7 @@ const forkCommandOf = (recall: Recall, match: SessionMatch, prompt: string): str
 };
 
 // UserPromptSubmit payload → hookSpecificOutput JSON on a strong first-prompt match, silence otherwise.
-// Exported for tests; never throws on malformed input — a broken hook must not block the user's prompt.
+// Exported for tests; never throws on malformed input, a broken hook must not block the user's prompt.
 export const runHookMatch = async (input: string, write: (chunk: string) => void): Promise<void> => {
     let payload: { session_id?: string; transcript_path?: string; cwd?: string; prompt?: string };
     try {
@@ -255,7 +255,7 @@ const grab = buildCommand({
                 let shown = 0;
                 for (const excerpt of excerpts) {
                     const block = [
-                        // `×N` marks a prompt that recurs — a scheduled job or a repeated ask. Saying it on the
+                        // `×N` marks a prompt that recurs, a scheduled job or a repeated ask. Saying it on the
                         // one row it collapsed to is the point: the alternative is N rows that say it N times.
                         `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
                         `    asked: ${cap(collapse(excerpt.prompt), 240)}`,

@@ -1,9 +1,9 @@
-/* THE RECORDED PRODUCT'S OWN SCREENS — acme-shop, drawn as SVG.
+/* THE RECORDED PRODUCT'S OWN SCREENS, acme-shop, drawn as SVG.
  *
  * The demo has two surfaces that must show the visitor what the agents are LOOKING AT: the browser view's
  * screencast (an agent driving Chromium) and an acceptance run's report (the screenshots that agent took at each
  * step). Both are pictures of the same three pages, so the pages live here and the two callers differ only in
- * what they do with a frame — play it on a socket, or store it in the fixture's filesystem.
+ * what they do with a frame, play it on a socket, or store it in the fixture's filesystem.
  *
  * SVG rather than captured PNGs, which is the whole reason this is affordable: five pages of plausible product UI
  * cost a few kilobytes of markup, weigh nothing in the bundle, and stay legible at any size they are given.
@@ -23,7 +23,7 @@ const box = (x: number, y: number, width: number, height: number, fill: string, 
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${radius}" fill="${fill}" stroke="${stroke}" />`;
 
 // The pointer the agent is driving. Drawn by the fixture because a screencast carries the real one in its
-// pixels — without it the page just changes by itself, which reads as a video rather than as something acting.
+// pixels, without it the page just changes by itself, which reads as a video rather than as something acting.
 const cursor = (x: number, y: number): string =>
     `<g transform="translate(${x} ${y})"><path d="M0 0 L0 18 L5 14 L8 21 L11 20 L8 13 L14 13 Z" fill="#111" stroke="#fff" stroke-width="1.2" /></g>`;
 
@@ -184,7 +184,7 @@ export const docsPage = (step: number): string =>
 // ---- the cart, where the coupon story goes wrong ---------------------------------------------------------------
 
 /* The page an acceptance run failed on: a valid launch coupon typed into a field that rejects it. It exists
- * because a report whose every screenshot shows the happy path cannot show what a failing run is FOR — the
+ * because a report whose every screenshot shows the happy path cannot show what a failing run is FOR, the
  * screenshot is the evidence, and the defect it evidences has to be visible in it.
  *
  * The summary's Discount line is never anything but a dash, in either frame: this page is drawn once before

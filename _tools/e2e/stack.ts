@@ -15,7 +15,7 @@ export const WEB_URL = `https://localhost:47145`;
 export const DATABASE_URL = `postgresql://app:app@localhost:5440/app`;
 
 // The cookie signature must match the API that verifies it. When a dev machine's already-running API is
-// reused, that API signed up under the root .env's secret — so read it from there first; the constant only
+// reused, that API signed up under the root .env's secret, so read it from there first; the constant only
 // backs the from-scratch boot (CI), where global-setup starts the API with exactly this value.
 const envSecret = (): string | undefined => {
     try {
@@ -28,14 +28,14 @@ const envSecret = (): string | undefined => {
 };
 export const BETTER_AUTH_SECRET = envSecret() ?? `intentic-e2e-secret`;
 
-// The daemon under test: the PUBLISHED sandbox image by default — the real contract a user's browser meets —
+// The daemon under test: the PUBLISHED sandbox image by default, the real contract a user's browser meets,
 // overridable to a source build for cross-repo debugging (SANDBOX_E2E_IMAGE=...).
 export const DAEMON_IMAGE = process.env[`SANDBOX_E2E_IMAGE`] ?? `ghcr.io/intentic/sandbox:stable`;
 // A non-default host port so the reuse check can never latch onto a REAL sandbox a dev runs on this machine.
 export const DAEMON_URL = `http://localhost:18787`;
 export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;
 
-// The public web client id — must match _editor/web/src/environments/environment.local.ts (it keys the cached
+// The public web client id, must match _editor/web/src/environments/environment.local.ts (it keys the cached
 // Google ID token's localStorage slot). Drift shows up as the sign-in gate in every spec's trace.
 const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
 
@@ -60,7 +60,7 @@ export const signedSessionCookie = (sessionToken: string): string =>
 
 // The sandboxClient refuses to call the daemon without a Google ID token (sandboxClient.ts throws before any
 // fetch), but useGoogleIdentity restores a cached one from localStorage without touching Google when its exp
-// is >60s out — and the loopback daemon never verifies the bearer. So the seed plants a well-formed fake JWT
+// is >60s out, and the loopback daemon never verifies the bearer. So the seed plants a well-formed fake JWT
 // (only the payload's exp/email are ever read) and no FedCM prompt or sign-in gate can appear.
 export const GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
 
@@ -70,7 +70,7 @@ export const fakeGoogleIdToken = (): string =>
     `${base64Json({ alg: `none`, typ: `JWT` })}.${base64Json({ exp: Math.floor(Date.now() / 1000) + 60 * 60, email: SEED.email })}.e2e`;
 
 // Seed the authenticated world: the user, a week-long session, and one sandbox whose daemonUrl points at the
-// loopback daemon. Idempotent — reruns replace the previous seed.
+// loopback daemon. Idempotent, reruns replace the previous seed.
 export const seed = async (): Promise<{ sessionToken: string; sandboxToken: string }> => {
     const prisma = createPrisma();
     const sessionToken = randomBytes(24).toString(`base64url`);

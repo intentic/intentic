@@ -3,25 +3,25 @@ import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { REVIEW_AGENT_ID } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
-/** The transcript route's body: `AgentTranscriptSchema` — the restored messages, plus the session they came from. */
+/** The transcript route's body: `AgentTranscriptSchema`, the restored messages, plus the session they came from. */
 interface AgentTranscript {
     readonly sessionId?: string;
     readonly messages: readonly RestoredMessage[];
 }
 
 /* WHAT A FINISHED AGENT'S CHAT HOLDS. `/agents/{id}/transcript` is what the panel reads when a conversation is
- * opened rather than attached to — every agent on the board except the one mid-turn. Answering it with an empty
+ * opened rather than attached to, every agent on the board except the one mid-turn. Answering it with an empty
  * list made the board's central move ("open the agent") land on "Start a conversation with Claude Code", as if
  * the work on the card had happened somewhere else.
  *
  * The shape is the restored one (`RestoredMessage`), not the streaming one: prose, the thinking that preceded
- * it, and the tool cards that prose introduced — which is why a reopened chat redraws its cards with their
+ * it, and the tool cards that prose introduced, which is why a reopened chat redraws its cards with their
  * diffs instead of a flat wall of text. The diffs below are the SAME strings the review panel serves for these
  * paths (fixture/workspace.ts), because they are the same change seen from the other side: the transcript is
  * where it was decided, the review is where it is read.
  *
  * FOUR conversations are fixtured: the agent holding a finished delta, which is the one a visitor is steered
- * to open from the board, and one per persona — the chats the window opens holding (fixture/openChats.ts),
+ * to open from the board, and one per persona, the chats the window opens holding (fixture/openChats.ts),
  * so the rail's Personas cut opens onto work rather than onto an empty pane. Anything else still answers an
  * empty transcript, and the panel's empty state is honest there: those cards are a roster, not a recording.
  *
@@ -43,7 +43,7 @@ const SCHEMA_AFTER = `export const users = pgTable("users", {
     email: text("email").notNull().unique(),
     name: text("name").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
-    // Soft delete: rows are retired, never removed — every read filters on this.
+    // Soft delete: rows are retired, never removed, every read filters on this.
     deletedAt: timestamp("deleted_at"),
 });
 
@@ -194,7 +194,7 @@ const MAYA_SUPPORT: AgentTranscript = {
 
 /* GROWTH'S CHAT. Shorter than Maya's and deliberately so: it is the second row of a list of people, read far
  * more often than it is opened, and its job when it IS opened is to be recognisably a different kind of work
- * from the one above it — writing, posted through this persona's own accounts, with the owner holding the
+ * from the one above it, writing, posted through this persona's own accounts, with the owner holding the
  * final word on what goes out. */
 const OWEN_LAUNCH: AgentTranscript = {
     sessionId: `ses_01j9owen`,
@@ -220,7 +220,7 @@ const OWEN_LAUNCH: AgentTranscript = {
 
 /* OPERATIONS' CHAT. The third kind again: reading two systems that disagree and coming back with the ONE
  * number a person has to decide about. It ends on a question rather than a result, because that is what this
- * persona's work usually ends on — and because a list of people whose every chat is finished says the wrong
+ * persona's work usually ends on, and because a list of people whose every chat is finished says the wrong
  * thing about what they are for. */
 const PRIYA_PAYOUTS: AgentTranscript = {
     sessionId: `ses_01j9priya`,

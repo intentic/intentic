@@ -5,15 +5,15 @@ import { diagnose } from "./client.js";
 import { rename } from "./rename.js";
 import type { Diagnostic } from "./report.js";
 
-// lsp — TypeScript rename + diagnostics for the agent, over the native TypeScript compiler. Two verbs:
+// lsp. TypeScript rename + diagnostics for the agent, over the native TypeScript compiler. Two verbs:
 //   lsp rename <file> <symbol> <newName>   rename a declared symbol across its TS project (updates every usage)
 //   lsp diag <file...>                     print syntactic + semantic diagnostics for the given files
 // Scope is the invoked file's own tsconfig project (see the skill). Exit 0 on success, 1 on a usage/arg error, 2
-// on an internal failure — including a project whose config cannot be loaded well enough to answer, because a
+// on an internal failure, including a project whose config cannot be loaded well enough to answer, because a
 // wrong answer printed confidently is the one outcome this tool must never produce.
 //
 // Every question is answered by a fresh run of the native compiler, which parses the project, answers, and
-// exits — nothing stays resident. A cold whole-project check costs 0.1–2s, at or below what the old resident
+// exits, nothing stays resident. A cold whole-project check costs 0.1–2s, at or below what the old resident
 // JS-compiler daemon answered in through its socket, and it holds no memory between questions.
 
 const USAGE = "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>";

@@ -5,16 +5,16 @@ import { SIGN_IN_IS_SEEDED } from "../src/seed.js";
 import { readWorldFile } from "../src/world-file.js";
 import { TRIAL_REPLY } from "../src/world.js";
 
-/* THE JOURNEY — arrive, sign in, get a connected sandbox, send a message, read a reply.
+/* THE JOURNEY, arrive, sign in, get a connected sandbox, send a message, read a reply.
  *
  * One spec file, run once per way of getting a sandbox. That shape is the whole point of this tier: the four
  * onboarding paths differ in exactly one segment, so writing four end-to-end tests would mean maintaining four
- * copies of the two segments that are identical, and finding a regression in either of them four times or —
- * far more likely — not at all. Every existing check on these paths stops at `/health`, which is why a sign-in
+ * copies of the two segments that are identical, and finding a regression in either of them four times or,
+ * far more likely, not at all. Every existing check on these paths stops at `/health`, which is why a sign-in
  * button that rendered and did nothing once shipped.
  *
  * Two tests rather than one, and the split is not cosmetic. The first ends where a SEEDED sign-in can honestly
- * take a journey; the second needs a real one, and says so in its own skip message. See seed.ts — a
+ * take a journey; the second needs a real one, and says so in its own skip message. See seed.ts, a
  * compose-provisioned daemon verifies Google ID tokens for real, so the seeded credential that gets a browser
  * past the platform is refused by the box. That is the daemon behaving exactly as it should.
  *
@@ -51,7 +51,7 @@ test(`a new account reaches a connected sandbox`, async ({ page }, testInfo) => 
     await page.goto(`${world.webUrl ?? ``}/`);
     await expect(page).not.toHaveURL(/\/login/);
 
-    // GET A CONNECTED SANDBOX — the one segment that differs between the four paths.
+    // GET A CONNECTED SANDBOX, the one segment that differs between the four paths.
     await provisioner.provision({ page, world });
 
     /* THE WORKSPACE. Setup ends here on every session, and reaching it is where a SEEDED sign-in stops being
@@ -63,8 +63,8 @@ test(`a new account reaches a connected sandbox`, async ({ page }, testInfo) => 
 
 /* THE SECOND HALF, waiting on a real sign-in.
  *
- * A provisioned daemon authenticates people against Google itself — that is the whole reason the sandbox ever
- * asked for Google a second time — so it refuses the seeded credential the platform accepted, with a 401 on
+ * A provisioned daemon authenticates people against Google itself, that is the whole reason the sandbox ever
+ * asked for Google a second time, so it refuses the seeded credential the platform accepted, with a 401 on
  * every call. Nothing here is wrong; the seeded sign-in simply cannot reach a box that verifies for real.
  *
  * So this test is written and skipped rather than absent. It is what the stand-in Google is FOR, and a step
@@ -78,7 +78,7 @@ test(`the free agent answers`, async ({ page }) => {
 
     await page.goto(`${world.webUrl ?? ``}/workspace`);
 
-    /* SAY YES TO REACHING THE BOX ON THIS COMPUTER — a real step in the real flow, not harness scaffolding.
+    /* SAY YES TO REACHING THE BOX ON THIS COMPUTER, a real step in the real flow, not harness scaffolding.
      *
      * A sandbox on the user's own machine is a loopback hop away, and the app would rather take that than go
      * out to a tunnel and back. But the reach is INTO the machine the browser runs on, which Chrome gates
@@ -87,7 +87,7 @@ test(`the free agent answers`, async ({ page }) => {
      * which in a hermetic run resolves nowhere.
      *
      * The card appears in the shell, so it is answered here. Best-effort because a run that already has the
-     * answer never shows it — what must hold either way is the assertion under it. */
+     * answer never shows it, what must hold either way is the assertion under it. */
     await page
         .getByRole(`button`, { name: `Allow`, exact: true })
         .first()
@@ -99,7 +99,7 @@ test(`the free agent answers`, async ({ page }) => {
     await expect(page.getByText(/Connecting to/i)).toHaveCount(0, { timeout: 180_000 });
 
     /* The trial is the free channel this tier walks (the world switches it on and points it at the stand-in
-     * model). The Google free channel — the "Try free with Google" card a new user meets first — needs a real
+     * model). The Google free channel, the "Try free with Google" card a new user meets first, needs a real
      * Google account inside the box and is deliberately not covered here. */
     await page.goto(`${world.webUrl ?? ``}/agents`);
     const composer = page.locator(`textarea[name="draft"]`);
@@ -110,7 +110,7 @@ test(`the free agent answers`, async ({ page }) => {
     await composer.fill(`Say hello.`);
     await composer.press(`Enter`);
 
-    /* A REPLY RENDERS — browser → daemon → platform trial → upstream → back onto the screen. The text is the
+    /* A REPLY RENDERS, browser → daemon → platform trial → upstream → back onto the screen. The text is the
      * stand-in's, chosen so no UI copy could be mistaken for it: what this asserts is that the whole pipe
      * carried a message, not that a model said anything in particular. */
     await expect(page.getByText(TRIAL_REPLY, { exact: false }).first()).toBeVisible({ timeout: 180_000 });

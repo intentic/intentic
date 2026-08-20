@@ -3,7 +3,7 @@ import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 // Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
 // redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
 // worker serves them as text/plain so `curl … | sh` gets the raw script. run_worker_first (wrangler.jsonc) sends
-// EVERY request here first — otherwise Cloudflare's asset layer answers browser navigations to /connect with the
+// EVERY request here first, otherwise Cloudflare's asset layer answers browser navigations to /connect with the
 // 404 page before the worker runs. Non-vanity paths fall through to env.ASSETS.fetch(): the built asset, or the
 // 404 page for a real miss.
 const SCRIPTS: Record<string, string> = {
@@ -15,12 +15,12 @@ const SCRIPTS: Record<string, string> = {
     "/sync": "sync.sh",
     "/sync.ps1": "sync.ps1",
     // "computer", not "host": /connect-host above enrolls a deploy TARGET, while these connect the machine the
-    // user is sitting at — and the card they are copied from calls it a computer.
+    // user is sitting at, and the card they are copied from calls it a computer.
     "/computer": "computer.sh",
     "/computer.ps1": "computer.ps1",
     "/cleanup": "cleanup.sh",
     "/cleanup.ps1": "cleanup.ps1",
-    // Both vanity paths serve the ONE recreate script — the mode rides the argument shape the platform's
+    // Both vanity paths serve the ONE recreate script, the mode rides the argument shape the platform's
     // cards already hand out (<slug> <sha256> = rebuild, <slug> = update), so every pasted one-liner keeps
     // working across the merge. The .ps1 siblings are the same two modes for a Windows host, where the mode
     // rides named parameters instead (-Slug, plus -Hash for a rebuild).
@@ -43,8 +43,8 @@ const SCRIPTS: Record<string, string> = {
  * The verb map is spelled out rather than derived from productPages: it is the OLD vocabulary, which by
  * definition no longer appears in the content. Automate kept its name and so needs no entry.
  *
- * The /api and /product prefixes are handled as prefixes, so every page under them — including any added
- * later, and any deep link with a #fragment — follows without a new line here. */
+ * The /api and /product prefixes are handled as prefixes, so every page under them, including any added
+ * later, and any deep link with a #fragment, follows without a new line here. */
 const MOVED_VERBS: Record<string, string> = {
     orchestrate: "run",
     empower: "connect",
@@ -71,7 +71,7 @@ function movedPath(pathname: string): string | undefined {
  * a returning visitor never issues the plaintext hop a redirect has to answer.
  *
  * includeSubDomains is safe here and checked: app. and api. both terminate TLS. `preload` is deliberately
- * NOT set — that submits the domain to a list baked into browser binaries, and getting off it takes months.
+ * NOT set, that submits the domain to a list baked into browser binaries, and getting off it takes months.
  * A year of max-age is the value the preload list would want anyway if we ever chose to. */
 const HSTS = "max-age=31536000; includeSubDomains";
 
@@ -82,7 +82,7 @@ const SITEMAP_ALIAS = "/sitemap.xml";
 
 // The Markdown mirror of /docs/quickstart/ lives at /docs/quickstart.md and is word-for-word the same
 // page, so it needs to say which of the two is the real one. A .md file can't carry <link rel=canonical>,
-// so the header does it — otherwise the pair reads as duplicate content.
+// so the header does it, otherwise the pair reads as duplicate content.
 function canonicalForMarkdown(pathname: string): string | undefined {
     if (!pathname.endsWith(".md")) return undefined;
     const withoutExt = pathname.slice(0, -".md".length);
@@ -90,12 +90,12 @@ function canonicalForMarkdown(pathname: string): string | undefined {
 }
 
 /* Desktop-app downloads (_editor/desktop-app): stable vanity URLs, so the site and the app's own links never
- * carry a version — while the FILE they hand over does. Those are two different promises and this is where
+ * carry a version, while the FILE they hand over does. Those are two different promises and this is where
  * they are kept apart: a link that needs bumping every release eventually 404s, and a download called
  * `Intentic-setup.exe` cannot tell anyone which build they installed, or survive sitting in a Downloads
  * folder beside three of its own predecessors.
  *
- * An installer staged locally into public/desktop/ (stage-local-downloads.sh — gitignored, so a deploy
+ * An installer staged locally into public/desktop/ (stage-local-downloads.sh, gitignored, so a deploy
  * normally ships none) is served directly under its plain staged name; otherwise this resolves the newest
  * release and redirects to that release's versioned asset.
  *
@@ -104,15 +104,15 @@ function canonicalForMarkdown(pathname: string): string | undefined {
 /* Where a download route actually sends someone, memoised per platform for an hour in the isolate. A worker
  * isolate serves many requests, so the common case costs no upstream request at all; a cold or recycled
  * isolate simply asks again. Releases are the slowest-moving thing this site knows about, and being an hour
- * behind on one costs a visitor nothing — the previous version's asset is still there.
+ * behind on one costs a visitor nothing, the previous version's asset is still there.
  *
  * TWO upstream reads, both cheap and both headers-only:
  *
  *   1. WHICH RELEASE IS NEWEST, read from where GitHub already answers it: /releases/latest is a 302 to
- *      /releases/tag/v<version>. Not the REST API — that spends an unauthenticated quota shared across
+ *      /releases/tag/v<version>. Not the REST API, that spends an unauthenticated quota shared across
  *      everything leaving a Cloudflare colo, for a fact this redirect states in a response with no body.
  *   2. WHETHER THAT RELEASE REALLY CARRIES THIS ASSET. Composing a file name from a version is a guess about
- *      what a build produced, and this route is the main way anyone gets the product — so the guess is
+ *      what a build produced, and this route is the main way anyone gets the product, so the guess is
  *      checked rather than served. It covers a release that failed to attach one platform's installer, a
  *      naming change landing on the site before the first release that produces it, and any future rename
  *      whose two halves deploy at different times, because the site and the release pipeline are separate
@@ -141,14 +141,14 @@ async function resolveDownload(asset: (version: string) => string, key: string):
             }
         }
     } catch {
-        // Offline, rate-limited, or the redirect shape moved — the releases-page fallback stands.
+        // Offline, rate-limited, or the redirect shape moved, the releases-page fallback stands.
     }
     downloadCache.set(key, { url: resolved, at: Date.now() });
     return resolved;
 }
 
 /* THE PROTOCOL, DECIDED ONCE. Cloudflare serves this site on both schemes, so until this existed every page
- * had a plaintext twin that answered 200 and carried the same self-referencing canonical — two crawlable
+ * had a plaintext twin that answered 200 and carried the same self-referencing canonical, two crawlable
  * copies of one site, splitting the links and the crawl signals between them. Google had already indexed the
  * http:// homepage under a title we retired.
  *
@@ -200,8 +200,8 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
             headers.set("content-disposition", `attachment; filename="${download.staged}"`);
             return new Response(staged.body, { status: staged.status, headers });
         }
-        // Keyed on the staged name rather than the route, so /desktop and /desktop/windows — the same
-        // installer under two paths — share one resolution instead of probing for it twice.
+        // Keyed on the staged name rather than the route, so /desktop and /desktop/windows, the same
+        // installer under two paths, share one resolution instead of probing for it twice.
         return Response.redirect(await resolveDownload(download.asset, download.staged), 302);
     }
 
@@ -219,13 +219,13 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
     }
 
     // Match vanity paths slash-insensitively: /connect and /connect/ both serve the script. The site's Astro
-    // pages use trailingSlash: "always", so a browser visit can arrive with a slash — but these worker routes
+    // pages use trailingSlash: "always", so a browser visit can arrive with a slash, but these worker routes
     // aren't Astro pages, so without this a trailing slash would fall through to the 404 page. Non-vanity
     // requests still fall through with the ORIGINAL request, keeping Astro's own slash canonicalization intact.
     const vanity = url.pathname !== "/" && url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
 
     /* The interactive demo (@intentic-dev/demo, built into public/demo/) is a history-mode SPA sharing this
-     * origin, so its routes — /demo/agents, /demo/workspace/api/src/stripe.ts — are paths no asset answers.
+     * origin, so its routes — /demo/agents, /demo/workspace/api/src/stripe.ts, are paths no asset answers.
      * Serve its document for any navigation under /demo/ that isn't a real file, which is the same rule its
      * dev server runs. Keyed on the request wanting html: a workspace route legitimately ends in `.ts`, and
      * the demo's own chunks never ask for a document. */

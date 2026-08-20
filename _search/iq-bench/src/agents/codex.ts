@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type AgentAdapter, type AgentRunResult, execAgent, onPath } from "./adapter.js";
 
-// `codex exec --json` JSONL events (experimental surface — parsed best-effort, absent fields stay absent).
+// `codex exec --json` JSONL events (experimental surface, parsed best-effort, absent fields stay absent).
 const EventSchema = z.looseObject({
     type: z.string(),
     item: z.looseObject({ type: z.string().optional(), text: z.string().optional() }).optional(),
@@ -62,7 +62,7 @@ export const parseCodexStream = (stdout: string): Omit<AgentRunResult, "exitCode
 
 export const codexAdapter: AgentAdapter = {
     id: "codex",
-    // No default — the user's configured codex model (e.g. GPT 5.6 Sol) applies unless --model is passed.
+    // No default, the user's configured codex model (e.g. GPT 5.6 Sol) applies unless --model is passed.
     available: () => onPath("codex"),
     async run(options) {
         // codex has no --max-turns equivalent; the wall-clock timeout is the cap (recorded in run metadata).

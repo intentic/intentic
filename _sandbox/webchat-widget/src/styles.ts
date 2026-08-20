@@ -4,8 +4,8 @@ import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
  * because the artifact must stay ONE script: a stylesheet the host page has to fetch is a second request that
  * can 404, be blocked, or arrive after the first paint.
  *
- * `all: initial` on the host is the load-bearing line. A shadow root stops the host page's selectors reaching
- * in, but inherited properties (font, color, line-height, letter-spacing) still cross the boundary — which is
+ * `all: initial` on the host is the line that matters. A shadow root stops the host page's selectors reaching
+ * in, but inherited properties (font, color, line-height, letter-spacing) still cross the boundary, which is
  * how an embedded widget ends up in a site's 22px display serif. Resetting at the host and restating what we
  * want below is what makes the widget look identical on every site. */
 
@@ -14,7 +14,7 @@ import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
  *
  * Hex, not oklch(), and not variables read from the host: this sheet ships to a stranger's browser, where
  * neither the app's tokens nor a 2023 colour space is guaranteed. Converting once here keeps the widget's
- * appearance independent of both. The warm greys are the reason the orange sits right — a neutral with no
+ * appearance independent of both. The warm greys are the reason the orange sits right, a neutral with no
  * chroma leaves the accent looking pasted on. */
 const NEUTRAL = {
     0: "#fdfbfa",
@@ -29,12 +29,12 @@ const NEUTRAL = {
     200: "#e8e4e0",
 } as const;
 
-/* The app's ROLE tokens, per scheme — a transcription of the `:root` and `[data-mode="dark"]` blocks in
+/* The app's ROLE tokens, per scheme, a transcription of the `:root` and `[data-mode="dark"]` blocks in
  * @intentic/ui semantic-colors.css, under the same names so the two can be read side by side. Everything
  * visible below is expressed in these, so "does the widget match the app" is a question about this table
  * rather than about forty rules.
  *
- * `overlay === card` in light is not a mistake — it is the app's own value, and the reason intentic's light
+ * `overlay === card` in light is not a mistake, it is the app's own value, and the reason intentic's light
  * chat separates its surfaces with hairlines rather than with fills. */
 const ROLES = {
     light: {
@@ -49,7 +49,7 @@ const ROLES = {
         /* Which way the accent moves to become INK. The app doesn't reuse one orange for fills and for glyphs:
          * `--role-primary-fill` is brand-700 in light and brand-400 in dark, because a mid-orange that reads as
          * a button on dark is a 2.6:1 glyph on white. The widget has one configurable accent instead of a ramp,
-         * so it synthesises those two ends by pulling the accent 15% toward the scheme's extreme — which lands
+         * so it synthesises those two ends by pulling the accent 15% toward the scheme's extreme, which lands
          * within a step of the ramp values it is imitating (#e47100 → #c26000 light, #e88626 dark). */
         inkToward: "#000000",
     },
@@ -81,7 +81,7 @@ const parseHex = (value: string): number[] | undefined => {
     return [0, 2, 4].map((at) => Number.parseInt(full.slice(at, at + 2), 16));
 };
 
-/** `color-mix(in srgb, top ${weight}, bottom)` — and, where `bottom` is what sits behind, an alpha composite. */
+/** `color-mix(in srgb, top ${weight}, bottom)`, and, where `bottom` is what sits behind, an alpha composite. */
 const mix = (top: string, bottom: string, weight: number): string => {
     const [over, under] = [parseHex(top), parseHex(bottom)];
     if (over === undefined || under === undefined) {
@@ -102,7 +102,7 @@ const luminance = (color: string): number => {
 
 const contrast = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/* The label that goes ON a solid accent — measured, not assumed. White on intentic's own orange is 3.15:1: it
+/* The label that goes ON a solid accent, measured, not assumed. White on intentic's own orange is 3.15:1: it
  * fails AA for text and only scrapes the 3:1 threshold for a glyph, which is why the app pairs its bright fills
  * with a near-black label instead (`--role-fill-content` is surface-900 in dark). Comparing both candidates
  * rather than thresholding the accent's lightness means there is no crossover constant to get wrong, and a
@@ -113,21 +113,21 @@ const onAccent = (accent: string): string => {
 };
 
 /* One scheme's worth of custom properties. Light and dark go through this same function so a value added to one
- * cannot be forgotten in the other — the failure mode of the two hand-written blocks this replaced.
+ * cannot be forgotten in the other, the failure mode of the two hand-written blocks this replaced.
  *
  * The derivations, each a transcription of a rule in the app:
  *
  *   --accent-ink        the accent as glyph and edge, stepped for the scheme (see `inkToward`)
- *   --accent-wash       chat.css .composer-send — a 14% wash of the fill, not a solid block of it, 22% on hover
+ *   --accent-wash       chat.css .composer-send, a 14% wash of the fill, not a solid block of it, 22% on hover
  *   --accent-line       the visitor bubble's edge: .chat-surface's `primary-500 22%` mixed into the line colour
  *   --accent-ring       ChatPanel's composer, `ring-primary-500/25`, over the panel it sits on
- *   --bubble-agent      .chat-surface-assistant — `overlay 35%` over the scroller's card
- *   --bubble-visitor    .chat-surface — `overlay 55%`, the BRIGHTER of the pair
+ *   --bubble-agent      .chat-surface-assistant, `overlay 35%` over the scroller's card
+ *   --bubble-visitor    .chat-surface, `overlay 55%`, the BRIGHTER of the pair
  *
  * The last two are the whole correction: the transcript says who spoke with a step in surface and a tinted edge,
  * never by dropping a saturated brand block into the middle of the thread.
  *
- * Rationale lives here rather than in the returned string because that string is the payload — this function
+ * Rationale lives here rather than in the returned string because that string is the payload, this function
  * runs once per scheme, so a comment inside it would ship to every visitor twice to explain TypeScript. */
 const tokens = (scheme: Scheme, accent: string): string => {
     const role = ROLES[scheme];
@@ -170,7 +170,7 @@ const PANEL_ANCHOR: Record<WebchatPublicConfig["position"], string> = {
 };
 
 /* An accent the maths can read. WebchatConfig validates the field as hex for exactly this reason, so this is
- * the branch that cannot be reached from a stored automation — kept because the wire type is a plain string and
+ * the branch that cannot be reached from a stored automation, kept because the wire type is a plain string and
  * a widget rendering with its wash, ring and label silently missing is worse than one rendering in the brand
  * orange the daemon defaults to anyway. */
 const DEFAULT_ACCENT = "#e47100"; // brand-600
@@ -269,7 +269,7 @@ button {
     overscroll-behavior: contain;
 }
 
-/* Both bubbles carry a border, so the pair sit on one grid — a bubble that gained an edge only when it was the
+/* Both bubbles carry a border, so the pair sit on one grid, a bubble that gained an edge only when it was the
    visitor's would be a pixel taller than the one above it. */
 .msg {
     max-width: 85%;
@@ -283,7 +283,7 @@ button {
 .msg.notice { align-self: center; max-width: 100%; text-align: center; color: var(--muted); font-size: 0.8125rem; padding: 0.25rem 0; }
 .msg.failed { align-self: center; max-width: 100%; text-align: center; color: var(--danger); font-size: 0.8125rem; }
 
-/* Three dots while the agent is thinking and has written nothing yet — the turn can take seconds, and a panel
+/* Three dots while the agent is thinking and has written nothing yet, the turn can take seconds, and a panel
    that shows nothing at all reads as a widget that broke. */
 .typing { display: inline-flex; gap: 0.25rem; align-items: center; height: 1.5em; }
 .typing span { width: 0.375rem; height: 0.375rem; border-radius: 999px; background: var(--muted); animation: blink 1.2s infinite; }
@@ -294,7 +294,7 @@ button {
 
 .gate { display: flex; flex-direction: column; gap: 0.625rem; padding: 0 0.875rem 0.875rem; }
 .gate p { margin: 0; color: var(--muted); font-size: 0.8125rem; }
-/* Google's button and Turnstile's iframe are slotted from the light DOM — they are third-party frames and
+/* Google's button and Turnstile's iframe are slotted from the light DOM, they are third-party frames and
    belong in the document, not in this shadow root. */
 ::slotted(*) { display: block; }
 

@@ -5,8 +5,8 @@ import { promisify } from "node:util";
 /* WHERE THIS TIER'S WORLD HAS TO LIVE, and why there is no choice about it.
  *
  * The browser tier beside this one (`_tools/e2e`) cannot run in CI, and its README says why: every server it
- * starts is addressed on `localhost`. The obvious correction is to address containers some other way — by the
- * host's gateway, or by their own addresses on the run's network — and both were tried here before the app
+ * starts is addressed on `localhost`. The obvious correction is to address containers some other way, by the
+ * host's gateway, or by their own addresses on the run's network, and both were tried here before the app
  * itself ruled them out.
  *
  * THE SPA SHIPS A CONTENT SECURITY POLICY, and it decides this:
@@ -14,11 +14,11 @@ import { promisify } from "node:util";
  *     connect-src 'self' https: wss: http://127.0.0.1:* ws://127.0.0.1:*
  *
  * An api reached over http at anything but 127.0.0.1 is refused by the browser before the request leaves the
- * page — not by CORS, which is configured correctly and answers correctly, but by the document's own policy.
+ * page, not by CORS, which is configured correctly and answers correctly, but by the document's own policy.
  * The symptom is the router sending every route to "Intentic isn't reachable", a screen that names the network,
  * so the reader looks anywhere but at the one line responsible.
  *
- * The world is served over TLS for other reasons (certs.ts), which `https:` above allows anywhere — but it is
+ * The world is served over TLS for other reasons (certs.ts), which `https:` above allows anywhere, but it is
  * still published on LOOPBACK ports, because that is the one address a process can be sure is its own. A
  * container elsewhere reaches the same platform through `host.docker.internal`, which is a different question
  * with a different answer, and neither is a guess.
@@ -30,7 +30,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-// The one host this tier can serve its world on. See the header — it is the app's policy, not a preference.
+// The one host this tier can serve its world on. See the header, it is the app's policy, not a preference.
 export const HOST = `127.0.0.1`;
 
 export const dockerAvailable = async (): Promise<boolean> => {
@@ -46,7 +46,7 @@ export const dockerAvailable = async (): Promise<boolean> => {
  *
  * Pre-allocating rather than letting Docker pick breaks a genuine circularity: the api must be told the SPA's
  * origin at boot and the SPA must be told the api's, so neither can wait for the other to start and report a
- * mapped port. There is a race between releasing the port and Docker binding it, and it is the standard one —
+ * mapped port. There is a race between releasing the port and Docker binding it, and it is the standard one,
  * smaller than the fixed-port collisions it replaces, which is the choice a tier that blocks releases has.
  *
  * Bound on 0.0.0.0, because that is where Docker publishes: a port free only on loopback is not free.
@@ -83,7 +83,7 @@ const reaches = async (port: number, timeoutMs: number): Promise<boolean> =>
  * This is the tier's one environmental requirement, and it is checked once, against the first container up, so
  * an environment that cannot meet it says so in a sentence instead of as four services that each "never
  * started". It fails wherever the test process is in a container whose Docker publishes onto some OTHER
- * machine's loopback — which is exactly why the CI job for this tier runs on the host rather than in one.
+ * machine's loopback, which is exactly why the CI job for this tier runs on the host rather than in one.
  */
 export const requireLoopback = async (port: number, what: string, timeoutMs = 60_000): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
@@ -102,7 +102,7 @@ export const requireLoopback = async (port: number, what: string, timeoutMs = 60
 
 /* The two addresses in this run, built here so nothing can quietly spell one its own way.
  *
- * `urlFor` is for the pair the BROWSER and the SANDBOX talk to — the api and the SPA — which must be TLS for
+ * `urlFor` is for the pair the BROWSER and the SANDBOX talk to, the api and the SPA, which must be TLS for
  * the reasons certs.ts sets out. `plainUrlFor` is for the stand-ins beside them, which only this process ever
  * polls: giving them certificates would be ceremony around a health check. */
 export const urlFor = (port: number): string => `https://${HOST}:${port}`;

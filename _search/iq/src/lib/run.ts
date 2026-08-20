@@ -47,7 +47,7 @@ export const engineFromEnv = (featuresSpec?: string): ReturnType<typeof createEn
     });
 };
 
-// Verbs whose query is (or starts with) a workspace path — resolved like --in, not searched.
+// Verbs whose query is (or starts with) a workspace path, resolved like --in, not searched.
 const PATH_QUERY_VERBS = new Set<Verb>(["outline", "context", "who"]);
 
 // `impact` is the one verb whose query is a LIST of paths rather than a single anchor, and an empty one is
@@ -66,7 +66,7 @@ const resolveQuery = (verb: Verb, query: string, root: string): string => {
 };
 
 // The sandbox pins WORKSPACE_ROOT (to /work), but agent sessions run in per-conversation worktrees OUTSIDE the
-// pin — transcript mining showed every such session silently searching the main checkout instead of its own
+// pin, transcript mining showed every such session silently searching the main checkout instead of its own
 // tree, and every worktree path zero-hitting. A pin the caller is not inside points at the wrong code: re-root
 // at the enclosing git workspace, falling back to cwd itself (matching the unpinned default).
 export const workspaceRoot = (): string => {
@@ -161,7 +161,7 @@ export interface MultiLine {
 }
 
 // Each multi line is a mini command: `<verb> <query…> [--lang ts,py] [--in dir] [--kind call] [--literal|--word|--case]`.
-// Anything unparseable becomes a per-section error — a flag must never be searched as literal text.
+// Anything unparseable becomes a per-section error, a flag must never be searched as literal text.
 export const parseMultiLine = (line: string): MultiLine => {
     const tokens = tokenize(line);
     const first = tokens[0] ?? "";
@@ -180,7 +180,7 @@ export const parseMultiLine = (line: string): MultiLine => {
     let caseSensitive = false;
     for (let i = 0; i < rest.length; i += 1) {
         const token = rest[i]!;
-        // Anything dash-prefixed is a flag attempt — grep's single-dash flags must error, never be searched.
+        // Anything dash-prefixed is a flag attempt, grep's single-dash flags must error, never be searched.
         if (!/^-{1,2}[A-Za-z]/.test(token)) {
             queryParts.push(token);
             continue;
@@ -269,7 +269,7 @@ const readStdin = (): Promise<string> =>
         process.stdin.on("error", reject);
     });
 
-// `iq multi`: several queries — `<verb> <query> [flags]` or a bare auto-mode query — sharing one process spawn
+// `iq multi`: several queries, `<verb> <query> [flags]` or a bare auto-mode query, sharing one process spawn
 // and one --budget (split equally, min 150 tokens per section). Each query is an operand, or one per stdin line
 // when they are generated rather than typed; transcript mining found agents writing heredocs and temp files to
 // reach a batch, which is a shell round-trip for something that is just an argument list. Per-line flags merge
@@ -289,7 +289,7 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, quer
         const prefix = `[${i + 1}/${lines.length}]`;
         let parsed = parseMultiLine(line);
         if (parsed.error === undefined) {
-            // Path-frame resolution can reject a line (path outside the workspace) — that is this line's error,
+            // Path-frame resolution can reject a line (path outside the workspace), that is this line's error,
             // never the batch's.
             try {
                 parsed = {

@@ -1,9 +1,9 @@
 // The app's own description of a persisted tab, reached through its package export the same way this package
-// reaches the app's entry — so a change to the strip's stored shape breaks this build rather than the demo.
+// reaches the app's entry, so a change to the strip's stored shape breaks this build rather than the demo.
 import type { StoredTab, TabSnapshot } from "@intentic-app/web/chat-tabs";
 import { FEATURED_AGENT_ID } from "./fleet";
 
-/* THE CHATS THE RECORDING OPENS HOLDING — the tab strip a visitor arrives with, and the conversation the
+/* THE CHATS THE RECORDING OPENS HOLDING, the tab strip a visitor arrives with, and the conversation the
  * docked chat is already showing.
  *
  * It used to hold nothing, and the demo opened on an empty "New agent" draft beside a board with three agents
@@ -11,14 +11,14 @@ import { FEATURED_AGENT_ID } from "./fleet";
  * plainly already had three. Two things are seeded instead.
  *
  * THE FEATURED RUN, focused. It is the turn the recording is built around (turn.ts) and it parks on a plan
- * card until somebody answers it, so opening on it costs nothing and gains the demo's whole opening beat —
+ * card until somebody answers it, so opening on it costs nothing and gains the demo's whole opening beat,
  * the visitor's first press is approving a plan rather than finding the card that offers one.
  *
- * ONE CHAT PER PERSONA, behind it. A persona is a card the sandbox can send as — a name, a face, and the
+ * ONE CHAT PER PERSONA, behind it. A persona is a card the sandbox can send as, a name, a face, and the
  * accounts that name reaches (the `/personas` route in daemon.ts serves the three). But the chat rail's
  * Personas cut is not built from that list alone: a row counts the conversations THIS WINDOW is holding for
  * that person, because the pick lives on the conversation and nowhere else (ChatPersonaRail.vue explains why).
- * A recording that served three personas and no chats pinned to them rendered three empty rows — the surface
+ * A recording that served three personas and no chats pinned to them rendered three empty rows, the surface
  * present and the thing it exists to show absent.
  *
  * They are WORK, not chat, and none of it is code: a support queue, a launch thread, a payouts
@@ -26,7 +26,7 @@ import { FEATURED_AGENT_ID } from "./fleet";
  * argument for personas being in this product, and three titles make it without a paragraph.
  *
  * All of it is seeded into the tab snapshot the app restores from (composables/chat/tabSnapshot.ts) exactly
- * the way this demo seeds a session into localStorage: not a fake, not a code path bypassed — the app finds
+ * the way this demo seeds a session into localStorage: not a fake, not a code path bypassed, the app finds
  * what it is looking for and rehydrates four ordinary tabs.
  */
 
@@ -62,7 +62,7 @@ const OPEN_TABS: readonly StoredTab[] = [
     tab(PRIYA_CHAT_ID, `August payouts reconciliation`, `ses_01j9priya`, `priya-ops`),
 ];
 
-/* The strip as the recording opens it: four tabs, the featured run focused, and ONE pane — the app's ordinary
+/* The strip as the recording opens it: four tabs, the featured run focused, and ONE pane, the app's ordinary
  * single-column chat. Splitting the column would be a second thing to explain in the first frame.
  */
 export const openTabSnapshot = (): TabSnapshot => ({

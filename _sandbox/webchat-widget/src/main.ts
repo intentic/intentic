@@ -7,7 +7,7 @@ import { fetchConfig } from "./transport.js";
  *
  * Everything else is derived: the daemon to talk to is the ORIGIN THIS SCRIPT CAME FROM, which is the one
  * thing a copy-pasted snippet can't get wrong. `data-base` overrides it for a site fronting the sandbox behind
- * its own proxy — the only case where the two legitimately differ. */
+ * its own proxy, the only case where the two legitimately differ. */
 
 const TAG = "intentic-front-desk";
 
@@ -29,7 +29,7 @@ const boot = async (script: HTMLScriptElement): Promise<void> => {
     const endpoint = { base, automationId };
 
     // The config fetch is also the reachability probe: a sandbox that is asleep, an automation that was
-    // deleted, or an origin that isn't on the allowlist all land here — and in every one of those cases the
+    // deleted, or an origin that isn't on the allowlist all land here, and in every one of those cases the
     // right thing is to render NOTHING. A launcher that opens onto an error is worse than no launcher.
     const config = await fetchConfig(endpoint).catch((error: unknown) => {
         console.error(`[intentic] Front Desk is unavailable:`, error);

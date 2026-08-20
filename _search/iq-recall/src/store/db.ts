@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-// Bumped on any table/column change OR extraction-logic change that must re-ingest — mismatch drops and
+// Bumped on any table/column change OR extraction-logic change that must re-ingest, mismatch drops and
 // recreates everything (the recall index is a pure cache over ~/.claude/projects transcripts).
 const SCHEMA_VERSION = "2";
 
@@ -122,7 +122,7 @@ const open = (dbPath: string): RecallDb => {
 };
 
 // Open the recall db, treating any failure (corruption, schema drift) as cache loss. Only the db's own files
-// are removed — it shares .intentic/local/cache/iq with index.db, whose openIndex wipes the whole dir on ITS failures;
+// are removed, it shares .intentic/local/cache/iq with index.db, whose openIndex wipes the whole dir on ITS failures;
 // recall re-ingests from transcripts either way.
 export const openRecallDb = (dbPath: string): RecallDb => {
     try {

@@ -29,14 +29,14 @@ const symbolRows = (db: IndexDb, where: string, ...params: string[]): StoredSymb
 
 const defTags = (symbol: StoredSymbol): WorkspaceSearchTag[] => (symbol.heuristic ? [{ kind: "def" }, { kind: "heuristic" }] : [{ kind: "def" }]);
 
-// `iq def X` — exact-name definitions from the symbol table, exported first.
+// `iq def X`, exact-name definitions from the symbol table, exported first.
 export const defOf = (db: IndexDb, name: string, allowed: ReadonlySet<string>): EngineHit[] =>
     symbolRows(db, "WHERE s.name = ?", name)
         .filter((symbol) => allowed.has(symbol.path))
         .toSorted((a, b) => Number(b.exported) - Number(a.exported) || (a.path < b.path ? -1 : 1))
         .map((symbol) => ({ path: symbol.path, line: symbol.line, text: symbol.signature, tags: defTags(symbol) }));
 
-// `iq sym <pattern>` — fuzzy (or glob) match over symbol names, optionally narrowed by kind.
+// `iq sym <pattern>`, fuzzy (or glob) match over symbol names, optionally narrowed by kind.
 export const symSearch = (db: IndexDb, pattern: string, kind: SymbolRow["kind"] | undefined, allowed: ReadonlySet<string>): EngineHit[] => {
     const glob = /[*?[]/.test(pattern) ? globToRegExp(pattern) : undefined;
     const scored: { symbol: StoredSymbol; score: number }[] = [];
@@ -88,7 +88,7 @@ export interface RefsResult {
     readonly hint?: string;
 }
 
-// `iq refs X` — live word-boundary ripgrep, each hit classified by lexical context; definition lines dropped.
+// `iq refs X`, live word-boundary ripgrep, each hit classified by lexical context; definition lines dropped.
 export const refsOf = async (db: IndexDb, name: string, kindFilter: RefKind | undefined, rgBase: Omit<RgOptions, "pattern">): Promise<RefsResult> => {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const { hits: raw } = await rgSearch({ ...rgBase, pattern: escaped, word: true });

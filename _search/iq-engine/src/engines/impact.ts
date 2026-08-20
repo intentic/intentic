@@ -1,11 +1,11 @@
 import { classOf } from "../workspace/scan.js";
 import type { ImportGraph } from "./import-graph.js";
 
-// "This changed — what else could break?" answered over the reversed import graph: start at the changed files
+// "This changed, what else could break?" answered over the reversed import graph: start at the changed files
 // and walk outward to everything that reaches them.
 //
 // THE DIRECTION IS DELIBERATE. Files are walked transitively; symbols are not walked here at all. Import edges
-// are recorded evidence — a file said in so many words that it pulls in another — so following them several
+// are recorded evidence, a file said in so many words that it pulls in another, so following them several
 // steps out stays defensible. A symbol-level walk has to re-scan the corpus per hop and guess a call from
 // surrounding text, and the guessing compounds: by the third hop the set is mostly noise wearing a precise
 // costume. The tool that inspired this walked symbols transitively and scored zero against independent ground
@@ -13,7 +13,7 @@ import type { ImportGraph } from "./import-graph.js";
 //
 // HOP DISTANCE IS THE RANKING, and it has to be, because a shared foundation file is reached by most of the
 // repo. Without an ordering and a ceiling the honest answer to "what does this affect" becomes "everything",
-// which is true, useless, and expensive. What gets cut is counted and handed back rather than dropped quietly —
+// which is true, useless, and expensive. What gets cut is counted and handed back rather than dropped quietly,
 // a truncated set that looks complete is worse than no answer.
 
 export interface ImpactedFile {
@@ -26,12 +26,12 @@ export interface ImpactResult {
     readonly reached: readonly ImpactedFile[];
     // How many reachable files the cap dropped. Never silent: a caller that shows the list shows this too.
     readonly truncated: number;
-    // Seeds the index has never seen — a new file, a doc, a lockfile. Reported rather than skipped, because an
+    // Seeds the index has never seen, a new file, a doc, a lockfile. Reported rather than skipped, because an
     // empty result for an unknown seed reads as "nothing is affected" when it means "I cannot tell".
     readonly unknownSeeds: readonly string[];
 }
 
-// Which way the walk runs. `importers` is "what could this break" — the classic blast radius. `imports` is
+// Which way the walk runs. `importers` is "what could this break", the downstream breakage set. `imports` is
 // "what does this lean on", which is a different question and, for the co-change ground truth, sometimes the
 // better predictor: adding a call edits the caller AND the callee in one commit. `both` unions them.
 export type ImpactDirection = "importers" | "imports" | "both";
@@ -85,14 +85,14 @@ export const impactOf = (graph: ImportGraph, seeds: readonly string[], options: 
 };
 
 // Which test files reach a changed file, and therefore stand a chance of catching a mistake in it. Coverage is
-// an IMPORTERS question specifically — a test that imports the code exercises it, whereas code the test happens
-// to import proves nothing — so this never runs `both`, whatever the impact walk is set to.
+// an IMPORTERS question specifically, a test that imports the code exercises it, whereas code the test happens
+// to import proves nothing, so this never runs `both`, whatever the impact walk is set to.
 //
 // THE DEPTH HERE IS NOT BENCHMARK-VALIDATED. The co-change gate measured which files change together, which is
 // a different question from which tests exercise what; carrying its winning depth over would be borrowing
 // evidence that was never collected. One hop is the conservative reading (a test that imports the file
 // directly) and it will under-report coverage through re-export chains. Measuring this properly needs its own
-// ground truth — mutate a file, see which suites go red — and until that exists the number stays deliberately
+// ground truth, mutate a file, see which suites go red, and until that exists the number stays deliberately
 // timid rather than confidently wrong.
 export const testsCovering = (graph: ImportGraph, seed: string, maxHops = 1): string[] =>
     impactOf(graph, [seed], { maxHops, cap: Number.MAX_SAFE_INTEGER, direction: "importers" })

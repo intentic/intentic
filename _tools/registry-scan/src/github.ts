@@ -18,7 +18,7 @@ export interface GithubRepo {
 
 export interface GithubReader {
     searchByTopic(topic: string): Promise<GithubRepo[]>;
-    /** Undefined when the repo is gone or private to us — which is itself a finding about a live listing. */
+    /** Undefined when the repo is gone or private to us, which is itself a finding about a live listing. */
     getRepo(fullName: string): Promise<GithubRepo | undefined>;
     headSha(fullName: string, ref: string): Promise<string | undefined>;
     readFile(fullName: string, ref: string, path: string): Promise<string | undefined>;
@@ -46,13 +46,13 @@ const toRepo = (raw: z.infer<typeof RepoSchema>): GithubRepo => ({
 });
 
 // Search caps out at 1000 results across 10 pages of 100. Well past that we would need a different discovery
-// mechanism entirely, so stopping here is honest — the caller logs the total it saw against what it read.
+// mechanism entirely, so stopping here is honest, the caller logs the total it saw against what it read.
 const PER_PAGE = 100;
 const MAX_PAGES = 10;
 
 // A 404 is an answer, not a failure: an extension repo that has no manifest yet, or a ref that moved. Any
 // other non-OK status is the API telling us something is wrong (rate limit, bad token, outage) and must not
-// be smoothed into "nothing found" — a scan that silently reads nothing would propose deleting the world if
+// be smoothed into "nothing found", a scan that silently reads nothing would propose deleting the world if
 // a later step ever trusted its emptiness.
 const optional = async (response: Response, what: string): Promise<Response | undefined> => {
     if (response.status === 404) {

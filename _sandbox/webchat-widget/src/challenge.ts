@@ -1,7 +1,7 @@
 import type { WebchatChallenge } from "@intentic/sandbox-contract";
 
 /* The bot ceiling, in the two flavours the config offers. Both produce ONE token spent on the first message of
- * a visitor thread — a per-message challenge would be a per-message interruption, and the rate limit is what
+ * a visitor thread, a per-message challenge would be a per-message interruption, and the rate limit is what
  * bounds a thread that has already been admitted. */
 
 /* ---- proof of work ----
@@ -10,11 +10,11 @@ import type { WebchatChallenge } from "@intentic/sandbox-contract";
  * second or so and costs a bot the same per identity it wants to burn, with no third-party account anywhere.
  *
  * Solved on the main thread in yielding batches rather than in a Worker: a Worker would have to come from a
- * blob: URL, which a host page's Content-Security-Policy is entitled to forbid — and being unable to chat
+ * blob: URL, which a host page's Content-Security-Policy is entitled to forbid, and being unable to chat
  * because of the SITE's CSP is a worse failure than a busy second. */
 const BATCH = 512;
 
-// Leading zero bits of a digest, up to `wanted` — stops at the first non-zero, so a miss costs one byte.
+// Leading zero bits of a digest, up to `wanted`, stops at the first non-zero, so a miss costs one byte.
 const leadingZeroBits = (digest: Uint8Array, wanted: number): number => {
     let bits = 0;
     for (const byte of digest) {
@@ -31,11 +31,11 @@ const leadingZeroBits = (digest: Uint8Array, wanted: number): number => {
     return bits;
 };
 
-// Resolves to the ANSWER the daemon expects — `<salt>:<nonce>`, carrying back the salt it signed so it can
+// Resolves to the ANSWER the daemon expects, `<salt>:<nonce>`, carrying back the salt it signed so it can
 // re-derive the challenge it issued without having stored one.
 export const solveProofOfWork = async (challenge: WebchatChallenge, onProgress?: (attempts: number) => void): Promise<string> => {
     if (crypto.subtle === undefined) {
-        // Only available in a secure context — an http:// site cannot solve this. Say so plainly; the fix is
+        // Only available in a secure context, an http:// site cannot solve this. Say so plainly; the fix is
         // the site's TLS, not anything the visitor can do.
         throw new Error("This page must be served over HTTPS to start a chat.");
     }
@@ -56,7 +56,7 @@ export const solveProofOfWork = async (challenge: WebchatChallenge, onProgress?:
 /* ---- Cloudflare Turnstile ----
  *
  * Rendered explicitly into a container the widget slots from the light DOM, for the same reason as Google's
- * button: it is a third-party iframe and belongs in the document. The SECRET half never appears here — the
+ * button: it is a third-party iframe and belongs in the document. The SECRET half never appears here, the
  * daemon verifies the token against siteverify. */
 
 interface Turnstile {

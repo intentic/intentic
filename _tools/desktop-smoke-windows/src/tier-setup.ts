@@ -1,25 +1,25 @@
-/* TIER 2 — does the setup the app runs actually GO THROUGH, on a real Windows machine?
+/* TIER 2, does the setup the app runs actually GO THROUGH, on a real Windows machine?
  *
  * The counterpart of `_tools/scripts/verify-desktop-setup.sh`, and it splits the setup journey the same way
  * that file does:
  *
- *   • WHAT THE APP PASSES — the argv and env assembly, including the sh-positional / ps1-named divergence that
+ *   • WHAT THE APP PASSES, the argv and env assembly, including the sh-positional / ps1-named divergence that
  *     silently misbinds. Unit-tested in the desktop crate; costs milliseconds; both hosts. Already covered.
- *   • WHAT THE SCRIPT THEN DOES — probe Docker, fetch the CLI, pull the image, run the container, wire the
+ *   • WHAT THE SCRIPT THEN DOES, probe Docker, fetch the CLI, pull the image, run the container, wire the
  *     network, wait on /health. That is this file. On Linux it needed a real Docker daemon and so runs nightly;
  *     on Windows it needs a real WINDOWS daemon, which is the entire reason this tier could not exist before.
  *
  * THE SCRIPT IS THE INSTALLED ONE, not the one in the source tree. `verify-desktop-bundle.sh` proves the
  * bundled bytes match the source; tier 1 proves the install puts those bytes on the machine; this runs exactly
- * them. Reading `_site/site/public/scripts/connect.ps1` here would test a file no user ever runs — and on
+ * them. Reading `_site/site/public/scripts/connect.ps1` here would test a file no user ever runs, and on
  * Windows that gap is wider than on Linux, because the installer is cross-built and its resource copy is the
  * step nobody has ever watched happen.
  *
- * IT IS SPAWNED THE WAY THE APP SPAWNS IT — `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <path>`.
+ * IT IS SPAWNED THE WAY THE APP SPAWNS IT, `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <path>`.
  * Windows PowerShell 5.1, not pwsh 7: that is what the app runs and what the site's one-liner lands in, and the
  * two differ in exactly the places these scripts live.
  *
- * HERMETIC — no tunnel hub, no Google, no platform. `connect.ps1` documents a direct-token path (CONNECT_TOKEN
+ * HERMETIC, no tunnel hub, no Google, no platform. `connect.ps1` documents a direct-token path (CONNECT_TOKEN
  * + ZROK_TOKEN + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: the platform
  * only mints a reachability grant when it has a zrok hub configured, so a code-claiming run cannot be
  * secret-free. The grant here is a dummy pointed at an unroutable hub, so the in-box agent fails to enable and
@@ -43,13 +43,13 @@ export interface SetupTierOptions {
     readonly sandboxImage: string;
     /** The `ic.exe` built from THIS checkout, handed to the shim through its own local-dev override. */
     readonly icBin: string | undefined;
-    /** Where the daemon should believe the web app lives — only ever read back as a CORS allowlist entry here. */
+    /** Where the daemon should believe the web app lives, only ever read back as a CORS allowlist entry here. */
     readonly webOrigin: string;
 }
 
 /* connect.ps1 is a bootstrap shim: the flow lives in the `ic` CLI, which the shim downloads from the LATEST
- * GitHub Release. This tier verifies THIS COMMIT's flow — and before the first release carrying ic there is
- * nothing to download at all — so CI cross-builds ic from the same checkout the installer was built from and
+ * GitHub Release. This tier verifies THIS COMMIT's flow, and before the first release carrying ic there is
+ * nothing to download at all, so CI cross-builds ic from the same checkout the installer was built from and
  * hands it in via IC_BIN, the shim's own local-dev override. Exactly what the Linux tier does. */
 const SETUP_TIMEOUT_MS = 30 * 60 * 1_000;
 
@@ -94,14 +94,14 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
 
     /* ── the prerequisite examination, on a machine that has nothing wrong with it ──────────────────────
      *
-     * `ic docker prepare` reads a dozen facts off this PC — WMI classes, service names, registry values,
-     * `wsl --status` — and decides from them whether a sandbox can run here. Every one of those is a name that
+     * `ic docker prepare` reads a dozen facts off this PC. WMI classes, service names, registry values,
+     * `wsl --status`, and decides from them whether a sandbox can run here. Every one of those is a name that
      * only exists on Windows, and the binary is cross-built on Linux, so nothing before this line has ever
      * executed a single one of them.
      *
      * `--dry-run` on a machine this tier has just confirmed is healthy therefore asserts the strongest thing
      * available cheaply: the probe runs, its output parses, and the classifier finds NOTHING. A renamed field
-     * or a probe that silently returns nothing would fail here as a fistful of imaginary problems — which is
+     * or a probe that silently returns nothing would fail here as a fistful of imaginary problems, which is
      * exactly how it would reach a user, except that they would meet it on a machine that really was fine. */
     if (options.icBin !== undefined) {
         harness.section(`ic docker prepare (read-only)`);
@@ -125,7 +125,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         ZROK_API,
         SANDBOX_HOSTNAME,
         SANDBOX_IMAGE: options.sandboxImage,
-        // Pointed at the unroutable reserved TLD precisely because nothing on this path should call it — a claim
+        // Pointed at the unroutable reserved TLD precisely because nothing on this path should call it, a claim
         // attempt fails loudly instead of quietly reaching production.
         PLATFORM_URL: PLATFORM_URL_UNREACHABLE,
         WEB_ORIGIN: options.webOrigin,
@@ -137,7 +137,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     const setup = await run(
         `powershell.exe`,
         // The app's own invocation, verbatim (scripts.rs): -File so the script's parameters bind normally, and
-        // the policy bypass scoped to this process. -Yes is the named form — a bare positional would bind to
+        // the policy bypass scoped to this process. -Yes is the named form, a bare positional would bind to
         // -PlatformUrl and point the whole setup at a platform named after a setup code.
         [`-NoProfile`, `-ExecutionPolicy`, `Bypass`, `-File`, script, `-Yes`],
         { env, timeoutMs: SETUP_TIMEOUT_MS },

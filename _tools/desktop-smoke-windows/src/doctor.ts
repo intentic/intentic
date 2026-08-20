@@ -10,7 +10,7 @@
  * with the boxes already ticked.
  *
  * It reports; it does not fix. A doctor that installed Docker or killed a stray app would be making the machine
- * pass rather than telling you what it is — and on a snapshot-reset runner the honest answer to "the app is
+ * pass rather than telling you what it is, and on a snapshot-reset runner the honest answer to "the app is
  * already installed" is that the snapshot did not reset, which no amount of uninstalling addresses.
  */
 
@@ -19,7 +19,7 @@ import type { Harness } from "./harness.js";
 import { dockerContainerOs, dockerReachable, findInstalledApp, schemeCommand, userInteractive, webView2, windows } from "./probe.js";
 
 export interface DoctorOptions {
-    /** Whether Docker is needed — tier 1 does not need it, tiers 2 and 3 do. */
+    /** Whether Docker is needed, tier 1 does not need it, tiers 2 and 3 do. */
     readonly needsDocker: boolean;
 }
 

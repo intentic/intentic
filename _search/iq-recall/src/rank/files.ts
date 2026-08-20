@@ -8,7 +8,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const decayOf = (ts: number, now: number): number => 2 ** (-Math.max(0, now - ts) / (HALF_LIFE_DAYS * DAY_MS));
 
 // User text → FTS5 query: bare tokens OR-ed, each quoted so operators/punctuation can't break the parser.
-// OR (not implicit AND) because prompts paraphrase — BM25 still ranks fuller matches higher.
+// OR (not implicit AND) because prompts paraphrase. BM25 still ranks fuller matches higher.
 export const ftsQueryOf = (query: string): string | undefined => {
     const tokens = query.match(/[\p{L}\p{N}_$]+/gu);
     if (tokens === null || tokens.length === 0) {

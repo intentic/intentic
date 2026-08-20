@@ -6,11 +6,11 @@ import type { WorldFile } from "./world-file.js";
  * Written out, a user's journey is three segments:
  *
  *   arrive → sign in                    identical everywhere
- *   get a connected sandbox             THE ONLY DIFFERENCE — installer, CLI, compose, cloud
+ *   get a connected sandbox             THE ONLY DIFFERENCE, installer, CLI, compose, cloud
  *   workspace → chat → a reply renders  identical everywhere
  *
  * So this is not four end-to-end tests. It is one journey plus four provisioners behind this interface, which
- * is what makes a path cost one adapter instead of a suite — and what makes a regression in signing in or in
+ * is what makes a path cost one adapter instead of a suite, and what makes a regression in signing in or in
  * chatting fail once rather than four times or, worse, nowhere.
  *
  * `provision` takes the PAGE, because for three of the four paths getting a sandbox is something a user does

@@ -1,6 +1,6 @@
 export const SITE_URL = "https://intentic.dev";
 export const APP_URL = "https://app.intentic.dev";
-// The platform API. The site is static, so the one page that shows live numbers — the pool ledger — reads
+// The platform API. The site is static, so the one page that shows live numbers, the pool ledger, reads
 // them from here in the browser. That endpoint is public and unauthenticated by design; a number anybody is
 // asked to trust should not need a login to check.
 export const API_URL = "https://api.intentic.dev";
@@ -10,8 +10,8 @@ export const API_URL = "https://api.intentic.dev";
 // into localStorage before the app boots. Relative, so a preview deploy embeds its own copy rather than prod's.
 export const DEMO_PATH = "/demo/";
 export const ORG_NAME = "intentic";
-/* The brand line: the working stance in three beats. It names the ACTOR, in the app's own word for it —
- * "agent" is what the /agents board, the API and the docs call it without exception — because the pronoun
+/* The brand line: the working stance in three beats. It names the ACTOR, in the app's own word for it,
+ * "agent" is what the /agents board, the API and the docs call it without exception, because the pronoun
  * this replaced had no antecedent above the fold and left the stance without a subject. It still licenses
  * no second word for the machine: that is the **sandbox**, without exception, and prose that needs the host
  * machine says "laptop, desktop or VPS". See docs/marketing/messaging.md for the rule. */

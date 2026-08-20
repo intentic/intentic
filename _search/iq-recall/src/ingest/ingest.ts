@@ -24,7 +24,7 @@ interface Touch {
     lastTs: number;
 }
 
-// Head-cap on the stored per-turn response — answers lead with their point; the transcript keeps the rest.
+// Head-cap on the stored per-turn response, answers lead with their point; the transcript keeps the rest.
 const RESPONSE_CAP = 4000;
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
@@ -40,7 +40,7 @@ interface Delta {
     maxTs: number | undefined;
     byteOffset: number;
     newTurns: NewTurn[];
-    // Keyed by turn ordinal — including the still-open turn restored from a previous pass.
+    // Keyed by turn ordinal, including the still-open turn restored from a previous pass.
     touches: Map<number, Map<string, Touch>>;
     // Ordinal → the turn's latest assistant text message so far. Last-write-wins twice over: within a turn the
     // closing message is the answer (progress narration and dead branches precede it in append order), and a
@@ -222,7 +222,7 @@ export const ingest = async (db: RecallDb, options: { root: string; projectsDir:
         const sessionId = basename(path, ".jsonl");
         let fromByte = row === undefined ? 0 : Number(row["byte_offset"]);
         if (fromByte > stat.size) {
-            // Shrunk transcripts should not exist (append-only) — treat as a rewrite and reparse fully.
+            // Shrunk transcripts should not exist (append-only), treat as a rewrite and reparse fully.
             db.transaction(() => {
                 db.run("DELETE FROM sessions WHERE session_id = ?", sessionId);
                 db.run("DELETE FROM transcripts WHERE path = ?", path);

@@ -67,20 +67,20 @@ export interface ProductPage {
     /**
      * The hero visual. A page leads with a real screenshot (`hero`) OR, where a drawing explains the thing
      * better than any one screen does, a diagram (`heroFigure`): exactly one is set. Automate is the only
-     * diagram-led page — see the note on its own entry for why the drawing outranks the screen it now has.
+     * diagram-led page, see the note on its own entry for why the drawing outranks the screen it now has.
      */
     hero?: ProductShot;
     heroFigure?: ProductFigure;
     /* THE PICTURE THE MEGA-MENU PREVIEWS, where the hero is the wrong picture for that box.
      *
      * The menu previews a row in a 16:10 frame 544px wide; a hero is framed for a page column, so it is a wide
-     * strip of a surface or a tall column of one. Run and Connect survive the difference — their heroes are
+     * strip of a surface or a tall column of one. Run and Connect survive the difference, their heroes are
      * near enough to the box that its crop still lands on lanes and tiles. Review and Host did not: one was a
      * chat shot 1:2 tall, previewing as a blown-up inch of its own header, and the other a 2.5:1 strip that
      * left a third of the frame empty.
      *
      * Automate had no picture at all, being diagram-led, and a row with no picture does not leave the rail
-     * empty — it leaves the LAST row's picture in it, so Automate showed you the capabilities catalog. It gets
+     * empty, it leaves the LAST row's picture in it, so Automate showed you the capabilities catalog. It gets
      * a capture of its own screen, which is also what keeps the rail coherent: five rows, five screenshots,
      * rather than four screenshots and a drawing floating in a box the others fill edge to edge.
      *
@@ -231,8 +231,8 @@ export const productPages: ProductPage[] = [
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
         /* Diagram-led BY CHOICE, not for want of a screen. This used to say there was no automations screen to
          * shoot; there is one (`/ext/automations`, and the menu previews it), so what keeps the drawing here is
-         * that the page's first job is explaining a machine nobody has seen yet — six triggers, one optional
-         * check, a fresh session — which a list of five configured automations shows the RESULT of rather than
+         * that the page's first job is explaining a machine nobody has seen yet, six triggers, one optional
+         * check, a fresh session, which a list of five configured automations shows the RESULT of rather than
          * the shape of. The triggers figure IS the hero; a real screen (the fleet board) carries a block below. */
         heroFigure: "triggers",
         menuShot: {

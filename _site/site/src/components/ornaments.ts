@@ -16,13 +16,13 @@
  *  FILLED, not stroked, and that is the whole design constraint. Its commonest job is a 15px list bullet,
  *  and at 15px a 1px stroke on a 32-unit grid lands at half a device pixel: the outlined version of this
  *  drawing resolved into a grey asterisk in every chip. Solid petals hold their silhouette at any size, and
- *  the petals are separated by falling opacity rather than by gaps — an outline needs room between shapes
+ *  the petals are separated by falling opacity rather than by gaps, an outline needs room between shapes
  *  to read, a tonal step does not.
  *
  *  THE VIEWBOX IS OFFSET, and that is not a typo. The drawing runs from y≈3.4 to y≈26.1, so inside a plain
  *  `0 0 32 32` box its own centre sits about 1.3 units ABOVE the box's. Every caller renders this in a
  *  square inside a flex row, so `align-items: center` was faithfully centring a box whose contents were
- *  high in it — which is why the lotus read a little above the text beside it, the wordmark included.
+ *  high in it, which is why the lotus read a little above the text beside it, the wordmark included.
  *  Shifting the box up by the same 1.3 puts the two centres on top of each other. If the petals are ever
  *  redrawn, re-measure the extents and re-set this number. */
 export const LOTUS = `<svg viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">

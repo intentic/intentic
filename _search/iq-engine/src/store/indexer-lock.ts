@@ -1,21 +1,21 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-/* WHO OWNS WRITING THIS INDEX — the invariant that keeps a search from failing because the index was busy being
+/* WHO OWNS WRITING THIS INDEX, the invariant that keeps a search from failing because the index was busy being
  * updated.
  *
  * SQLite in WAL mode lets any number of readers run straight through a writer, but it admits exactly ONE writer
  * at a time. That was fine while the index had one: the daemon's resident engine indexes on a worker thread and
  * queries through a handle that only reads. The CLI engine is a different process, and it revalidates the whole
- * workspace inline on every invocation — so in a sandbox, every `iq` call was a second writer racing the
+ * workspace inline on every invocation, so in a sandbox, every `iq` call was a second writer racing the
  * daemon's sweep, and the one that lost got SQLITE_BUSY and exited 2. Both writers were doing the SAME work;
  * only one of them had to.
  *
  * So ownership is declared rather than assumed: the resident engine claims the index for the life of its
- * process, and an engine that finds a LIVE owner never writes at all — it queries what the owner has already
+ * process, and an engine that finds a LIVE owner never writes at all, it queries what the owner has already
  * indexed. The pid file is the whole mechanism. It needs no heartbeat and no expiry because the question it
  * answers ("is that process still there?") is one the OS answers exactly, and a daemon killed mid-pass leaves
- * behind a pid that no longer resolves — which reads as "unowned", which is the truth. */
+ * behind a pid that no longer resolves, which reads as "unowned", which is the truth. */
 
 const lockPath = (dir: string): string => join(dir, "indexer.pid");
 

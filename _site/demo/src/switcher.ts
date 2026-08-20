@@ -1,6 +1,6 @@
 import { DEMO_MODES, demoMode, setDemoMode } from "./mode";
 
-/* THE SWITCHER — the demo's own chrome, and the only pixels on this page the product did not draw.
+/* THE SWITCHER, the demo's own chrome, and the only pixels on this page the product did not draw.
  *
  * It answers the question a recording cannot: "is this what it looks like, or is this what you filled it with?"
  * Three buttons, one per state (mode.ts), so the visitor sees the same workspace bare, curated and at full
@@ -8,7 +8,7 @@ import { DEMO_MODES, demoMode, setDemoMode } from "./mode";
  *
  * Built in plain DOM against document.body rather than as a component of the app, for two reasons that are the
  * same reason: the app owns #app and knows nothing about the demo, and this bar has to be on screen before the
- * app has booted — it is mounted first, so the first frame of a cold load already carries it.
+ * app has booted, it is mounted first, so the first frame of a cold load already carries it.
  *
  * Its CSS is UNLAYERED, which beats every @layer the app's stylesheet declares, so Tailwind's preflight cannot
  * reset a button out from under it. Colours are the design system's own role tokens, so the bar follows the

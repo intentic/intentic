@@ -1,7 +1,7 @@
 import type { Graph, Note, NoteSummary, Overview, SearchHit } from "@intentic/ext-knowledge";
 import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "@intentic/ext-knowledge/notes";
 
-/* THE KNOWLEDGE BASE for acme-shop — the things around the code that no file in the repository records: who
+/* THE KNOWLEDGE BASE for acme-shop, the things around the code that no file in the repository records: who
  * the people are, what the projects are for, and what was decided and why.
  *
  * It is the demo's argument for the surface. Every note here is the kind of fact a colleague picks up in a
@@ -11,7 +11,7 @@ import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, over
  * invitation rather than as damage.
  *
  * Written as raw markdown and indexed by the extension's own engine, so the demo's backlinks, graph and counts
- * are computed exactly as the product computes them — a fixture that hand-authored those answers would be
+ * are computed exactly as the product computes them, a fixture that hand-authored those answers would be
  * showing visitors behaviour the product does not have.
  *
  * MUTABLE: save, delete and starting it off really writes here, so the red pen works and the list
@@ -198,10 +198,10 @@ export const deleteKnowledgeNote = (now: number, path: string): boolean => {
     return true;
 };
 
-// Where the demo's notes "are" — the folder the panel names, and the same default a real sandbox uses.
+// Where the demo's notes "are", the folder the panel names, and the same default a real sandbox uses.
 const KNOWLEDGE_DIR = `knowledge`;
 
-/* THE ANSWERS, computed by the extension's own engine over the notes above — not hand-authored. The backlinks,
+/* THE ANSWERS, computed by the extension's own engine over the notes above, not hand-authored. The backlinks,
  * the map and the drift report a visitor sees are the ones the product computes; a fixture that wrote them out
  * by hand would be showing behaviour the product does not have, and would go quietly wrong the first time the
  * engine improved. Everything below is one index build and one shaping call, exactly as the backend does it. */
@@ -227,7 +227,7 @@ export const knowledgeSearch = (params: URLSearchParams): SearchHit[] => {
     );
 };
 
-// Undefined is a 404 at the route, the same as the real backend's — a note the visitor deleted a moment ago
+// Undefined is a 404 at the route, the same as the real backend's, a note the visitor deleted a moment ago
 // should read as gone, not as empty.
 export const knowledgeNoteAt = (path: string): Note | undefined => {
     const built = index(Date.now());

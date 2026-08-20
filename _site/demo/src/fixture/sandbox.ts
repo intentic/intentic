@@ -6,18 +6,18 @@ import { demoMode } from "../mode";
 /* The sandbox's own furniture for the recorded workspace: what acme-shop is made of, what it is wired to, which
  * extensions supply that wiring, and the spend ledger behind the Usage tab.
  *
- * The connector entries are copies of the real `_extensions/connectors` and `_extensions/discord` manifests —
- * same providers, same catalog copy — minus the credential guides, which only matter in an add dialog this
+ * The connector entries are copies of the real `_extensions/connectors` and `_extensions/discord` manifests,
+ * same providers, same catalog copy, minus the credential guides, which only matter in an add dialog this
  * fixture can't complete. A card a visitor sees here is a card the product really contributes. */
 
 const day = (now: number, back: number): string => new Date(now - back * 86_400_000).toISOString().slice(0, 10);
 
-/* WHAT EACH REPOSITORY IS MADE OF — `GET /panels`, and the most load-bearing rows in this fixture.
+/* WHAT EACH REPOSITORY IS MADE OF. `GET /panels`, and the most relied-on rows in this fixture.
  *
  * These are the facts every extension's `detect()` runs over, so they are what decides which tiles the rail
  * carries at all: Documentation and Maintenance activate on there being a repository, Acceptance on one that
  * has user stories or a dev server, Preview on `hasPanel`, Apps on `monorepo`/`vitest`. A fixture that answered
- * this route with an empty list — as this one did — is a fixture whose sidebar is missing half the product.
+ * this route with an empty list, as this one did, is a fixture whose sidebar is missing half the product.
  *
  * Evidence over identity, exactly as the daemon computes it: `web` ships a Vite dev server and carries stories
  * under `docs/user-stories`; `api` carries stories but has no dev script to preview. Neither is a monorepo and
@@ -25,7 +25,7 @@ const day = (now: number, back: number): string => new Date(now - back * 86_400_
  *
  * `running` is false for both, and that is the honest answer rather than a shy one: nothing runs in a
  * recording. The panel's Start button reaches a refusal that says so (daemon.ts), and Acceptance's target
- * picker shows the repo as "stopped" — which is exactly what it shows against a real sandbox before you press
+ * picker shows the repo as "stopped", which is exactly what it shows against a real sandbox before you press
  * anything. */
 export const demoPanels = (): PanelSummary[] => [
     {
@@ -60,7 +60,7 @@ export const demoPanels = (): PanelSummary[] => [
 ];
 
 /* The installed capabilities: one per system the recorded agents operate. Configs are the secret-stripped echo
- * the daemon returns — a token never leaves the sandbox, so it never appears in a list row either. `secrets`
+ * the daemon returns, a token never leaves the sandbox, so it never appears in a list row either. `secrets`
  * names the keys stripped out of each, which is what lets a card's form be opened over one of these and show
  * dots where it may not show a value. */
 export const demoCapabilities = (): CapabilitySummary[] => [
@@ -92,7 +92,7 @@ export const demoCapabilities = (): CapabilitySummary[] => [
 ];
 
 /* The extensions those cli capabilities resolve through: without the contribution there is no card, which is
- * exactly how the product works — a connector is manifest data, not a hardcoded table in the app. These two are
+ * exactly how the product works, a connector is manifest data, not a hardcoded table in the app. These two are
  * daemon-side (a connector catalog and a listener), so no code of theirs runs in the browser and the hub calls
  * them `agent-only`.
  *
@@ -239,8 +239,8 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
 ];
 
 /* THE LIST THE IMAGE WOULD BAKE. Every first-party extension whose code this app build compiled in, read off
- * the app's own registry rather than re-typed here — because the extension host treats a compiled-in extension
- * the daemon didn't mention as version drift, and says so on each row: "this sandbox image doesn't list it —
+ * the app's own registry rather than re-typed here, because the extension host treats a compiled-in extension
+ * the daemon didn't mention as version drift, and says so on each row: "this sandbox image doesn't list it,
  * the image and the app are on different versions". True of a dogfooding sandbox, alarming nonsense on a
  * marketing page, and re-listing them by hand would only move the drift to the next extension somebody adds.
  *
@@ -249,16 +249,16 @@ const compiledExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
     [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, source: `builtin` }));
 
 // Built once and then LIVE: the hub's Extensions tab really writes these switches, because the daemon persists
-// a flip and every later read reflects it — a fixture that answered read-only would have a toggle that springs
+// a flip and every later read reflects it, a fixture that answered read-only would have a toggle that springs
 // back on the next poll.
 let extensions: ExtensionSummary[] | undefined;
 
 /* WHICH OF THEM ARE ON is the demo mode's opening position (mode.ts), and only that: every extension stays in
  * the list, because the Extensions tab showing the whole catalog with most of it switched off is the truth
- * about a workspace nobody has set up yet — and the visitor can turn any of them on from there. */
+ * about a workspace nobody has set up yet, and the visitor can turn any of them on from there. */
 export const demoExtensions = (): ExtensionSummary[] =>
     (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
-        // In place: these objects ARE the live list from here on — the hub's switch writes `enabled` straight
+        // In place: these objects ARE the live list from here on, the hub's switch writes `enabled` straight
         // back into them (setExtensionEnabled below), as it has since before there were modes.
         Object.assign(extension, { enabled: demoMode.extensions?.includes(extension.id) ?? true }),
     ));
@@ -271,7 +271,7 @@ export const setExtensionEnabled = (id: string, enabled: boolean): void => {
 };
 
 /* The image overlay: the layer of the environment everyone else keeps closed. What's applied is what the
- * container was built from; the proposal is the agent asking for one more tool — approved by the owner, never
+ * container was built from; the proposal is the agent asking for one more tool, approved by the owner, never
  * by the agent, which is the whole point of showing a Dockerfile diff instead of installing behind your back. */
 const APPLIED_OVERLAY = `# intentic:custom — approved 3 days ago
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\
@@ -297,7 +297,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
     },
 });
 
-/* The same environment read as CONTENTS — what the sandbox has rather than how it was built, which is the view
+/* The same environment read as CONTENTS, what the sandbox has rather than how it was built, which is the view
  * the Environment tab opens on. Every state the rows can be in is represented, because each one is a different
  * sentence to a visitor: installed and answering, approved but waiting on a rebuild, and proposed by the agent
  * and waiting on them. Versions are what the tools report in a real sandbox, so they are written as real
@@ -446,7 +446,7 @@ export const demoUsageRollup = (now: number): UsageRollupRow[] => {
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-haiku-4-5-20251001`, harness: `claude-code`, turns: 9, cost: 0.28 },
         { provider: `codex`, account: `chatgpt-ada`, model: `gpt-5.2-codex`, harness: `native`, turns: 6, cost: 1.1 },
     ];
-    // A fortnight of work with a weekend dip — the ledger is per day × provider × account × model, and the
+    // A fortnight of work with a weekend dip, the ledger is per day × provider × account × model, and the
     // browser re-projects it into every chart on the tab.
     for (let back = 13; back >= 0; back -= 1) {
         const weekday = new Date(now - back * 86_400_000).getUTCDay();

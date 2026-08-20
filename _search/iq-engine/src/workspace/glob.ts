@@ -8,7 +8,7 @@ export const globToRegExp = (glob: string): RegExp => {
         const ch = pattern[i]!;
         if (ch === "*") {
             if (pattern[i + 1] === "*") {
-                // `**` crosses directories — but only WHOLE ones. A globstar before "api" means "an api
+                // `**` crosses directories, but only WHOLE ones. A globstar before "api" means "an api
                 // directory anywhere", not "anything ending in api": as `.*` it also matched `_apps/napi/x.ts`,
                 // and since the search box's file filter puts a globstar in front of every name it is typed,
                 // that was a directory nobody asked for in most of its results. Followed by a slash it consumes

@@ -1,6 +1,6 @@
 import { type AgentAdapter, onPath } from "./adapter.js";
 
-// Grok CLI's headless flag surface is not reliably documented — availability-gated stub so the harness
+// Grok CLI's headless flag surface is not reliably documented, availability-gated stub so the harness
 // degrades to two vendors with no other changes. Fill in run() once the flags are verified.
 export const grokAdapter: AgentAdapter = {
     id: "grok",

@@ -29,13 +29,13 @@ export interface HeroScreen extends ShotImage {
     frameLabel: string;
 }
 
-/* THE HERO VISUAL: two windows, because that is what this product looks like in use — the workspace in one,
+/* THE HERO VISUAL: two windows, because that is what this product looks like in use, the workspace in one,
  * and the chat lifted out of it into another (the app's own pop-out). One still frame of a fleet board could
  * only ever make one of the page's claims; a workspace beside a live conversation makes the whole of it.
  *
  * EACH FRAME CYCLES, in the order written here, and the two lists are DIFFERENT LENGTHS on purpose: three
  * surfaces behind, two conversations in front, so the pair never settles into one repeating picture. Order is
- * editorial and the first of each is the one a stranger sees first — so `app` opens on the board, which is the
+ * editorial and the first of each is the one a stranger sees first, so `app` opens on the board, which is the
  * page's subject, and `chat` opens on the agents cut, which is the conversation the board's cards lead to.
  *
  * The frames CROP their screens rather than fitting them (see Landing.astro): every capture is one window
@@ -43,7 +43,7 @@ export interface HeroScreen extends ShotImage {
 export interface HeroScreens {
     /** The workspace window, behind and larger. */
     app: HeroScreen[];
-    /** The chat, in the window the product pops it out into — in front, smaller, overlapping. */
+    /** The chat, in the window the product pops it out into, in front, smaller, overlapping. */
     chat: HeroScreen[];
 }
 
@@ -143,19 +143,19 @@ export const landingContent: LandingContent = {
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The
-        // headline owns the working stance — you hand over the work, the agent does it, nothing lands
-        // without you — and says it in words nobody has to translate. "Agents", not "They": the line
+        // headline owns the working stance, you hand over the work, the agent does it, nothing lands
+        // without you, and says it in words nobody has to translate. "Agents", not "They": the line
         // used to name nothing in the system on purpose, and the pronoun paid for that by having no
         // antecedent anywhere above the fold. A reader who did not already know the category had
         // nothing to resolve it against, so the first screen read as a stance with no subject.
         headlineLines: ["You delegate. Agents work.", "You approve."],
         // Two beats: what the thing IS, then the claim the board underneath proves. The category
         // noun sits here rather than in the headline because the headline is a stance, and a stance
-        // needs a subject the reader already holds — the first screen was supplying none, and that
+        // needs a subject the reader already holds, the first screen was supplying none, and that
         // is the one thing strangers reliably bounced on ("I read the whole page and still don't
         // know what it does"). Visibility is what the headline leaves out: "You approve" is a gate
         // at the end, this is the whole run, watched while it happens and interruptible mid-thought.
-        // Scale is still shown rather than SAID — the shot below is a full board, and "ten agents at
+        // Scale is still shown rather than SAID, the shot below is a full board, and "ten agents at
         // once" was the most crowded sentence in the category. Ownership still stays out (it answers
         // a fear instead of creating a want) and persistence still lives in the meta description and
         // the bands, because framing it as the reader walking away argued against the co-piloted
@@ -163,8 +163,8 @@ export const landingContent: LandingContent = {
         subhead: "A workspace for coding agents. Nothing happens out of sight.",
         /* THE LITERAL SENTENCE, under the two persuasive ones. The headline is a stance and the subhead is a
          * category noun plus a claim; neither ever says the mechanism, because saying it costs the opener its
-         * edge. So it is said here instead, one step down the page, in words a reader already holds — parallel,
-         * branch, review — instead of the ones the copy used to lead with (container, worktree). Those two are
+         * edge. So it is said here instead, one step down the page, in words a reader already holds, parallel,
+         * branch, review, instead of the ones the copy used to lead with (container, worktree). Those two are
          * accurate and still show up on the pages a search sends you to (guides, docs, the Run page), where the
          * reader arrived already knowing the concept. The home page pays the human cost of them and gets very
          * little back, because a stranger reading "in its own container and git worktree" on the first screen
@@ -172,7 +172,7 @@ export const landingContent: LandingContent = {
          *
          * It is not a fourth persuasive beat and must not become one. It names what the product does and stops.
          * Ownership stays out by the standing rule and is carried by the chip below, which is crawlable text on
-         * the same screen — the concept is present without the opener paying for it. */
+         * the same screen, the concept is present without the opener paying for it. */
         summary: "Run many coding agents on your own machine, each on its own branch, and read every change on its way in.",
         // "Works with Claude, Codex and Grok" replaces "Bring your own agent": the old chip asked the
         // reader to already know what an agent is and that they have one, which is the assumption the
@@ -221,13 +221,13 @@ export const landingContent: LandingContent = {
     verbs: {
         eyebrow: "A day at the board",
         // The heading is a scene, not a to-do list. Two versions preceded it and both read as a chore
-        // chart — the very thing this section was accused of. First it was three bare verbs in a row
+        // chart, the very thing this section was accused of. First it was three bare verbs in a row
         // ("Run agents. Connect your tools. Read every change."); then it was "One board holds every
         // agent working for you", which read fine on its own but said almost exactly what the first verb
         // card below it already says ("One board shows every agent you have running…"), so the reader met
         // the same sentence twice and the second screen felt like filing, not delegating. This names the
-        // feeling the five verbs add up to — a whole fleet at work, and you still holding the thread of
-        // it — and leaves the board itself to the Run card. The sub keeps the one mechanical fact that
+        // feeling the five verbs add up to, a whole fleet at work, and you still holding the thread of
+        // it, and leaves the board itself to the Run card. The sub keeps the one mechanical fact that
         // makes "a whole fleet" believable, in words a reader already holds.
         heading: "A whole fleet at work, and you never lose the thread.",
         sub: "Each agent works on a branch of its own, so many can share one repo without ever stepping on each other.",

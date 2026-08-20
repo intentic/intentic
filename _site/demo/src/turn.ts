@@ -2,15 +2,15 @@ import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
 import type { StreamSink } from "./sse";
 
-/* THE TURN THE VISITOR WATCHES — a recorded `AgentEvent` sequence played back on a timer.
+/* THE TURN THE VISITOR WATCHES, a recorded `AgentEvent` sequence played back on a timer.
  *
  * `/agent/attach` is an event iterator over AttachFrame, and every part of the streaming transcript is driven by
  * the frames inside it: thinking folds, text deltas type, tool cards appear pending and resolve, the todo list
- * ticks over, the context meter fills. So a script of those frames needs no cooperation from the UI at all —
+ * ticks over, the context meter fills. So a script of those frames needs no cooperation from the UI at all,
  * this is the real chat panel reacting to the real protocol, and the only fiction is where the bytes came from.
  *
  * The two INTERACTIVE frames are why this is a demo rather than a video. A `plan` or `question` frame parks the
- * turn until `POST /agent/reply` resolves its requestId, exactly as the daemon parks a real one — so the script
+ * turn until `POST /agent/reply` resolves its requestId, exactly as the daemon parks a real one, so the script
  * stops, the card waits, and the visitor's click is what starts it moving again. */
 
 /** One recorded beat: wait, then emit. `park` holds the script until the app replies to that requestId. */
@@ -35,7 +35,7 @@ const todos = (done: number, running: number): AgentEvent => ({
 });
 
 /* The featured run: the Stripe-checkout agent, mid-turn. It opens on a plan card (so the very first thing the
- * visitor is asked to do is approve a plan), works through four todos, and ends on a question — the two moments
+ * visitor is asked to do is approve a plan), works through four todos, and ends on a question, the two moments
  * that prove an agent here is co-piloted rather than watched. */
 const FEATURED: Beat[] = [
     { after: 300, event: { kind: `init`, model: `claude-sonnet-5` } },
@@ -238,7 +238,7 @@ const replyScript = (prompt: string): Beat[] => [
  * It keeps a LOG of the frames it has emitted, because that is the contract `/agent/attach` has with the client:
  * a frame carries the `seq` it was logged at, the head frame says how many were logged when the attach landed,
  * and everything up to that boundary is REPLAY (the app renders it without animating, then switches to live).
- * Any client can therefore join a turn already in progress — which in the demo is not an edge case but the
+ * Any client can therefore join a turn already in progress, which in the demo is not an edge case but the
  * common one: a reload, a second tab, or the panel remounting when the visitor navigates. Without the log, each
  * attach restarted the script and the transcript began again mid-sentence.
  *
@@ -296,7 +296,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
         sinks.clear();
     };
 
-    // Runs the script ONCE, from the moment the run is created — not per attach, or every consumer would start
+    // Runs the script ONCE, from the moment the run is created, not per attach, or every consumer would start
     // its own copy of the same turn.
     void (async () => {
         for (const beat of beats) {

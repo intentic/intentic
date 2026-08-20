@@ -1,9 +1,9 @@
-/* TIER 1 — does the artifact we are about to ship INSTALL, LAUNCH, and answer a deep link, on Windows?
+/* TIER 1, does the artifact we are about to ship INSTALL, LAUNCH, and answer a deep link, on Windows?
  *
  * The direct counterpart of `_tools/desktop-smoke/smoke.sh`, in the same order a user meets the same things,
  * and it exists because the Windows installer is the one artifact in this repo that is cross-built on a Linux
  * runner and then executed for the first time on a customer's PC. Until this tier ran, the only automated look
- * inside the installer was `verify-desktop-bundle.sh` unpacking it with 7z — which proves the files are
+ * inside the installer was `verify-desktop-bundle.sh` unpacking it with 7z, which proves the files are
  * in the archive and nothing at all about what happens when someone double-clicks it.
  *
  * NO DOCKER OR CREDENTIALS. The app and setup are pointed at loopback stand-ins; only the installer's own
@@ -11,31 +11,31 @@
  *
  * The four things no `cargo test` can tell you, and one Windows adds:
  *
- *   1. INSTALL. The NSIS installer runs to completion, unattended, on a machine where the app is not present —
+ *   1. INSTALL. The NSIS installer runs to completion, unattended, on a machine where the app is not present,
  *      and Windows lists it afterwards. On a host with no WebView2 runtime this is also where the installer's
  *      bootstrapper has to fetch one, which is the step that makes a Server-based runner differ from a desktop.
  *   2. ON DISK. The executable, and the bundled `scripts/` the app spawns. Those scripts ARE the app's entire
  *      native capability; a launcher button whose script is missing fails only when a user presses it.
- *   3. REGISTRATION. `intentic://` resolves to a command — asserted BEFORE the app has ever run, because that
+ *   3. REGISTRATION. `intentic://` resolves to a command, asserted BEFORE the app has ever run, because that
  *      is the one moment the INSTALLER's registration is what answers. The app rewrites it on first start, so
  *      every assertion made after a single launch tests the app's own handler and none of them tests the
  *      shipped one. That is exactly how a package that registers the scheme and then drops every link it wins
  *      can sit in a release: correct in the archive, correct once the app has run, dead for the user who just
  *      installed it and clicked "set up".
  *   4. THE DEEP LINK, TWICE. A link finds the app in one of two states and they share almost no mechanism.
- *      NOT RUNNING: the OS starts the app WITH the link in argv and the app has to notice it at startup — the
+ *      NOT RUNNING: the OS starts the app WITH the link in argv and the app has to notice it at startup, the
  *      first-time user's path, and the half that was broken on Linux while the other half passed on every
  *      build. RUNNING: the OS starts a second copy whose argv the single-instance plugin forwards to the first.
- *   5. UNINSTALL. Windows-only, and worth asserting because the app is MEANT to be running when it happens —
+ *   5. UNINSTALL. Windows-only, and worth asserting because the app is MEANT to be running when it happens,
  *      it lives in the tray once its window is closed, and the installer carries a pre-uninstall hook whose
  *      whole job is to end it so the built-in check never raises a message box at someone who already told the
  *      machine to remove it. An uninstall that leaves the app running is a dialog nobody is there to answer.
  *
- * Assertions read WINDOWS, not a test hook — the app has none and should not grow one. The window appearing IS
+ * Assertions read WINDOWS, not a test hook, the app has none and should not grow one. The window appearing IS
  * the behaviour a user is promised. Which windows are the app's is decided by the PROGRAM that owns them, and
  * the title only ever says which of its two screens is up: the app shows one window and swaps screens through
- * it. Those are separate questions, and answering both with the title is how another program's window — a
- * browser reading the product's own docs is titled `Intentic …` — gets counted as the app's. See `appWindows`.
+ * it. Those are separate questions, and answering both with the title is how another program's window, a
+ * browser reading the product's own docs is titled `Intentic …`, gets counted as the app's. See `appWindows`.
  */
 
 import type { WindowInfo } from "@intentic/desktop";
@@ -54,7 +54,7 @@ export interface InstallTierOptions {
     readonly expectedVersion: string | undefined;
     /** Where the app's workspace window should point. A stub origin keeps this tier hermetic. */
     readonly appUrl: string | undefined;
-    /** Leave the app installed when the tier finishes — what tier 2 needs, since it runs the INSTALLED scripts. */
+    /** Leave the app installed when the tier finishes, what tier 2 needs, since it runs the INSTALLED scripts. */
     readonly keepInstalled: boolean;
 }
 
@@ -73,7 +73,7 @@ const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 /** One window's rectangle as a string, so two of them can be compared (and printed) as one value. */
 const box = (window: WindowInfo): string => `${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
 
-/** Its centre — what "this window is about that one" is asserted on, two windows of different sizes having no
+/** Its centre, what "this window is about that one" is asserted on, two windows of different sizes having no
  * corner in common. */
 const middle = (window: WindowInfo): { x: number; y: number } => ({
     x: window.bounds.x + window.bounds.width / 2,
@@ -85,7 +85,7 @@ const describeWindows = async (): Promise<string> => {
     return titles.length === 0 ? `(no windows)` : titles.map((title) => `- ${title}`).join(`\n`);
 };
 
-/* Recorded only when it went wrong, because "a key was pressed" is not a promise made to anyone — every line
+/* Recorded only when it went wrong, because "a key was pressed" is not a promise made to anyone, every line
  * in this tier is something a user would see. What it prevents is the failure that reads as somebody else's:
  * a Return that never reached the dialog leaves the assertions below waiting out their deadlines, and their
  * wording ("the setup screen", "one window, not two") points at the app for a machine's refusal. */
@@ -103,8 +103,8 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
 
     const hermetic = await prepareHermeticDesktop(options.appUrl);
     try {
-        // Recorded, never asserted. A machine with no runtime is a legitimate machine — the installer is configured
-        // to fetch one — but it changes what a launch failure means, and a log that does not say which kind of
+        // Recorded, never asserted. A machine with no runtime is a legitimate machine, the installer is configured
+        // to fetch one, but it changes what a launch failure means, and a log that does not say which kind of
         // machine this was cannot tell those two apart afterwards.
         const runtimeBefore = await webView2();
         harness.section(`the machine, before`);
@@ -113,7 +113,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         const already = await findInstalledApp(PRODUCT_NAME);
         if (already !== undefined) {
             // Not a failure to recover from: this tier's subject is a FIRST install, and an install over an existing
-            // one is a different code path with different assertions. Saying so is the useful thing — a runner whose
+            // one is a different code path with different assertions. Saying so is the useful thing, a runner whose
             // snapshot did not reset is the likeliest cause, and it would otherwise show up as a puzzling pass.
             harness.fail(
                 `${PRODUCT_NAME} ${already.version ?? ``} is already installed at ${already.installLocation}`,
@@ -157,7 +157,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             return;
         }
         harness.pass(`executable at ${executable}`);
-        // How every window assertion below finds the app's OWN windows — see `appWindows` for why not by title.
+        // How every window assertion below finds the app's OWN windows, see `appWindows` for why not by title.
         // Windows names a process after its executable's base name, so this is that name and nothing to keep in
         // step by hand.
         const app = basename(executable, `.exe`);
@@ -256,7 +256,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
          * This was asserted as "the same rectangle" while setup was a chromeless sheet on the workspace's own
          * frame. That is the shape it replaced, and this platform is where it was worst: a first install comes
          * from a link in the browser with no workspace open, so the sheet came up at the app's default
-         * 1440×900 — which at Windows' usual 150% scaling is 2160×1350 physical, over every other window, with
+         * 1440×900, which at Windows' usual 150% scaling is 2160×1350 physical, over every other window, with
          * no title bar to move it by and no button to minimise it. What is asserted now is what makes it
          * usable: a dialog-sized window, centred on the app it is about. Taken after the search, so the move
          * has landed. */
@@ -273,7 +273,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             if (setup === undefined || workspace === undefined) {
                 return false;
             }
-            // Smaller in both directions by a real margin — the workspace opens at 1440×900 and this at
+            // Smaller in both directions by a real margin, the workspace opens at 1440×900 and this at
             // 620×640, so anything near the workspace's own width is the sheet coming back. And centred on it,
             // which is what says the window is ABOUT the app rather than merely near it; a whole setup
             // window's slack each way, so the desktop's own placement nudge is not a failure.

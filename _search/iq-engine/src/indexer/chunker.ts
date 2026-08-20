@@ -5,7 +5,7 @@ const WINDOW_LINES = 40;
 const WINDOW_OVERLAP = 10;
 const CHUNK_MAX_CHARS = 1200;
 // Body char budget per symbol chunk, leaving headroom for the `path § label\n` prefix so a long function splits
-// into several fully-covered dense chunks instead of ONE chunk truncated at CHUNK_MAX_CHARS — which silently
+// into several fully-covered dense chunks instead of ONE chunk truncated at CHUNK_MAX_CHARS, which silently
 // dropped (and left unindexed) everything past ~25 lines. Benchmarked: that truncation buried mid-function code.
 const SYMBOL_BODY_CHARS = CHUNK_MAX_CHARS - 100;
 

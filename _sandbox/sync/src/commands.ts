@@ -27,7 +27,7 @@ import {
     writeManagedSshConfig,
 } from "./ssh.js";
 
-// Which pairings a command acts on. No selector means every one this machine holds — with a fleet, `--sandbox`
+// Which pairings a command acts on. No selector means every one this machine holds, with a fleet, `--sandbox`
 // takes the sandbox id or any substring that matches exactly one of them (real ids are
 // `sandbox-<hex>-<zone>`-shaped, so "0738" is how a human names one).
 export const selectPairings = (state: SyncState, selector: string | undefined): readonly Pairing[] => {
@@ -51,12 +51,12 @@ export const selectPairings = (state: SyncState, selector: string | undefined): 
 };
 
 // Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon answers with the
-// sync token — the credential this agent presents for the port read, its own machine report, and the SSH
+// sync token, the credential this agent presents for the port read, its own machine report, and the SSH
 // transport it serves on loopback (tunnel.ts). No address comes back: the sandbox is reached at the URL we
 // already hold, which is what makes every sandbox sync the same way.
 // This fires right after the sandbox's tunnel comes up, so it may still be warming: the edge answers before the
 // origin is registered (transient 502/503/504), or the host doesn't resolve yet (fetch throws). Retry through
-// that. 401 (pairing expired) and other 4xx are the daemon's own definitive answers — never retried.
+// that. 401 (pairing expired) and other 4xx are the daemon's own definitive answers, never retried.
 // ponytail: fixed ~30s window (10 × 3s); widen only if real tunnel warmups exceed it.
 export const enrollKey = async (
     sandboxUrl: string,
@@ -109,7 +109,7 @@ export const enrollKey = async (
         /* The sync token is the whole enrollment now: it authorizes the port read, the machine report AND the
          * SSH transport this agent listens for locally (tunnel.ts). A daemon that answers without one has
          * enrolled the key and handed back nothing to use it with, which is a broken sync rather than a partial
-         * one — so it fails here instead of ten minutes later as a Mutagen session that never connects. */
+         * one, so it fails here instead of ten minutes later as a Mutagen session that never connects. */
         if (body.syncToken === undefined) {
             throw new Error("the sandbox enrolled this machine but returned no sync credential — update the sandbox and enable sync again.");
         }
@@ -120,7 +120,7 @@ export const enrollKey = async (
 };
 
 // Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token,
-// so the sandbox drops just this machine's key + token. Best-effort — the caller ignores failures.
+// so the sandbox drops just this machine's key + token. Best-effort, the caller ignores failures.
 const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
     await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, { method: "DELETE", headers: { "x-intentic-sync": syncToken } });
 };
@@ -151,12 +151,12 @@ const setup = buildCommand<SetupFlags>({
     },
     async func(this: CommandContext, flags: SetupFlags) {
         /* Rendered through the shared renderer (@intentic/local-agent), which is also what `ic` renders
-         * through — so this reads as the same program whether it is pasted on its own or run by `ic` in the
+         * through, so this reads as the same program whether it is pasted on its own or run by `ic` in the
          * middle of its install. Three modes and this command cares about none of them: a pipe still gets the
          * historical marker stream, a terminal gets the checklist, and `ic` sets INTENTIC_UI=nested so these
          * lines land as detail under ITS step rather than opening a second banner inside somebody's setup. */
         const ui = createUi(this.process);
-        // Every helper below takes a `Log` and narrates through it — routing that at the renderer means the
+        // Every helper below takes a `Log` and narrates through it, routing that at the renderer means the
         // whole command's prose is placed, wrapped and coloured without any of them knowing.
         const out: Log = ui.note;
         ui.begin("intentic · desktop sync", SETUP_PLAN);
@@ -181,7 +181,7 @@ const SETUP_PLAN: readonly PlanStep[] = [
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("sync-enrolling", "enrolling this machine with your sandbox…");
     const publicKey = await ensureSshKey();
-    // Enrollment can retry for ~30s while the sandbox tunnel warms — overlap it with the two binary
+    // Enrollment can retry for ~30s while the sandbox tunnel warms, overlap it with the two binary
     // downloads (independent: distinct endpoints, distinct install paths).
     const [{ syncToken, mode }, mutagen] = await Promise.all([
         enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
@@ -192,11 +192,11 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
     const alias = sshAlias(sandboxId);
 
-    // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
+    // File sync exists only in "sync" mode, a mirror-only enrollment (a collaborator) has no local dir and
     // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
-    // the claim payload — no shell expands it), so expand it here where every entry path converges.
+    // the claim payload, no shell expands it), so expand it here where every entry path converges.
     // The default folder is named for the id in the sandbox's own URL (the browser's SYNC_DIR prefixes that
-    // with the sandbox's name), never the whole sanitized host — so `~/intentic/<id>` and
+    // with the sandbox's name), never the whole sanitized host, so `~/intentic/<id>` and
     // `https://sandbox-<id>.<zone>` are visibly the same sandbox.
     const localDir =
         mode === "sync"
@@ -207,7 +207,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
               )
             : undefined;
     if (localDir !== undefined) {
-        // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.
+        // Create the local root up front, an immediately-visible folder is the user's anchor that setup worked.
         await mkdir(localDir, { recursive: true });
     }
 
@@ -220,17 +220,17 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     };
 
     ui.step("sync-linking", "linking the folder to your sandbox…");
-    // Stop the resident watcher before touching state or sessions — and ONLY the watcher. It is running the
+    // Stop the resident watcher before touching state or sessions, and ONLY the watcher. It is running the
     // agent binary this very run just replaced, so every fix shipped since the day it started stays inert
     // until it restarts (and `setup` would report "already running (pid …)" as if that were the same thing);
-    // on Windows it also holds that binary open. Its forwards stay up throughout — Mutagen's daemon holds
+    // on Windows it also holds that binary open. Its forwards stay up throughout. Mutagen's daemon holds
     // them, so no live connection drops, and the pairings it was serving are untouched.
     const stoppedPid = await stopWatcher();
     if (stoppedPid !== undefined) {
         out(`stopped the mirror watcher (pid ${stoppedPid}) — it was running the agent binary this run replaced; restarting it below.`);
     }
     // ADD this pairing to whatever this machine already holds. Pairing a second sandbox used to overwrite the
-    // first — dropping its ssh alias, its folder and its file-sync session — which is how installing the
+    // first, dropping its ssh alias, its folder and its file-sync session, which is how installing the
     // desktop app beside a CLI-started sandbox silently stopped syncing the folder the user was working in.
     await upsertPairing(pairing);
     const pairings = (await readState()).pairings;
@@ -241,11 +241,11 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     /* THE TRANSPORT COMES UP BEFORE ANYTHING DIALS IT, and that reorders this command.
      *
      * The sandbox's sshd is reached through a listener on this machine (tunnel.ts) rather than a hostname
-     * somebody's fabric resolves, and the process that holds it is the mirror watcher — the resident half of
+     * somebody's fabric resolves, and the process that holds it is the mirror watcher, the resident half of
      * this agent, restarted just above. So mirroring is started HERE, before the probe and before Mutagen,
      * where it used to be the last thing setup did: every step under it now depends on the port being open.
      *
-     * The wait is what makes that honest rather than racy — the watcher is a detached process, so the port
+     * The wait is what makes that honest rather than racy, the watcher is a detached process, so the port
      * appears some hundreds of milliseconds after it is asked to start. Not fatal on timeout: Mutagen retries
      * a session forever, and the watcher keeps trying to bind, so a slow start costs a warning rather than a
      * failed setup. */
@@ -256,13 +256,13 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet — syncing starts as soon as it is.`);
     }
 
-    // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick — on
+    // Prove the transport before handing it to Mutagen, using the very client Mutagen will pick, on
     // Windows that is not the `ssh` on PATH but the first hit in its own hardcoded list (see ssh.ts).
     const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
     assertSshConfigVisible(ssh, alias, port);
     await probeSshTransport(ssh, alias, out);
 
-    // Start THIS pairing's file sync — or, when re-running setup found the same session already running on
+    // Start THIS pairing's file sync, or, when re-running setup found the same session already running on
     // this version's rules, leave it exactly as it is rather than paying a full rescan for nothing. Every
     // other pairing's session keeps running; only sessions no pairing claims any more are swept.
     ensureSyncSession(mutagen, pairing, out);
@@ -270,7 +270,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
     // the first minute rather than waiting out the watcher's cadence.
     runGitBridge(realBridgeExec, pairing, out, undefined);
-    // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
+    // Register the Mutagen daemon to autostart at login and resume sessions across reboots, it holds BOTH
     // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
     // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
     if (process.platform !== "linux") {
@@ -283,8 +283,8 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         }
     }
     // Say the fleet out loud, BEFORE the ending block. Pairing a sandbox on a machine that already had one
-    // is the exact moment the user needs to know the others are still syncing — the silence there is what
-    // made a lost pairing take days to notice — and it is detail under this step, not part of the verdict.
+    // is the exact moment the user needs to know the others are still syncing, the silence there is what
+    // made a lost pairing take days to notice, and it is detail under this step, not part of the verdict.
     if (pairings.length > 1) {
         ui.note(`This machine now syncs ${pairings.length} sandboxes:`);
         for (const held of pairings) {
@@ -293,7 +293,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     }
     ui.finished(
         mode === "sync" ? "Desktop sync is running." : "Enrolled for port mirroring.",
-        // The address a person acts on. For file sync that is the FOLDER — it is the thing they open, and
+        // The address a person acts on. For file sync that is the FOLDER, it is the thing they open, and
         // an immediately-visible path is the anchor that setup worked.
         mode === "sync" ? localDir : undefined,
         mode === "sync"
@@ -308,7 +308,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
 };
 
 /* How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
- * startup on a busy machine, not by any work the watcher does — it binds before its first poll. */
+ * startup on a busy machine, not by any work the watcher does, it binds before its first poll. */
 const TUNNEL_READY_MS = 10_000;
 
 // Turn mirroring on: register it to resume at every login AND run it now. registerAutostart returns true when
@@ -346,7 +346,7 @@ const mirror = buildCommand<MirrorFlags>({
             return;
         }
         if (flags.watch) {
-            // Timestamp the foreground/detached loop's lines — mirror.log is long-lived, so bare lines are useless.
+            // Timestamp the foreground/detached loop's lines, mirror.log is long-lived, so bare lines are useless.
             await runMirrorWatch((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
             return;
         }
@@ -354,7 +354,7 @@ const mirror = buildCommand<MirrorFlags>({
     },
 });
 
-/* Status leads with the PAIRING LIST — which sandboxes this machine syncs and into which folders — because that
+/* Status leads with the PAIRING LIST, which sandboxes this machine syncs and into which folders, because that
  * is the question a user actually arrives with, and the one this command could not answer before: it read the
  * single pairing and printed Mutagen's view of it, so a folder that had quietly stopped being synced was
  * indistinguishable from one that never existed. Every folder that should be syncing is named here, or it isn't
@@ -380,8 +380,8 @@ const portLine = (port: MachinePort): string => {
  *
  * The two rules it exists to keep:
  *
- *   A count is printed only when it IS a count. `conflicts` is absent whenever Mutagen has none to report —
- *   protobuf JSON omits an empty list — so a healthy session used to render "[watching, undefined conflict(s)]",
+ *   A count is printed only when it IS a count. `conflicts` is absent whenever Mutagen has none to report,
+ *   protobuf JSON omits an empty list, so a healthy session used to render "[watching, undefined conflict(s)]",
  *   on the one line a user reads to find out whether anything is wrong. Absent means "none reported", never a
  *   number to interpolate.
  *
@@ -410,7 +410,7 @@ export const pairingLine = (pairing: MachineReport["pairings"][number]): string 
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
 
-/* THE WATCHER LINE — running, stopped, or the third state that had no words: a live process whose loop is gone.
+/* THE WATCHER LINE, running, stopped, or the third state that had no words: a live process whose loop is gone.
  *
  * That third one is the failure this whole file keeps meeting from a different angle. The watcher holds its
  * tunnel listeners on the event loop, so anything that escapes the loop leaves a process that is alive, a pidfile
@@ -429,7 +429,7 @@ export const watcherLine = (watcher: MachineReport["watcher"], now: number): str
     }
     /* An agent too old to stamp reports no lastTickAt at all, and so does one whose first pass has not finished.
      * Neither is a stall, and neither is a clean bill of health, so the line says which of the two it is rather
-     * than picking one — the alternative is the same silent green this field was added to end. */
+     * than picking one, the alternative is the same silent green this field was added to end. */
     return since === undefined
         ? `Mirror watcher: running (pid ${watcher.pid}) — no completed pass reported yet (a pass finishes within seconds of startup; an agent older than this one never reports them).`
         : `Mirror watcher: running (pid ${watcher.pid}), last pass ${Math.round(since / 1000)}s ago`;
@@ -451,7 +451,7 @@ const printReport = (report: MachineReport, out: (message: string) => void): voi
     }
 };
 
-/* Status leads with the PAIRING LIST — which sandboxes this machine syncs and into which folders — because that
+/* Status leads with the PAIRING LIST, which sandboxes this machine syncs and into which folders, because that
  * is the question a user actually arrives with, and the one this command could not answer before: it read the
  * single pairing and printed Mutagen's view of it, so a folder that had quietly stopped being synced was
  * indistinguishable from one that never existed. Every folder that should be syncing is named here, or it isn't
@@ -459,7 +459,7 @@ const printReport = (report: MachineReport, out: (message: string) => void): voi
  * server ports stop appearing on localhost and commits stop arriving in the local clones.
  *
  * `--json` emits the same MachineReport this prints, and is what the desktop app and a `host`-capability read
- * both consume — so the terminal answer and the two on-screen ones cannot drift apart, for the same reason the
+ * both consume, so the terminal answer and the two on-screen ones cannot drift apart, for the same reason the
  * desktop app spawns connect.sh rather than reimplementing it. Mutagen's own listings still follow the report in
  * the human rendering: they carry live transfer progress, which is detail the report deliberately does not model. */
 const status = buildCommand<StatusFlags>({
@@ -478,11 +478,11 @@ const status = buildCommand<StatusFlags>({
             return;
         }
         printReport(report, out);
-        /* Mutagen's own listing, for the pairings whose session EXISTS — and only those.
+        /* Mutagen's own listing, for the pairings whose session EXISTS, and only those.
          *
          * `mutagen sync list a b` is all-or-nothing: a name it cannot resolve makes it print nothing at all and
          * exit 1, and runMutagen turns that into a throw. So one pairing that had lost its session took the whole
-         * command down — no port mirroring section, no exit 0, and an error about a Mutagen "specification" as
+         * command down, no port mirroring section, no exit 0, and an error about a Mutagen "specification" as
          * the only answer to "is my sync working". That is a diagnostic command failing precisely when there is
          * something to diagnose. The missing ones are named here instead; the report above has already said the
          * folder is not syncing. */
@@ -508,7 +508,7 @@ const status = buildCommand<StatusFlags>({
     },
 });
 
-// Which sandbox a command acts on — every one this machine pairs unless named. Shared by pause/resume/uninstall.
+// Which sandbox a command acts on, every one this machine pairs unless named. Shared by pause/resume/uninstall.
 interface SandboxFlags {
     readonly sandbox?: string;
 }
@@ -522,7 +522,7 @@ const sandboxFlag = {
     },
 } as const;
 
-// Pause/resume act on file sync — skipped with a note for a mirror-only enrollment (mirroring is controlled by
+// Pause/resume act on file sync, skipped with a note for a mirror-only enrollment (mirroring is controlled by
 // `intentic-sync mirror`, not paused).
 const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
     buildCommand<SandboxFlags>({
@@ -553,7 +553,7 @@ const resume = fileSyncOnly("Resume file syncing", "resume");
 
 /* The build this agent is, on stdout, and nothing else on it. Deliberately bare rather than "intentic-sync
  * x.y.z": it is read by a person asking one question, by the release build proving the version stamp reached the
- * binary, and by `upgrade` vetting a freshly downloaded one before it installs it — and the last two want the
+ * binary, and by `upgrade` vetting a freshly downloaded one before it installs it, and the last two want the
  * string, not a sentence around it. */
 const version = buildCommand({
     docs: { brief: "Print this agent's version" },
@@ -581,14 +581,14 @@ const watcherCameUp = async (): Promise<boolean> => {
     return false;
 };
 
-/* Move this machine onto the current agent — WITHOUT a pairing token, which is the entire point. Updating and
+/* Move this machine onto the current agent. WITHOUT a pairing token, which is the entire point. Updating and
  * enrolling had been the same command, so the cost of a version bump was a trip to the browser for a single-use
  * token that expires in ten minutes; the predictable result was machines running whatever was current the day
  * they were paired, indefinitely.
  *
  * Pairings, keys, ssh config, Mutagen sessions and mirrored ports are all untouched: this replaces one file and
  * restarts one background process. Everything that can fail is checked before the swap, and the one thing that
- * cannot be checked in advance — whether the new agent stays up on THIS machine — is rolled back automatically
+ * cannot be checked in advance, whether the new agent stays up on THIS machine, is rolled back automatically
  * (upgrade.ts). */
 interface UpgradeFlags {
     readonly force: boolean;
@@ -611,7 +611,7 @@ const upgrade = buildCommand<UpgradeFlags>({
     },
 });
 
-/* Uninstall. With `--sandbox` it unpairs ONE sandbox and leaves the agent — and every other pairing — running;
+/* Uninstall. With `--sandbox` it unpairs ONE sandbox and leaves the agent, and every other pairing, running;
  * bare, it removes the agent from this machine entirely. Either way the pairings it drops are self-revoked on
  * their sandboxes, so a machine walking away cleans up after itself. */
 const uninstall = buildCommand<SandboxFlags>({
@@ -625,7 +625,7 @@ const uninstall = buildCommand<SandboxFlags>({
         const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairing.sandboxId === held.sandboxId));
 
         // Self-revoke each dropped enrollment so its sandbox drops the key + token (a collaborator leaving cleans
-        // up after itself, without touching anyone else's mirror). Best-effort — an unreachable sandbox shouldn't
+        // up after itself, without touching anyone else's mirror). Best-effort, an unreachable sandbox shouldn't
         // block local teardown.
         for (const pairing of dropped) {
             if (pairing.syncToken !== undefined) {
@@ -634,7 +634,7 @@ const uninstall = buildCommand<SandboxFlags>({
             }
             if (pairing.mode === "sync") {
                 // The pair goes together. A surviving backup session would keep mirroring a sandbox this machine
-                // has just unpaired — writing into a folder the owner considers released.
+                // has just unpaired, writing into a folder the owner considers released.
                 spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing.sandboxId)], { stdio: "ignore" });
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
@@ -654,11 +654,11 @@ const uninstall = buildCommand<SandboxFlags>({
             return;
         }
 
-        // Nothing left to serve — remove the agent's own residency: login-autostart, watcher, forwards, transport.
+        // Nothing left to serve, remove the agent's own residency: login-autostart, watcher, forwards, transport.
         await unregisterAutostart(MIRROR_AUTOSTART, out);
         await stopMirror(out);
         await removeManagedSshConfig();
-        // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely — the login
+        // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely, the login
         // registration and the resident process both. A system-installed `mutagen` on PATH may hold the user's
         // own sessions: leave its daemon alone and say so instead.
         const ownCopy = mutagen !== "mutagen";

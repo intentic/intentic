@@ -89,7 +89,7 @@ export const pageMeta: Record<string, PageMeta> = {
         datePublished: "2026-08-11",
     },
     /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the
-     * platform promises, and this is where a reader goes to check it — read live in their own browser from the
+     * platform promises, and this is where a reader goes to check it, read live in their own browser from the
      * public endpoint, so nothing here is authored. */
     "/earn/ledger/": {
         title: "The ledger · Earn · intentic",
@@ -97,7 +97,7 @@ export const pageMeta: Record<string, PageMeta> = {
             "Every month of the creator pool, live from the platform: what came in, what processing cost, what reached creators, and what is still owed.",
         datePublished: "2026-08-12",
     },
-    // The listings themselves, plus the wanted list — the demand side of the same live read.
+    // The listings themselves, plus the wanted list, the demand side of the same live read.
     "/earn/catalog/": {
         title: "The catalog · Earn · intentic",
         description:

@@ -1,6 +1,6 @@
 // Example: deploy an app using GitLab as the source-control + CI backend.
 // Instead of self-hosting Forgejo, intentic uses GitLab projects, GitLab CI (.gitlab-ci.yml), and the GitLab
-// Container Registry. Komodo still runs on the host as the deploy orchestrator — you own your infrastructure;
+// Container Registry. Komodo still runs on the host as the deploy orchestrator, you own your infrastructure;
 // GitLab owns the source pipeline. Works with gitlab.com or a self-hosted instance (set `url`).
 
 import { env } from "@intentic/graph";
@@ -26,7 +26,7 @@ export const intent = defineIntent((i) => {
 
     // What I want: an app. intentic derives a GitLab project, a single .gitlab-ci.yml (build → GitLab Container
     // Registry → notify Komodo, one job per environment), Komodo on the host rolling out the pushed image, and a
-    // Cloudflare tunnel + DNS route. No Forgejo, no self-hosted runner — and no host SSH key ever leaves for GitLab.
+    // Cloudflare tunnel + DNS route. No Forgejo, no self-hosted runner, and no host SSH key ever leaves for GitLab.
     i.want.app("my-app", {
         on: host,
         expose: cf,

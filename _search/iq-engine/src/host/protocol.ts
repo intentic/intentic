@@ -2,15 +2,15 @@ import type { CodebaseHealth, HealthRequest } from "../engines/health.js";
 import type { Feature } from "../features.js";
 import type { IndexStatus, QueryOutcome, QueryRequest } from "../types.js";
 
-/* THE WIRE BETWEEN THE DAEMON AND THE ENGINE'S OWN PROCESS — one file both halves import, so a message either
+/* THE WIRE BETWEEN THE DAEMON AND THE ENGINE'S OWN PROCESS, one file both halves import, so a message either
  * side can send is a message the other side has a case for. host/client.ts is the parent, host/child.ts the
  * child; the argument for splitting them at all is in client.ts.
  *
  * Sent with node's ADVANCED (structured-clone) IPC serialization rather than JSON, because the surface carries
  * things JSON silently ruins: QueryRequest.features is a Set, and half the optional fields on a request are
- * absent-vs-undefined distinctions that `exactOptionalPropertyTypes` makes load-bearing. */
+ * absent-vs-undefined distinctions that `exactOptionalPropertyTypes` makes meaningful. */
 
-// The constructor arguments, minus the three callbacks — those cannot cross a process boundary, so the child
+// The constructor arguments, minus the three callbacks, those cannot cross a process boundary, so the child
 // turns each into a pushed event and the client calls the host's function on arrival.
 export interface EngineInit {
     readonly root: string;
@@ -24,7 +24,7 @@ export type EngineRequest =
     | { readonly type: "init"; readonly options: EngineInit }
     | { readonly type: "run"; readonly id: number; readonly request: QueryRequest }
     // The parent's AbortSignal, forwarded: it fires on a browser superseding a search, and what it has to reach
-    // is the rg child the engine spawned — which now lives over here.
+    // is the rg child the engine spawned, which now lives over here.
     | { readonly type: "abort"; readonly id: number }
     | { readonly type: "health"; readonly id: number; readonly request: HealthRequest }
     | { readonly type: "warm"; readonly id: number }
@@ -49,7 +49,7 @@ export interface EngineMetricsSnapshot {
 }
 
 // What a settled call carries back. Which member it is follows from the request `id` being answered, which the
-// client tracks — the union is not discriminated on the wire because nothing on either side branches on it.
+// client tracks, the union is not discriminated on the wire because nothing on either side branches on it.
 // `undefined` is close()'s answer: a call that reports completion and nothing else.
 export type EngineAnswer = QueryOutcome | CodebaseHealth | IndexStatus | undefined;
 

@@ -1,9 +1,9 @@
-// Which dependency manager a project needs, decided from its manifest/lockfile NAMES alone — pure, no I/O and
+// Which dependency manager a project needs, decided from its manifest/lockfile NAMES alone, pure, no I/O and
 // no node imports, so both sides can run it: the browser over a drag-drop's file list BEFORE a byte uploads
 // (useUploadQueue offers the install as part of the import), and the daemon over a readdir of what landed
 // (workspace-setup.ts answers "is this project ready?").
 //
-// A drop deliberately omits node_modules/.venv (dropEntries' IGNORED_DIRS) — uploading a dependency tree over
+// A drop deliberately omits node_modules/.venv (dropEntries' IGNORED_DIRS), uploading a dependency tree over
 // HTTP would be slow AND wrong, since it was built against the laptop's OS/glibc, not this container's. So the
 // tree arrives sound but unusable: tests can't run, and the agent's post-edit type-check reports every import
 // as broken. Naming the manager is what lets the product close that gap instead of leaving the user to notice.
@@ -12,18 +12,18 @@
 // (pnpm/npm/yarn via corepack). Python's entries are here because python3 is baked and the shape generalizes;
 // the daemon gates every recipe on the manager actually being on PATH (setupStateOf), so a detected-but-absent
 // manager surfaces as "unsupported" with the binary named, never as an install that fails in a terminal.
-// Adding rust/go/ruby is a row in the tables below plus that manager in the image — no other change.
+// Adding rust/go/ruby is a row in the tables below plus that manager in the image, no other change.
 
 export type Ecosystem = "node" | "python";
 
 export interface SetupRecipe {
     readonly ecosystem: Ecosystem;
     // The CLI the install runs through. Also what the daemon looks for on PATH before offering the recipe, so
-    // it must be the real binary name — not a display label.
+    // it must be the real binary name, not a display label.
     readonly manager: string;
     // The install command, run from the project directory.
     readonly command: string;
-    // The file that decided the manager ("pnpm-lock.yaml"), shown in the UI so the choice is never opaque —
+    // The file that decided the manager ("pnpm-lock.yaml"), shown in the UI so the choice is never opaque,
     // the user can see we read their lockfile rather than guessed.
     readonly evidence: string;
     // The directory whose presence means the install already happened, relative to the project dir. The daemon
@@ -31,7 +31,7 @@ export interface SetupRecipe {
     readonly marker: string;
 }
 
-// A project directory and what it needs. `dir` is relative to whatever root the paths were relative to — the
+// A project directory and what it needs. `dir` is relative to whatever root the paths were relative to, the
 // drop root in the browser, the workspace root on the daemon; "" means the root itself owns the manifest.
 export interface ProjectSetup {
     readonly dir: string;
@@ -73,7 +73,7 @@ const PYTHON_RECIPES: readonly (readonly [file: string, manager: string, command
 
 const PYTHON_MARKER = ".venv";
 
-// The `packageManager` field (corepack's explicit declaration) beats any lockfile — it is what the project SAYS
+// The `packageManager` field (corepack's explicit declaration) beats any lockfile, it is what the project SAYS
 // it uses, where a lockfile is only evidence of what someone last ran. Returns undefined for absent, malformed,
 // or unrecognized values; the caller then falls back to the lockfile.
 export const managerFromPackageJson = (text: string): string | undefined => {
@@ -91,7 +91,7 @@ export const managerFromPackageJson = (text: string): string | undefined => {
         return undefined;
     }
     // "pnpm@11.13.1+sha512.…" → "pnpm". Corepack forbids a scope here, so a leading "@" is malformed, not a
-    // scoped name — slicing at the first "@" would yield "" and fall through to the whitelist rejection anyway.
+    // scoped name, slicing at the first "@" would yield "" and fall through to the whitelist rejection anyway.
     const name = field.split("@")[0] ?? "";
     return NODE_MANAGERS.has(name) ? name : undefined;
 };
@@ -103,7 +103,7 @@ export const isManifest = (name: string): boolean => MANIFESTS.has(name);
 
 // The recipe for ONE directory, from its immediate entry names. `packageManagerField` is the parsed
 // `packageManager` value when the caller has already read package.json (the browser reads the dropped File;
-// the daemon reads it off disk) — omit it and detection falls back to lockfiles, which is correct but coarser.
+// the daemon reads it off disk), omit it and detection falls back to lockfiles, which is correct but coarser.
 export const recipeFor = (names: readonly string[], packageManagerField?: string): SetupRecipe | undefined => {
     const has = (name: string): boolean => names.includes(name);
     if (has("package.json")) {
@@ -133,7 +133,7 @@ const isAncestor = (ancestor: string, dir: string): boolean => ancestor === "" |
 // Every project in a flat list of root-relative file paths. Only the SHALLOWEST manifest on each branch wins:
 // a monorepo installs once from its root (the workspace manager resolves the members), so descending into
 // _apps/*/package.json would propose N redundant installs of the same tree. Two unrelated projects dropped
-// side by side still get one each — neither is an ancestor of the other.
+// side by side still get one each, neither is an ancestor of the other.
 //
 // `packageManagerFields` maps a project dir to that dir's parsed `packageManager` value, for callers that read
 // the manifests up front. Unknown dirs simply fall back to lockfile detection.
@@ -149,7 +149,7 @@ export const detectProjects = (paths: readonly string[], packageManagerFields?: 
             names.push(name);
         }
     }
-    // Shallowest first (then lexical, so the result is stable for the same drop regardless of walk order —
+    // Shallowest first (then lexical, so the result is stable for the same drop regardless of walk order,
     // dropEntries walks concurrently and its output order is explicitly non-deterministic).
     const candidates = Array.from(byDir.entries())
         .filter(([, names]) => names.some(isManifest))

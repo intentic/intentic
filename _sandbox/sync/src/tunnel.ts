@@ -1,7 +1,7 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import type { Log } from "@intentic/local-agent";
 
-/* THE TRANSPORT, THIS SIDE — a loopback port on this machine that IS the sandbox's sshd.
+/* THE TRANSPORT, THIS SIDE, a loopback port on this machine that IS the sandbox's sshd.
  *
  * Mutagen speaks SSH and nothing else, so something has to put a TCP endpoint in front of it. That used to be
  * the reachability fabric: `ssh-<id>.<zone>` was a real hostname and `cloudflared access ssh` dialled it. The
@@ -10,12 +10,12 @@ import type { Log } from "@intentic/local-agent";
  *
  *   ssh ─→ 127.0.0.1:<port> [here] ─wss→ <sandbox>/system/sync/ssh ─→ 127.0.0.1:22 [in the sandbox]
  *
- * One socket per SSH connection, opened on demand and closed with it — no session, no reconnect logic, nothing
+ * One socket per SSH connection, opened on demand and closed with it, no session, no reconnect logic, nothing
  * to keep in step. Mutagen already treats a dropped transport as a reconnect and retries forever, so the
  * honest thing for a failed socket to do is fail the TCP connection and let Mutagen decide when to try again.
  *
  * A WebSocket rather than a bare HTTP upgrade of our own invention, because this stream crosses whatever sits
- * in front of the sandbox — the platform's hub, a reverse proxy, possibly a CDN — and a WebSocket is the one
+ * in front of the sandbox, the platform's hub, a reverse proxy, possibly a CDN, and a WebSocket is the one
  * upgrade every one of them is guaranteed to pass through. The daemon's terminal already proves this exact
  * path end to end.
  */
@@ -30,7 +30,7 @@ const SSH_PORT_SPAN = 4000;
 
 export const syncSshPort = (sandboxId: string): number => {
     // The id as the daemon knows it is 12 hex; a sanitized alias (`sandbox-<hex>-<zone>`) is not, so the digits
-    // are taken from wherever they are rather than from a fixed offset — the point is only that one id maps to
+    // are taken from wherever they are rather than from a fixed offset, the point is only that one id maps to
     // one port, stably.
     const hex = (/[0-9a-f]{6}/i.exec(sandboxId)?.[0] ?? "000000").toLowerCase();
     return SSH_PORT_BASE + (Number.parseInt(hex, 16) % SSH_PORT_SPAN);
@@ -39,7 +39,7 @@ export const syncSshPort = (sandboxId: string): number => {
 // The socket URL for a paired sandbox: its own public URL, ws-scheme, at the daemon's transport route.
 export const sshSocketUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "").replace(/^http/, "ws")}/system/sync/ssh`;
 
-/* Backpressure, laptop side. A sync push fills this direction, and a WebSocket send never blocks — it buffers —
+/* Backpressure, laptop side. A sync push fills this direction, and a WebSocket send never blocks, it buffers,
  * so without this a big upload grows the send buffer until the process dies. Past HIGH the TCP socket is paused
  * (ssh then blocks on its own write, which is the signal we want to reach Mutagen); it resumes under LOW. */
 const BUFFER_HIGH = 1_048_576;
@@ -48,21 +48,21 @@ const DRAIN_POLL_MS = 50;
 
 /* HOW LONG A CONNECTION MAY SIT IN THE HANDSHAKE before this end gives up on it.
  *
- * The listener accepts TCP instantly — it is a local socket — so from ssh's point of view the connection always
+ * The listener accepts TCP instantly, it is a local socket, so from ssh's point of view the connection always
  * SUCCEEDS, and everything that can actually fail (the sandbox being asleep, its tunnel 502-ing, its zone
  * retired) fails silently afterwards, inside a WebSocket that may never resolve either way. ssh then waits in
  * banner exchange, and every caller waits on ssh: Mutagen's create, and the git bridge, whose own cap is 120
- * SECONDS. One unreachable sandbox therefore added two minutes to every watcher pass — serially, ahead of every
- * healthy pairing's ports and commits — for as long as it stayed unreachable. Measured on this exact bug.
+ * SECONDS. One unreachable sandbox therefore added two minutes to every watcher pass, serially, ahead of every
+ * healthy pairing's ports and commits, for as long as it stayed unreachable. Measured on this exact bug.
  *
  * So the timeout lives HERE, at the one place that knows the stream never opened, and it is short: a WebSocket to
- * a healthy sandbox settles in well under a second, and anything slower is going to be retried anyway — Mutagen
+ * a healthy sandbox settles in well under a second, and anything slower is going to be retried anyway. Mutagen
  * redials a dropped transport every 15s and the watcher's next pass is seconds away. Failing fast is what keeps a
  * dead pairing costing one line in the log instead of every other pairing's freshness. */
 const OPEN_TIMEOUT_MS = 10_000;
 
 /* One TCP read, as a frame the socket can own. A Buffer is a slice of a shared pool and `send` is asynchronous,
- * so handing over the pool's memory lets the next read overwrite bytes that have not gone out yet — on an SSH
+ * so handing over the pool's memory lets the next read overwrite bytes that have not gone out yet, on an SSH
  * stream that is not a glitch, it is a corrupted transport with no error to point at. */
 const frameOf = (chunk: Buffer): Uint8Array<ArrayBuffer> => {
     const frame = new Uint8Array(chunk.byteLength);
@@ -78,7 +78,7 @@ export interface TunnelTarget {
 
 /* Which pairings get a transport: the ones holding a sync token, which is the credential the socket presents.
  * A pairing without one cannot open the stream, so binding a port for it would produce a listener that accepts
- * ssh and then fails every connection — a worse answer than no listener, which at least fails at connect with
+ * ssh and then fails every connection, a worse answer than no listener, which at least fails at connect with
  * the port in the message. */
 export const tunnelTargets = (
     pairings: readonly { readonly sandboxId: string; readonly sandboxUrl: string; readonly syncToken?: string }[],
@@ -90,13 +90,13 @@ export const tunnelTargets = (
 // Bridge ONE accepted TCP connection to one WebSocket. Exported for the test that drives it against a real
 // socket server without binding a listener.
 export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: (message: string) => void): void => {
-    /* The credential goes on the REQUEST, not in the URL — a query string is the half of a request that ends up
+    /* The credential goes on the REQUEST, not in the URL, a query string is the half of a request that ends up
      * in logs, and this token is what a machine's whole enrollment rests on. The cast is because the second
      * argument is typed as WebSocket subprotocols by the DOM lib; both runtimes this agent runs on (Node's
      * undici and Bun) accept an options object with headers there, which is checked by the tests. */
     const ws = new WebSocket(sshSocketUrl(target.sandboxUrl), { headers: { "x-intentic-sync": target.syncToken } } as never);
     ws.binaryType = "arraybuffer";
-    // ssh sends its version banner immediately — before the socket is open — so bytes that arrive early are held
+    // ssh sends its version banner immediately, before the socket is open, so bytes that arrive early are held
     // rather than dropped. Cleared on open; the socket stays paused until then so the queue is bounded by one
     // read rather than by how long the handshake takes.
     const queued: Buffer[] = [];
@@ -171,13 +171,13 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
 /* NO SEPARATE "DIAGNOSIS" REQUEST LIVES HERE, and the attempt is worth recording. A WebSocket error event carries
  * no status by specification, so the obvious idea is to ask the same URL over plain HTTP and report what comes
  * back. It does not work: this route exists only as an upgrade, so a plain GET answers 404 on a perfectly healthy
- * sandbox — and the "diagnosis" then states, in a confident sentence, that the user's sandbox is too old, when
+ * sandbox, and the "diagnosis" then states, in a confident sentence, that the user's sandbox is too old, when
  * the real cause is on this side. A wrong explanation is worse than the plain fact that the stream did not open;
  * it sends the reader to the wrong machine. If this is ever worth explaining, it has to be explained by something
  * that performs the real upgrade. */
 
-/* Start listening for this pairing. Resolves once the port is bound — a caller that goes on to hand the port to
- * ssh must not race the bind — and answers a stop function that closes the listener and every live stream.
+/* Start listening for this pairing. Resolves once the port is bound, a caller that goes on to hand the port to
+ * ssh must not race the bind, and answers a stop function that closes the listener and every live stream.
  *
  * EADDRINUSE is reported rather than thrown: on a machine that pairs several sandboxes, one port taken by
  * something else must not take down the other pairings' tunnels with it. */
@@ -211,7 +211,7 @@ export const startSshTunnel = async (target: TunnelTarget, log: Log): Promise<((
     };
 };
 
-/* EVERY PAIRING'S TRANSPORT, held by one process — the mirror watcher, which is already the resident half of
+/* EVERY PAIRING'S TRANSPORT, held by one process, the mirror watcher, which is already the resident half of
  * this agent: it runs at every login, it re-reads the pairing list on every tick, and it is what `setup`
  * restarts. Putting the listeners anywhere else would mean a second thing to keep alive and a second thing to
  * restart, for the same lifetime.

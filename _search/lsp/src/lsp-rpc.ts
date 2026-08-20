@@ -1,12 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
-/* A minimal LSP-over-stdio client — just enough protocol to hold one short conversation with the native
+/* A minimal LSP-over-stdio client, just enough protocol to hold one short conversation with the native
  * compiler's language server (`tsgo --lsp`) and hang up. Used by rename, which needs the server's
  * project-wide view for the one question the batch compiler cannot answer: "every location this symbol is
  * used, with the edits that move it".
  *
  * Deliberately not a language-server HOST: nothing stays running, nothing watches files, and server-initiated
- * requests are answered with nulls — the session exists for one request chain and is torn down with the
+ * requests are answered with nulls, the session exists for one request chain and is torn down with the
  * process. */
 
 interface Pending {

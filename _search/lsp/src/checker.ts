@@ -8,7 +8,7 @@ import { tsgoExePath } from "./tsgo.js";
 /* One check = one run of the native compiler over one tsconfig project, exiting when it has answered.
  *
  * This used to be a resident JS-compiler daemon: ~1 GB of warm program per view of the tree, held for a
- * 15-minute idle window, times one per concurrent agent worktree — the single largest steady memory cost on the
+ * 15-minute idle window, times one per concurrent agent worktree, the single largest steady memory cost on the
  * machine, paid to make a per-edit check affordable. The native compiler inverts the economics: a cold
  * whole-project check costs 0.1–2s and gives every byte back when it exits, which is at or below what a warm
  * answer cost through the old daemon's socket. So nothing stays resident, and there is no daemon to leak, to
@@ -17,18 +17,18 @@ import { tsgoExePath } from "./tsgo.js";
  * What survives from the old engine is its epistemics, because they were never about the compiler:
  *
  *   - REFUSE RATHER THAN GUESS. A config chain that does not load, or a program whose type foundations
- *     (@types, global types) did not resolve, makes the compiler report phantom errors on healthy code —
+ *     (@types, global types) did not resolve, makes the compiler report phantom errors on healthy code,
  *     confident, specific, and wrong. Every such state comes back as `unavailable` with the reason, never as
  *     diagnostics. One refusal is native-era new: the native compiler does not auto-include @types from
  *     PARENT node_modules the way the JS one does, so a program that trips over missing node globals while an
- *     ancestor @types directory exists is refused — the caller's own toolchain would have loaded them.
+ *     ancestor @types directory exists is refused, the caller's own toolchain would have loaded them.
  *   - .vue IMPORTS GO UNCHECKED, NOT FALSELY BROKEN. Resolving .vue modules is the Vue toolchain's job
  *     (vue-tsc); this checker drops the module-shape errors those imports produce, and keeps every other
  *     diagnostic in the file real. The old engine shimmed them to `any` at resolution time; filtering the
  *     errors of an unresolved import leaves the same `any` in the program and the same silence in the report. */
 
 // The compiler answers about one project; callers ask about files. The nearest tsconfig.json above a file is
-// its project — the same question ts.findConfigFile answers, asked without loading any compiler.
+// its project, the same question ts.findConfigFile answers, asked without loading any compiler.
 export const findTsconfig = (fromPath: string): string | undefined => {
     for (let dir = dirname(resolve(fromPath)); ;) {
         const candidate = join(dir, "tsconfig.json");
@@ -61,7 +61,7 @@ const namesVueModule = (message: string): boolean => /['"][^'"]*\.vue['"]/.test(
 // environment the checker stands in, not the code.
 const UNLOADED_FOUNDATIONS = new Set([2318, 2468, 2688]);
 
-// "Cannot find name 'process'. Do you need to install type definitions?" — real when the types are nowhere,
+// "Cannot find name 'process'. Do you need to install type definitions?", real when the types are nowhere,
 // phantom when they sit in a PARENT node_modules/@types the JS compiler would auto-include and the native one
 // does not. `typesAbove` is how the two are told apart.
 const MISSING_TYPE_DEFINITIONS = new Set([2580, 2582, 2584, 2591]);
@@ -85,7 +85,7 @@ interface RunResult {
 }
 
 // Run the compiler to completion, demoted: a check is background tooling and must lose to the control plane
-// under contention. `failure` is a process-level fault (could not spawn, did not finish) — not a non-zero exit,
+// under contention. `failure` is a process-level fault (could not spawn, did not finish), not a non-zero exit,
 // which is how the compiler ordinarily reports that it found errors.
 const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlacement | undefined): Promise<RunResult> =>
     new Promise((settle) => {
@@ -107,7 +107,7 @@ const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlace
             try {
                 os.setPriority(child.pid, 10);
             } catch {
-                // EPERM/ESRCH — the check just runs undemoted.
+                // EPERM/ESRCH, the check just runs undemoted.
             }
         }
         let output = "";
@@ -131,7 +131,7 @@ const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlace
                 settle({ output, failure: `the checker did not answer within ${RUN_TIMEOUT_MS / 1000}s` });
                 return;
             }
-            // The compiler exits 1 for "errors found" — an answer. Anything else with no parseable output is a
+            // The compiler exits 1 for "errors found", an answer. Anything else with no parseable output is a
             // fault worth carrying verbatim.
             settle({ output: output === "" && code !== 0 && code !== 1 ? stderr : output, failure: undefined });
         });
@@ -143,14 +143,14 @@ const refusal = (files: readonly string[], reason: string): DiagReport => ({
 });
 
 // Why this run's answers cannot be vouched for, or undefined when they can. Checked before any diagnostic is
-// relayed: diagnostics from a half-loaded program are confident, specific and wrong — worse than silence.
+// relayed: diagnostics from a half-loaded program are confident, specific and wrong, worse than silence.
 const unusableReason = (diagnostics: readonly Diagnostic[], tsconfigPath: string | undefined, projectDir: string): string | undefined => {
     for (const d of diagnostics) {
         if (d.category !== "error") {
             continue;
         }
         // A fault located in the config file itself, or reported with no location at all, is the config chain
-        // failing to load — the state the JS compiler recovered from by checking against decade-old defaults.
+        // failing to load, the state the JS compiler recovered from by checking against decade-old defaults.
         if (d.file === "" || (tsconfigPath !== undefined && resolve(d.file) === resolve(tsconfigPath))) {
             return d.message;
         }
@@ -168,7 +168,7 @@ const unusableReason = (diagnostics: readonly Diagnostic[], tsconfigPath: string
 };
 
 // Diagnostics for `files` within one project, computed by one compiler run over the whole project and filtered
-// to the asked files — cross-file breakage still surfaces on the file being asked about, because the whole
+// to the asked files, cross-file breakage still surfaces on the file being asked about, because the whole
 // program was checked to answer.
 export const checkProject = async (
     tsconfigPath: string | undefined,

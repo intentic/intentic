@@ -38,7 +38,7 @@ const guard = (path: string): string => {
     return normalized;
 };
 
-// `iq outline <path>` — the file's symbol skeleton, with each entry's preceding doc first-line when present.
+// `iq outline <path>`, the file's symbol skeleton, with each entry's preceding doc first-line when present.
 export const outlineOf = async (db: IndexDb, root: string, rawPath: string): Promise<RankedGroup[]> => {
     const path = guard(rawPath);
     const symbols = symbolsOfFile(db, path);
@@ -68,7 +68,7 @@ export const parseAnchor = (anchor: string): { path: string; line: number; endLi
     return { path: guard(match[1]!), line: Number(match[2]), ...(match[3] !== undefined ? { endLine: Number(match[3]) } : {}) };
 };
 
-// `iq context <path:line>` — the smallest enclosing symbol's live body (fallback: ±20 lines), grown by -C.
+// `iq context <path:line>`, the smallest enclosing symbol's live body (fallback: ±20 lines), grown by -C.
 export const contextOf = async (db: IndexDb, root: string, anchor: string, grow: number): Promise<{ groups: RankedGroup[]; label: string }> => {
     const { path, line } = parseAnchor(anchor);
     const content = await readFile(join(root, path), "utf8").catch(() => undefined);

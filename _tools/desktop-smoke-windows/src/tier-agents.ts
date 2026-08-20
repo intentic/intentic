@@ -1,30 +1,30 @@
-/* TIER 3 — from this Windows machine, is the sandbox REACHABLE, is its gate real, and does one /agents turn
+/* TIER 3, from this Windows machine, is the sandbox REACHABLE, is its gate real, and does one /agents turn
  * complete?
  *
  * The three questions tier 2 deliberately stops short of. Tier 2 asks the daemon whether it is alive from
  * INSIDE its own container, which is the right question for "did setup work" and the wrong one for "can this
- * machine use it" — the address a browser dials, the credential it presents and the answer it gets back are
+ * machine use it", the address a browser dials, the credential it presents and the answer it gets back are
  * all outside that container.
  *
  * HOW A BROWSER FINDS IT. A sandbox on the same machine as the browser does not go through Cloudflare: the
  * container publishes its loopback listener on a host port DERIVED from the sandbox id, and the browser
  * computes that address rather than being told it. So this tier derives it the same way, from the same
- * function — `localDaemonPort` in `@intentic/sandbox-run`, never a copy of the arithmetic. If the publish is
+ * function, `localDaemonPort` in `@intentic/sandbox-run`, never a copy of the arithmetic. If the publish is
  * broken on Windows, every local user's workspace silently falls back to the tunnel and nobody finds out here.
  *
  * HOW A PROGRAM AUTHENTICATES. Not by pretending to be a browser. The daemon verifies a real Google ID token
- * on every route but /health, which no CI job can mint — so this uses the credential the product provides for
+ * on every route but /health, which no CI job can mint, so this uses the credential the product provides for
  * exactly this case: a CONTROL TOKEN, the thing "anything outside the browser presents to drive this sandbox",
  * at `drive` scope, which reaches `POST /agent` and the fleet reads and stops short of landing anything.
  *
  * The token is SEEDED rather than minted, because minting is owner-gated and the owner is a person with a
- * Google account. Seeding writes the store the daemon reads, inside the container, as root — the same shape of
+ * Google account. Seeding writes the store the daemon reads, inside the container, as root, the same shape of
  * move the browser tier makes when it seeds a signed session cookie instead of signing in to Google. Both are
  * the harness standing in for the one step a machine cannot take, and both are worth naming as such.
  *
  * HOW AN ACCOUNT IS CONNECTED. This is the one thing CI cannot fake, and the tier does not try: connecting an
  * AI account is a subscription OAuth flow through a browser. What it uses instead is the product's own answer
- * to "several sandboxes, one set of credentials" — a shared agent-auth VOLUME. Connect an account once, by
+ * to "several sandboxes, one set of credentials", a shared agent-auth VOLUME. Connect an account once, by
  * hand, in the runner's snapshot; every sandbox this tier creates mounts that volume and comes up already
  * connected. Absent the volume the turn stands down NAMING it, exactly as the repo's other gated tiers do:
  * a tier that cannot reach its credential has nothing to say, and must not fail.
@@ -62,8 +62,8 @@ const STORE_PATH = `${WORKSPACE_ROOT}/${STATE_DIR}/identity/control-tokens.json`
 
 /* sha256, computed by the container so the digest is the one that container's own code would compute.
  *
- * Returns what went wrong rather than a bare false: the two steps here fail for entirely different reasons —
- * a container that is gone, and a store the daemon has never written a directory for — and a tier that
+ * Returns what went wrong rather than a bare false: the two steps here fail for entirely different reasons,
+ * a container that is gone, and a store the daemon has never written a directory for, and a tier that
  * reported both as "could not seed" once cost a Windows build the one line that would have explained it. */
 const seedControlToken = async (container: string, token: string): Promise<string | undefined> => {
     const digest = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf %s ${shellQuote(token)} | sha256sum | cut -d" " -f1`]);
@@ -80,7 +80,7 @@ interface DaemonCall {
     readonly body: string;
 }
 
-/* Spoken from the Windows host over the derived loopback address — the whole point of the tier. `fetch` rather
+/* Spoken from the Windows host over the derived loopback address, the whole point of the tier. `fetch` rather
  * than a curl inside the container: a call made from inside would go through neither the publish nor the host's
  * own network stack, which is exactly the half tier 2 already covered. */
 const callDaemon = async (port: number, path: string, token: string | undefined, body?: unknown): Promise<DaemonCall> => {
@@ -124,7 +124,7 @@ export const runAgentsTier = async (harness: Harness, options: AgentsTierOptions
     // ── the gate is real ─────────────────────────────────────────────────────────────────────────────────
     // Asserted before the credential is used, and worth asserting because the failure it guards is silent: a
     // daemon that answers everything to everyone looks identical, from every other assertion here, to one that
-    // is correctly gated. The daemon refuses to boot at all in that state — this proves it did not.
+    // is correctly gated. The daemon refuses to boot at all in that state, this proves it did not.
     const unauthenticated = await callDaemon(port, `/agents`, undefined);
     if (unauthenticated.status === 401 || unauthenticated.status === 403) {
         harness.pass(`an uncredentialed call is refused (${unauthenticated.status})`);

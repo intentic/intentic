@@ -10,12 +10,12 @@ const RECENCY_HALF_LIFE_DAYS = 14;
 
 // Class prior for natural-language answers only. "How does X work" is answered by the implementation; its test
 // file names the same vocabulary more densely and used to outrank it, which cost the reading agent a second
-// query. Exact verbs (find/refs/def) never apply this — there, a hit in a test IS a hit. Its own feature
+// query. Exact verbs (find/refs/def) never apply this, there, a hit in a test IS a hit. Its own feature
 // (`-srcfirst`), like every other multiplier below, so the bench can attribute its contribution on its own.
 const CLASS_PRIOR: Record<FileClass, number> = { src: 1, config: 0.9, tests: 0.75, docs: 0.7 };
 
 export interface FuseContext {
-    // The query's content words — a hit whose path is NAMED after one of them gets a boost.
+    // The query's content words, a hit whose path is NAMED after one of them gets a boost.
     readonly queryTokens: readonly string[];
     readonly mtimes: ReadonlyMap<string, number>;
     readonly now: number;
@@ -23,7 +23,7 @@ export interface FuseContext {
     readonly defBoost: boolean;
     readonly pathBoost: boolean;
     readonly recency: boolean;
-    // Prefer implementation over tests/docs/config — natural-language queries only.
+    // Prefer implementation over tests/docs/config, natural-language queries only.
     readonly sourceFirst: boolean;
 }
 
@@ -37,7 +37,7 @@ const dedupeTags = (tags: WorkspaceSearchTag[]): WorkspaceSearchTag[] => {
             seen.set(tag.kind, tag);
         }
     }
-    // Canonical order — output must not depend on which engine reported first.
+    // Canonical order, output must not depend on which engine reported first.
     return [...seen.values()].toSorted((a, b) => TAG_ORDER.indexOf(a.kind) - TAG_ORDER.indexOf(b.kind));
 };
 
@@ -73,7 +73,7 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
             }
         });
     }
-    // A path names the query when one of its word tokens starts with a query token — `indexer/indexer.ts` answers
+    // A path names the query when one of its word tokens starts with a query token, `indexer/indexer.ts` answers
     // "index", `_textwrap.py` does not answer "wrap". Memoized: one file can carry an unbounded number of hits.
     const named = new Map<string, boolean>();
     const namesQuery = (path: string): boolean => {
@@ -118,7 +118,7 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
     const groups: RankedGroup[] = [];
     for (const [path, groupHits] of byPath) {
         // Reduced, not spread: a spread argument list is a stack frame per hit, and one path CAN accumulate an
-        // unbounded number of them (every engine's hits for a file that matches on every line) — which is the
+        // unbounded number of them (every engine's hits for a file that matches on every line), which is the
         // "Maximum call stack size exceeded" a search has no business ever raising.
         const best = groupHits.reduce((max, hit) => (hit.score > max ? hit.score : max), Number.NEGATIVE_INFINITY);
         groups.push({
