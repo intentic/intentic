@@ -73,7 +73,8 @@ const candidatesIn = (files: readonly string[]): string[] => {
  * block in MediaViewer.vue. `antialiased` is the same coincidence one step further out: it is a real utility
  * and an ordinary English word about how edges are drawn, and the one in this tree is PROSE — a sentence in
  * WorkflowNodeCard.vue explaining why a status stripe stops short of the card's corner. Naming both here says
- * "we looked", which is more honest than widening the promise to cover a class no markup contains. */
+ * "we looked", which is more honest than widening the promise to cover a class no markup contains — and than
+ * editing the sentence, which would only leave the next person to write the word tripping the same wire. */
 const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`]);
 
 const classesOf = (css: string): Set<string> =>
