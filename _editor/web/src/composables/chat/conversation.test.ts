@@ -1332,7 +1332,12 @@ describe(`Conversation`, () => {
 
     /* THE ONE ENDING IT MUST NEVER ANSWER. Stop is the user saying "not this" — restarting the turn they just
      * stopped is the exact opposite of what they asked for, and it is the same `resumable` flag either way, so
-     * the difference has to be read off who ended it rather than off what was left behind. */
+     * the difference has to be read off who ended it rather than off what was left behind.
+     *
+     * Waits for the agent's own text rather than for `streaming`, which goes true the instant the send opens and
+     * so was satisfied while the opening request was still in flight — a Stop landing there stops a turn the
+     * daemon never took, which is a different ending with its own test below ("stands the continue offer down").
+     * This one is about a turn that really is running. */
     it(`stays out of the way of a turn the user stopped`, async () => {
         vi.useFakeTimers();
         try {
@@ -1340,7 +1345,7 @@ describe(`Conversation`, () => {
             conversation.setAutoContinue(true);
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
             const turn = conversation.send(`ship the parser`, settings);
-            await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+            await vi.waitFor(() => expect(conversation.messages.value.some((message) => message.text === `working`)).toBe(true));
             await conversation.stop();
             await turn;
 
@@ -2476,6 +2481,60 @@ describe(`Conversation`, () => {
 
         expect(conversation.error.value).toBe(`This agent already has a turn running — wait for it to finish.`);
         expect(conversation.queued.value).toEqual([]);
+    });
+
+    /* THE SEND THAT NEVER LEFT THE BUILDING — the one failure above that arrives as neither a status nor a frame,
+     * because the request itself never completed: an unreachable daemon, a dropped tunnel, an event loop stalled
+     * long enough for the fetch to die. It read as a mid-turn crash and was handled like one — a bare "Chat
+     * failed." and the words left sitting in the transcript — which is a message shown as SAID that no agent has
+     * ever seen, and the only copy of it anywhere.
+     *
+     * The attachment is the half that made this unrecoverable rather than merely annoying: text can be retyped
+     * from the screen, and a dropped file cannot. */
+    it(`hands the words back when the request never reached the daemon`, async () => {
+        const conversation = new Conversation(`c1`);
+        const shot = { name: `setup.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/setup.png` };
+        sandboxRequestMock.mockRejectedValue(new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`));
+
+        await conversation.send(`the setup view is too scary`, settings, [shot]);
+
+        expect(conversation.error.value).toBe(
+            `Your sandbox isn't reachable yet — finish setup so it registers its address. Your message is held below — send it again to deliver it.`,
+        );
+        // Held whole, attachment and all — the queue is the only place this survives.
+        expect(conversation.queued.value.map((message) => [message.text, message.attachments])).toEqual([[`the setup view is too scary`, [shot]]]);
+        // And out of the transcript: no daemon anywhere has a record of it.
+        expect(conversation.messages.value).toEqual([]);
+    });
+
+    /* AND THE SAME SEND, STOPPED WHILE IT HUNG — which is the report this came from. A Stop arms the continue
+     * offer, and on a conversation the daemon never took there is nothing behind that press: it opens a fresh
+     * session whose first message is the word "Continue", collects the new-conversation preamble with it, and the
+     * agent answers that there is nothing to continue while the user's real message sits above it, undelivered.
+     *
+     * So both halves are asserted: the offer stands down, and the words come back. */
+    it(`stands the continue offer down when the stopped send never became a turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation((path, init) => {
+            if (path !== `/agent`) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+            }
+            // Hangs exactly as a send into a stalled daemon does, and dies the way fetch does when Stop aborts it.
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener(`abort`, () => reject(new DOMException(`aborted`, `AbortError`)));
+            });
+        });
+
+        const turn = conversation.send(`the setup view is too scary`, settings);
+        expect(conversation.streaming.value).toBe(true);
+        conversation.stop();
+        await turn;
+
+        expect(conversation.resumable.value).toBe(false);
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`the setup view is too scary`]);
+        // A Stop is the user's own doing, so it says so and nothing more — no red line over a send they cancelled.
+        expect(conversation.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);
+        expect(conversation.error.value).toBeNull();
     });
 
     it(`replays the held message once the account is reconnected`, async () => {

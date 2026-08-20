@@ -114,6 +114,22 @@ export class Conversation {
      * to send instead of it. */
     readonly resumable = ref(false);
 
+    /* WHETHER THE DAEMON HAS TAKEN THE TURN THIS WINDOW IS ON — false from the moment a send opens one until its
+     * ack comes back, and true for the whole of a run adopted by reattach (a run that exists daemon-side is
+     * accepted by definition).
+     *
+     * It exists because the two halves of a send fail in ways that have nothing in common, and one `catch` used
+     * to read them as the same thing. AFTER the ack, a throw is a stream this window lost over a turn the daemon
+     * owns and is still running: the words are recorded, so they stay in the transcript and the failure is the
+     * red line's business. BEFORE it, nothing reached the daemon at all — no turn, no record, no session — so
+     * this window holds the ONLY copy of what the user typed, and a bubble left sitting in the transcript shows
+     * a message as said when no agent has ever seen it. That is what the report behind this was: a send lost to
+     * an unreachable daemon left the words on screen, undelivered and unrecoverable, and the chat then offered to
+     * "continue" a conversation the daemon had no record of — so the press sent a bare "Continue" as its opening
+     * message, collected the new-conversation preamble, and the agent answered that there was nothing to
+     * continue. Both halves of that are this flag's: the words go back to the queue, and the offer stands down. */
+    private turnAccepted = false;
+
     /* THE SAME PRESS, STANDING — this chat continues itself for as long as it keeps stopping short.
      *
      * A standing instruction rather than a per-stop choice, which is why it lives on the conversation and is
@@ -1045,10 +1061,27 @@ export class Conversation {
             // stands on its own and the linkage is spent.
             this.pendingForkOf.value = undefined;
             const { run } = (await response.json()) as { run: string };
+            this.turnAccepted = true;
             await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
-            if (!(err instanceof DOMException && err.name === `AbortError`)) {
+            const stopped = err instanceof DOMException && err.name === `AbortError`;
+            /* THE SEND THAT NEVER LEFT — the request itself threw or was aborted, so there was never a turn (see
+             * `turnAccepted`). Same bargain as the refusal above, for the same reason: the daemon has no record of
+             * these words, so the bubble comes back out of the transcript and waits in the queue for the user's own
+             * next send. Leaving it on screen is the shape of the bug this fixes — a message that reads as sent,
+             * that no agent will ever see, and that the user can only recover by retyping (and cannot recover at
+             * all if they had dropped a file on it).
+             *
+             * The offer to carry on is refused on the same grounds, one level down in `ended()`: a Stop pressed
+             * while this request hung would otherwise arm a press with nothing behind it, which opens a fresh
+             * session whose first message is the word "Continue". */
+            if (!this.turnAccepted) {
+                this.requeueUndelivered(userMessageId);
+                this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below — send it again to deliver it.`;
+                return;
+            }
+            if (!stopped) {
                 this.error.value = errorMessage(err, `Chat failed.`);
             }
         } finally {
@@ -1064,6 +1097,9 @@ export class Conversation {
     private beginTurn(controller: AbortController, startedAt: number): void {
         this.inflight = controller;
         this.streaming.value = true;
+        // Nothing is delivered until the daemon says so (see `turnAccepted`). reattach() sets it straight after
+        // this call — the run it adopts is the daemon's already.
+        this.turnAccepted = false;
         // Whatever interrupted the last turn is history, so THIS one's clean end may flush the queue.
         this.interrupted = false;
         this.error.value = null;
@@ -1357,10 +1393,16 @@ export class Conversation {
     private ended(): void {
         this.cancelPendingCards();
         this.transcript.notice(`Stopped.`);
-        // The work stopped mid-flight and the session is untouched, so the way back is one press (see
-        // `resumable`). Armed HERE rather than in abort(), which a closed tab and a sandbox switch also call:
-        // neither of those is the user standing in front of a chat deciding what to do next.
-        this.resumable.value = true;
+        /* The work stopped mid-flight and the session is untouched, so the way back is one press (see
+         * `resumable`). Armed HERE rather than in abort(), which a closed tab and a sandbox switch also call:
+         * neither of those is the user standing in front of a chat deciding what to do next.
+         *
+         * And only for a turn the daemon actually took (see `turnAccepted`). A Stop pressed while the opening
+         * request was still in flight left nothing behind to pick up — no turn, no record, no session — so the
+         * press would send a bare "Continue" as the conversation's first message and the agent would rightly
+         * answer that it has nothing to continue. What that Stop earns instead is the words back, which the
+         * send's own pre-ack path hands over. */
+        this.resumable.value = this.turnAccepted;
         this.abort();
         this.persist();
     }
@@ -1411,6 +1453,9 @@ export class Conversation {
             }
             engaged = true;
             this.beginTurn(controller, head.startedAt);
+            // The daemon is streaming this run at us, so it is its own record already — nothing here is
+            // undelivered, and a stream that drops later leaves a turn that really is worth continuing.
+            this.turnAccepted = true;
             /* THIS WINDOW MAY HAVE DRAWN THIS RUN ALREADY — a stream that dropped and came back, a sandbox that
              * restarted underneath one, a tab reopened onto a run still going. The attach below replays the run
              * from its first frame regardless, so its rows come off before they are drawn again; what stays is
