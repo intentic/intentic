@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The app's one entitlement: push. Passed to xcodebuild as CODE_SIGN_ENTITLEMENTS by the release workflow,
+     so the generated project is never patched — automatic signing reads it and registers the capability on
+     the App ID. "production" is what a store/TestFlight build needs; a local debug run from Xcode gets the
+     development environment through its own signing regardless of this value. -->
+<plist version="1.0">
+<dict>
+    <key>aps-environment</key>
+    <string>production</string>
+</dict>
+</plist>

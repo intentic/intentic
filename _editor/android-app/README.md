@@ -18,7 +18,15 @@ the app. That file belongs to the WEB DEPLOYMENT (it lives on the origin, not in
 
 ## Shipping it
 
-Everything is generated from `twa-manifest.json` by Bubblewrap (needs a JDK + Android SDK, which it offers to
+CI owns the whole build: **validation** (`.github/workflows/mobile.yml`) regenerates the project from the
+manifest and assembles it with a throwaway key on every change here; **release**
+(`.github/workflows/mobile-release.yml`, a dispatch button) signs with the real upload keystore and pushes
+the bundle straight to the chosen Play track. Versioning needs no maintenance: the dispatched marketing
+version and the workflow run number are stamped over the manifest's placeholders at build time, so every
+upload's `versionCode` is monotonic by construction. The secrets the release needs and the one-time Play
+setup are in that workflow's header comment.
+
+The same flow by hand, for a local device build (needs a JDK + Android SDK, which Bubblewrap offers to
 install itself):
 
 ```sh
@@ -32,10 +40,9 @@ Then, once, after the first Play Console upload: copy the **App signing key cert
 console into `assetlinks.template.json`'s placeholder, and publish that JSON at
 `https://app.intentic.dev/.well-known/assetlinks.json`. Until it is served, the app works but wears a URL bar.
 
-Two gotchas worth their sentence: the version lives in `twa-manifest.json` (`appVersionCode` must bump per
-upload), and the generated project + keystore stay out of git — the manifest is the source of truth,
-`bubblewrap update` rebuilds the rest, and the UPLOAD keystore matters less than it looks because Play app
-signing holds the certificate that the asset link actually names.
+One gotcha worth its sentence: the generated project and keystore stay out of git — the manifest is the
+source of truth, `bubblewrap update` rebuilds the rest, and the UPLOAD keystore matters less than it looks
+because Play app signing holds the certificate that the asset link actually names.
 
 ## Key files
 

@@ -27,27 +27,36 @@ The web app detects the shell through the injected bridge (`_editor/web/src/shel
 push transport — nothing else about it changes. The Android story is deliberately different and simpler: the
 Play app (`_editor/android-app`) is a Trusted Web Activity, real Chrome, ordinary web push, no relay.
 
-## Working on it
+## Building and shipping
 
-**Standalone on purpose** — this folder is excluded from the pnpm workspace (see the note in
-`pnpm-workspace.yaml`): its dependencies feed Xcode and CocoaPods on a Mac, never the monorepo's node
-toolchain, so it installs its own `node_modules` on the machine that actually builds it. The native project
-(`ios/`) is generated there too:
+**Nothing native is committed and no Mac is required to ship.** The native project is generated from the
+config on every build (`cap add ios`), CI compiles it, and the release pipeline signs in Apple's cloud —
+certificates and profiles are minted on demand by the App Store Connect API key, so no signing material lives
+anywhere but Apple's console. The push entitlement rides in as [native/App.entitlements](native/App.entitlements)
+(wired into the app target by [scripts/prepare-native.mjs](scripts/prepare-native.mjs) right after
+generation — never onto the Pods, which a global build flag would also hit), and the same script fails the
+build if a Capacitor upgrade ever ships a template that cannot register for push — the one product-breaking
+regression a green compile would hide.
+
+- **Validation** — `.github/workflows/mobile.yml`: on any change here, generates the project and compiles it
+  (simulator, unsigned).
+- **Release** — `.github/workflows/mobile-release.yml`, a dispatch button: archive, cloud-sign, upload to
+  App Store Connect → TestFlight. Submitting to App Review stays a console action on purpose. The secrets it
+  needs and the one-time store setup are in that workflow's header comment.
+
+Local development on a Mac is the same flow by hand — **standalone on purpose** (this folder is excluded
+from the pnpm workspace; the note in `pnpm-workspace.yaml` says why):
 
 ```sh
 cd _editor/ios-app
-npm install              # standalone — commit the package-lock.json this mints
-npm run cap:add:ios      # once — generates ios/ from the config
-npm run cap:sync         # after changing capacitor.config.ts or plugin versions
-npm run cap:open         # open in Xcode to run / archive
+npm install
+npm run cap:add:ios      # generates ios/ from the config
+npm run cap:open         # open in Xcode to run on a device
 INTENTIC_APP_URL=https://localhost:4200 npm run cap:sync   # point a debug build at a local SPA
 ```
 
-After generating, in Xcode: add the **Push Notifications** capability and **Background Modes → Remote
-notifications** to the app target, and confirm `AppDelegate.swift` forwards APNs registration to Capacitor
-(the two `didRegisterForRemoteNotifications…` methods from the `@capacitor/push-notifications` docs). The
-platform side needs the APNs auth key configured (`APNS_KEY_P8` etc. — `_platform/api/src/config.ts`); debug
-builds need `APNS_URL` pointed at Apple's sandbox gateway.
+The platform side needs the APNs auth key configured for notifications to flow (`APNS_KEY_P8` etc. —
+`_platform/api/src/config.ts`); debug installs need `APNS_URL` pointed at Apple's sandbox gateway.
 
 App Review notes live with the choice they defend: a remote-URL shell passes review on what the NATIVE layer
 adds (push, and whatever native affordances land next), so anything that thins that story — removing the push
@@ -56,5 +65,7 @@ entitlement, shipping without the offline page — is an App Store risk, not a c
 ## Key files
 
 - [capacitor.config.ts](capacitor.config.ts) — the whole shell: app id, the hosted URL the webview loads, the dev override.
+- [native/App.entitlements](native/App.entitlements) — the push entitlement prepare-native.mjs wires into the app target.
+- [scripts/prepare-native.mjs](scripts/prepare-native.mjs) — finishes a generated project: push-wiring assertion + entitlements.
+- [assets/logo.png](assets/logo.png) — the 1024px mark the pipeline turns into icons and splash screens.
 - [www/index.html](www/index.html) — the offline fallback, the only page the app itself carries.
-- [package.json](package.json) — Capacitor + the push plugin; the `cap:*` scripts above.

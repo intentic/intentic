@@ -262,11 +262,6 @@
     },
     {
       "dev": true,
-      "from": "_editor/ios-app",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
       "from": "_editor/share-view",
       "to": "_editor/ui"
     },
@@ -2072,9 +2067,9 @@
       "loc": 0,
       "name": "@intentic/android-app",
       "oneLiner": "The Play Store shell: the hosted web app as a Trusted Web Activity — real Chrome, near-zero upkeep.",
-      "readmeRev": "",
+      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1787224057000
     },
     {
       "anchors": [],
@@ -2152,24 +2147,32 @@
           "what": "the whole shell: app id, the hosted URL the webview loads, the dev override."
         },
         {
-          "path": "_editor/ios-app/www/index.html",
-          "what": "the offline fallback, the only page the app itself carries."
+          "path": "_editor/ios-app/native/App.entitlements",
+          "what": "the push entitlement, passed to the build as a setting."
         },
         {
-          "path": "_editor/ios-app/package.json",
-          "what": "Capacitor + the push plugin; the cap: scripts above."
+          "path": "_editor/ios-app/scripts/assert-push-wiring.mjs",
+          "what": "CI's proof the generated project can register for push."
+        },
+        {
+          "path": "_editor/ios-app/assets/icon.png",
+          "what": "the 1024px store icon the pipeline stamps over Capacitor's placeholder."
+        },
+        {
+          "path": "_editor/ios-app/www/index.html",
+          "what": "the offline fallback, the only page the app itself carries."
         }
       ],
       "behind": 0,
       "dir": "_editor/ios-app",
-      "files": 1,
+      "files": 2,
       "hasTests": false,
-      "loc": 28,
+      "loc": 56,
       "name": "@intentic/ios-app",
       "oneLiner": "The App Store shell: the hosted web app in a native iOS frame, with real push notifications.",
-      "readmeRev": "",
+      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1787224057000
     },
     {
       "anchors": [
@@ -2238,18 +2241,17 @@
           "what": "the full route table."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/web",
       "files": 929,
       "hasTests": true,
-      "loc": 157256,
+      "loc": 157297,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue) — the platform's workspace UI.",
-      "readmeRev": "afc2270368ad6c22f88abcb5237fb51dc5839583",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787220419000
+      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
+      "stale": false,
+      "updatedAt": 1787224057000
     },
     {
       "anchors": [
@@ -3234,12 +3236,12 @@
       "dir": "_platform/api",
       "files": 97,
       "hasTests": true,
-      "loc": 17319,
+      "loc": 17328,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend — Hono + oRPC + Prisma + Better Auth.",
-      "readmeRev": "1f61a7ea1d135e0f11ca38da2014eccd3cd4db0e",
+      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
       "stale": false,
-      "updatedAt": 1787180692000
+      "updatedAt": 1787224057000
     },
     {
       "anchors": [
@@ -3252,7 +3254,7 @@
           "what": "the Zod schemas and inferred types."
         }
       ],
-      "behind": 31,
+      "behind": 0,
       "component": "platform",
       "dir": "_platform/api-contract",
       "files": 2,
@@ -3260,10 +3262,9 @@
       "loc": 1443,
       "name": "@intentic-app/api-contract",
       "oneLiner": "The single source of truth for the platform's API surface — the oRPC contract and its Zod schemas.",
-      "readmeRev": "e1af9a03167daea435040e618bf90573ba487e6c",
-      "reason": "31 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1786131270000
+      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
+      "stale": false,
+      "updatedAt": 1787224057000
     },
     {
       "anchors": [
@@ -3322,7 +3323,7 @@
           "what": "the package entry (re-exports the generated client); prisma.config.ts — generator/datasource config."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "platform",
       "dir": "_platform/prisma",
       "files": 63,
@@ -3331,7 +3332,7 @@
       "name": "@intentic-app/prisma",
       "oneLiner": "The database layer — the Prisma schema, the generated client, and the migrations.",
       "readmeRev": "31263d56ade396b9f15d25c45c7ef335f4f8fa78",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787169320000
     },
@@ -3697,16 +3698,16 @@
           "what": "workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 1,
+      "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 856,
+      "files": 867,
       "hasTests": true,
-      "loc": 149011,
+      "loc": 149866,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon — a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "1f61a7ea1d135e0f11ca38da2014eccd3cd4db0e",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787180692000
     },
@@ -3753,7 +3754,7 @@
           "what": "and contract.lock.json — every exported"
         }
       ],
-      "behind": 31,
+      "behind": 32,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
       "files": 104,
@@ -3762,7 +3763,7 @@
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client — change it here, and both sides follow.",
       "readmeRev": "996ce7771d24ec5c5c4739773133a87496844584",
-      "reason": "31 commits have touched this package since its README was written",
+      "reason": "32 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786833176000
     },
@@ -4224,6 +4225,10 @@
           "what": "the landing page, whose hero shot links to the demo."
         },
         {
+          "path": "_site/site/src/pages/angkor.astro",
+          "what": "the same landing page in an alternative dress, on its own"
+        },
+        {
           "path": "_site/site/src/pages/docs",
           "what": "the documentation pages."
         },
@@ -4260,18 +4265,18 @@
           "what": "where the build-time integrations are wired in."
         }
       ],
-      "behind": 22,
+      "behind": 2,
       "component": "site",
       "dir": "_site/site",
-      "files": 13,
+      "files": 15,
       "hasTests": false,
-      "loc": 2179,
+      "loc": 3051,
       "name": "@intentic-dev/site",
       "oneLiner": "The public website at intentic.dev — an Astro build, all copy imported rather than written in the markup.",
-      "readmeRev": "594410a4fb8197bbe532a6d72d48c9d293b676c6",
+      "readmeRev": "e9fefcd54a70b0bbe642f68f21aa83d1eda48713",
       "reason": "it points at _site/site/src/pages/docs/search.json.ts, which no longer exists",
       "stale": true,
-      "updatedAt": 1786888479000
+      "updatedAt": 1787222481000
     },
     {
       "anchors": [
@@ -4791,7 +4796,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787222101489,
+  "generatedAt": 1787228761106,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [
