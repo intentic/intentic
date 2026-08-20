@@ -1,53 +1,43 @@
 <script setup lang="ts">
-import { Icon, type IconName, PersonaFace, ResponsiveOverlay, useDevice } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
-import { computed, nextTick, onBeforeUnmount, provide, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import {
-    type AgentCommand,
-    type EditorContext,
-    isTrialProvider,
-    type LoopDesign,
-    loopDesignLine,
-    loopFromDesign,
-    TRIAL_NOTICE,
-    type Workflow,
-} from "@intentic/sandbox-contract";
-import { trialExhausted } from "../composables/chat/access";
+import { Icon, PersonaFace, ResponsiveOverlay, useDevice, useLoadingReveal } from "@intentic/ui";
+import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { type AgentCommand, isTrialProvider, loopDesignLine } from "@intentic/sandbox-contract";
 import { turnInFlight } from "../composables/agents/agentStatus";
 import { useAgents } from "../composables/agents/useAgents";
-import { useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
-import { openRunInChat } from "../composables/chat/openRun";
 import { modeMeta } from "../composables/chat/catalog";
-import type { Conversation, PendingAttachment } from "../composables/chat/conversation";
-import { effectiveAccount } from "../composables/chat/providerAccounts";
-import { modelLabelFor, providerDisplayLabel, trialStatus } from "../composables/chat/providerCatalog";
-import { type ChatAttachment, type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
-import { formatReset, formatUtilization, formatWait, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
+import {
+    type ComposerSituation,
+    continueOffered,
+    placeholderFor,
+    sendable,
+    sendHintFor,
+    sendIntentOf,
+    sendRefusal,
+    VIEWER_PLACEHOLDER,
+} from "../composables/chat/composerIntent";
+import type { Conversation } from "../composables/chat/conversation";
+import { modelLabelFor, providerDisplayLabel } from "../composables/chat/providerCatalog";
+import { type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
+import { formatWait } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
-import { useLoadingReveal } from "@intentic/ui";
-import { creditSummary, formatCredits } from "../composables/membership/creditMeter";
-import { useMembership } from "../composables/membership/useMembership";
-import { useToolCalls } from "../composables/chat/useToolCalls";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
-import { conversationView, hydrateOnce, loadTrialStatus, PANE_VIEW, useChat } from "../composables/chat/useChat";
+import { conversationView, hydrateOnce, PANE_VIEW, useChat } from "../composables/chat/useChat";
 import { CHAT_SURFACE } from "./chatSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../composables/sandbox/usePersonas";
 import { useRole } from "../composables/sandbox/useRole";
+import { useChatAttachments } from "../composables/chat/useChatAttachments";
 import { useChatPopout } from "../composables/chat/useChatPopout";
-import { useVoiceInput } from "../composables/chat/useVoiceInput";
+import { useComposerVoice } from "../composables/chat/useComposerVoice";
+import { useEditorContextChip } from "../composables/chat/useEditorContextChip";
+import { useRunThrough } from "../composables/chat/useRunThrough";
 import { useStickToBottom } from "../composables/chat/useStickToBottom";
-import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
+import { useTranscriptWarmup } from "../composables/chat/useTranscriptWarmup";
 import { isBlocked } from "../composables/sandbox/connection";
-import { jsonBody } from "../composables/sandbox/jsonBody";
-import { useEditorSelection } from "../composables/workspace/useEditorSelection";
-import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { collectDroppedFiles } from "../pages/workspace/dropEntries";
 import { inputHistoryFor, recallStep } from "../composables/chat/inputHistory";
 import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
-import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
 import ChatImageThumb from "./ChatImageThumb.vue";
 import ChatMentionPopover from "./ChatMentionPopover.vue";
@@ -56,15 +46,13 @@ import ChatForkLine from "./ChatForkLine.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
+import ChatPaneNotices from "./ChatPaneNotices.vue";
+import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "./ChatPersonaMenu.vue";
 import ChatRunThroughMenu from "./ChatRunThroughMenu.vue";
-import { useLoopDesigns } from "../composables/agents/useLoopDesigns";
-import { startLoop, stopLoop } from "../composables/agents/useLoops";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
-import { formatTokens, ProgressRing } from "@intentic/ui";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
-import UsageRing from "../components/UsageRing.vue";
 
 /* ONE CHAT ON SCREEN — the transcript, the composer that writes into it, and the pickers and banners that
  * belong to that one conversation. The panel around it (ChatPanel) owns the frame: the chat list, the pop-out,
@@ -75,6 +63,14 @@ import UsageRing from "../components/UsageRing.vue";
  * approves — has to be this pane's, not whichever chat happens to hold the focus. The facade over it
  * (conversationView) is built once here and PROVIDED, so the transcript rows and their tool cards four levels
  * down answer for the same chat without threading a prop through everything in between.
+ *
+ * WHAT THIS FILE IS, after everything that could be lifted out of it has been. The pane is wiring: it holds the
+ * conversation, the transcript's shape, and the keyboard — and it delegates the four things that are their own
+ * machine. What the next press MEANS and what to say about it is one decision table (composerIntent.ts); the
+ * mic, the staged files, the run-through badge and the scroll warm-up are composables beside it; the standing
+ * banners and the status readouts are components of their own (ChatPaneNotices, ChatPaneStatus). Anything that
+ * can be decided from values alone belongs in the first of those, where it can be read as a table and tested
+ * without a chat on screen.
  *
  * The column is a @container: composer/status label density keys off the width the messages get (288px docked
  * while the viewport is desktop-wide, or this pane's share of the pop-out window), while touch-target sizing
@@ -127,7 +123,9 @@ const takeFocus = (): void => {
 const CLOSE_PANE = `Close this pane — the chat stays open`;
 const closeHint = computed(() => (props.focused ? withShortcut(CLOSE_PANE, `chat.closePane`) : CLOSE_PANE));
 
-const paneView = conversationView(computed(() => props.conversation));
+// The prop as a ref, for the view and the composables that follow this pane from one chat to the next.
+const chat = computed(() => props.conversation);
+const paneView = conversationView(chat);
 provide(PANE_VIEW, paneView);
 const {
     messages,
@@ -139,11 +137,8 @@ const {
     autoContinue,
     autoContinueAt,
     setAutoContinue,
-    contextUsage,
     mode,
     provider,
-    account,
-    accounts,
     model,
     draft,
     attachments,
@@ -175,15 +170,13 @@ provide(
         navigate: (route) => void router.push(route),
     }),
 );
-// How much of an agent's working-out this transcript shows — flipped from the readouts under the composer.
-const { showToolCalls } = useToolCalls();
 const { poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because
 // waiting will not fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
-const { mobile, keyboardInset } = useDevice();
+const { mobile } = useDevice();
 
 /* Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
  * catalogs live in the contract's agent-catalog.ts (shared with the automations dialog) and chat/catalog.ts.
@@ -195,6 +188,9 @@ const providerName = computed(() => providerDisplayLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
+// The trial has no vendor to name — it is the product's own channel, and "Ask Free trial…" invites a sentence
+// to a thing rather than to somebody.
+const onTrial = computed(() => isTrialProvider(provider.value));
 /* NEITHER PILL CARRIES A HOVER LABEL. The model pill's said the provider's name — which its own logo is
  * already there to say — and the mode pill's said the mode's description, which the menu one click below
  * prints under every mode including the one in force. Two boxes that opened over the composer to repeat what
@@ -213,7 +209,6 @@ const input = ref<HTMLTextAreaElement>();
 // out into a real window and still have overlays that land in the right place and close when clicked away from.
 const modelOpen = ref(false);
 const modeOpen = ref(false);
-const runThroughOpen = ref(false);
 const personaOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
@@ -227,14 +222,6 @@ const personaPill = ref<HTMLElement>();
 // they move to another one, which for this pane is the pop-out and back.
 const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
 
-// The window this pane's rows are painted in — the pop-out's whenever the panel has one. Asked of the scroller
-// afresh at each use, since a pop-out or a dock can land between two steps of the same pass.
-// Undefined only when there is no window to be had at all — the pane's scroller is gone AND so is the global.
-// That is a torn-down document, which happens between a deferred callback being queued and it running (a
-// unit test's environment closing under an idle task; a pop-out closed mid-pass). `globalThis.window` rather
-// than a bare `window`, because the bare identifier THROWS where the property merely reads undefined.
-const transcriptWindow = (): (Window & typeof globalThis) | undefined => scroller.value?.ownerDocument.defaultView ?? globalThis.window;
-
 const activeError = computed(() => props.conversation.error.value);
 /* This conversation's transcript round-trip, still in flight with nothing painted yet — the empty state
  * defers to a loading one on it. Gated by useLoadingReveal, not read raw: a warm daemon answers this in well
@@ -246,131 +233,7 @@ const activeLoading = useLoadingReveal(
     computed(() => props.conversation.conversationId),
 );
 
-// This conversation's account when its stored credential can no longer be refreshed — surfaced as a
-// pre-send banner so the user reconnects before hitting an opaque failure mid-turn (Codex today).
-const activeAccountReauth = computed(() => {
-    const id = account.value ?? accounts.value[0]?.id;
-    return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
-});
-
-/* What the trial strip above the composer says, or nothing at all when this conversation isn't on the trial.
- *
- * Two sentences, because there are two states worth interrupting for and they want opposite things from the
- * reader. While there is allowance left the message LEADS WITH THE COUNT and then discloses — these messages
- * pass through intentic — which the user needs before typing, not after. Once it is spent the disclosure is
- * moot and the only useful sentence is where to go next, which is the free Google sign-in: no daily cap, still
- * no subscription.
- *
- * The count is here and not only on the picker's badge because this is the surface a person is looking at while
- * they spend it. It also carries the one thing that surprises people about this meter: it counts MODEL CALLS,
- * and an agent turn makes several of them, so a first question can cost more than one. Saying so beside the
- * number is cheaper than letting somebody discover it by watching twelve become seven. */
-const onTrial = computed(() => isTrialProvider(provider.value));
-const trialLeft = computed(() => trialStatus.value.remaining);
-const trialHealthIssue = computed(() => trialStatus.value.health === `degraded` || trialStatus.value.health === `unavailable`);
-const trialNotice = computed(() => {
-    if (!onTrial.value) {
-        return undefined;
-    }
-    if (trialExhausted(provider.value)) {
-        return `Free trial used up for today. Connect a Google account to keep going free — no subscription, no daily cap.`;
-    }
-    if (trialStatus.value.health === `unavailable`) {
-        return `Free trial temporarily unavailable — failed messages aren’t counted.`;
-    }
-    if (trialStatus.value.health === `degraded`) {
-        return `Free trial service is degraded — another upstream key may still answer, and failed messages aren’t counted.`;
-    }
-    const left = `${trialLeft.value} free ${trialLeft.value === 1 ? `message` : `messages`} left today`;
-    /* WHICH MODEL ANSWERED, once one has. The trial publishes a single row and picks a real model per message
-     * (the platform's trial-ladder.ts), so without this the user cannot tell a weak answer from a fallback rung
-     * — and neither can we, reading their bug report. It leads the sentence only after a turn has run: before
-     * that there is nothing true to say, and a placeholder would be a promise about a choice not yet made. */
-    const served = trialStatus.value.servedModel;
-    const answered = served === undefined ? `` : `Last answer: ${served}. `;
-    return `${answered}${left} — a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
-});
-const retryTrial = async (): Promise<void> => {
-    if (!reachable.value) {
-        return;
-    }
-    await loadTrialStatus();
-    await props.conversation.resume();
-};
-
-/* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known reset
- * instant and nothing anyone can do before it, so the transcript notice naming that instant says everything
- * there is to say. An outage has no known end, which is why it needs a live banner — its whole job is to answer
- * "is anything still happening?", which during an outage is the only question anyone has. When the resume is
- * off it is instead the offer to arm it, which arms the very turn that bounced (the daemon remembered it
- * either way).
- *
- * THE PRESS ARMS THIS CHAT AND NOTHING ELSE. It used to write the sandbox-wide setting, and the gap between
- * what the button looked like — one line in one conversation, under one dead turn — and what it did was the
- * whole bug: a person finishing one piece of work at midnight silently signed every agent on the board up to
- * re-run its turns on their allowance. So it writes this conversation's own override (agents.resumeAfterOutage)
- * and the sandbox default stays where a standing policy belongs, in Sandbox ▸ Agent. */
-const outageResume = computed(() => props.conversation.failures.outageResume.value);
-const armingOutageResume = ref(false);
-const enableOutageResume = async (): Promise<void> => {
-    if (!reachable.value || armingOutageResume.value) {
-        return;
-    }
-    armingOutageResume.value = true;
-    try {
-        await setResumeAfterOutage(props.conversation.conversationId, true);
-        props.conversation.failures.armOutageResume();
-    } catch {
-        // The offer stays up to press again — the daemon still holds the stranded turn either way, and a
-        // banner that vanished on a failed write would claim a resume nobody armed.
-    } finally {
-        armingOutageResume.value = false;
-    }
-};
-/* …and the same press pointing the other way. `false`, not null: somebody stopping a retry they can watch
- * counting down means THIS chat, now — handing it back to a default that may well say "resume" would restart
- * the very thing they just stopped. The daemon keeps the stranded turn either way; it simply stops offering
- * it to the breaker, and the hour-long staleness sweep retires it. */
-const stopOutageResume = async (): Promise<void> => {
-    if (!reachable.value || armingOutageResume.value) {
-        return;
-    }
-    armingOutageResume.value = true;
-    try {
-        await setResumeAfterOutage(props.conversation.conversationId, false);
-        props.conversation.failures.disarmOutageResume();
-    } catch {
-        // Left as it stands — the countdown is honest until the daemon has actually been told otherwise.
-    } finally {
-        armingOutageResume.value = false;
-    }
-};
-
-/* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
- * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
- * Such a tab must not look live, so the pane says the agent is off the board and offers the one press back. The
- * line also spends its second half on the fact nothing else here could tell the user: a message sent from this tab
- * un-archives the agent (the daemon rebuilds the entry without its marker — registry.begin), which is a
- * feature, not a surprise to walk into.
- *
- * Archived agents ride their own list rather than the live roster, so it has to be asked for. On the REACHABLE
- * seam, not at setup: this pane mounts with the shell, long before the daemon is answering, and a read fired
- * then simply fails — leaving every archived tab in the app looking live until the user happened to open the
- * board. Only while the list is empty, so the one request is not repeated per reconnect once it has landed. */
-const { agentById, archived, loadArchived, restore, busyIds, setResumeAfterOutage } = useAgents();
-watch(
-    reachable,
-    (live) => {
-        if (live && archived.value.length === 0) {
-            void loadArchived();
-        }
-    },
-    { immediate: true },
-);
-const activeArchived = computed(() => {
-    const agent = agentById(props.conversation.conversationId);
-    return agent?.archivedAt === undefined ? undefined : agent;
-});
+const { agentById } = useAgents();
 
 /* THE PANE FOLLOWS THE FLEET — the missing half of "the chats fill a second later" (chatRun's promise about a
  * workflow's derived conversation ids). A run's panes open on conversations the daemon has not created yet,
@@ -413,107 +276,6 @@ watch(fleetTurn, (now, before) => {
     // first turn created the entry.
     props.conversation.registered.value = true;
     hydrateOnce(props.conversation);
-});
-
-/* THE LOOP HALF OF THE RUN-THROUGH BADGE. The badge itself (states, glyph, what a press means) is assembled
- * further down with the workflow half, because the two are one control; what lives here is what only a loop
- * has — the fleet entry behind a RUNNING one, and the stop.
- *
- * Two things are read off that entry rather than asked anywhere: whether this agent works in its own worktree
- * (a loop cannot change that mid-flight), and whether one is already running (the daemon refuses a second, so
- * offering one would only spend a round to say no).
- */
-const activeLoop = computed(() => agentById(props.conversation.conversationId)?.loop);
-const looping = computed(() => activeLoop.value?.state === `running`);
-const loopIsolated = computed(() => agentById(props.conversation.conversationId)?.branch !== undefined);
-const { designs: loopDesigns } = useLoopDesigns();
-const loopFailure = ref<string>();
-const pickedLoop = computed(() => loopDesigns.value.find((design) => design.id === props.conversation.loopId.value));
-const endLoop = async (): Promise<void> => {
-    if (!reachable.value) {
-        return;
-    }
-    // Stops the LOOP, not the turn: whatever iteration is running finishes and lands. Abandoning it outright is
-    // this plus the Stop button beside it, which is exactly how it reads on screen.
-    await stopLoop(props.conversation.conversationId).catch(() => undefined);
-};
-// A pick REPLACES a pick, in both directions — see the badge below. The composer can only run the next message
-// one way, so holding both ids at once was never a state a person could mean, only one they could reach.
-const pickLoop = (design: LoopDesign | undefined): void => {
-    runThroughOpen.value = false;
-    loopFailure.value = undefined;
-    props.conversation.loopId.value = design?.id;
-    if (design !== undefined) {
-        props.conversation.workflowId.value = undefined;
-    }
-};
-// The picker's way out to the page that owns saved loops AND saved workflows — the same errand the persona
-// menu's "Manage" runs, and the only door to the long loop form now that the composer carries none.
-const manageRunThrough = (): void => {
-    runThroughOpen.value = false;
-    void router.push({ name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
-};
-
-// Claude subscription headroom for this conversation's account, pushed from the agent stream at no token
-// cost — a small ring once that account's first Claude turn reports its limits, tinted as the binding pool
-// fills. Keyed by account so switching accounts shows the right one. The ring tracks the FULLEST pool (the one
-// that will gate the next turn); its card lists them all, because which one is binding shifts between turns.
-const usageChip = computed(() => {
-    // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
-    // first, and the usage map is keyed by that real id — looking up `undefined` kept this chip invisible on
-    // every single-account setup.
-    const headroom = planHeadroom(usageStatusFor(effectiveAccount(provider.value, account.value)));
-    // No binding pool ⇒ nothing measured, or everything has reset. Unlike an account ROW, a chat's chip stays
-    // out of the way rather than pinning a 0% to the composer for a session that has not asked for anything.
-    if (headroom?.binding === undefined) {
-        return undefined;
-    }
-    // Once a pool is effectively spent the question flips from "how much is left" to "when can I go again", so
-    // the binding pool's reset joins the VISIBLE label instead of waiting behind a hover — the chat view is
-    // where a limit bites.
-    const reset = headroom.percent >= SPENT_PERCENT && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
-    return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
-});
-
-/* MEMBERSHIP CREDITS, IN THE ROOM WHERE THEY GET SPENT.
- *
- * The other way a credit leaves is a premium SERVICE run, and it is agreed to here, in chat: the agent quotes a
- * price and waits for a yes. That etiquette is written into the services tool, which means the figure reached the
- * reader only if the model remembered to type it — the interface itself said nothing, and a number the product
- * refuses to vouch for is a number nobody should have to trust. This pill is the app saying it too.
- *
- * IT APPEARS ONCE THE DAY'S ALLOWANCE IS IN PLAY, and not before — the same rule the plan-limit chip beside it
- * follows for the same reason: a composer must not pin an untouched 1,000 to a session that has not asked for
- * anything. Nothing spent, nothing to report. From the first spend on it is the running answer to "how much of
- * today have I used", which is exactly when that question starts being asked.
- *
- * NOT A RING, though it sits between two of them. Those measure a rate limit FILLING UP towards a wall; this is a
- * wallet emptying, and it is scoped to the person rather than to this conversation's provider account. Dressed as
- * a third ring it would read as a third rate limit — so it takes the membership's own star and a plain figure,
- * and cannot be mistaken for its neighbours. */
-const { meter: creditMeter } = useMembership();
-
-const creditChip = computed(() => {
-    const meter = creditMeter.value;
-    if (meter === undefined || !meter.touched) {
-        return undefined;
-    }
-    return { label: formatCredits(meter.remaining), spent: meter.spent, hint: creditSummary(meter) };
-});
-
-// Per-conversation context-window fill — a ring that warns as the chat approaches auto-compaction.
-const contextRing = computed(() => {
-    const usage = contextUsage.value;
-    if (usage === undefined || usage.contextWindow <= 0) {
-        return undefined;
-    }
-    const pct = Math.min(100, Math.round((usage.tokens / usage.contextWindow) * 100));
-    return {
-        value: pct,
-        label: `${pct}%`,
-        warn: pct >= 80,
-        tooltip: `Context · ${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)} (${pct}%)`,
-    };
 });
 
 // True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not simply
@@ -630,6 +392,7 @@ const modeIcon = computed(() => modeMeta(mode.value).icon);
  * holds one line, whatever the reader's text size. Below it, the measurement is not believed at all and the
  * height is left as `auto` — the browser's own one-line size, and the same thing the box would show if this
  * function had never run. A later grow (the first keystroke, the next tab switch) then measures properly. */
+const MAX_COMPOSER_HEIGHT = 192;
 const grow = (): void => {
     const el = input.value;
     if (!el) {
@@ -641,231 +404,16 @@ const grow = (): void => {
     if (!(el.scrollHeight >= oneLine)) {
         return;
     }
-    el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
 };
 
-/* HANDS-FREE VOICE MODE. One mic tap arms it; from there the gesture is speech itself: talk, and the pause is
- * the send. The capture and the transcription are useVoiceInput's (sandbox-side whisper — every browser, and
- * audio never leaves the user's infrastructure); what the pane owns is what "send" means: each transcribed
- * utterance lands in the draft and goes out after a short beat — long enough to glance at, and Escape (or
- * typing) catches it, keeping the words in the box for editing. The mode then STAYS on between turns, because
- * a conversation is the point of hands-free — until the mic is tapped again, the user starts typing, or this
- * pane stops being the one they're working in (focus loss, tab switch, unmount): the mic never records where
- * nobody is looking. */
-const { state: voiceState, level: voiceLevel, pending: voicePending, error: voiceError, start: startVoice, stop: stopVoice } = useVoiceInput();
-const voiceOn = computed(() => voiceState.value !== `idle`);
+// Files staged for the next turn, and the three ways they arrive (useChatAttachments).
+const staging = useChatAttachments({ attachments, reachable, connected });
+const { dragDepth } = staging;
 
-// The glance-window between the words appearing and the message going. A countdown, not a confirmation: the
-// default is that speaking sends, and this is only how long the catch stays possible.
-const VOICE_SEND_DELAY_MS = 1200;
-let voiceSendTimer: ReturnType<typeof setTimeout> | undefined;
-const voiceSendArmed = ref(false);
-const cancelVoiceSend = (): void => {
-    clearTimeout(voiceSendTimer);
-    voiceSendArmed.value = false;
-};
+// The chip that offers the file the user is looking at (useEditorContextChip).
+const { target: editorTarget, include: includeEditorContext, label: editorChipLabel, forSend: editorContextForSend } = useEditorContextChip();
 
-// An utterance's words join whatever the box already holds (a typed half-sentence stays the user's), then the
-// countdown re-arms — a second utterance inside the glance window extends the message rather than racing it.
-const onVoiceTranscript = (text: string): void => {
-    cancelVoiceSend();
-    const base = draft.value.trim();
-    draft.value = base.length > 0 ? `${base} ${text}` : text;
-    void nextTick(() => grow());
-    voiceSendArmed.value = true;
-    voiceSendTimer = setTimeout(() => {
-        voiceSendArmed.value = false;
-        // oxlint-disable-next-line no-use-before-define -- the countdown fires long after setup; `submit` sits below with the other send paths
-        submit();
-    }, VOICE_SEND_DELAY_MS);
-};
-
-const toggleVoice = (): void => {
-    if (voiceOn.value) {
-        stopVoice();
-        cancelVoiceSend();
-        return;
-    }
-    if (!reachable.value) {
-        return;
-    }
-    startVoice(onVoiceTranscript);
-};
-
-// Typing or leaving exits hands-free — a mode that talked over the user's own keystrokes, or kept recording a
-// pane they left, would be the feature at its worst. The draft is untouched either way.
-const quitVoice = (): void => {
-    if (voiceOn.value || voiceSendArmed.value) {
-        stopVoice();
-        cancelVoiceSend();
-    }
-};
-watch([() => props.conversation, () => props.focused], quitVoice);
-onBeforeUnmount(quitVoice);
-
-const voiceHint = computed(() => {
-    switch (voiceState.value) {
-        case `preparing`:
-            return `Preparing voice…`;
-        case `listening`:
-            return `Stop voice mode`;
-        default:
-            return `Talk hands-free — pause to send, tap again to stop`;
-    }
-});
-
-// The capture's failure modes, in the user's words. `needs-rebuild` is the one with an errand attached: the
-// image predates the whisper pack, and the Environment card's rebuild is what adds it.
-const voiceErrorMessage = computed(() => {
-    switch (voiceError.value) {
-        case undefined:
-            return undefined;
-        case `mic-blocked`:
-            return `Microphone access is blocked. Allow it in your browser's site settings, then try again.`;
-        case `no-mic`:
-            return `No microphone was found.`;
-        case `needs-rebuild`:
-            return `Voice needs a one-time sandbox update — run the rebuild on the Sandbox page's Environment card first.`;
-        case `unavailable`:
-            return `Voice isn't available on this sandbox — update it, then try again.`;
-        default:
-            return `Couldn't transcribe that — try again.`;
-    }
-});
-
-// --- Attachments ------------------------------------------------------------------------------
-// Files staged for the next turn, per-tab like the draft (`attachments` forwards to this pane's conversation).
-// ponytail: abandoned drafts orphan their uploads in .intentic/records/artifacts/attachments (visible/deletable in the
-// workspace tree); a daemon-side sweep of stale dirs is the upgrade path if they pile up.
-
-const attach = (file: File): void => {
-    if (!reachable.value) {
-        return;
-    }
-    const controller = new AbortController();
-    // reactive() explicitly: entries are mutated through this reference (progress ticks), not via the
-    // array ref's proxy, so the raw object wouldn't trigger updates. The entry lands on the tab active at
-    // attach time and this closure keeps pointing at it, so a mid-upload tab switch updates the right chip.
-    const entry = reactive<PendingAttachment>({
-        id: crypto.randomUUID(),
-        name: file.name,
-        path: `.intentic/records/artifacts/attachments/${crypto.randomUUID()}/${file.name}`,
-        controller,
-        status: `uploading`,
-        progress: 0,
-        ...(file.type.startsWith(`image/`) ? { previewUrl: URL.createObjectURL(file) } : {}),
-    });
-    attachments.value = [...attachments.value, entry];
-    sandboxUpload(`/workspace/upload?path=${encodeURIComponent(entry.path)}`, file, {
-        signal: controller.signal,
-        onProgress: (loaded) => {
-            entry.progress = file.size > 0 ? loaded / file.size : 1;
-        },
-    }).then(
-        () => {
-            entry.status = `done`;
-        },
-        (err: unknown) => {
-            entry.status = `failed`;
-            entry.error = errorMessage(err, `Upload failed.`);
-        },
-    );
-};
-
-const removeAttachment = (attachment: PendingAttachment): void => {
-    attachment.controller?.abort();
-    if (attachment.previewUrl !== undefined) {
-        URL.revokeObjectURL(attachment.previewUrl);
-    }
-    if (attachment.status === `done`) {
-        // Fire-and-forget: drop the uploaded uuid dir; on failure the orphan stays visible in the
-        // workspace tree, deletable there.
-        const dir = attachment.path.slice(0, attachment.path.lastIndexOf(`/`));
-        sandboxJson(`/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
-    }
-    attachments.value = attachments.value.filter((entry) => entry.id !== attachment.id);
-};
-
-const onPaste = (event: ClipboardEvent): void => {
-    const files = Array.from(event.clipboardData?.files ?? []);
-    if (files.length === 0 || !reachable.value) {
-        return;
-    }
-    event.preventDefault();
-    for (const file of files) {
-        attach(file);
-    }
-};
-
-// Depth counter (enter/leave fire per descendant) drives the drop ring on this pane. Per PANE rather than per
-// panel: with several open, a dropped screenshot belongs to the chat it was dropped on.
-const dragDepth = ref(0);
-const onDragEnter = (event: DragEvent): void => {
-    if (!reachable.value || !connected.value || !event.dataTransfer?.types.includes(`Files`)) {
-        return;
-    }
-    dragDepth.value += 1;
-};
-const onDragLeave = (): void => {
-    dragDepth.value = Math.max(0, dragDepth.value - 1);
-};
-const onDrop = (event: DragEvent): void => {
-    dragDepth.value = 0;
-    if (!reachable.value || !connected.value || !event.dataTransfer) {
-        return;
-    }
-    // collectDroppedFiles must be called synchronously in the drop handler (drag-store validity window).
-    // A dropped folder is walked but attached flat — chat attachments carry no directory structure.
-    void collectDroppedFiles(event.dataTransfer).then(({ files }) => {
-        for (const dropped of files) {
-            attach(dropped.file);
-        }
-    });
-};
-
-// --- Editor context chip ---------------------------------------------------------------------
-// What the chip would attach: the live Monaco selection, else the active file tab. OFF by default — the user
-// clicks the chip to attach it to the next message (the inverse of VSCode Claude Code's always-on injection).
-//
-// Gated on the Workspace being the area on screen. The chip's whole claim is "the file you are LOOKING AT",
-// and it reads two singletons (useWorkspaceTabs, useEditorSelection) that outlive the Workspace view — while
-// this pane is docked in the persistent shell (ShellDesktop) beside whatever area is open. Off /workspace
-// there is nothing the user is looking at, so "this file" has no referent and the chip is a stale nag for a
-// file they left behind (worse in /agents, where the turn runs in the agent's worktree, not the /work tree
-// the tab came from). Route-gated rather than dismissible: it is self-correcting — walk back into the
-// Workspace and the chip returns, with nothing to undo.
-const route = useRoute();
-const workspaceTabs = useWorkspaceTabs();
-const editorSelection = useEditorSelection();
-const editorTarget = computed<{ file: string; startLine?: number; endLine?: number; selection?: string } | undefined>(() => {
-    if (route.name !== `workspace`) {
-        return undefined;
-    }
-    const selection = editorSelection.selection.value;
-    if (selection !== undefined) {
-        return { file: selection.path, startLine: selection.startLine, endLine: selection.endLine, selection: selection.text };
-    }
-    const tab = workspaceTabs.activeTab.value;
-    return tab?.kind === `file` ? { file: tab.path } : undefined;
-});
-const includeEditorContext = ref(false);
-// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in, as does
-// leaving the Workspace (the target goes undefined with the chip, so an opt-in can't outlive the chip that
-// explained it and ride along invisibly into a later message).
-watch(
-    () => editorTarget.value?.file,
-    () => {
-        includeEditorContext.value = false;
-    },
-);
-const editorChipLabel = computed(() => {
-    const target = editorTarget.value;
-    if (target === undefined) {
-        return ``;
-    }
-    const name = target.file.split(`/`).pop() ?? target.file;
-    return target.startLine !== undefined ? `${name}:${target.startLine}-${target.endLine}` : name;
-});
 // The composer Send is usable whenever there is something to send — text, a finished attachment, or a queued
 // message waiting to go out — regardless of what the conversation is doing: a message written mid-turn is
 // never refused, it is delivered into the running turn or queued behind it (see Conversation.enqueue). A
@@ -882,6 +430,28 @@ const staged = computed(() => draft.value.trim().length > 0 || attachments.value
  * Offered only where it can land: the route is keyed on the registry, so a draft chat that has never run a
  * turn has nowhere to place into — the pill appears with the first turn, like the agent itself does. */
 const voiceAgent = ref(false);
+const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
+
+// The badge that says what the next message is run THROUGH — a loop, a workflow, or nothing (useRunThrough).
+const runThrough = useRunThrough(chat, { reachable, connected, staged, draft });
+const {
+    open: runThroughOpen,
+    state: runThroughState,
+    icon: runThroughIcon,
+    name: runThroughName,
+    hint: runThroughHint,
+    label: runThroughLabel,
+    workflow: pickedWorkflow,
+    loop: pickedLoop,
+    running: runningLoop,
+    workflowFailure,
+    loopFailure,
+    pickLoop,
+    pickWorkflow,
+    manage: manageRunThrough,
+    end: endLoop,
+} = runThrough;
+
 /* NOTHING ELSE THAT REWRITES WHAT SEND MEANS SURVIVES AN EDIT BEING ARMED — the voice, and the run-through
  * badge's two picks. All three answer the same question the edit does ("what happens when I press send") with
  * answers that cannot both hold, and submit() has to pick one; every arrangement where the loser stays LIT is a
@@ -892,75 +462,91 @@ const voiceAgent = ref(false);
  * clearing them VISIBLY — the pill goes quiet, the badge goes neutral — is what makes the precedence something
  * the user sees rather than something they discover by pressing Send.
  *
- * Cleared here rather than by disabling the controls, which is also why the run-through badge is untouched
- * above: a running loop is stopped from that badge, and a disabled one would leave the loop no way out but the
- * fleet board. Its PICK goes; its press stays. */
+ * Cleared here rather than by disabling the controls, which is also why the run-through badge's PRESS is left
+ * alone: a running loop is stopped from that badge, and a disabled one would leave the loop no way out but the
+ * fleet board. Its pick goes; its press stays. */
 watch(editing, (armed) => {
     if (armed === undefined) {
         return;
     }
     voiceAgent.value = false;
-    props.conversation.workflowId.value = undefined;
-    props.conversation.loopId.value = undefined;
+    runThrough.clear();
 });
-const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
-/* WHY SEND IS REFUSING, in the user's words — undefined when the press will land. The only thing that can hold
- * a staged message back is an attachment that isn't on disk yet, and until now that greyed the button out and
- * said nothing: the chip looks finished the moment its thumbnail renders, so a message that will not send has
- * no visible cause anywhere on screen. Anything the composer refuses has to name itself. */
-const sendBlock = computed(() => {
-    if (!staged.value) {
-        // Nothing staged is not a refusal — an empty composer explains itself.
-        return undefined;
+// A workflow badge takes the composer over entirely — the message becomes a run's request, and an agent voice
+// left armed under it would be a promise about a send that is no longer a message into this chat.
+watch(pickedWorkflow, (picked) => {
+    if (picked !== undefined) {
+        voiceAgent.value = false;
     }
-    /* The agent's voice refuses more than your own, and each refusal is the daemon's rule said early: a
-     * running turn holds the very session placing exists to retire (the route answers CONFLICT), a pending
-     * plan is a question the agent is mid-way through asking, and an attachment is a thing the USER hands
-     * over — there is no shape of transcript in which the agent attached a file to its own reply. */
-    if (voiceAgent.value) {
-        if (streaming.value) {
-            return `The agent is running — its words can be placed once the turn ends.`;
-        }
-        if (pendingPlanMessage.value) {
-            return `A plan is awaiting your answer — decide it before speaking as the agent.`;
-        }
-        if (attachments.value.length > 0) {
-            return `An attachment can't be placed as the agent's words — remove it (×) or switch back to your own voice.`;
-        }
-    }
-    /* An edit spends a rewind, and the daemon refuses one while a turn holds the conversation (agent/rewind.ts).
-     * Said HERE rather than by grefying the button silently: the pencil is only offered on a settled chat, so a
-     * user who reaches this state armed an edit and then something started — an auto-continue, a queued message
-     * going out, a colleague's press — and the composer is the only thing on screen that can explain why the
-     * send it is holding will not land. The edit stays armed; the press works the moment the turn ends. */
-    if (editing.value !== undefined && streaming.value) {
-        return `The agent is running — this edit can be sent once the turn ends.`;
-    }
-    if (attachments.value.some((entry) => entry.status === `uploading`)) {
-        return `Waiting for the attachment to finish uploading…`;
-    }
-    if (attachments.value.some((entry) => entry.status === `failed`)) {
-        return `An attachment failed to upload — remove it (×) to send.`;
-    }
-    return undefined;
 });
-/* THE LAST TURN STOPPED BEFORE IT FINISHED, and this composer is offering to carry it on.
+/* Close the model, mode and persona panels whenever the pill they hang off stops being usable, which happens
+ * two ways. The pills live behind `v-if="connected"`, so switching to a disconnected provider unmounts the
+ * anchor out from under an open panel; and a picked workflow greys them, which a panel already open would
+ * happily go on ignoring — a tab switch is enough to land in that state, since the open flags belong to the pane
+ * and the badge belongs to the conversation. Either way the answer is the same: the composer that owns them
+ * closes them.
  *
- * The flag itself is the conversation's (Conversation.resumable, which says at length which endings earn it);
- * what the composer adds is the three states in which the offer would be wrong even though the turn really did
- * stop. An EMPTY BOX is the whole of the gesture — the offer is "press this instead of typing", so the moment
- * there are words or files staged, those are what the user means to send. A PENDING PLAN turns the composer
- * into the revision field, where a continuation would be feedback rather than a continuation. And a QUEUED
- * message is already the answer to "what happens next", waiting for a send of its own.
- *
- * One computed for both affordances deliberately: the strip and the Enter key are the same offer wearing two
- * shapes, and a user who reaches for the key because the strip is on screen must not find it does something
- * else. */
-const continueOffer = computed(
-    () => resumable.value && !staged.value && queued.value.length === 0 && pendingPlanMessage.value === undefined && connected.value,
+ * The run-through panel is NOT in this list, and that is the point of it: it is the one control a picked
+ * workflow leaves live, because it is the control holding the pick. Closing it on `!isConnected` would be
+ * right, but the pick that lands there closes it already, and unpicking has to stay reachable. */
+watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
+    if (!isConnected || workflow !== undefined) {
+        modelOpen.value = false;
+        modeOpen.value = false;
+        personaOpen.value = false;
+    }
+});
+
+/* WHAT THE NEXT PRESS MEANS — one snapshot of the composer, and every answer that follows from it. The ladder
+ * itself is composerIntent.ts; what the pane owns is the reading of it, because these are the values only a
+ * mounted chat has. */
+const situation = computed<ComposerSituation>(() => ({
+    staged: staged.value,
+    attached: attachments.value.length > 0,
+    uploading: attachments.value.some((entry) => entry.status === `uploading`),
+    uploadFailed: attachments.value.some((entry) => entry.status === `failed`),
+    voiceAgent: voiceAgent.value,
+    editing: editing.value !== undefined,
+    pendingPlan: pendingPlanMessage.value !== undefined,
+    streaming: streaming.value,
+    awaitingDecision: awaitingDecision.value,
+    steerable: steerable.value,
+    resumable: resumable.value,
+    queued: queued.value.length,
+    connected: connected.value,
+}));
+const intent = computed(() => sendIntentOf(situation.value));
+// Why Send is refusing, in the user's words — undefined when the press will land.
+const refusal = computed(() => sendRefusal(situation.value));
+const continueOffer = computed(() => continueOffered(situation.value));
+const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
+// Everything a press that spends the box needs to be true, in one name: the two intercepting intents (the
+// agent's voice and an armed edit) return before `canSend` is ever consulted, and Enter arrives straight into
+// submit() without passing the disabled Send button at all.
+const readyToSend = computed(() => connected.value && staged.value && refusal.value === undefined);
+
+const words = computed(() => ({ provider: providerName.value, onTrial: onTrial.value, editDropped: editDropped.value }));
+// A viewer's composer is present but inert: the transcript is theirs to read, the send is not theirs to make
+// (the daemon floors every turn route at collaborator). Disabled-with-a-reason over hidden — an input that
+// vanished would read as broken, and the placeholder is where a composer explains itself.
+const { canDrive } = useRole();
+const composerPlaceholder = computed(() => (canDrive.value ? placeholderFor(intent.value, words.value) : VIEWER_PLACEHOLDER));
+const sendHint = computed(() => {
+    if (!reachable.value) {
+        return `The sandbox is busy — keep typing; Send is available when it is ready.`;
+    }
+    return refusal.value ?? sendHintFor(intent.value, words.value);
+});
+// Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
+// want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
+// card's own buttons were the only way forward. Name the consequence there: the parked request goes with it.
+const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`));
+const stopHint = computed(() =>
+    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
 );
-/* THE SAME OFFER, LEFT ON — and the strip carries it because that is where the user is when they wish they had
- * it: reading "this turn stopped before it finished" for the third time in half an hour.
+
+/* THE STOPPED TURN'S OFFER, LEFT ON — and the strip carries it because that is where the user is when they wish
+ * they had it: reading "this turn stopped before it finished" for the third time in half an hour.
  *
  * Shown WHENEVER the automation is armed, not only alongside the offer, because the switch has to be reachable
  * to be turned off. The armed line is the whole of what a chat looks like while it is waiting on itself — a
@@ -972,92 +558,6 @@ const autoContinueLine = computed(() =>
         ? `Auto-continue is on — this chat picks itself back up when a turn stops short.`
         : `Auto-continue is on — continuing in ${formatWait(autoContinueAt.value / 1000)}.`,
 );
-const canSend = computed(() => {
-    if (sendBlock.value !== undefined) {
-        return false;
-    }
-    // The agent's voice sends exactly the words in the box — an empty box continues nothing and flushes no
-    // queue, because both of those are turns and a placed message is deliberately not one.
-    if (voiceAgent.value) {
-        return staged.value;
-    }
-    /* An edit replaces a prompt, so it needs one: an empty box would drop the turns and then ask nothing, which
-     * is a rewind the user did not ask for wearing an edit's confirmation. Cancel is how an edit ends with
-     * nothing sent, and it is on screen the whole time (see the editing strip). */
-    if (editing.value !== undefined) {
-        return staged.value;
-    }
-    return staged.value || continueOffer.value || (queued.value.length > 0 && !streaming.value && !pendingPlanMessage.value);
-});
-const sendHint = computed(() => {
-    if (!reachable.value) {
-        return `The sandbox is busy — keep typing; Send is available when it is ready.`;
-    }
-    if (sendBlock.value !== undefined) {
-        return sendBlock.value;
-    }
-    if (voiceAgent.value) {
-        return `Place into the transcript as ${providerName.value} — no reply`;
-    }
-    // Names the COST, because this is the press that pays it and the count is the thing the struck rows are on
-    // screen to make legible. Singular where only the edited prompt itself goes.
-    if (editing.value !== undefined) {
-        return editDropped.value === 1 ? `Replace this message` : `Replace this message and the ${editDropped.value - 1} below it`;
-    }
-    if (pendingPlanMessage.value) {
-        return `Send as feedback (keep planning)`;
-    }
-    if (!streaming.value) {
-        return `Send`;
-    }
-    // Mid-turn the message either reaches the running turn or waits for it — say which, so a Send that looks
-    // identical in both cases doesn't quietly mean two different things.
-    if (awaitingDecision.value) {
-        return `Queue for after the request above`;
-    }
-    return steerable.value ? `Send to the running turn` : `Queue for when this turn ends`;
-});
-// Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
-// want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
-// card's own buttons were the only way forward. Name the consequence there: the parked request goes with it.
-const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`));
-const stopHint = computed(() =>
-    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
-);
-// While a plan awaits a decision, typing revises it (reject-with-feedback); while a turn runs, typing either
-// steers it or queues behind it — the placeholder says which.
-// A viewer's composer is present but inert: the transcript is theirs to read, the send is not theirs to make
-// (the daemon floors every turn route at collaborator). Disabled-with-a-reason over hidden — an input that
-// vanished would read as broken, and the placeholder is where a composer explains itself.
-const { canDrive } = useRole();
-
-const composerPlaceholder = computed(() => {
-    if (!canDrive.value) {
-        return `You're viewing — ask the owner for a collaborator role to drive agents`;
-    }
-    // The armed voice outranks every turn-shaped placeholder below: none of them describes what this box now
-    // does, and the placeholder is where a composer says whose words it is holding.
-    if (voiceAgent.value) {
-        return `Write as ${providerName.value} — placed into the transcript, no reply…`;
-    }
-    // An edit arrives with the old prompt already in the box, so this placeholder is only ever read once the
-    // user has cleared it — which is precisely the moment "what was I doing?" needs answering.
-    if (editing.value !== undefined) {
-        return `Ask this turn again, differently…`;
-    }
-    if (pendingPlanMessage.value) {
-        return `Reply to revise the plan…`;
-    }
-    if (!streaming.value) {
-        // The trial has no vendor to name — it is the product's own channel, and "Ask Free trial…" invites a
-        // sentence to a thing rather than to somebody.
-        return onTrial.value ? `Ask anything…` : `Ask ${providerName.value}…`;
-    }
-    if (awaitingDecision.value) {
-        return `Answer above, or add a message for after…`;
-    }
-    return steerable.value ? `Steer ${providerName.value} mid-turn…` : `Add a message for when this turn ends…`;
-});
 
 // The one line under the queued stack: what will actually happen to those messages. A turn that can take
 // mid-turn input has already been offered them (they are only sitting here because it is parked on a card),
@@ -1073,7 +573,7 @@ const queuedHint = computed(() => {
 // Resolved per active sandbox rather than held, so switching sandboxes switches rings.
 const history = computed(() => (activeSandboxId.value === undefined ? undefined : inputHistoryFor(activeSandboxId.value)));
 
-/* Send the sentence the press stands for (see continueOffer above). It goes down the ordinary send path — it IS
+/* Send the sentence the press stands for (see continueOffered). It goes down the ordinary send path — it IS
  * an ordinary message, typed by the button instead of by hand — so it lands in the recall ring like any other,
  * and ↑ brings it straight back for anyone who wants to continue with an instruction attached rather than
  * plain. Down here beside the ring rather than up with the offer, so it reads after the thing it writes to. */
@@ -1109,170 +609,6 @@ const commandRun = computed<AgentCommand | undefined>(() => {
     }
     const name = text.slice(1).split(/\s/, 1)[0] ?? ``;
     return availableCommands.value.find((command) => command.name === name);
-});
-
-// The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
-// advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
-// just filled the ring.
-const composerHint = computed(() => {
-    /* The live voice mode outranks everything below: while it is on, Escape means "catch the mic", so the
-     * streaming hint's "Esc to stop" would name the wrong action — and each of these states is the only place
-     * the user learns what the mode is doing right now. Armed-send first (the narrowest window), then the two
-     * working states, then plain listening. */
-    if (voiceSendArmed.value) {
-        return `Sending — Esc to edit`;
-    }
-    if (voicePending.value > 0) {
-        return `Transcribing…`;
-    }
-    if (voiceState.value === `preparing`) {
-        return `Preparing voice (first use)…`;
-    }
-    if (voiceState.value === `listening`) {
-        return `Listening — pause to send, Esc to stop`;
-    }
-    // While the agent is generating, the shortcut worth the slot is the way out of it — the same slot is how
-    // the user learns Escape does this at all.
-    if (streaming.value && !awaitingDecision.value) {
-        return `Esc to stop`;
-    }
-    // A draft that runs as a command sends nothing to the model, so say so before Enter rather than after.
-    if (commandRun.value !== undefined) {
-        return `Enter runs /${commandRun.value.name}`;
-    }
-    /* The stopped turn's shortcut, in the slot the user is already looking at while they decide what to type.
-     * This is the whole of how anyone learns the key exists: the strip above says a turn is unfinished and
-     * carries the button, and this says the key does the same thing — so the gesture is learned once, at the
-     * only moment it applies, and costs the composer nothing on every other turn. Ahead of the recall hint
-     * because it is the rarer state and the more useful one: ↑ is always there, and this is not. */
-    if (continueOffer.value) {
-        return `Enter to continue`;
-    }
-    return draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`;
-});
-
-// The staged chips as the message carries them: upload metadata plus the object URL, so the bubble it lands on
-// shows the same thumbnail the chip did without re-reading the bytes.
-const snapshotAttachments = (): ChatAttachment[] =>
-    attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({ name, path, ...(previewUrl !== undefined ? { previewUrl } : {}) }));
-
-/* The editor chip this send carries, or nothing — extracted because an EDIT sends by a different path than an
- * ordinary message (see submit) and the two must not disagree about what "the file I'm looking at" means. The
- * selection is capped at the same 20k it always was: a prompt is not a place to paste a whole file. */
-const editorContextForSend = (): EditorContext | undefined => {
-    const target = editorTarget.value;
-    if (!includeEditorContext.value || target === undefined) {
-        return undefined;
-    }
-    return {
-        file: target.file,
-        ...(target.selection !== undefined
-            ? { startLine: target.startLine, endLine: target.endLine, selection: target.selection.slice(0, 20_000) }
-            : {}),
-    };
-};
-
-/* --- The workflow this composer is aimed at ------------------------------------------------------
- * A pick, held on the conversation (Conversation.workflowId) beside the model and the effort, because that is
- * what it is: one more answer to "what happens when I press send". Set it and the next message is not a turn
- * on this chat at all — it is the REQUEST of a run, handed to every step of a saved design.
- *
- * IT IS A BADGE AND NOT A ONE-SHOT PICKER, which is the correction. It used to be a pill that opened a list
- * and started a run the moment you chose from it, so the choice and the send were the same press and there
- * was nothing on screen, before or after, saying which design your words had gone to. Now the badge names the
- * pick and stays named until the message goes.
- *
- * The pick CLEARS on a successful send. A workflow fans one message into several paid sessions, and a badge
- * that survived its own run would make the next message do it again silently.
- */
-const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
-const workflowFailure = ref<string>();
-const pickedWorkflow = computed(() => workflowDesigns.value.find((workflow) => workflow.id === props.conversation.workflowId.value));
-
-// A workflow badge takes the composer over entirely — the message becomes a run's request, and an agent voice
-// left armed under it would be a promise about a send that is no longer a message into this chat.
-watch(pickedWorkflow, (picked) => {
-    if (picked !== undefined) {
-        voiceAgent.value = false;
-    }
-});
-
-/* Close the model and mode panels whenever the pill they hang off stops being usable, which happens two ways.
- * The pills live behind `v-if="connected"`, so switching to a disconnected provider unmounts the anchor out
- * from under an open panel; and a picked workflow greys them, which a panel already open would happily go on
- * ignoring — a tab switch is enough to land in that state, since the open flags belong to the pane and the
- * badge belongs to the conversation. Either way the answer is the same: the composer that owns them closes
- * them.
- *
- * The run-through panel is NOT in this list, and that is the point of it: it is the one control a picked
- * workflow leaves live, because it is the control holding the pick. Closing it on `!isConnected` would be
- * right, but the pick that lands there closes it already, and unpicking has to stay reachable.
- */
-watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
-    if (!isConnected || workflow !== undefined) {
-        modelOpen.value = false;
-        modeOpen.value = false;
-        personaOpen.value = false;
-    }
-});
-
-// The loop pick's mirror image: one badge, one answer, so arming this disarms that.
-const pickWorkflow = (workflow: Workflow | undefined): void => {
-    runThroughOpen.value = false;
-    workflowFailure.value = undefined;
-    props.conversation.workflowId.value = workflow?.id;
-    if (workflow !== undefined) {
-        props.conversation.loopId.value = undefined;
-    }
-};
-
-/* --- THE RUN-THROUGH BADGE ------------------------------------------------------------------------
- * ONE control for the one question — what is the next message run THROUGH — and it took two pills far too
- * long to admit they were asking it. A loop repeats the message here until a bar is cleared; a workflow hands
- * it to a design of sessions that are not this one. Different machines, mutually exclusive answers, and the
- * old row expressed that exclusivity by greying whichever pill you hadn't used yet.
- *
- * FOUR STATES, in this precedence:
- *
- *  - RUNNING a loop — the round count, and the press ENDS it. Outranks everything, including a workflow the
- *    user might otherwise want to arm mid-loop: a loop already going spends money with nobody pressing
- *    anything between rounds, so the one press it needs is the way out, and a badge that hid the stop behind
- *    a menu would leave the fleet board as the only exit. One press ends it and the badge is a picker again.
- *  - WORKFLOW armed — the design's own glyph and name, in the active tint.
- *  - LOOP armed — the same, in the loop's glyph.
- *  - Nothing — a bare `fork`: a message taking some route other than straight down into this chat. Neither of
- *    the two specific glyphs, deliberately, since either would read as one of them already being armed.
- *
- * Never greyed under a workflow badge the way model, effort, mode and persona are. Those describe a turn the
- * workflow send doesn't make; this one IS the badge, and a control you cannot press to undo is a trap.
- */
-const runThroughIcon = computed<IconName>(() => {
-    if (looping.value || pickedLoop.value !== undefined) {
-        return `repeat`;
-    }
-    return pickedWorkflow.value === undefined ? `fork` : `sitemap`;
-});
-const runThroughName = computed(() => pickedWorkflow.value?.name ?? pickedLoop.value?.name);
-const runThroughHint = computed(() => {
-    if (looping.value) {
-        return `Stop looping — iteration ${activeLoop.value?.iteration} finishes first. Use Stop to cut it short.`;
-    }
-    if (pickedWorkflow.value !== undefined) {
-        return `Send runs “${pickedWorkflow.value.name}” with this message as its request`;
-    }
-    if (pickedLoop.value !== undefined) {
-        return `Send runs “${pickedLoop.value.name}” — this message is the goal, repeated until it is met`;
-    }
-    return `Repeat this message until a goal is met, or run it through a workflow`;
-});
-const runThroughLabel = computed(() => {
-    if (looping.value) {
-        return `Stop looping`;
-    }
-    if (pickedWorkflow.value !== undefined) {
-        return `Workflow: ${pickedWorkflow.value.name}`;
-    }
-    return pickedLoop.value === undefined ? `Run this message through a loop or a workflow` : `Loop: ${pickedLoop.value.name}`;
 });
 
 /* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD. The pick lives on the conversation (and rides every turn
@@ -1318,41 +654,14 @@ const pickPersona = (id: string | undefined): void => {
     props.conversation.actsAs.value = id;
 };
 
-/* Send the draft as a run's request. The draft is cleared on success for the reason an ordinary send clears it
- * — the text has gone somewhere — and KEPT on failure, because the message is all the user has and a control
- * that eats it is one nobody presses twice. Then the run takes the screen (openRunInChat), which is the same
- * landing the board's card gives it.
- */
-const sendThroughWorkflow = async (workflow: Workflow): Promise<void> => {
-    workflowFailure.value = undefined;
-    const request = draft.value.trim();
-    try {
-        const run = await startWorkflow.mutateAsync({ id: workflow.id, ...(request === `` ? {} : { request }) });
-        draft.value = ``;
-        props.conversation.workflowId.value = undefined;
-        await openRunInChat(run);
-    } catch (error) {
-        workflowFailure.value = error instanceof Error ? error.message : `The workflow could not be started.`;
-    }
-};
-
-/* Start the armed loop with the draft as its goal. The draft clears on success for the reason an ordinary send
- * clears it — the words have gone somewhere — and is KEPT on failure, because the message is all the user has.
- *
- * The badge clears too, and that is the one thing here that must not be forgotten: a loop spends money per
- * round with nobody pressing anything in between, so a badge that survived its own start would turn the next
- * ordinary message into a second paid loop, silently.
- */
-const sendThroughLoop = async (design: LoopDesign): Promise<void> => {
-    loopFailure.value = undefined;
-    const goal = draft.value.trim();
-    try {
-        await startLoop(loopFromDesign(design, { conversationId: props.conversation.conversationId, goal, isolated: loopIsolated.value }));
-        draft.value = ``;
-        props.conversation.loopId.value = undefined;
-    } catch (error) {
-        loopFailure.value = error instanceof Error ? error.message : `The loop could not be started.`;
-    }
+// Snap the box back to one line and keep the cursor ready for the next message — what every path that spends
+// the draft ends with.
+const settleComposer = (): void => {
+    draft.value = ``;
+    void nextTick(() => {
+        grow();
+        input.value?.focus();
+    });
 };
 
 /* Place the draft into the transcript as the AGENT's words (the armed voice above). Awaited rather than
@@ -1370,111 +679,37 @@ const placeDraft = async (): Promise<void> => {
     // Disarm — speaking as the agent is a deliberate act each time (see voiceAgent).
     voiceAgent.value = false;
     pin();
-    draft.value = ``;
-    void nextTick(() => {
-        grow();
-        input.value?.focus();
-    });
+    settleComposer();
 };
 
-const submit = (): void => {
-    workflowFailure.value = undefined;
-    loopFailure.value = undefined;
-    if (!reachable.value) {
-        return;
-    }
-    /* THE ARMED VOICE INTERCEPTS EVERYTHING — placed words are not a turn, so no gate below (a plan to revise,
-     * a turn to steer, a queue to flush, a continuation to offer) applies to them; and it RETURNS either way,
-     * because falling through with an empty box would let a press meant as "place" become a Continue. The
-     * workflow badge cannot be armed at the same time (its pick disarms the voice), so the order to it is a
-     * formality kept explicit. */
-    if (voiceAgent.value) {
-        if (connected.value && staged.value && sendBlock.value === undefined) {
-            void placeDraft();
-        }
-        return;
-    }
-    /* AN ARMED EDIT INTERCEPTS NEXT, and for the same reason the voice above it does: this press is not a new
-     * message at the end of the conversation, so none of the gates below — a plan to revise, a turn to steer, a
-     * queue to flush, a stopped turn to continue — is asking about the right thing. It rewinds to the message
-     * being edited and sends the box in its place (Conversation.submitEdit), and it RETURNS either way, because
-     * falling through would let a press meant as "replace that prompt" become an ordinary send appended to the
-     * very turns the user was replacing.
-     *
-     * THE SEND IS THE CONFIRMATION. Everything the edit destroys is destroyed here and nowhere earlier, which is
-     * what buys the mode its cancel-costs-nothing promise — and why there is no second "are you sure" on top of
-     * it: the user has just restated the prompt with the casualties struck through on screen in front of them.
-     * An empty box is refused by `canSend` above, so a stray Enter cannot spend an edit on nothing. */
-    if (editing.value !== undefined) {
-        /* Gated exactly as the voice above is, and for the same three reasons — no daemon means nothing to send
-         * to, an empty box means an edit that would drop the turns and then ask nothing (a rewind the user never
-         * asked for, wearing an edit's confirmation), and a refusal is a refusal. It has to be checked HERE
-         * rather than left to `canSend` further down, because this branch returns before reaching it: the Send
-         * button greys itself out, but Enter arrives straight into this function. */
-        if (!connected.value || !staged.value || sendBlock.value !== undefined) {
-            return;
-        }
-        const replacement = draft.value.trim();
-        void submitEdit(replacement, snapshotAttachments(), editorContextForSend());
-        attachments.value = [];
-        includeEditorContext.value = false;
-        history.value?.record(replacement);
-        pin();
-        draft.value = ``;
-        void nextTick(() => {
-            grow();
-            input.value?.focus();
-        });
-        return;
-    }
-    /* THE BADGE INTERCEPTS THE SEND, ahead of every gate below it — those are about a TURN on this
-     * conversation (a pending plan, a running turn to steer, staged attachments), and this message is not one.
-     * It goes to a graph of sessions that are not this chat, so none of the machinery for putting words into
-     * this chat applies. `connected` still does: with no daemon there is nothing to start. */
-    const workflow = pickedWorkflow.value;
-    if (workflow !== undefined && connected.value) {
-        void sendThroughWorkflow(workflow);
-        return;
-    }
-    /* The loop badge intercepts next, and BELOW the workflow one because a workflow greys the loop pill: the
-     * two can never be armed at once, so the order is a formality kept explicit rather than a precedence.
-     *
-     * Unlike a workflow's, this send does need a goal — a loop with an empty one has nothing to converge on and
-     * the daemon's own schema refuses it — so it gates on `staged`, the composer actually holding something,
-     * rather than on `canSend`. The two are not the same question: `canSend` is also true for the presses that
-     * send something OTHER than the draft (a queue to flush, a stopped turn to continue), and a loop started off
-     * one of those would go up with no goal at all. It is not a turn on this chat either, so nothing below it
-     * applies: a loop drives its own. */
-    const loop = pickedLoop.value;
-    if (loop !== undefined && connected.value && staged.value && !looping.value) {
-        void sendThroughLoop(loop);
-        return;
-    }
-    // canSend covers the gates that are left: an empty composer and an attachment that isn't on disk yet.
-    if (!connected.value || !canSend.value) {
-        return;
-    }
-    /* NOTHING TYPED AND A TURN LEFT HANGING: the press means Continue (see continueOffer). Below the badges,
-     * which are explicit choices the user armed, and above everything else, because every gate under here reads
-     * the draft — and the whole point of this branch is that there isn't one. */
-    if (continueOffer.value) {
-        continueTurn();
-        return;
-    }
+/* Rewind to the message being edited and send the box in its place (Conversation.submitEdit).
+ *
+ * THE SEND IS THE CONFIRMATION. Everything the edit destroys is destroyed here and nowhere earlier, which is
+ * what buys the mode its cancel-costs-nothing promise — and why there is no second "are you sure" on top of it:
+ * the user has just restated the prompt with the casualties struck through on screen in front of them. */
+const sendEdit = (): void => {
+    const replacement = draft.value.trim();
+    void submitEdit(replacement, staging.snapshot(), editorContextForSend());
+    attachments.value = [];
+    includeEditorContext.value = false;
+    history.value?.record(replacement);
+    pin();
+    settleComposer();
+};
+
+// The ordinary message: one path whether or not a turn is running — the conversation delivers it into the
+// running turn or queues it (see Conversation.enqueue). Typing while a plan is pending rejects that plan with
+// the text as feedback (Claude Code style) instead, and the agent stays in plan mode to revise.
+const sendDraft = (): void => {
     const text = draft.value.trim();
     const pendingPlan = pendingPlanMessage.value;
-    if (pendingPlan) {
-        // Typing while a plan is pending rejects it with that text as feedback (Claude Code style) — the
-        // agent stays in plan mode and revises. Staged files go with it (as workspace paths in the feedback —
-        // see decidePlan), then clear like a normal send: WITHOUT revoking the preview URLs, which the user
-        // bubble the rejection leaves behind now owns.
-        void decidePlan(pendingPlan, false, text, snapshotAttachments());
+    // Snapshot the chips onto the message, then clear WITHOUT revoking preview URLs — the thumbnails now live
+    // on the queued/sent (or rejected-with-feedback) message, which owns them.
+    if (pendingPlan !== undefined) {
+        void decidePlan(pendingPlan, false, text, staging.snapshot());
         attachments.value = [];
     } else {
-        // One path whether or not a turn is running — the conversation delivers it into the running turn or
-        // queues it (see Conversation.enqueue). Snapshot the chips onto the message, then clear WITHOUT
-        // revoking preview URLs — the thumbnails now live on the queued/sent message.
-        void send(text, snapshotAttachments(), editorContextForSend());
+        void send(text, staging.snapshot(), editorContextForSend());
         attachments.value = [];
         includeEditorContext.value = false;
     }
@@ -1487,13 +722,99 @@ const submit = (): void => {
     // in the transcript. It re-arms the follow they gave up by scrolling away to check something before
     // writing, which is the one case where the "leave the reader alone" rule would be reading the wrong intent.
     pin();
-    draft.value = ``;
-    // Snap the box back to one line and keep the cursor ready for the next message.
-    void nextTick(() => {
-        grow();
-        input.value?.focus();
-    });
+    settleComposer();
 };
+
+/* THE PRESS, in the precedence the intents are named in.
+ *
+ * The first two INTERCEPT: placed words are not a turn and an edit is not a new message at the end of the
+ * conversation, so no gate below them — a plan to revise, a turn to steer, a queue to flush, a stopped turn to
+ * continue — is asking about the right thing. Each returns either way, because falling through with an empty
+ * box would let a press meant as "place" become a Continue, and a press meant as "replace that prompt" become
+ * an ordinary send appended to the very turns the user was replacing.
+ *
+ * Then the badge, which is not a turn on this conversation at all (useRunThrough.claimSend). Then `canSend`,
+ * which covers what is left: an empty composer, and an attachment that isn't on disk yet. */
+const submit = (): void => {
+    runThrough.clearFailures();
+    if (!reachable.value) {
+        return;
+    }
+    if (intent.value === `place`) {
+        if (readyToSend.value) {
+            void placeDraft();
+        }
+        return;
+    }
+    if (intent.value === `edit`) {
+        if (readyToSend.value) {
+            sendEdit();
+        }
+        return;
+    }
+    if (runThrough.claimSend()) {
+        return;
+    }
+    if (!connected.value || !canSend.value) {
+        return;
+    }
+    /* NOTHING TYPED AND A TURN LEFT HANGING: the press means Continue (see continueOffered). Below the badges,
+     * which are explicit choices the user armed, and above everything else, because every gate under here reads
+     * the draft — and the whole point of this branch is that there isn't one. */
+    if (continueOffer.value) {
+        continueTurn();
+        return;
+    }
+    sendDraft();
+};
+
+// Hands-free voice: the mic, and what the pause does (useComposerVoice). Below `submit`, because the pause IS
+// the send — the countdown calls it.
+const {
+    on: voiceOn,
+    live: voiceLive,
+    state: voiceState,
+    level: voiceLevel,
+    buttonHint: voiceHint,
+    slotHint: voiceSlotHint,
+    errorMessage: voiceErrorMessage,
+    toggle: toggleVoice,
+    quit: quitVoice,
+} = useComposerVoice({ draft, reachable, grew: grow, send: submit });
+// Leaving exits hands-free — a mode that kept recording a pane the user walked away from would be the feature
+// at its worst. The draft is untouched. (Typing exits it too, from the input handler below.)
+watch([() => props.conversation, () => props.focused], quitVoice);
+
+// The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
+// advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
+// just filled the ring.
+const recallable = computed(() => draft.value === `` && history.value?.recallable === true);
+const composerHint = computed(() => {
+    // The live voice mode outranks everything below: while it is on, Escape means "catch the mic", so the
+    // streaming hint's "Esc to stop" would name the wrong action.
+    const spoken = voiceSlotHint.value;
+    if (spoken !== undefined) {
+        return spoken;
+    }
+    // While the agent is generating, the shortcut worth the slot is the way out of it — the same slot is how
+    // the user learns Escape does this at all.
+    if (streaming.value && !awaitingDecision.value) {
+        return `Esc to stop`;
+    }
+    // A draft that runs as a command sends nothing to the model, so say so before Enter rather than after.
+    if (commandRun.value !== undefined) {
+        return `Enter runs /${commandRun.value.name}`;
+    }
+    /* The stopped turn's shortcut, in the slot the user is already looking at while they decide what to type.
+     * This is the whole of how anyone learns the key exists: the strip above says a turn is unfinished and
+     * carries the button, and this says the key does the same thing — so the gesture is learned once, at the
+     * only moment it applies, and costs the composer nothing on every other turn. Ahead of the recall hint
+     * because it is the rarer state and the more useful one: ↑ is always there, and this is not. */
+    if (continueOffer.value) {
+        return `Enter to continue`;
+    }
+    return recallable.value ? `↑ for previous message` : `Shift+Enter for new line`;
+});
 
 // --- @-mention + /-command popovers -----------------------------------------------------------
 // The caret drives which popover is live: an @-token at the caret opens the file picker; a leading `/` with
@@ -1606,78 +927,99 @@ const recallKeydown = (event: KeyboardEvent): boolean => {
     return true;
 };
 
+// --- The composer's keyboard ------------------------------------------------------------------
+// Both lists answer the same three gestures, and the composer wants nothing else from either.
+interface PopoverList {
+    readonly move: (delta: number) => void;
+    /** Whether a row was actually picked — with none active, the key belongs to the composer. */
+    readonly pickActive: () => boolean;
+}
+const activePopover = computed<PopoverList | undefined>(() =>
+    mentionOpen.value ? mentionPopover.value : commandOpen.value ? commandPopover.value : undefined,
+);
+// An open popover owns the list keys; anything it does not claim falls straight through, which is what keeps
+// Shift+Enter a newline with the list up.
+const POPOVER_KEYS: Record<string, (popover: PopoverList, event: KeyboardEvent) => boolean> = {
+    ArrowDown: (popover) => {
+        popover.move(1);
+        return true;
+    },
+    ArrowUp: (popover) => {
+        popover.move(-1);
+        return true;
+    },
+    Escape: () => {
+        popoverDismissed.value = true;
+        return true;
+    },
+    Enter: (popover, event) => !event.shiftKey && popover.pickActive(),
+    Tab: (popover) => popover.pickActive(),
+};
+const popoverKeydown = (event: KeyboardEvent): boolean => {
+    const popover = activePopover.value;
+    if (popover === undefined) {
+        return false;
+    }
+    return POPOVER_KEYS[event.key]?.(popover, event) === true;
+};
+
+// Escape interrupts the turn (Claude Code's shortcut), but only while it is GENERATING: a turn parked on a card
+// is spending nothing, and losing a plan the user is still reading to a stray Escape costs far more than the
+// keystroke saves — the Stop button is the deliberate way out of that one.
+const interruptible = computed(() => streaming.value && !awaitingDecision.value && reachable.value);
+/* WHO GETS ESCAPE, once the popovers and message recall have had their claim on it. Both modes above the
+ * turn-stop are there on the same reasoning: the thing the user is escaping is the mode they are in, and
+ * stopping a streaming turn instead would be a far bigger action than the key meant.
+ *
+ * The voice catches a message counting down to send (the words stay in the box for editing) and ends hands-free
+ * either way. The edit is simply abandoned, which is free — the transcript is intact, the files are untouched,
+ * and the composer goes back to whatever the pencil displaced (Conversation.cancelEdit). */
+const escapeKeydown = (): boolean => {
+    if (voiceLive.value) {
+        quitVoice();
+        return true;
+    }
+    if (editing.value !== undefined) {
+        cancelEdit();
+        return true;
+    }
+    if (!interruptible.value) {
+        return false;
+    }
+    stop();
+    return true;
+};
+
 const onKeydown = (event: KeyboardEvent): void => {
     // Never submit mid-IME-composition (CJK candidates confirm with Enter).
     if (event.isComposing) {
         return;
     }
-    // An open popover owns the list keys; Enter/Tab pick, Escape dismisses, arrows move.
-    const popover = mentionOpen.value ? mentionPopover.value : commandOpen.value ? commandPopover.value : undefined;
-    if (popover !== undefined) {
-        if (event.key === `ArrowDown` || event.key === `ArrowUp`) {
-            event.preventDefault();
-            popover.move(event.key === `ArrowDown` ? 1 : -1);
-            return;
-        }
-        if (event.key === `Escape`) {
-            event.preventDefault();
-            popoverDismissed.value = true;
-            return;
-        }
-        if ((event.key === `Enter` && !event.shiftKey) || event.key === `Tab`) {
-            if (popover.pickActive()) {
-                event.preventDefault();
-                return;
-            }
-        }
+    if (popoverKeydown(event)) {
+        event.preventDefault();
+        return;
     }
     // After the popovers: an open @/-list owns the arrows for the token being typed, and recall's own Escape
-    // must not pre-empt dismissing that list.
+    // must not pre-empt dismissing that list. Recall claims the key by preventing the default itself.
     if (recallKeydown(event)) {
         return;
     }
-    // Escape's next claim is the live voice mode: it catches a message counting down to send (the words stay
-    // in the box for editing) and ends hands-free either way. Ahead of the turn-stop below on purpose — with
-    // the mic on, the thing the user is escaping is the mic, and stopping a streaming turn instead would be a
-    // far bigger action than the key meant.
-    if (event.key === `Escape` && (voiceOn.value || voiceSendArmed.value)) {
-        event.preventDefault();
-        quitVoice();
-        return;
-    }
-    /* Escape's next claim is an armed EDIT, which it abandons — the key's plainest meaning ("get me out of this
-     * mode"), and it is free to obey here because abandoning costs nothing: the transcript is intact, the files
-     * are untouched, and the composer goes back to whatever the pencil displaced (Conversation.cancelEdit).
-     *
-     * Ahead of the turn-stop below, on the same reasoning that puts the voice ahead of it: with an edit armed,
-     * the mode the user is escaping is the edit, and stopping a turn instead would be a much larger action than
-     * the key meant. The two cannot both claim the key anyway — an edit cannot be armed on a streaming chat. */
-    if (event.key === `Escape` && editing.value !== undefined) {
-        event.preventDefault();
-        cancelEdit();
-        return;
-    }
-    // Escape interrupts the turn (Claude Code's shortcut), once the popovers and message recall have had their
-    // claim on the key. Only while it's GENERATING: a turn parked on a card is spending nothing, and losing a
-    // plan the user is still reading to a stray Escape costs far more than the keystroke saves — the Stop
-    // button is the deliberate way out of that one.
-    if (event.key === `Escape` && streaming.value && !awaitingDecision.value && reachable.value) {
-        event.preventDefault();
-        stop();
-        return;
-    }
-    if (event.key !== `Enter`) {
+    if (event.key === `Escape`) {
+        if (escapeKeydown()) {
+            event.preventDefault();
+        }
         return;
     }
     // On mobile Enter is a newline (the send button submits) — the virtual keyboard has no Shift+Enter.
-    if (mobile.value) {
+    if (event.key !== `Enter` || mobile.value) {
         return;
     }
     // Enter (or Cmd/Ctrl+Enter) sends; Shift+Enter inserts a newline.
-    if (!event.shiftKey || event.metaKey || event.ctrlKey) {
-        event.preventDefault();
-        submit();
+    if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
+        return;
     }
+    event.preventDefault();
+    submit();
 };
 
 // --- Tabs / history --------------------------------------------------------------------------
@@ -1704,93 +1046,14 @@ watch(composerFocus, () => {
 });
 
 // --- Lifecycle / effects ---------------------------------------------------------------------
-/* Make the native scrollbar truthful after a transcript lands wholesale.
- *
- * .chat-message rows are content-visibility:auto with a 3rem estimate (chat.css), so a freshly swapped-in
- * transcript reports a scrollHeight built almost entirely of estimates. Left alone, every row realizing on
- * the way past rewrites scrollHeight mid-scroll — and a native scrollbar DRAG maps the thumb against the
- * current scrollHeight, so the thumb kept leaping hundreds of px away from the cursor. The cure is one
- * idle-time realization pass: .chat-realize forces every row to lay out for real, `auto` records those
- * heights as remembered sizes, and skipping resumes with a scrollHeight that no longer moves.
- *
- * Two frames under the class on purpose: the first lays the realized transcript out and records remembered
- * sizes (that happens at resize-observer timing, at the end of the frame), the second may drop back to
- * skipping. A followed transcript survives the growth spurt through useStickToBottom's own observer;
- * elsewhere scroll anchoring holds the view. requestIdleCallback keeps the one full layout off the restore's
- * critical path (Safari has no idle callback — a beat of setTimeout is the same bargain). */
-const realizing = ref(false);
-let warmQueued = false;
-// Both callbacks are the TRANSCRIPT's window's — asked for afresh at each step, since a pop-out or a dock can
-// land between them. Asking the opener (where this code runs) is asking a window that is typically behind the
-// chat window and getting no rendering steps at all: the pass never ran, and the latch below never lifted.
-const whenIdle = (task: () => void): void => {
-    const view = transcriptWindow();
-    if (view === undefined) {
-        // Nothing left to schedule against. The work is a scroll warm-up, so dropping it costs a frame of
-        // layout on a pane that no longer exists.
-        return;
-    }
-    if (view.requestIdleCallback === undefined) {
-        view.setTimeout(task, 200);
-        return;
-    }
-    view.requestIdleCallback(task);
-};
-const warmTranscript = (): void => {
-    if (warmQueued) {
-        return;
-    }
-    warmQueued = true;
-    whenIdle(() => {
-        realizing.value = true;
-        void nextTick(() => {
-            const view = transcriptWindow();
-            if (view === undefined) {
-                // The document went away between the idle callback and this tick. Clear the latch by hand,
-                // since the frames that would have cleared it are never going to run.
-                realizing.value = false;
-                warmQueued = false;
-                return;
-            }
-            view.requestAnimationFrame(() =>
-                view.requestAnimationFrame(() => {
-                    realizing.value = false;
-                    warmQueued = false;
-                }),
-            );
-        });
-    });
-};
-
-// Every path that mounts never-painted rows outside the viewport, and nothing that fires per streamed frame:
-// a tab switch or history open swaps the whole list (conversationId), the IndexedDB repaint and the daemon's
-// replay land in bulk (length jumps while idle — a live turn only ever appends one bubble per flush), and a
-// turn's end covers an answer that streamed in below the fold while the user was scrolled up reading.
-watch(() => props.conversation.conversationId, warmTranscript, { immediate: true });
-watch(
-    () => messages.value.length,
-    (now, before) => {
-        if (!streaming.value && Math.abs(now - before) > 1) {
-            warmTranscript();
-        }
-    },
-);
-// A pop-out or a dock is a new window at a new width, so every row's remembered size is a measurement of
-// somewhere else — and a pass left in flight is owed frames by the window just left, which will never deliver
-// them. Clearing the latch is what stops that one missed hand-off from disabling warming for the session.
-watch(
+// One idle-time realization pass after a transcript lands wholesale, so the native scrollbar stops lying about
+// how tall the column is (useTranscriptWarmup).
+const { realizing } = useTranscriptWarmup({
+    scroller,
+    conversationId: computed(() => props.conversation.conversationId),
+    messageCount: computed(() => messages.value.length),
+    streaming,
     poppedOut,
-    () => {
-        warmQueued = false;
-        realizing.value = false;
-        warmTranscript();
-    },
-    { flush: `post` },
-);
-watch(streaming, (now, was) => {
-    if (was && !now) {
-        warmTranscript();
-    }
 });
 
 /* A different transcript is on screen — start it at its newest message, the way a chat is opened everywhere.
@@ -1856,10 +1119,10 @@ watch(
         :class="{ 'chat-pane-on': focused }"
         @pointerdown="takeFocus"
         @focusin="takeFocus"
-        @dragenter="onDragEnter"
+        @dragenter="staging.onDragEnter"
         @dragover.prevent
-        @dragleave="onDragLeave"
-        @drop.prevent.stop="onDrop"
+        @dragleave="staging.onDragLeave"
+        @drop.prevent.stop="staging.onDrop"
     >
         <div
             v-if="dragDepth > 0"
@@ -2011,118 +1274,9 @@ watch(
                         }}
                     </p>
                     <template v-if="!blocked">
-                        <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing
-                         (the branch, the diff, the transcript and every counter stay — this tab is the proof), so
-                         the line states a fact rather than raising an alarm. It carries the one thing no other
-                         surface could tell the user in time — that sending from here un-archives the agent — and
-                         the press that does it deliberately, without sending anything. -->
-                        <div
-                            v-if="activeArchived !== undefined"
-                            class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                        >
-                            <Icon name="box" class="shrink-0" />
-                            <span class="min-w-0 flex-1">Archived — off the agents board. Sending a message puts it back.</span>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="!reachable || busyIds.includes(activeArchived.id)"
-                                v-tooltip.top="'Put this agent back on the board now'"
-                                @click="restore([activeArchived.id])"
-                            >
-                                Restore
-                            </button>
-                        </div>
-                        <ChatAccountPanel />
-                        <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing;
-                             this says it for as long as the choice is in force, because the person typing may not
-                             be the person who picked, and a conversation can outlive the click that started it.
-                             Exhausted, the same strip becomes the signpost to the free Google sign-in — the next
-                             rung, and the one with no daily cap. -->
-                        <div
-                            v-if="trialNotice"
-                            class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
-                        >
-                            <Icon name="sparkles" class="mt-0.5 shrink-0 text-link" />
-                            <span class="min-w-0 flex-1">{{ trialNotice }}</span>
-                            <button
-                                v-if="trialHealthIssue"
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="!reachable || streaming"
-                                @click="retryTrial"
-                            >
-                                Retry
-                            </button>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                                @click="router.push({ path: '/sandbox/agent', query: { connect: 'gemini' } })"
-                            >
-                                Connect Google
-                            </button>
-                        </div>
-                        <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
-                         refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->
-                        <button
-                            v-if="activeAccountReauth"
-                            type="button"
-                            class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-                            @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
-                        >
-                            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
-                            <span
-                                >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }}
-                                <span class="font-semibold underline">Reconnect</span></span
-                            >
-                        </button>
-                        <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this
-                         says when and how many tries are left. Naming the bound is the point — an automation
-                         spending the user's allowance while they watch has to account for itself, or the
-                         reasonable response is to switch it back off. -->
-                        <div
-                            v-if="outageResume"
-                            class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                        >
-                            <Icon name="clock" class="mt-0.5 shrink-0" />
-                            <span v-if="outageResume.scheduled" class="min-w-0 flex-1"
-                                >This chat is picking the turn back up by itself in {{ formatWait(outageResume.retryAt) }} — attempt
-                                {{ outageResume.attempt }} of {{ outageResume.maxAttempts }} since the provider failed it. Sending again yourself
-                                works too.</span
-                            >
-                            <!-- THE WAY BACK OUT, in the surface that armed it. Symmetry is the point: a press
-                                 that starts something automatic and can only be undone from a settings page is
-                                 how people learn not to press it. The button that turns this on is two lines
-                                 down, and this is the same button pointing the other way. -->
-                            <button
-                                v-if="outageResume.scheduled"
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="!reachable || armingOutageResume"
-                                @click="stopOutageResume"
-                            >
-                                Stop
-                            </button>
-                            <!-- The button arms THIS CHAT and nothing else, which is the one thing about it
-                                 worth saying — so the sentence says it, in the words the press is made of
-                                 ("this chat", "keep going") rather than in the name of a setting. The old copy
-                                 admitted the sandbox-wide blast radius in a parenthesis, which is exactly the
-                                 place nobody reads before pressing; the honest fix was to make the press
-                                 smaller, not the warning louder. Where the standing default lives is a
-                                 different question, and it is answered on the notice the press writes. -->
-                            <span v-else class="min-w-0 flex-1"
-                                >The model provider failed this turn and nothing is retrying it. Keep this chat going and it picks the turn back up by
-                                itself as soon as the provider answers.</span
-                            >
-                            <button
-                                v-if="!outageResume.scheduled"
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                                :disabled="!reachable || armingOutageResume"
-                                @click="enableOutageResume"
-                            >
-                                Keep this chat going
-                            </button>
-                        </div>
+                        <!-- What this chat's standing is: archived, the account gate, the trial, a credential
+                             that needs renewing, an outage picking the turn back up (ChatPaneNotices). -->
+                        <ChatPaneNotices />
                         <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on. Under the outage
                              banner and above the queue, because that is the order the three answer "what is
                              happening to my work": one is coming back by itself, this one is waiting on a
@@ -2305,7 +1459,7 @@ watch(
                                         <button
                                             type="button"
                                             class="composer-ghost h-5 w-5 shrink-0"
-                                            @click="removeAttachment(a)"
+                                            @click="staging.remove(a)"
                                             aria-label="Remove attachment"
                                         >
                                             <Icon name="times" class="text-2xs" />
@@ -2332,7 +1486,7 @@ watch(
                                     @keydown="onKeydown"
                                     @keyup="syncCaret"
                                     @click="syncCaret"
-                                    @paste="onPaste"
+                                    @paste="staging.onPaste"
                                 ></textarea>
 
                                 <!-- THE CONTROL ROW, IN TWO GROUPS THAT WRAP AS UNITS — and the wrapping is the
@@ -2501,22 +1655,22 @@ watch(
                                             ref="runThroughPill"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{ 'composer-active': looping || pickedLoop !== undefined || pickedWorkflow !== undefined }"
-                                            :disabled="looping && !reachable"
-                                            @click="looping ? endLoop() : (runThroughOpen = !runThroughOpen)"
+                                            :class="{ 'composer-active': runThroughState !== 'idle' }"
+                                            :disabled="runningLoop !== undefined && !reachable"
+                                            @click="runningLoop ? endLoop() : (runThroughOpen = !runThroughOpen)"
                                             v-tooltip.top="runThroughHint"
-                                            :aria-pressed="looping"
-                                            :aria-expanded="looping ? undefined : runThroughOpen"
+                                            :aria-pressed="runningLoop !== undefined"
+                                            :aria-expanded="runningLoop ? undefined : runThroughOpen"
                                             :aria-label="runThroughLabel"
                                         >
                                             <Icon
                                                 :name="runThroughIcon"
                                                 class="text-2xs"
-                                                :class="looping || runThroughName !== undefined ? 'text-link' : ''"
-                                                :spin="looping"
+                                                :class="runningLoop || runThroughName !== undefined ? 'text-link' : ''"
+                                                :spin="runningLoop !== undefined"
                                             />
-                                            <span v-if="activeLoop && looping" class="@max-lg:hidden"
-                                                >{{ activeLoop.iteration }}/{{ activeLoop.maxIterations }}</span
+                                            <span v-if="runningLoop" class="@max-lg:hidden"
+                                                >{{ runningLoop.iteration }}/{{ runningLoop.maxIterations }}</span
                                             >
                                             <template v-else-if="runThroughName !== undefined">
                                                 <span class="max-w-32 truncate @max-lg:hidden">{{ runThroughName }}</span>
@@ -2558,8 +1712,8 @@ watch(
                                         </button>
 
                                         <!-- HANDS-FREE VOICE — one tap arms it, and from there the pause is the send
-                                     (see the voice section in the script). Every browser gets this button now:
-                                     the transcription is the sandbox's own, so there is no per-browser support
+                                     (see useComposerVoice). Every browser gets this button now: the
+                                     transcription is the sandbox's own, so there is no per-browser support
                                      to gate on — only the viewer role, which cannot send at all. While
                                      listening the icon breathes with the microphone level, which is the whole
                                      "it can hear you" indicator; a state label rides the hint slot below. -->
@@ -2633,7 +1787,7 @@ watch(
                                  on spending after the user has looked away, so "what ends it" belongs where the
                                  message is being written — not behind a hover on the pill, which no touch device
                                  will ever show anyone. -->
-                            <p v-else-if="pickedLoop && !looping" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
+                            <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met — ends on
                                 {{ loopDesignLine(pickedLoop) }}.
                             </p>
@@ -2656,101 +1810,8 @@ watch(
              daemon is up), not about the message being written, and unlike the composer it has no surface
              of its own to keep it legible over a transcript sliding beneath it. Below the scroller it sits
              on the panel's own background, which is where a status bar belongs and where Claude's own
-             "check important info" line sits. It also carries the mobile keyboard inset for the whole
-             footer: growing the bottom-most row in the flow shortens the scroller, and the composer stuck
-             to its bottom edge rides up with it. Only rendered where the composer is, so the inset can
-             never be needed while the row is absent. -->
-        <div
-            v-if="reachable && connected"
-            class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
-            :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
-        >
-            <!-- The refusal owns this slot whenever there is one: a Send that won't go has to say what it
-                 is waiting for, and the tooltip alone never reaches a touch device. Every form factor and
-                 width, unlike the keyboard hint it displaces.
-                 Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there), and doesn't
-                 earn its width in a narrow panel. An empty composer is the one moment message recall is
-                 available, so the slot advertises it instead. -->
-            <span v-if="sendBlock !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
-                <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
-                <span class="truncate">{{ sendBlock }}</span>
-            </span>
-            <span v-else-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
-            <div class="ml-auto flex items-center gap-3">
-                <!-- WHETHER THIS TRANSCRIPT SHOWS ITS TOOL CALLS. It belongs in the chat because that is where
-                     the question is asked — you want the calls back at the moment you are staring at a run mark
-                     wondering what it did, not two screens away in settings (where it also lives, for the person
-                     who wants it decided once). A pane has no header to hang it off, so it joins the readouts
-                     under the composer: the strip that already says what this chat is doing.
-
-                     A HAMMER, ALONE, AND STRUCK THROUGH WHEN THE CALLS ARE HIDDEN. The glyph names what is being
-                     shown — the work a run did, not an eye's "visible/hidden" — and at that it needs no label
-                     beside it; the word was the chip's crutch back when the icon was a generic eye. Tilted off
-                     upright because a hammer mid-swing is a hammer, where the straight-on one is a capital T at
-                     the size this draws at.
-                     State is the slash, NOT brightness: the strip is read at a glance and a control that lights
-                     up to say "on" is a second bright thing competing with the numbers beside it. So the glyph
-                     stays at the strip's own weight in both states and only lifts a tier under the pointer, and
-                     the crossed-out reading — the one every mute and hide control in the world already uses —
-                     carries the answer. The slash runs across the handle, not along it. -->
-                <button
-                    type="button"
-                    class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-muted"
-                    :aria-pressed="showToolCalls"
-                    :aria-label="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
-                    v-tooltip.top="showToolCalls ? 'Hide tool calls' : 'Show tool calls'"
-                    @click="showToolCalls = !showToolCalls"
-                >
-                    <Icon name="hammer" class="rotate-[35deg] text-xs" />
-                    <span
-                        v-if="!showToolCalls"
-                        aria-hidden="true"
-                        class="pointer-events-none absolute top-1/2 left-1/2 h-px w-[130%] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-current"
-                    />
-                </button>
-                <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
-                    <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
-                    <span class="@max-xs:hidden">{{ contextRing.label }}</span>
-                </span>
-                <!-- The chip answers "am I about to get rate-limited" — hovering it opens the pool-by-pool
-                     card beside the composer, and a click goes to the screen that answers "and what has it
-                     cost me". -->
-                <button
-                    v-if="usageChip"
-                    type="button"
-                    class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
-                    @click="router.push('/sandbox/usage')"
-                >
-                    <UsageRing :headroom="usageChip.headroom"
-                        ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
-                    >
-                </button>
-                <!-- What is left of today's membership allowance, once any of it has gone. The star is the
-                     membership's glyph everywhere else in the app, which is what keeps this from reading as a
-                     third rate limit; a click goes to the page that explains what a credit buys. Warning-tinted
-                     only when the allowance is gone — and that is a statement, not an alarm: the money went to
-                     the people who wrote what was used, which is what the membership is for. -->
-                <button
-                    v-if="creditChip"
-                    type="button"
-                    class="touch-target inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
-                    :class="creditChip.spent ? `text-warning` : ``"
-                    :aria-label="creditChip.hint"
-                    v-tooltip.top="creditChip.hint"
-                    @click="router.push('/settings/membership')"
-                >
-                    <Icon name="star" class="shrink-0 text-2xs" />
-                    <span class="tabular-nums @max-xs:hidden">{{ creditChip.label }}</span>
-                </button>
-                <button
-                    type="button"
-                    class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
-                    @click="router.push('/sandbox/agent')"
-                >
-                    <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
-                </button>
-            </div>
-        </div>
+             "check important info" line sits. -->
+        <ChatPaneStatus v-if="reachable && connected" :block="refusal" :hint="composerHint" />
 
         <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them
