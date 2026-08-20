@@ -234,15 +234,26 @@ const fit = (): void => void flow.value?.fitView(FIT);
 
                      IT IS `relative` AND ROUNDED, AND BOTH ARE LOAD-BEARING RATHER THAN COSMETIC. A card's slot
                      content may position something against the card's own edge — the workflow card's status
-                     stripe runs `inset-y-0 left-0` down the leading edge — and an `overflow-hidden` on a static
-                     element does NOT clip a descendant whose containing block is an ancestor of it. Without
-                     `relative` here the stripe resolved against the FRAME instead, escaped this clip entirely,
-                     and painted its square corners over the frame's rounded ones: two dark notches at the top
-                     and bottom of the leading edge, visible the moment a selected card put a ring behind them.
-                     5px rather than `rounded-md` because the frame's 6px radius is its BORDER box; the padding
-                     box this button fills curves at 6 − 1. DagGraph never had the bug because its card is one
-                     element — border, rounding and clip on the same box. -->
-                <button type="button" v-tooltip.top="data.tooltip" class="relative block h-full w-full overflow-hidden rounded-[5px] text-left" @click="toggle(data.id)">
+                     stripe runs down the leading edge — and an `overflow-hidden` on a STATIC element does not
+                     clip a descendant whose containing block is an ancestor of it. Without `relative` here that
+                     stripe resolved against the FRAME instead, escaped this clip entirely, and painted its
+                     square corners over the frame's rounded ones: two dark notches at the top and bottom of the
+                     leading edge, obvious the moment a selected card put a ring behind them.
+
+                     THE RADIUS IS DERIVED, NOT TYPED. This button fills the frame's PADDING box, which curves
+                     one border-width tighter than the frame's own `rounded-md` — so the clip is that token
+                     minus the 1px border, and it stays right if either ever changes. Writing the number instead
+                     is how it went wrong the first time: `rounded-md` is 0.5rem against a root the app scales,
+                     which is 8.8px here and not the 6 it looks like in the stylesheet.
+
+                     DagGraph never had any of this because its card is ONE element — border, rounding and clip
+                     on the same box, so the browser reconciles them itself. -->
+                <button
+                    type="button"
+                    v-tooltip.top="data.tooltip"
+                    class="relative block h-full w-full overflow-hidden rounded-[calc(var(--radius-md)-1px)] text-left"
+                    @click="toggle(data.id)"
+                >
                     <slot name="node" :node="data" :selected="data.id === selectedId" />
                 </button>
                 <Handle type="target" :position="targetPosition" class="dag-editor-handle" />
