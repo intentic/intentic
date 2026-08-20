@@ -63,6 +63,10 @@ export interface WorkspaceTabStrip {
     // Which tab is focused, or null — a legitimate state, not a missing value: closing the last tab leaves the
     // strip empty, and a bare /workspace URL deselects a file tab while its neighbours stay open.
     readonly active: string | null;
+    // The transient tab (see OpenMode), or null when nothing is merely being looked at. Stored so a session that
+    // ends mid-peek comes back mid-peek: restoring it as an ordinary tab would pin the one file the user never
+    // asked to keep, once per reload.
+    readonly preview: string | null;
     readonly tabs: readonly StoredWorkspaceTab[];
 }
 
@@ -83,11 +87,11 @@ const StoredTabSchema: z.ZodType<StoredWorkspaceTab> = z.discriminatedUnion(`kin
 
 // Parse one stored blob into a coherent strip: readable tabs only (an unreadable one is skipped rather than
 // fatal — it must not cost the user every other file they had open), each id once (a duplicate would render as
-// two tabs sharing a key), and a focus that names one of them.
+// two tabs sharing a key), and a focus and a preview slot that each name one of them.
 const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
-    let stored: { active?: unknown; tabs?: unknown };
+    let stored: { active?: unknown; preview?: unknown; tabs?: unknown };
     try {
-        stored = JSON.parse(raw) as { active?: unknown; tabs?: unknown };
+        stored = JSON.parse(raw) as { active?: unknown; preview?: unknown; tabs?: unknown };
     } catch {
         return undefined;
     }
@@ -106,7 +110,8 @@ const parseStrip = (raw: string): WorkspaceTabStrip | undefined => {
     if (tabs.length === 0) {
         return undefined;
     }
-    return { active: typeof stored.active === `string` && seen.has(stored.active) ? stored.active : null, tabs };
+    const names = (id: unknown): string | null => (typeof id === `string` && seen.has(id) ? id : null);
+    return { active: names(stored.active), preview: names(stored.preview), tabs };
 };
 
 // This window's editor tabs for a sandbox, else the last window's (the seed) when this one has never opened it.

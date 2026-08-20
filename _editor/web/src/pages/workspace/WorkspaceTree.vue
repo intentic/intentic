@@ -26,6 +26,7 @@ import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { ancestorDirs, revealTargets } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
+import type { OpenMode } from "./workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
 
 interface Row {
@@ -91,7 +92,10 @@ const {
      * listing is lazily loaded, so nobody can enumerate the paths up front. */
     rowActions?: (dir: string) => readonly RowAction[];
 }>();
-const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
+/* `openFile` carries the GESTURE, not just the path (see OpenMode): a single click is a peek, and it lands in the
+ * strip's one transient slot that the next peek takes over — reading down a folder used to leave a pinned tab per
+ * file glanced at. A double-click on the row is the "I want this one" that keeps it, exactly as in VSCode. */
+const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string] }>();
 
 const {
     saveText,
@@ -392,10 +396,10 @@ const toggleExpand = (path: string): void => {
     expanded.value = next;
 };
 
-const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean): void => {
+const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: OpenMode): void => {
     // A locked folder opens its explanation like a locked file: there is nothing inside it to expand into.
     if (locked(entry.path)) {
-        emit(`openFile`, entry.path);
+        emit(`openFile`, entry.path, mode);
         return;
     }
     if (entry.type === `dir`) {
@@ -406,7 +410,7 @@ const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean): void =>
         }
         return;
     }
-    emit(`openFile`, entry.path);
+    emit(`openFile`, entry.path, mode);
 };
 
 // ---- focus (roving tabindex) ----
@@ -489,7 +493,16 @@ const onRowClick = (event: MouseEvent, row: Row): void => {
         return;
     }
     selectSingle(path);
-    activate(row.entry, false);
+    activate(row.entry, false, `preview`);
+};
+
+/* The second half of the click: a double-click keeps the tab the first click previewed. Only a file has anything
+ * to keep — a directory row toggles on each of the two clicks and lands back where it started, which is what
+ * VSCode's explorer does too. */
+const onRowDblClick = (row: Row): void => {
+    if (row.entry.type === `file` || locked(row.entry.path)) {
+        emit(`openFile`, row.entry.path, `keep`);
+    }
 };
 
 // A nest parent's chevron owns the expand/collapse (its row click opens the file); a dir's chevron just
@@ -581,10 +594,11 @@ const commitCreate = async (): Promise<void> => {
         await focusLead();
         return;
     }
-    // A new file: create it, open it, and drop straight into the editor so the user can type immediately.
+    // A new file: create it, open it, and drop straight into the editor so the user can type immediately. Kept,
+    // never previewed — the user is about to type into it, and the next peek must not close it under them.
     await run(() => saveText(path, ``), `Couldn't create that file.`);
     selectSingle(path);
-    emit(`openFile`, path);
+    emit(`openFile`, path, `keep`);
     layout.setEditMode(true);
     await focusLead();
 };
@@ -908,7 +922,9 @@ const onKeydown = (event: KeyboardEvent): void => {
         event.preventDefault();
     } else if (event.key === `Enter`) {
         if (leadEntry.value !== undefined) {
-            activate(leadEntry.value, true);
+            // Enter is the keyboard's single click, so it peeks like one — walking a folder with ↑↓ then Enter
+            // leaves the same one tab behind that clicking down it does.
+            activate(leadEntry.value, true, `preview`);
         }
         event.preventDefault();
     } else if (event.key === `Escape`) {
@@ -1161,6 +1177,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         }"
                         :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
                         @click="onRowClick($event, row)"
+                        @dblclick="onRowDblClick(row)"
                         @contextmenu.prevent.stop="openMenu($event, row.entry)"
                         @dragstart="onRowDragStart($event, row)"
                         @dragend="onRowDragEnd"

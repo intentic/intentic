@@ -3,6 +3,7 @@ import { documentTabId } from "../../core-views/documentRegistry";
 import type { DiffPayload } from "@intentic/extension-api";
 import { closeTabs, diffTabId, type LineJump, type OpenMode, placeTab, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { useSandbox } from "../sandbox/useSandbox";
+import { useEditBuffers } from "./useEditBuffers";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
 /* The Workspace editor area's open tabs, as a module-level singleton (like useChat/useLayout), so they survive
@@ -22,7 +23,8 @@ let jumpSeq = 0;
 /* The strip's preview slot: the id of the tab that is only being LOOKED at (see OpenMode), or null. At most one
  * exists, the next preview takes its place, and nothing else about it is special — it is an ordinary tab that
  * happens to be transient, so closing, cycling and the context menu all still act on it as they do on any
- * other. Never persisted: a restored strip is the tabs the user chose to keep. */
+ * other. It survives a reload with the strip: a peek that came back pinned would be the one tab the user never
+ * asked for, growing the strip by one on every session. */
 const previewId = ref<string | null>(null);
 
 // --- Tab persistence ---------------------------------------------------------------------------
@@ -42,7 +44,7 @@ const restoreTabs = (): void => {
     tabs.value = stored?.tabs ?? [];
     activeId.value = stored?.active ?? null;
     openLine.value = undefined;
-    previewId.value = null;
+    previewId.value = stored?.preview ?? null;
 };
 restoreTabs();
 
@@ -54,12 +56,14 @@ export const resetWorkspaceTabs = (): void => {
 
 // What the strip persists: every tab but a diff, and a focus that survives the cut — one focused on a diff
 // comes back on its last surviving neighbour (the rule closeTabs already uses for a closed tab), while one
-// focused on nothing (a bare /workspace, where mobile browses folders) stays that way.
+// focused on nothing (a bare /workspace, where mobile browses folders) stays that way. The preview slot only
+// survives when the tab holding it does: a previewed DIFF is not stored at all, so its slot has nothing to name.
 const persistedStrip = (): string => {
     const persistable = tabs.value.filter((tab): tab is StoredWorkspaceTab => tab.kind !== `diff`);
     const focused = persistable.find((tab) => tab.id === activeId.value);
     return JSON.stringify({
         active: activeId.value === null ? null : (focused?.id ?? persistable.at(-1)?.id ?? null),
+        preview: persistable.find((tab) => tab.id === previewId.value)?.id ?? null,
         tabs: persistable,
     });
 };
@@ -69,25 +73,67 @@ watch(persistedStrip, (json) => {
     }
 });
 
-const openFile = (path: string): void => {
-    openLine.value = undefined;
-    activeId.value = path;
-    if (!tabs.value.some((tab) => tab.id === path)) {
-        tabs.value = [...tabs.value, { kind: `file`, id: path, path }];
-    }
-};
-
-const openAtLine = (path: string, line: number): void => {
-    openFile(path);
-    openLine.value = { line, seq: ++jumpSeq };
-};
-
 // Promote the preview tab into an ordinary one — the double-click VSCode uses, on the tab or on the row that
 // opened it. Named by id because the gesture lands on a tab, and only the tab holding the slot gives it up.
 const keepTab = (id: string): void => {
     if (previewId.value === id) {
         previewId.value = null;
     }
+};
+
+/* Typing into a previewed file keeps it, VSCode's third promotion gesture beside the double-click and the menu.
+ * It is the one that matters most: a preview tab is replaced by the next file looked at, so without this the
+ * user's own edit would be what the next peek closed — and they would have to answer a discard prompt about a
+ * file they never chose to open as more than a glance. */
+const { dirtyPaths, forget } = useEditBuffers();
+watch(dirtyPaths, (dirty) => {
+    const previewed = tabs.value.find((tab) => tab.id === previewId.value);
+    if (previewed?.kind === `file` && dirty.has(previewed.path)) {
+        previewId.value = null;
+    }
+});
+
+/* Handing the slot to a new tab, called BEFORE the strip is rewritten. The tab in the slot is not closed, it is
+ * REPLACED in place (placeTab puts the newcomer at its index), and a replaced file tab has to give up what a
+ * closed one gives up: its edit buffer. Left behind, that buffer stands in for the file's real contents the next
+ * time it is opened — the editor seeds from the buffer first — so a file peeked at, changed on disk by an agent,
+ * and peeked at again would come back as the stale text, and saving would write it over the newer file.
+ *
+ * Never drops unsaved work: an edited preview has already left the slot (the dirty watch above), so the tab
+ * being replaced here is by construction one nobody has typed into. */
+const releasePreview = (incomingId: string): void => {
+    const outgoing = tabs.value.find((tab) => tab.id === previewId.value);
+    if (outgoing?.kind === `file` && outgoing.id !== incomingId) {
+        forget(outgoing.path);
+    }
+};
+
+/* Opening a file, in whichever of the two modes the GESTURE meant (see OpenMode) — a click in the explorer is a
+ * peek that takes the preview slot, a double-click, a deep link or a jump from the chat asks to keep.
+ *
+ * A file that is ALREADY open is only focused: it keeps whatever standing it had, so peeking at a file the user
+ * deliberately kept never demotes that tab back into the transient slot. */
+const openFile = (path: string, mode: OpenMode = `keep`): void => {
+    openLine.value = undefined;
+    const open = tabs.value.some((tab) => tab.id === path);
+    if (!open) {
+        // A preview takes the outgoing preview's place, so the slot stays put as the user reads down a folder.
+        if (mode === `preview`) {
+            releasePreview(path);
+        }
+        tabs.value = placeTab(tabs.value, { kind: `file`, id: path, path }, mode === `preview` ? previewId.value : null);
+    }
+    activeId.value = path;
+    if (mode === `keep`) {
+        keepTab(path);
+    } else if (!open) {
+        previewId.value = path;
+    }
+};
+
+const openAtLine = (path: string, line: number, mode: OpenMode = `keep`): void => {
+    openFile(path, mode);
+    openLine.value = { line, seq: ++jumpSeq };
 };
 
 /* A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same
@@ -117,6 +163,10 @@ const diffTab = (payload: DiffPayload): WorkspaceTab => ({
 const openDiff = (payload: DiffPayload, mode: OpenMode): void => {
     const tab = diffTab(payload);
     openLine.value = undefined;
+    if (mode === `preview`) {
+        // The slot is one slot for every kind of tab, so a peeked diff can be what replaces a peeked FILE.
+        releasePreview(tab.id);
+    }
     tabs.value = placeTab(tabs.value, tab, mode === `preview` ? previewId.value : null);
     activeId.value = tab.id;
     if (mode === `preview`) {

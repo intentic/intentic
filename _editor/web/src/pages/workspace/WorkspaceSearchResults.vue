@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { iconForEntry } from "@intentic/ui";
 import { codeLangForPath } from "./fileType";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
+import type { OpenMode } from "./workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
 
 /* Workspace search results for the explorer sidebar: a count line, then file header rows + indented hit rows
@@ -40,7 +41,10 @@ const { groups, total, files, partial, truncated, searching, pending, loadingMor
     note?: string;
     query: string;
 }>();
-const emit = defineEmits<{ openMatch: [path: string, line: number]; loadMore: [] }>();
+// The mode rides along because it is the GESTURE that decides it (see workspaceTabs' OpenMode): a click is a
+// look, so it lands in the strip's one transient slot and the next hit clicked takes that slot over; a
+// double-click asks to keep the tab. Reading down a result list used to pin a tab per line looked at.
+const emit = defineEmits<{ openMatch: [path: string, line: number, mode: OpenMode]; loadMore: [] }>();
 
 /* One row height for both kinds, as the editor this is modelled on uses — it is what lets the window be index
  * arithmetic instead of a measurement pass, and a search list is scanned rather than read, so uniform rows are
@@ -148,15 +152,15 @@ const summary = computed(() => {
     return truncated ? `${scope} · showing ${shown.value.toLocaleString()}` : scope;
 });
 
-const activate = (row: ResultRow): void => {
+const activate = (row: ResultRow, mode: OpenMode): void => {
     if (row.kind === `file`) {
         const first = row.group.hits[0];
         if (first !== undefined) {
-            emit(`openMatch`, row.group.path, first.line);
+            emit(`openMatch`, row.group.path, first.line, mode);
         }
         return;
     }
-    emit(`openMatch`, row.path, row.hit.line);
+    emit(`openMatch`, row.path, row.hit.line, mode);
 };
 
 // ---- focus ----
@@ -232,7 +236,8 @@ const onKeydown = (event: KeyboardEvent): void => {
                         :tabindex="tabbableKey === painted.row.key ? 0 : -1"
                         class="ui-row-select absolute inset-x-0 flex items-center gap-1.5 px-2 text-left text-[0.8125rem]"
                         :style="{ top: `${painted.row.index * ROW_H}px`, height: `${ROW_H}px` }"
-                        @click="activate(painted.row)"
+                        @click="activate(painted.row, 'preview')"
+                        @dblclick="activate(painted.row, 'keep')"
                         @focus="lead = painted.row.key"
                     >
                         <Icon :name="iconForEntry(basename(painted.row.group.path), 'file', false)" class="shrink-0 text-2xs text-muted" />
@@ -252,7 +257,8 @@ const onKeydown = (event: KeyboardEvent): void => {
                         :tabindex="tabbableKey === painted.row.key ? 0 : -1"
                         class="ui-row-select absolute inset-x-0 flex items-center gap-2 pr-2 pl-6 text-left"
                         :style="{ top: `${painted.row.index * ROW_H}px`, height: `${ROW_H}px` }"
-                        @click="activate(painted.row)"
+                        @click="activate(painted.row, 'preview')"
+                        @dblclick="activate(painted.row, 'keep')"
                         @focus="lead = painted.row.key"
                     >
                         <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ painted.row.hit.line }}</span>

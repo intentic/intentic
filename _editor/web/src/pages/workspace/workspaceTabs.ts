@@ -40,10 +40,16 @@ export type WorkspaceTab =
 
 export const diffTabId = (key: string, scope: string, path: string): string => `diff:${key}:${scope}/${path}`;
 
-/* How an open treats the strip. `keep` is an ordinary tab — the user asked for it and it stays until they close
- * it. `preview` is the strip's single transient slot (VSCode's italic tab), for a look-at-this gesture like
- * clicking a row in Changes: the NEXT preview takes its place, so reading through twenty changed files leaves
- * one tab behind instead of twenty nobody meant to keep. Double-clicking promotes a preview to `keep`. */
+/* How an open treats the strip — decided by the GESTURE, not by the caller's opinion of the file.
+ *
+ * `preview` is the strip's single transient slot (VSCode's italic tab), for a look-at-this: a click in the
+ * explorer, a search hit, a row in Changes. The NEXT preview takes its place, so reading through twenty files
+ * leaves one tab behind instead of twenty nobody meant to keep.
+ *
+ * `keep` is an ordinary tab — the user asked for THIS file and it stays until they close it. Three gestures ask:
+ * a double-click (on the row or on the tab), the tab menu's Keep Open, and typing into a previewed file. So does
+ * every arrival from outside the explorer — a deep link, a file mention in the chat, Quick Open — because none of
+ * those is browsing, and VSCode keeps those too. */
 export type OpenMode = "keep" | "preview";
 
 // Where a newly opened tab lands. One that is already open is refreshed in place — a diff's content moves on

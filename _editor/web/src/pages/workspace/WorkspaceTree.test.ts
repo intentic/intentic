@@ -8,6 +8,7 @@
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import type { RowAction } from "./rowActions";
+import type { OpenMode } from "./workspaceTabs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -115,7 +116,7 @@ const mount = async (props: {
     tree: WorkspaceTreeEntry[];
     selectedPath?: string;
     rowActions?: (dir: string) => readonly RowAction[];
-    onOpenFile?: (path: string) => void;
+    onOpenFile?: (path: string, mode: OpenMode) => void;
 }): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -327,6 +328,50 @@ describe(`the rows the sandbox keeps to itself`, () => {
 
         expect(opened).toEqual([`.intentic/secrets/auth`]);
         expect(rows(el)).toEqual([`.intentic`, `capabilities.json`, `settings.json`, `auth`, `README.md`]);
+    });
+});
+
+/* Looking at a file and choosing one are different gestures, and the strip used to hear only the second: every
+ * row glanced at on the way to the right one left a tab behind it. The click now reports itself as a peek (the
+ * strip's one transient slot, which the next peek takes over) and the double-click as the choice. */
+describe(`peeking at a file versus keeping it`, () => {
+    const openedBy = async (act: (row: HTMLElement) => void): Promise<[string, OpenMode][]> => {
+        const opened: [string, OpenMode][] = [];
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE, onOpenFile: (path: string, mode: OpenMode) => opened.push([path, mode]) });
+        act([...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `main.ts`) as HTMLElement);
+        await nextTick();
+        return opened;
+    };
+
+    it(`opens a clicked file as a peek`, async () => {
+        expect(await openedBy((row) => row.click())).toEqual([[`src/main.ts`, `preview`]]);
+    });
+
+    // The browser fires the click first, so both arrive — and the second one is what keeps the tab.
+    it(`keeps a double-clicked file`, async () => {
+        const opened = await openedBy((row) => {
+            row.click();
+            row.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+        });
+
+        expect(opened).toEqual([
+            [`src/main.ts`, `preview`],
+            [`src/main.ts`, `keep`],
+        ]);
+    });
+
+    // Enter is the keyboard's single click: walking a folder with the arrows leaves the same one tab behind.
+    it(`opens the focused file as a peek on Enter`, async () => {
+        const opened = await openedBy((row) => {
+            row.click();
+            row.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+        });
+
+        expect(opened).toEqual([
+            [`src/main.ts`, `preview`],
+            [`src/main.ts`, `preview`],
+        ]);
     });
 });
 

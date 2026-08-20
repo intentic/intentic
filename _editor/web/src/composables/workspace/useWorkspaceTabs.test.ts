@@ -32,6 +32,7 @@ sessionStorage.setItem(
 );
 
 const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
+const { useEditBuffers } = await import("./useEditBuffers");
 
 const { tabs, activeId, previewId, openDiff, openFile, keepTab, selectTab, closedTabs, closeTabIds, reopenClosedTab } = useWorkspaceTabs();
 const diffPayload = (path: string) => ({
@@ -43,7 +44,7 @@ const diffPayload = (path: string) => ({
     before: `a`,
     after: `b`,
 });
-const stored = (): { active: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
+const stored = (): { active: string | null; preview: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
     expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`]);
@@ -162,6 +163,73 @@ it(`releases the slot when the previewed row is re-opened to keep`, () => {
 it(`empties the slot when the preview tab is closed`, () => {
     openDiff(diffPayload(`src/d.ts`), `preview`);
     closeTabIds(new Set([previewId.value ?? ``]));
+
+    expect(previewId.value).toBeNull();
+});
+
+/* The same slot, for the gesture it was really needed for: browsing FILES. A click in the explorer used to pin a
+ * tab per file glanced at, so a folder read top to bottom left a strip nobody could find anything in. */
+it(`gives a peeked file the slot, and the next peek takes its place`, () => {
+    const kept = tabs.value.map((tab) => tab.id);
+
+    openFile(`src/peek-a.ts`, `preview`);
+
+    expect(previewId.value).toBe(`src/peek-a.ts`);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, `src/peek-a.ts`]);
+
+    openFile(`src/peek-b.ts`, `preview`);
+
+    // In the outgoing preview's OWN position, so the slot stays put as the reader moves down the folder.
+    expect(previewId.value).toBe(`src/peek-b.ts`);
+    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, `src/peek-b.ts`]);
+});
+
+// The double-click on the row, and the one on the tab: the second, deliberate open is the one asking to keep it.
+it(`keeps the peeked file when it is opened again to keep`, () => {
+    openFile(`src/peek-b.ts`, `keep`);
+
+    expect(previewId.value).toBeNull();
+    expect(tabs.value.filter((tab) => tab.id === `src/peek-b.ts`)).toHaveLength(1);
+});
+
+// A tab the user chose to keep is never demoted by a later look at it — a peek at a file already open would
+// otherwise hand its tab to the next peek and close the one they had deliberately pinned.
+it(`leaves an already-open tab where it stands when it is peeked at`, () => {
+    openFile(`src/peek-c.ts`, `preview`);
+    openFile(`src/peek-b.ts`, `preview`);
+
+    expect(previewId.value).toBe(`src/peek-c.ts`);
+    expect(activeId.value).toBe(`src/peek-b.ts`);
+});
+
+it(`stores the slot, so a session that ended mid-peek comes back mid-peek`, async () => {
+    openFile(`src/peek-d.ts`, `preview`);
+    await nextTick();
+
+    expect(stored().preview).toBe(`src/peek-d.ts`);
+});
+
+/* A replaced preview gives up what a closed tab gives up. The editor seeds from the buffer before the file it
+ * re-reads, so a peek left behind would come back as the text the file had the FIRST time — stale the moment an
+ * agent touched it, and written back over the newer file on the next save. */
+it(`drops the replaced peek's text, so the file is re-read the next time it is opened`, () => {
+    const { setBaseline, bufferOf } = useEditBuffers();
+    openFile(`src/read-once.ts`, `preview`);
+    setBaseline(`src/read-once.ts`, `on disk`);
+
+    openFile(`src/read-next.ts`, `preview`);
+
+    expect(bufferOf(`src/read-once.ts`)).toBeUndefined();
+});
+
+// The third promotion gesture, beside the two double-clicks: typing into a preview keeps it, so the next peek
+// can never be what closes the user's own unsaved edit.
+it(`keeps the previewed file the moment it is edited`, async () => {
+    const { setBaseline, setBuffer } = useEditBuffers();
+    openFile(`src/typed.ts`, `preview`);
+    setBaseline(`src/typed.ts`, `before`);
+    setBuffer(`src/typed.ts`, `after`);
+    await nextTick();
 
     expect(previewId.value).toBeNull();
 });

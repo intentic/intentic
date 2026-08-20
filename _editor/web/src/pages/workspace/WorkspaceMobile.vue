@@ -500,6 +500,8 @@ const onPick = (event: Event): void => {
                 <!-- The match list scrolls itself (it virtualizes against its own viewport) and pulling on it
                      would refetch the directory tree, which is not what it shows. The directory listing keeps
                      pull-to-refresh. -->
+                <!-- `open-match` reports the gesture (peek vs keep); this view drops it. There is no tab strip
+                     here, so there is no transient slot to put a peek in and no double-click to promote one. -->
                 <div v-if="contentMode" class="min-h-0 flex-1">
                     <WorkspaceSearchResults
                         :groups="searchGroups"
@@ -513,7 +515,7 @@ const onPick = (event: Event): void => {
                         :error="searchError"
                         :note="searchNote"
                         :query="filter"
-                        @open-match="openAtLine"
+                        @open-match="(path, line) => openAtLine(path, line)"
                         @load-more="searchLoadMore"
                     />
                 </div>
