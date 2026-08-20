@@ -571,37 +571,64 @@ body:has(.a-page) {
     flex: none;
 }
 
-/* THE PRIMARY IS A PANEL OF DARK WOOD, not a wash of ember. The resting fill used to be one radial
- * glow over stone, which read as the same lit-from-below light every band on the page already carries.
- * It is now a slab of carved teak inside the gold rule: a body that darkens top to foot, two grains of
- * near-horizontal striation over it — a fine one and a broader cathedral streak, on their own periods so
- * the pair never lines up into corduroy — and the old ember kept only as a low sheen at the sill, so the
- * button still catches the room's warmth without pretending to emit it. The layers paint front-to-back:
- * fine grain, broad grain, sheen, then the wood. The carved frame and the outer halo below are untouched. */
+/* THE PRIMARY IS A PANEL OF DARK WOOD, not a wash of ember. The resting fill used to be one radial glow
+ * over stone, which read as the same lit-from-below light every band on the page already carries.
+ *
+ * ── WHY THE GRAIN IS RENDERED NOISE AND NOT STRIPED GRADIENTS ──
+ *
+ * The first cut at this drew the grain with two `repeating-linear-gradient`s a couple of degrees off
+ * horizontal. That is the obvious way to write wood in CSS and it is the wrong one at this size. A
+ * repeating gradient tilted 2° off the axis has to step down one pixel row every ~28px, and each of its
+ * stops is a hard edge the rasteriser cannot anti-alias along its length — so a 220px button shows the
+ * staircase, and the two periods beat against each other into a moiré. It read as a low-resolution
+ * photograph of wood rather than as wood.
+ *
+ * So the grain is now GENERATED: one SVG carrying two `feTurbulence` fields, rasterised by the engine at
+ * whatever size the button happens to be. Fractal noise has no edges to alias and no period to beat
+ * against itself, so it stays smooth at any width, on any DPR, and scales with the small variant for
+ * free. Frequency is deliberately lopsided — near-nothing across, high down the panel — which is what
+ * turns isotropic noise into streaks running the length of the board, the way a plank is cut.
+ *
+ * Two fields, because real grain is two things: `d` is the dark figure, wide and slow, and `l` is the
+ * fine pale fleck over it, an order finer and on its own seed so the two can never line up into corduroy.
+ * Both are matrixed to a FLAT colour with the noise driving only ALPHA — tinting the noise itself gives
+ * mud, since what varies in timber is how much light the fibre returns, not its hue.
+ *
+ * ── AND WHY THE PANEL IS DARKER THAN THE WOOD IT DEPICTS ──
+ *
+ * The label sits ON this, so the wood's job is to be a ground, not a subject. The body runs #2a1a0d to
+ * #120a05 — several steps below where a teak swatch would sit — and the grain is held under 0.3 alpha,
+ * which puts the ember label around 10:1 against its own background instead of the ~4:1 the mid-brown
+ * first version gave it. The warmth is carried by the sill sheen and the gold rule rather than by
+ * lightening the field the words have to be read against.
+ *
+ * Front-to-back: grain, sill sheen, body. The bevel is an inset shadow so it rides above all three, and
+ * the carved frame and the outer halo are untouched. */
 .a-page .a-btn-primary {
-    color: var(--a-ember-bright);
-    background-color: #241509;
+    color: #ffb367;
+    /* The letters are on texture, so they carry their own separation. Tight and nearly opaque: at this
+       size a soft shadow is a smudge, and what is wanted is a cut edge, not a glow. */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    background-color: #1b1008;
     background-image:
-        repeating-linear-gradient(
-            178deg,
-            rgba(0, 0, 0, 0.26) 0px,
-            rgba(0, 0, 0, 0) 1px,
-            rgba(122, 74, 39, 0.1) 2px,
-            rgba(0, 0, 0, 0) 3.5px,
-            rgba(0, 0, 0, 0.16) 5px,
-            rgba(0, 0, 0, 0) 6.5px
-        ),
-        repeating-linear-gradient(
-            2deg,
-            rgba(58, 33, 15, 0) 0px,
-            rgba(96, 58, 30, 0.16) 9px,
-            rgba(30, 17, 8, 0.3) 17px,
-            rgba(58, 33, 15, 0) 26px
-        ),
-        radial-gradient(130% 165% at 50% 122%, rgba(228, 138, 62, 0.2) 0%, rgba(150, 84, 40, 0.06) 46%, transparent 76%),
-        linear-gradient(180deg, #402a17 0%, #2c1a0d 54%, #1b1008 100%);
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='d' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.005 0.17' numOctaves='4' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.026 0 0 0 0 0.012 0.8 0 0 0 -0.22'/%3E%3C/filter%3E%3Cfilter id='l' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.009 0.95' numOctaves='3' seed='19'/%3E%3CfeColorMatrix values='0 0 0 0 0.74 0 0 0 0 0.52 0 0 0 0 0.3 0.34 0 0 0 -0.22'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23d)'/%3E%3Crect width='320' height='64' filter='url(%23l)'/%3E%3C/svg%3E"),
+        radial-gradient(135% 170% at 50% 124%, rgba(228, 138, 62, 0.22) 0%, rgba(150, 84, 40, 0.07) 44%, transparent 74%),
+        linear-gradient(180deg, #2a1a0d 0%, #1d1108 56%, #120a05 100%);
+    /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its
+       joins, and one field scaled to the panel is exactly how a board is cut from a plank. */
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
     border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(224,123,39,0.66)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(224,123,39,0.32)' stroke-width='2.24'/%3E%3C/svg%3E");
-    box-shadow: 0 0 22px rgba(224, 123, 39, 0.16);
+    /* THE PANEL IS SEATED IN THE FRAME, not laid on it. A lit hairline along the top edge and a shadow
+       along the foot is the whole of a bevel at this size; the wide inner shadow behind them pulls the
+       four edges down so the board sits INSIDE the gold rule rather than floating level with it. Inset,
+       so all three ride above the wood and below the label — and so the notched clip carries them round
+       the chamfers instead of squaring them off. */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 219, 170, 0.11),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+        inset 0 0 18px rgba(0, 0, 0, 0.5),
+        0 0 22px rgba(224, 123, 39, 0.16);
 }
 .a-page .a-btn-primary::before {
     border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(248,167,80,0.98)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(248,167,80,0.55)' stroke-width='2.24'/%3E%3C/svg%3E");
@@ -613,7 +640,7 @@ body:has(.a-page) {
     box-shadow: inset 0 0 26px rgba(245, 155, 63, 0.18);
 }
 .a-page .a-btn-primary:hover {
-    color: #ffcf95;
+    color: #ffe3bd;
 }
 
 /* The compact cartouche, for the bar and for secondary rows further down the page. The notch shrinks
