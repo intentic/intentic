@@ -159,7 +159,7 @@ pub fn install_docker_desktop(facts: &Facts) -> Fixed {
     if let Err(problem) = download(INSTALLER_URL, &installer) {
         return Err(Trouble::Failed(problem));
     }
-    crate::ui::progress(
+    super::progress(
         "running Docker's installer (this takes a few minutes, and it says nothing while it works)",
     );
     let path = installer.to_string_lossy().replace('\'', "''");
@@ -226,13 +226,13 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
         if written - announced >= ANNOUNCE_EVERY {
             announced = written;
             if total > 0 {
-                crate::ui::progress(&format!(
+                super::progress(&format!(
                     "downloaded {} MB of {} MB",
                     written / (1024 * 1024),
                     total / (1024 * 1024)
                 ));
             } else {
-                crate::ui::progress(&format!("downloaded {} MB", written / (1024 * 1024)));
+                super::progress(&format!("downloaded {} MB", written / (1024 * 1024)));
             }
         }
     }
@@ -344,16 +344,35 @@ pub fn start_docker_desktop(facts: &Facts) -> Fixed {
 /// Wait for the engine, saying so as it goes. The one place in this flow where patience is the fix.
 #[cfg(windows)]
 pub fn wait_for_daemon() -> Fixed {
-    let deadline = Instant::now() + DAEMON_TIMEOUT;
+    let started = Instant::now();
+    let deadline = started + DAEMON_TIMEOUT;
     let mut said = Instant::now();
+    // How long to wait before mentioning the thing that is USUALLY happening. A first start genuinely takes a
+    // couple of minutes on a laptop (it creates the WSL2 distro, unpacks the engine and boots a VM), so
+    // saying this at ten seconds would be crying wolf on every install; saying it only at the five-minute
+    // timeout is telling somebody what to do after they have given up.
+    const HINT_AFTER: Duration = Duration::from_secs(75);
+    let mut hinted = false;
     while Instant::now() < deadline {
         if crate::docker::daemon_reachable() {
             return Ok(Done::Now);
         }
+        if !hinted && started.elapsed() >= HINT_AFTER {
+            hinted = true;
+            /* THE THING THAT IS ACTUALLY ON SCREEN, SAID WHILE IT STILL HELPS.
+             *
+             * Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to
+             * sign in — and it does it in its OWN window, which on a machine where the setup was started from
+             * a browser is behind everything else. Until somebody answers it there is no engine, forever. The
+             * wait cannot tell that apart from a slow boot, so it stops trying to and names both. */
+            super::progress(
+                "Docker Desktop may be asking you something - check its window for a licence or sign-in screen; a first start also just takes a couple of minutes",
+            );
+        }
         if said.elapsed() >= Duration::from_secs(20) {
             said = Instant::now();
             let left = deadline.saturating_duration_since(Instant::now()).as_secs();
-            crate::ui::progress(&format!(
+            super::progress(&format!(
                 "still waiting for Docker's engine ({left}s before we give up)"
             ));
         }
@@ -362,7 +381,7 @@ pub fn wait_for_daemon() -> Fixed {
     // Not a failure of ours, and the remedy is a human one: Docker Desktop asks for a licence acceptance and
     // sometimes a sign-in on its first run, and until somebody answers that, no engine appears.
     Err(Trouble::Failed(
-        "Docker Desktop was started but its engine never came up. Open Docker Desktop, accept its terms and finish its first-run screens, then run this again.".to_string(),
+        "Docker Desktop was started but its engine never came up.\n       Open Docker Desktop from the Start menu, accept its licence and finish its first-run screens - it may be waiting on a window behind this one. Then choose Check again.".to_string(),
     ))
 }
 

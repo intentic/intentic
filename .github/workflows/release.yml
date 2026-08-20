@@ -91,6 +91,15 @@ jobs:
       CARGO_TARGET_DIR: /ci-cache/desktop-release-windows-target
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
+      # came from us to the app's own updater; this one is what stops Windows telling every new user the
+      # installer might be dangerous, and nothing here carried one until now. Unset, the build runs and says
+      # so (sign-windows.sh); set, an unsigned artifact fails the release (verify-desktop-bundle.sh).
+      WINDOWS_SIGN_TOOL: ${{ secrets.WINDOWS_SIGN_TOOL }}
+      WINDOWS_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
+      WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
+      WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
+      WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
       # Baked into the launcher UI at build time (desktop-app/vite.config.ts). Released installers only — a CI
       # or nightly build gets no key, so the artifacts nobody installs report nothing.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
@@ -251,6 +260,15 @@ jobs:
       # For build-ic.sh's windows-x64 target (cargo-xwin) — the ~1.1 GB MSVC splat cache, shared.
       XWIN_CACHE_DIR: /ci-cache/xwin
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
+      # came from us to the app's own updater; this one is what stops Windows telling every new user the
+      # installer might be dangerous, and nothing here carried one until now. Unset, the build runs and says
+      # so (sign-windows.sh); set, an unsigned artifact fails the release (verify-desktop-bundle.sh).
+      WINDOWS_SIGN_TOOL: ${{ secrets.WINDOWS_SIGN_TOOL }}
+      WINDOWS_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
+      WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
+      WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
+      WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
       # Baked into the launcher UI at build time — released installers only, same as windows-build.
       POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
     steps:
@@ -350,6 +368,15 @@ jobs:
       # Not for signing — that happened where the installers were built. The assemble step reads it as the
       # switch that says "this release is signed", requiring both .sig files and writing latest.json.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
+      # came from us to the app's own updater; this one is what stops Windows telling every new user the
+      # installer might be dangerous, and nothing here carried one until now. Unset, the build runs and says
+      # so (sign-windows.sh); set, an unsigned artifact fails the release (verify-desktop-bundle.sh).
+      WINDOWS_SIGN_TOOL: ${{ secrets.WINDOWS_SIGN_TOOL }}
+      WINDOWS_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
+      WINDOWS_SIGN_STORE: ${{ secrets.WINDOWS_SIGN_STORE }}
+      WINDOWS_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
+      WINDOWS_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
       PLANNED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       PREBUILT_WINDOWS_DESKTOP_DIR: ${{ github.workspace }}/windows-release-candidate
     steps:

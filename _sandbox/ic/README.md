@@ -87,7 +87,16 @@ a stale ic still runs a new image correctly.
   Docker-in-Docker target with a netns-shared cloudflared publishing its sshd on the user's own zone), not a
   dialect of the Linux one.
 - Interactive questions read from the controlling terminal, never stdin — the shims pipe this binary's flows
-  from `curl … | sh`, where stdin is the script. A failed read is a refusal, never a default.
+  from `curl … | sh`, where stdin is the script. A failed read is a refusal, never a default. **`INTENTIC_NO_PROMPT=1`
+  turns every one of them off**, which is what the desktop app sets: it spawns these flows from a GUI process
+  with no window, no console and closed stdin, and a probe that is wrong there does not produce a bad guess —
+  it produces an install that never ends. The probes stay; this is the caller saying so outright.
+- **`ic docker prepare` has two exit codes that are not failures.** `3` means requirements were reported and
+  nothing was changed (come back with `-y` / `INSTALL_DOCKER=1`); `4` means Windows has to restart first.
+  Every Windows install that needs anything ends its first pass on `3` by design, and a caller that reads
+  that as a crash shows the user `exited with status 3` instead of the diagnosis it just printed. See
+  `docs/cli-output-protocol.md` §2c, and §2b for the two `intentic-requirement…:` markers the desktop app
+  draws its checklist from.
 - **Decisions are split from the IO that acts on them**, and that split is what the tests hook into: the argv
   that asks the image for its run command, the overlay's base check, the rollback record's arithmetic, the
   image-reference classification. Each is a pure function beside the function that calls docker, so the

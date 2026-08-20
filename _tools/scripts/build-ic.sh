@@ -99,6 +99,13 @@ for target in "$@"; do
   # because the failure it replaces was silent: a leftover binary copies just as happily as a fresh one.
   [ -f "$src" ] || { echo "error: no ic binary at $src after building $target" >&2; exit 1; }
   cp "$src" "$OUT/$name"
+  # SIGNED LIKE THE INSTALLER, because it is downloaded like one. Every shim fetches this binary from a
+  # GitHub release and runs it, so it arrives on a user's PC carrying the mark-of-the-web and gets the same
+  # SmartScreen and Defender scrutiny the .exe installer does — and it runs at the most fragile moment of the
+  # whole flow, before anything else has worked. Does nothing when signing is not configured.
+  case "$target" in
+    windows-*) bash "$(dirname "$0")/sign-windows.sh" "$OUT/$name" ;;
+  esac
 done
 
 echo "==> ic binaries in $OUT:"

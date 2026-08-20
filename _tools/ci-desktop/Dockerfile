@@ -27,10 +27,19 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                             installer it just produced, and a verifier that skips when its tool is missing
 #                             reports "verified" for a bundle nobody opened
 #   xz-utils                  tar shells out to it, and the zig tarball below is the only .tar.xz here
+#   osslsigncode              Authenticode signing FROM LINUX (_tools/scripts/sign-windows.sh). The Windows
+#                             installer is cross-built here, so `signtool.exe` does not exist and never will;
+#                             this is the tool that signs from a .pfx. The other supported signer is `jsign`,
+#                             for a key that lives in a cloud service (Azure Trusted Signing and friends) —
+#                             it is Java and is deliberately NOT baked in until that provider is chosen, since
+#                             a JRE is ~90 MB in an image every desktop job pulls. Adding it is two lines:
+#                             `default-jre-headless` here, and the jsign .deb from its GitHub release.
+#                             docs/windows-code-signing.md has the whole decision.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
         build-essential libssl-dev pkg-config nsis lld llvm clang xdg-utils file p7zip-full rpm xz-utils \
+        osslsigncode \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust, in the image rather than in $CARGO_HOME: the jobs point CARGO_HOME at the shared /ci-cache store for the

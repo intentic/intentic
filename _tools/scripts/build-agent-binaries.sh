@@ -35,6 +35,9 @@ for target in "$@"; do
     [ "$os" = "windows" ] && ext=".exe"
     bun build --compile --target="bun-${target}" --define "INTENTIC_AGENT_VERSION=\"${version}\"" \
         "${pkg}/dist/cli.js" --outfile "${out}/${name}-${os}-${arch}${ext}"
+    # The Windows agents are downloaded and executed on a user's PC exactly as `ic` is, so they carry the
+    # mark-of-the-web and face the same publisher question. No-op unless signing is configured.
+    [ "$os" = "windows" ] && bash "$(dirname "$0")/sign-windows.sh" "${out}/${name}-${os}-${arch}${ext}"
 done
 
 # …and prove the stamp actually landed, by ASKING one of the binaries just built. A define that silently stops

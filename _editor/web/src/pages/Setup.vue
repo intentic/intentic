@@ -323,7 +323,23 @@ const composeShown = computed(() => commandVisible.value && runTab.value === `co
  * and the wait's wording switch on this. It needs the intentic-provided tunnel (the machine boots headless,
  * with no Cloudflare of its own), so the form yields to a pointer at step 1 while `mode` says `own`. */
 const machine = ref<"hosted" | "mine" | "cloud">(mobile.value ? `cloud` : `mine`);
-const cloudOffered = computed(() => addressed.value && !desktop.value);
+
+/* THE OTHER RUNGS, INSIDE THE APP — hidden by default, never absent.
+ *
+ * They used to be hard-excluded here on the argument above: the app IS a computer the user has, so a picker
+ * offering them a different one is scenery. That holds right up until this computer cannot run it — no WSL2,
+ * no Docker, a locked-down work laptop, a machine too small — and then the app has nothing to say and the
+ * user has nowhere to go. The app's own requirements screen now links here for exactly that reader
+ * (`?elsewhere=1`, desktop-app/src/App.vue), and a link into a page that still hides what it promised would
+ * be worse than not offering it.
+ *
+ * So: local stays the loud default in the app, unchanged and preselected, and the other rungs sit behind one
+ * quiet line. `elsewhere` is what opens them — set by the link from the requirements screen, or by that line.
+ */
+const elsewhere = ref(route.query[`elsewhere`] === `1`);
+// Inside the app the other rungs are one click away rather than on screen; outside it, nothing is hidden.
+const elsewhereOffered = computed(() => !desktop.value || elsewhere.value);
+const cloudOffered = computed(() => addressed.value && elsewhereOffered.value);
 /* The pasted command is an address away from being useless: the script it runs redeems a setup code, and a
  * platform that mints none has nothing for it to redeem. So this rung stands on the same offer the cloud one
  * does — including in the desktop app, where the button IS the command. */
@@ -341,7 +357,7 @@ const commandOffered = computed(() => addressed.value);
  * crossing, which is how a mis-click cost a person their typed name and their place in the flow. */
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
-const hostedOffered = computed(() => hostedOffer.value?.enabled === true && !desktop.value);
+const hostedOffered = computed(() => hostedOffer.value?.enabled === true && elsewhereOffered.value);
 /* Is there a provision lane to be in at all — a machine we can start, or an address we can put on one the
  * reader starts. With neither, the way BACK to it (the attach lane's last line) is a promise this platform
  * cannot keep, and the attach lane is not a detour off the flow but the whole of it. */
@@ -521,7 +537,7 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
 /* Shown once there is a CHOICE to make. A picker over one rung is not a picker — it is a card describing the
  * only thing on offer, which is what the step under it already does — and while the offers are still being
  * read there is nothing honest to draw at all. */
-const ladderShown = computed(() => !desktop.value && ladderOptions.value.length > 1);
+const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
 
 /* WHICH ADDRESS THE CARD IS REPORTING — one of four, and they are mutually exclusive: a hosted machine
  * announces its own, a platform that mints none says so, the default is the intentic domain, and the last is
@@ -2436,6 +2452,24 @@ watch(commandReady, (ready) => {
                                     <Button label="Set it up now" class="self-start" @click="runHere">
                                         <template #icon><Icon name="bolt" /></template>
                                     </Button>
+                                    <!-- THE OTHER RUNGS, ONE CLICK AWAY RATHER THAN ABSENT.
+                                         They were hidden here on the argument that the app IS the computer — which
+                                         is true until this computer cannot run it, and the readers who meet that are
+                                         precisely the ones with no WSL2, no Docker and no administrator. The app's
+                                         requirements screen links straight to this with `?elsewhere=1`, so the
+                                         rungs are already open when somebody arrives that way; this is the same
+                                         door for the reader who worked it out before the install stopped them.
+                                         One muted line, under the loud default, exactly like the command below. -->
+                                    <button
+                                        v-if="!elsewhere && (addressed || hostedOffer?.enabled)"
+                                        type="button"
+                                        :class="ui.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
+                                        @click="elsewhere = true"
+                                    >
+                                        <Icon name="cloud" class="shrink-0" />
+                                        <span class="min-w-0">Can't run it on this computer? See the other options</span>
+                                        <Icon name="chevron-down" class="shrink-0 text-subtle" />
+                                    </button>
                                 </template>
 
                                 <!-- …and in a browser, the same answer one install earlier: the app, for the

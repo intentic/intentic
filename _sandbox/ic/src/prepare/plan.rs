@@ -608,13 +608,43 @@ pub fn advisories(facts: &Facts) -> Vec<String> {
     notes
 }
 
+/// The build Windows 11 starts at. Every 11 machine reports a `CurrentBuildNumber` at or above this and
+/// every 10 machine below it, which makes the number the only reliable way to name the OS — see
+/// [`windows_name`].
+pub const FIRST_WINDOWS_11_BUILD: u32 = 22_000;
+
+/* WHAT THIS PC IS CALLED, AND WHY IT IS NOT WHAT THE REGISTRY SAYS.
+ *
+ * `HKLM\…\CurrentVersion\ProductName` was frozen at "Windows 10 …" when 11 shipped and has never been
+ * corrected, so a Windows 11 machine introduces itself as "Windows 10 Pro" — which is exactly what a real
+ * user saw on the first line of their checklist, above four things we were telling them to change. The
+ * facts.rs OMEN fixture has carried that value with a comment about it since it was captured; nothing
+ * DECIDES anything from the name, but this is the sentence a stranger reads first, and being visibly wrong
+ * about the machine is not a good way to ask somebody for administrator.
+ *
+ * So the edition (the "Pro"/"Home" tail) is kept — that part of the registry value is right — and only the
+ * family in front of it is re-derived from the build number, which is the version of record everywhere else
+ * in this module. A name we cannot parse is left exactly as it is rather than guessed at.
+ */
+pub fn windows_name(product_name: &str, build: u32) -> String {
+    let trimmed = product_name.trim();
+    if trimmed.is_empty() {
+        return "Windows".to_string();
+    }
+    // Only the values this rewrite is about: `Windows 10 Pro`, `Windows 10 Home`, `Windows 10 Enterprise`.
+    // Anything else (a Server SKU, a name a future Windows invents) is somebody else's string.
+    let Some(edition) = trimmed.strip_prefix("Windows 10") else {
+        return trimmed.to_string();
+    };
+    if build == 0 || build < FIRST_WINDOWS_11_BUILD {
+        return trimmed.to_string();
+    }
+    format!("Windows 11{edition}")
+}
+
 /// The line the checklist draws for a machine with nothing wrong — what it IS, rather than a bare "ok".
 pub fn summary(facts: &Facts) -> String {
-    let name = if facts.product_name.is_empty() {
-        "Windows".to_string()
-    } else {
-        facts.product_name.clone()
-    };
+    let name = windows_name(&facts.product_name, facts.build);
     let release = if facts.display_version.is_empty() {
         String::new()
     } else {
@@ -1298,5 +1328,52 @@ mod tests {
             }),
             "Windows"
         );
+    }
+
+    /* THE REGISTRY LIES ABOUT WHICH WINDOWS THIS IS, and a real user met that lie on the first line of a
+     * checklist that then asked them for administrator four times. `ProductName` was frozen at "Windows 10"
+     * when 11 shipped; the build number is what everything else in this module already believes. */
+    #[test]
+    fn a_windows_11_machine_is_not_introduced_as_windows_10() {
+        // The exact pair the reported machine printed: 25H2, build 26200, calling itself Windows 10 Pro.
+        assert_eq!(windows_name("Windows 10 Pro", 26_200), "Windows 11 Pro");
+        assert_eq!(windows_name("Windows 10 Home", 22_631), "Windows 11 Home");
+        assert_eq!(
+            windows_name("Windows 10 Enterprise", FIRST_WINDOWS_11_BUILD),
+            "Windows 11 Enterprise"
+        );
+        // …and the summary line the checklist actually draws.
+        assert_eq!(
+            summary(&Facts {
+                product_name: "Windows 10 Pro".to_string(),
+                display_version: "25H2".to_string(),
+                build: 26_200,
+                ..healthy()
+            }),
+            "Windows 11 Pro 25H2, build 26200"
+        );
+    }
+
+    #[test]
+    fn a_machine_that_really_is_windows_10_keeps_its_name() {
+        assert_eq!(windows_name("Windows 10 Pro", 19_045), "Windows 10 Pro");
+        assert_eq!(
+            windows_name("Windows 10 Pro", FIRST_WINDOWS_11_BUILD - 1),
+            "Windows 10 Pro"
+        );
+        // A build we could not read is not evidence of anything, so the registry's word stands.
+        assert_eq!(windows_name("Windows 10 Pro", 0), "Windows 10 Pro");
+    }
+
+    #[test]
+    fn a_name_this_rule_is_not_about_is_left_alone() {
+        // Server SKUs and anything a future Windows invents are somebody else's string.
+        assert_eq!(
+            windows_name("Windows Server 2022 Standard", 26_200),
+            "Windows Server 2022 Standard"
+        );
+        assert_eq!(windows_name("Windows 11 Pro", 26_200), "Windows 11 Pro");
+        assert_eq!(windows_name("", 26_200), "Windows");
+        assert_eq!(windows_name("   ", 26_200), "Windows");
     }
 }

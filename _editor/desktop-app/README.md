@@ -84,8 +84,16 @@ matters most that was unusable: a first install starts from a link in the *brows
 window to take a rectangle from and the sheet opened at the app's default 1440×900 — which at Windows' usual
 150% scaling is 2160×1350 physical, over every other application, with no title bar to move it by and no
 button to minimise it. An install runs for minutes and it took the machine for all of them. So the setup
-window is movable, minimisable, resizable and never topmost, and its card scrolls inside it — the requirements
-list a stopped Windows install draws is taller than the window it arrives in.
+window is movable, minimisable, resizable and never topmost.
+
+**And it grows to its card, because "it scrolls" was not enough.** The card was allowed to overflow a 620×640
+frame on the argument that a scroll container catches it. What that meant in practice, on exactly the machines
+this screen exists for, was a Windows PC reporting four things wrong with itself — no WSL2, no Docker, no
+group membership, no engine — and putting every one of them, plus the button that fixes them, below the fold
+of a small window with nothing on screen to say there was more. A user watched that install "hang on checking
+Docker": the diagnosis was correct, the buttons were drawn, and the part of the window they could see held a
+spinner. The card now measures itself and `fit_setup` resizes the window to it, capped at the work area — and
+the requirements list leads the card rather than sitting under ten rows of progress plan.
 
 **A window that fits the screen still has to be put on it, and for a while only the first half was done.**
 `fit_to_screen` stopped the app asking for a window taller than the display; nothing then chose where that
@@ -179,8 +187,25 @@ The scripts are **bundled as resources** from `_site/site/public/scripts/`, by w
 globs *that* — so a script added to the site is bundled by construction, and a file the commit does not carry
 cannot be, however long the runner has kept its checkout. The trade is that an **uncommitted** edit to a
 script does not reach a local installer or `tauri dev`; commit it. A release of the app is cut from one
-commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`; the shims fetch the newest released `ic` at run time,
-which is how flow fixes reach app users between app updates.
+commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0`.
+
+### …and the CLI they fetch is pinned to the same release
+
+The shims download `ic` on every run, and until recently they took it from `releases/latest` — so the app's
+bundled scripts came from one commit and the binary they hand over to came from whatever was newest. The app
+installs its own updates only when the user next quits it, which makes "a release behind" an ordinary state,
+not an edge case.
+
+That is not a cosmetic drift. The `intentic-requirement:` protocol and the two-pass consent flow the Windows
+setup screen is built around arrived in a single commit: an app older than it receives those lines, has no
+parser for them, has no requirements list to draw, and does not know that the first pass is *supposed* to
+stop — which is a Windows install that reports nothing and appears to hang on "checking Docker".
+
+So `setup_script` sets `IC_URL` to this build's own release tag, through the base-URL override every shim
+already honours. A build with no version (`tauri dev`, any local build) sets nothing and takes `latest`,
+because a checkout has no matching release to pin to. Flow fixes now reach app users through an app update
+rather than behind its back — which is the same trade the bundled scripts already make, applied to the one
+piece that was exempt from it.
 
 ### The scripts say which phase they are in, not just what they are doing
 
@@ -208,6 +233,53 @@ and how long, were both unanswerable. `setupPlan.ts` answers them:
   script gets to say a step is over.
 - **The estimate is the plan corrected by the run.** Remaining weight at the pace this machine has actually
   managed so far, so a slow disk stretches the number instead of being contradicted by it.
+
+### When it stops, somebody has to find out
+
+A Windows install once reported four specific things wrong with the machine, exited, and the user saw a
+spinner. Nothing about the diagnosis was wrong; every part of *delivering* it was. That failure had five
+separate causes and all five are closed here, because any one of them alone reproduces it:
+
+- **The requirements lead the card**, above the progress plan rather than under it, and the window grows to
+  fit them (above). They were previously the last thing on a card taller than its window.
+- **A non-zero exit is not automatically a failure.** Every Windows install that needs anything ends its first
+  pass non-zero *by design* — the flow reports what it would change and stops, because there is no terminal
+  here to ask the one question on. `ic` now says which stop that was with a documented exit code
+  (`docs/cli-output-protocol.md` §2c), and the screen renders it as the list, never as `connect.ps1 exited
+  with status 3`.
+- **The setup face is latched, not derived.** It used to be `pending !== undefined || activeRun === 'setup'`,
+  where `pending` is cleared by the run that starts and re-read from two directions — so ordinary orderings
+  could end with both halves false while a failed setup was on screen, handing the window back to the manager
+  face and taking the failure with it. `take_pending_setup` is now take-once, and only finishing or the ×
+  closes the screen.
+- **A stopped run raises its own window** (`setup_alert` → unminimise, show, `request_user_attention`). This
+  window is deliberately not topmost and deliberately minimisable, which is right for something that runs for
+  minutes and exactly why a failure behind the workspace changed only pixels nobody was looking at.
+- **Every run writes a transcript to `~/.intentic/logs/desktop-<id>-<stamp>.log`**, whether or not anyone
+  asks, with **Copy log** and **Open log folder** on the card. Before this, a run existed only as events in
+  one webview: closing the card destroyed the only evidence there was.
+
+Two more things the screen gained at the same time:
+
+- **Stop.** There was no way to end a run. "You can close this — the install keeps going" was the whole of the
+  offer, so a run that had gone wrong could be walked away from and not stopped, and the next attempt raced the
+  one still going. `run_stop` kills the tree (`taskkill /T` on Windows; the child leads its own process group
+  on Unix).
+- **Live requirement rows.** `ic` reports each requirement's own state as it works through it
+  (`intentic-requirement-state:`), so the list ticks over in place — instead of one spinner on "Set up Docker"
+  for the ten minutes it takes to switch WSL2 on, download 600 MB, run an installer and wait for an engine.
+
+### The way out that is not giving up
+
+The list above is a machine being asked for administrator, a 600 MB download and a restart, and some of the
+people reading it are on a PC where none of that will happen — a locked-down work laptop, a machine too small,
+an account with no admin. The browser has offered a cloud machine and a hosted one all along; the app hid them
+on the argument that "this computer" is the whole point of being in it. That holds right up until this
+computer cannot, and then it is a dead end.
+
+So the requirements card carries one quiet line — *Not on this computer? Run it in the cloud instead* — which
+hands the window back to the SPA's setup page at `?elsewhere=1`, where those rungs are open. Local stays the
+loud, preselected default everywhere else, including the same page reached any other way.
 
 ## Sign-in never happens in the webview
 
@@ -305,7 +377,9 @@ install's outcome was invisible. It now sends named events of its own
 | `desktop_app_opened` | the launcher mounts | whether Docker already answers |
 | `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
 | `desktop_install_dismissed` | the setup card is closed | whether the run was still going, and how far it had got |
-| `desktop_install_restart` | Windows is restarted mid-setup | which prerequisites asked for it |
+| `desktop_install_stopped` | the user ends a run with **Stop** | how far it had got |
+| `desktop_install_elsewhere` | the requirements card's cloud escape hatch is taken | which prerequisites made them take it |
+| `desktop_install_restart` | Windows is restarted **or signed out of** mid-setup | which of the two, and which prerequisites asked for it |
 | `desktop_install_resumed` / `_resume_expired` | the app comes back after that restart | how long the parked setup sat there |
 | `desktop_recreate_started` / `_finished` | an update or an environment rebuild | the same, plus which of the two, and whether it came from this screen or from the SPA's card |
 

@@ -34,16 +34,43 @@ pub struct Args {
     pub dry_run: bool,
 }
 
+/* THE TWO WAYS THIS COMMAND STOPS WITHOUT ANYTHING BEING WRONG — as exit codes, because a caller must not
+ * have to read prose to tell them from a crash.
+ *
+ * The desktop app's FIRST pass is designed to end here: examine, report, change nothing, wait to be asked
+ * again with consent. Until now that ended the same way a genuine failure does — `exit 1` and a line on
+ * stderr reading "there is no terminal to ask on, so nothing was changed" — which is a developer's sentence
+ * describing normal behaviour, and it is what a user meets whenever the requirement lines fail to reach the
+ * screen for any other reason. One reported install ended exactly there with nothing on screen at all.
+ *
+ * So the expected stops get their own codes. The app maps them to "here is what this PC needs" and never to
+ * a red box; a terminal user sees the same checklist it always did; a script still stops, because both are
+ * non-zero. 3 and 4 are chosen to sit above the 1 that means "it broke" and below the 125+ range shells
+ * reserve for their own signalling. */
+
+/// Requirements were found and reported, and NOTHING was changed — the caller has the list and has to come
+/// back with consent (`-y`, or `INSTALL_DOCKER=1`).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const EXIT_NEEDS_CONSENT: i32 = 3;
+/// Windows has to restart before the setup can go further. Everything that could be done has been.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const EXIT_NEEDS_RESTART: i32 = 4;
+
+/// Whether anything is parsing this output. The same test ui.rs uses to pick its mode, asked here because
+/// the markers below are for a reader that has no screen — in a terminal they are a screenful of JSON in
+/// the middle of the one screen somebody is trying to read.
+#[cfg(windows)]
+fn piped() -> bool {
+    use std::io::IsTerminal;
+    !std::io::stdout().is_terminal()
+}
+
 /// The machine-readable half of a requirement, for the desktop app. A DIFFERENT prefix from `intentic: [x] y`
 /// on purpose: that vocabulary moves a progress bar, and a requirement is not a step. The app's parser would
 /// otherwise see a phase called `requirement` and slide its cursor to a step that does not exist.
-///
-/// Only when stdout is a pipe. In a terminal these are a screenful of JSON in the middle of the one screen
-/// somebody is trying to read.
 #[cfg(windows)]
 fn announce(requirement: &plan::Requirement) {
-    use std::io::IsTerminal;
-    if std::io::stdout().is_terminal() {
+    if !piped() {
         return;
     }
     let line = serde_json::json!({
@@ -55,6 +82,46 @@ fn announce(requirement: &plan::Requirement) {
         "detail": requirement.detail,
     });
     println!("intentic-requirement: {line}");
+}
+
+/* WHAT IS HAPPENING TO ONE REQUIREMENT, RIGHT NOW — the marker that turns a list into a live checklist.
+ *
+ * `intentic-requirement:` says a thing is unmet. It says nothing at all about the ten minutes that follow,
+ * during which the app could draw exactly one row — "Set up Docker" — with a spinner on it, while WSL2 was
+ * turned on, 600 MB came down, an installer ran, an engine started and a daemon was waited for. The reader
+ * with the least patience in this whole flow is the one on a machine that needs the most work, and they were
+ * the one shown the least.
+ *
+ * So each requirement reports its own state as it is worked through, and the `detail` carries the changing
+ * measurement under it — the megabytes, the seconds left on the engine wait. Same prefix family as the
+ * announcement and the same rule: pipes only, never a phase id, so nothing here can move a progress bar. */
+#[cfg(windows)]
+fn announce_state(id: &str, state: &str, detail: Option<&str>) {
+    if !piped() {
+        return;
+    }
+    let line = serde_json::json!({ "id": id, "state": state, "detail": detail });
+    println!("intentic-requirement-state: {line}");
+}
+
+/// Which requirement the fixes below are currently working on, so their progress readings can be attributed
+/// to a row rather than being loose lines in a log. Set by [`apply`] around one fix at a time — the flow is
+/// strictly sequential, which is why one slot is enough.
+#[cfg(windows)]
+static WORKING_ON: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// A CHANGING MEASUREMENT while a requirement is being fixed — what [`fix`] calls instead of `ui::progress`.
+/// It still prints the human line (the log is a trail, and the timings in it are the only record of where a
+/// slow install went); it additionally attributes the reading to the row the app is drawing.
+#[cfg(windows)]
+pub fn progress(text: &str) {
+    crate::ui::progress(text);
+    let working_on = WORKING_ON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(id) = *working_on {
+        announce_state(id, "running", Some(text));
+    }
 }
 
 /// The checklist, as the terminal draws it. Same row vocabulary as checks::print_row, because a user meeting
@@ -136,8 +203,14 @@ pub fn run(args: Args) -> Result<()> {
         bail!("{}", explain(&stuck));
     }
 
+    // Report-only, by request. Everything left on the list is ours to fix (the `stuck` check above already
+    // took the ones that are not, as a real failure), so this is the consent stop with the asking left out.
     if args.dry_run {
-        bail!("{}", explain(&unmet));
+        println!("{}", explain(&unmet));
+        stop(
+            EXIT_NEEDS_CONSENT,
+            "nothing was changed - this was a dry run.",
+        );
     }
 
     // A restart Windows was already waiting for, with nothing else to do first.
@@ -197,6 +270,9 @@ pub fn run(args: Args) -> Result<()> {
                     for entry in &pending {
                         announce(entry);
                     }
+                    // Done as far as anything here can take it — the row is finished, and what is left is
+                    // the machine going down and coming back.
+                    announce_state(requirement.id, "done", Some("waiting for the restart"));
                     return restart(&pending, args.yes);
                 }
                 Outcome::SignOut => {
@@ -206,6 +282,7 @@ pub fn run(args: Args) -> Result<()> {
                         "sign out of Windows and back in, then run the same command again."
                             .to_string();
                     announce(&pending);
+                    announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
                     bail!(
                         "{} was added to the docker-users group, but Windows only picks that up on the next sign-in.\n       Sign out and back in, then run the same command again.",
                         if facts.user.is_empty() { "this account" } else { &facts.user }
@@ -253,6 +330,12 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
         _ => "preparing Docker...",
     };
     step("installing-docker", doing);
+    // The row this fix belongs to starts moving before the fix does, so the app can draw it as working
+    // rather than as still-pending through however many minutes it takes.
+    announce_state(requirement.id, "running", Some(doing));
+    *WORKING_ON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(requirement.id);
 
     let outcome = match requirement.id {
         "wsl-features" => fix::enable_wsl_features(),
@@ -266,21 +349,36 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
             "no idea how to fix '{other}' - this is a bug in intentic, please report it."
         ))),
     };
+    // Whatever happened, nothing after this point is this requirement's progress.
+    *WORKING_ON
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 
     match outcome {
         Ok(fix::Done::Now) => {
             crate::ui::row(crate::ui::RowOutcome::Pass, &requirement.title, "");
+            announce_state(requirement.id, "done", None);
             Ok(Outcome::Continue)
         }
         Ok(fix::Done::AfterRestart) => Ok(Outcome::Restart),
         Ok(fix::Done::AfterSignOut) => Ok(Outcome::SignOut),
         // Dismissing the prompt is an ANSWER, and it gets its own sentence: "failed" would be an accusation
         // about a machine that is fine and a decision that was deliberate.
-        Err(fix::Trouble::Cancelled) => bail!(
-            "the administrator prompt was dismissed, so {} was not changed.\n       Run the same command again and choose Yes when Windows asks.",
-            requirement.title.to_lowercase()
-        ),
-        Err(fix::Trouble::Failed(problem)) => bail!("{problem}"),
+        Err(fix::Trouble::Cancelled) => {
+            announce_state(
+                requirement.id,
+                "failed",
+                Some("the administrator prompt was dismissed"),
+            );
+            bail!(
+                "the administrator prompt was dismissed, so {} was not changed.\n       Run the same command again and choose Yes when Windows asks.",
+                requirement.title.to_lowercase()
+            )
+        }
+        Err(fix::Trouble::Failed(problem)) => {
+            announce_state(requirement.id, "failed", Some(problem.as_str()));
+            bail!("{problem}")
+        }
     }
 }
 
@@ -317,9 +415,29 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
      * a sandbox launch on a machine that is about to go down. */
     if !pre_consented && tty::have_tty() && tty::confirm("Restart this PC now?", false) {
         fix::restart_windows().map_err(crate::util::Fail)?;
-        bail!("this PC is restarting in 10 seconds - run the command above once it is back.");
+        stop(
+            EXIT_NEEDS_RESTART,
+            "this PC is restarting in 10 seconds - run the command above once it is back.",
+        );
     }
-    bail!("this PC has to restart before Docker can run - restart it, then run the command above.")
+    stop(
+        EXIT_NEEDS_RESTART,
+        "this PC has to restart before Docker can run - restart it, then run the command above.",
+    )
+}
+
+/* AN EXPECTED STOP, SAID AS ONE. Everything above that ends a run through `bail!` is reported by main as
+ * `error: …`, in red, on stderr — which is right for a failure and wrong for the two outcomes this command
+ * is DESIGNED to reach: a machine that needs consent, and a machine that needs a restart. Neither is
+ * anything going wrong, and dressing them as errors is how a first-run install reads like a crash.
+ *
+ * So they leave through here instead: an ordinary sentence, and one of the documented codes above rather
+ * than the 1 that means "it broke". It exits the process rather than returning, because there is nothing
+ * after it — the same thing main does with a `Fail`, one frame earlier and with a code that carries meaning. */
+#[cfg(windows)]
+fn stop(code: i32, message: &str) -> ! {
+    crate::ui::note(message);
+    std::process::exit(code)
 }
 
 /// The command to paste after the restart, rebuilt from what this run was given. A setup code that will have
@@ -357,14 +475,18 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!("  https://www.docker.com/legal/docker-subscription-service-agreement");
     println!();
     if !tty::have_tty() {
-        // The desktop app's first pass lands exactly here: it has the requirement lines already, and this is
-        // the message behind its "Install and continue" button.
-        bail!(
-            "there is no terminal to ask on, so nothing was changed.\n       Re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above."
+        /* THE DESKTOP APP'S FIRST PASS LANDS EXACTLY HERE, and it is the most-travelled line in this file:
+         * every Windows install that needs anything at all reaches it. It used to leave as `error: there is
+         * no terminal to ask on, so nothing was changed` — a sentence about our own plumbing, on stderr, in
+         * red, describing a run that did precisely what it was designed to do. The app has the requirement
+         * lines already and draws them as a list with a button; this is only the note behind that button. */
+        stop(
+            EXIT_NEEDS_CONSENT,
+            "nothing has been changed yet - re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above.",
         );
     }
     if !tty::confirm("Go ahead?", false) {
-        bail!("nothing was changed.");
+        stop(EXIT_NEEDS_CONSENT, "nothing was changed.");
     }
     println!();
     crate::ui::resume();

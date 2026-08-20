@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import type { Requirement, RequirementAction } from "../desktop";
+import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
 
 /* WHAT THIS COMPUTER NEEDS, AS SOMETHING YOU CAN ACT ON.
  *
@@ -21,8 +21,21 @@ import type { Requirement, RequirementAction } from "../desktop";
  * walkthrough the installer already wrote — shown here in full, in a monospace block, because it is a list of
  * keys to press on a screen that is not this one. */
 
-const props = defineProps<{ requirements: Requirement[]; busy: boolean }>();
-const emit = defineEmits<{ install: []; restart: []; recheck: [] }>();
+const props = defineProps<{ requirements: Requirement[]; busy: boolean; progress?: Record<string, RequirementProgress> }>();
+const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();
+
+/* HOW EACH ROW IS GOING, WHILE IT IS GOING.
+ *
+ * The list used to be a thing you read once and then replaced with a spinner: click "Install and continue"
+ * and the whole card was swapped for one progress row reading "Set up Docker", which then sat there for as
+ * long as it took to switch WSL2 on, download 600 MB, run an installer, start an engine and wait for a
+ * daemon. Ten minutes of one spinner, on the machines that need the most work — the readers least likely to
+ * believe it is still going.
+ *
+ * So the rows stay, and each reports itself: the installer names what it is doing per requirement and what
+ * it measures underneath (desktop.ts's requirement-state marker). Nothing here invents a state — a row with
+ * no report is simply still pending, which is exactly what it is. */
+const stateOf = (id: string): RequirementProgress | undefined => props.progress?.[id];
 
 // Which walkthroughs are open. Closed by default: the firmware one is thirty lines, and somebody whose only
 // problem is a missing Docker should not have to scroll past it.
@@ -55,11 +68,26 @@ const BADGE: Record<RequirementAction, string> = {
     unsupported: `not supported`,
 };
 
+/* …and what a row says about itself once it HAS a state, which retires the promise in `BADGE`. `pending` is
+ * spelled here as the absence of one so the lookup has a total answer rather than a branch. */
+const STATE_BADGE: Record<string, string | undefined> = {
+    pending: undefined,
+    running: `working on it`,
+    done: `done`,
+    failed: `didn't work`,
+};
+
 const ours = computed(() => props.requirements.some((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`));
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
-// Nothing here is ours and nothing is a restart: every button would be a lie, so only "Check again" remains —
+/* The one that had no button. Adding an account to `docker-users` succeeds immediately and does nothing at
+ * all until Windows re-issues the login token, which it does on the next sign-in — so this row's only
+ * control was "Check again", which cannot possibly work, on a machine where everything else had. Same shape
+ * as the restart: the setup is parked, Windows is asked to sign out, and the same RunOnce that survives a
+ * reboot picks it up on the way back in. */
+const signingOut = computed(() => props.requirements.some((requirement) => requirement.action === `signOut`));
+// Nothing here is ours, and nothing we can drive: every button would be a lie, so only "Check again" remains —
 // it is the honest one, because the user is about to go and change something we cannot see from here.
-const stuck = computed(() => !ours.value && !restarting.value);
+const stuck = computed(() => !ours.value && !restarting.value && !signingOut.value);
 const needsAdmin = computed(() => props.requirements.some((requirement) => requirement.action === `fixElevated`));
 </script>
 
@@ -72,18 +100,37 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
         <ul class="flex flex-col gap-2">
             <li v-for="requirement in requirements" :key="requirement.id" class="rounded-md border border-line bg-canvas p-2.5">
                 <div class="flex items-start gap-2">
+                    <!-- The row's own state wins over its action, because once something is being DONE about
+                         a requirement, "we'll do this" is history and "how is it going" is the question. -->
+                    <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-primary-400" />
+                    <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
                     <Icon
-                        :name="ICON[requirement.action]"
+                        v-else
+                        :name="stateOf(requirement.id)?.state === `failed` ? `times` : ICON[requirement.action]"
                         class="mt-0.5 shrink-0"
-                        :class="requirement.action === `fix` || requirement.action === `fixElevated` ? 'text-primary-400' : 'text-warning'"
+                        :class="
+                            stateOf(requirement.id)?.state === `failed`
+                                ? 'text-danger'
+                                : requirement.action === `fix` || requirement.action === `fixElevated`
+                                  ? 'text-primary-400'
+                                  : 'text-warning'
+                        "
                     />
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-baseline gap-x-2">
                             <span class="text-2xs font-medium text-content">{{ requirement.title }}</span>
-                            <span class="text-2xs text-subtle">{{ BADGE[requirement.action] }}</span>
+                            <!-- The badge is a PROMISE about what will happen, so it retires the moment
+                                 something has. A row that has just failed still reading "we'll do this" is
+                                 the screen contradicting the red mark beside it. -->
+                            <span class="text-2xs text-subtle">{{
+                                STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? BADGE[requirement.action]
+                            }}</span>
                         </div>
                         <p class="text-2xs text-muted">{{ requirement.problem }}</p>
-                        <p v-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
+                        <!-- While something is happening, the installer's own words about THIS row replace the
+                             remedy — the remedy describes what will happen, and it already is. -->
+                        <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
+                        <p v-else-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
                         <button
                             v-if="requirement.detail"
                             type="button"
@@ -99,7 +146,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                 <pre
                     v-if="requirement.detail && opened[requirement.id]"
                     class="mt-2 max-h-72 overflow-auto rounded-md border border-line bg-surface p-2 font-mono text-2xs leading-relaxed text-muted whitespace-pre-wrap"
-                >{{ requirement.detail }}</pre>
+                    >{{ requirement.detail }}</pre>
             </li>
         </ul>
 
@@ -114,10 +161,29 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
             <Button v-if="restarting" :disabled="busy" label="Restart now" @click="emit(`restart`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
+            <Button v-if="signingOut" :disabled="busy" label="Sign out now" @click="emit(`signout`)">
+                <template #icon><Icon name="refresh" /></template>
+            </Button>
             <Button severity="secondary" :text="true" :disabled="busy" label="Check again" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
         </div>
-        <p v-if="restarting" class="text-2xs text-subtle">Your setup is saved — this window picks it up again after the restart.</p>
+        <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved — this window picks it up again once you're back.</p>
+
+        <!-- THE WAY OUT THAT IS NOT GIVING UP, and the only place in this app that offers one.
+             Everything above is a machine being asked for administrator, a 600 MB download and a restart, and
+             some of the people reading it are on a PC where none of that is going to happen. The browser has
+             offered a cloud machine and a hosted one all along; the app hid them on the argument that "this
+             computer" is the whole point of being here — true until this computer cannot, and then it is a
+             dead end. One quiet line, under the loud default. -->
+        <button
+            type="button"
+            class="flex items-center gap-2 self-start text-2xs text-muted hover:text-content"
+            :disabled="busy"
+            @click="emit(`elsewhere`)"
+        >
+            <Icon name="cloud" class="shrink-0" />
+            <span>Not on this computer? Run it in the cloud instead</span>
+        </button>
     </div>
 </template>

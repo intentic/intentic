@@ -1,10 +1,11 @@
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::path::BaseDirectory;
@@ -43,6 +44,10 @@ pub enum Stream {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RunEvent {
+    /// A run has begun, and where its transcript is being written. Sent before the first line so the screen
+    /// can offer the log from the moment there is one — including while a run is still going, which is when
+    /// somebody stuck on it most wants something to paste into a support thread.
+    Started { run: String, log: Option<String> },
     Line {
         run: String,
         stream: Stream,
@@ -56,6 +61,108 @@ pub enum RunEvent {
 }
 
 pub const RUN_EVENT: &str = "desktop://run";
+
+/* THE TRANSCRIPT, ON DISK, WHETHER OR NOT ANYBODY IS LOOKING.
+ *
+ * Until now a run existed only as events in one webview: the lines a user could see were the lines that
+ * window happened to still be holding, and closing the card destroyed them. A Windows install that stopped
+ * with something unexplained therefore left NOTHING behind — not for the user, who has nothing to send, and
+ * not for us, who get "it just said checking Docker" and no way to go further.
+ *
+ * Same directory and the same shape `ic` already writes its own logs to (_sandbox/ic/src/logfile.rs), so a
+ * machine has one place where install evidence lives rather than two. Best-effort throughout: a log that
+ * cannot be opened must never be the reason an install does not run. */
+fn log_path(id: &str) -> Option<PathBuf> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .filter(|home| !home.is_empty())?;
+    let dir = Path::new(&home).join(".intentic").join("logs");
+    std::fs::create_dir_all(&dir).ok()?;
+    // `recreate:work` is not a filename on Windows, where a colon opens an alternate data stream.
+    let safe: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    Some(dir.join(format!("desktop-{safe}-{}.log", stamp())))
+}
+
+/// `YYYYmmdd-HHMMSS`, UTC, for a log filename — the same spelling `ic` uses, so the two sets of logs in the
+/// directory sort together. Derived here rather than pulled in as a dependency for one filename.
+fn stamp() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0);
+    let (days, rest) = ((secs / 86_400) as i64, secs % 86_400);
+    let (hour, minute, second) = (rest / 3600, (rest % 3600) / 60, rest % 60);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}")
+}
+
+/* WHAT IS RUNNING RIGHT NOW, SO IT CAN BE STOPPED.
+ *
+ * There was no way to end one of these. The setup card says "you can close this — the install keeps going",
+ * which is true and was the only option: a run that had gone wrong could be walked away from and not ended,
+ * and the next attempt then raced the one still going. A pid per run id is all a stop needs, and keeping the
+ * pid rather than the `Child` is what lets the stop happen from a different thread than the one blocked in
+ * `wait`.
+ */
+fn running() -> &'static Mutex<HashMap<String, u32>> {
+    static RUNNING: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+    RUNNING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remember(id: &str, pid: u32) {
+    if let Ok(mut live) = running().lock() {
+        live.insert(id.to_string(), pid);
+    }
+}
+
+fn forget(id: &str) {
+    if let Ok(mut live) = running().lock() {
+        live.remove(id);
+    }
+}
+
+/// End a run and everything it started. The tree matters more than the process: the shim is `powershell.exe`
+/// or `sh`, and the thing actually doing the work — `ic`, `docker`, an installer — is its child. Killing only
+/// what we spawned would leave a 600 MB download running behind a window that says it stopped.
+pub fn stop(id: &str) -> Result<(), String> {
+    let pid = running()
+        .lock()
+        .ok()
+        .and_then(|live| live.get(id).copied())
+        .ok_or_else(|| format!("nothing called {id} is running on this computer"))?;
+    let killed = if cfg!(windows) {
+        quiet(Command::new("taskkill.exe"))
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+    } else {
+        // The child leads its own process group (see `command_for`), so the negative pid reaches everything
+        // it started rather than only the shell.
+        Command::new("kill")
+            .args(["-TERM", "--", &format!("-{pid}")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+    };
+    match killed {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("could not stop it (exit {:?})", status.code())),
+        Err(error) => Err(format!("could not stop it: {error}")),
+    }
+}
 
 /// Which script family a run targets, and therefore which argument convention and which interpreter. Every
 /// flow has a `.sh` and a `.ps1` sibling in `_site/site/public/scripts/`, and this is the only platform branch
@@ -153,14 +260,29 @@ fn command_for(app: &AppHandle, run: &ScriptRun) -> Result<Command, String> {
         );
         command.args(["sh", &path]);
         command.args(&run.args);
-        return Ok(command);
+        return Ok(own_group(command));
     }
 
     let mut command = Command::new("sh");
     command.arg(&path);
     command.args(&run.args);
     command.envs(run.env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
-    Ok(command)
+    Ok(own_group(command))
+}
+
+/// Give the child a process group of its own, so [`stop`] can reach everything it started with one signal
+/// rather than killing the shell and orphaning the download it was waiting on. Windows gets the same reach
+/// from `taskkill /T` and needs nothing here.
+#[cfg(unix)]
+fn own_group(mut command: Command) -> Command {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+    command
+}
+
+#[cfg(not(unix))]
+fn own_group(command: Command) -> Command {
+    command
 }
 
 /* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever.
@@ -214,6 +336,23 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("could not start {}: {error}", script.file))?;
+    remember(id, child.id());
+
+    // Opened before the first line and shared by both pumps, so the transcript interleaves the two streams
+    // in the order they actually arrived — which is the order that makes a failure readable.
+    let path = log_path(id);
+    let transcript = path.as_ref().and_then(|path| {
+        std::fs::File::create(path)
+            .ok()
+            .map(|file| Arc::new(Mutex::new(file)))
+    });
+    let _ = app.emit(
+        RUN_EVENT,
+        RunEvent::Started {
+            run: id.to_string(),
+            log: path.as_ref().map(|path| path.to_string_lossy().to_string()),
+        },
+    );
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -226,11 +365,26 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
             let app = app.clone();
             let id = id.to_string();
             let reporting = Arc::clone(&reporting);
+            let transcript = transcript.clone();
             std::thread::spawn(move || {
                 if let Some(handle) = handle {
                     for line in BufReader::new(handle).lines().map_while(Result::ok) {
                         if !reporting.load(Ordering::Relaxed) {
                             return;
+                        }
+                        // To disk first: the window is the copy that can be closed, and the whole point of
+                        // the file is that it outlives whoever was watching.
+                        if let Some(file) = &transcript {
+                            if let Ok(mut file) = file.lock() {
+                                let _ = writeln!(
+                                    file,
+                                    "{}{line}",
+                                    match stream {
+                                        Stream::Stdout => "",
+                                        Stream::Stderr => "! ",
+                                    }
+                                );
+                            }
                         }
                         let _ = app.emit(
                             RUN_EVENT,
@@ -259,10 +413,16 @@ pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
     let status = child
         .wait()
         .map_err(|error| format!("{} did not finish: {error}", script.file))?;
+    forget(id);
     // The child is gone; give its pipes a moment to hand over the tail of their buffers, then stop listening
     // whether or not they closed. See DRAIN_GRACE — on Windows they may never close at all.
     await_drain(&drains, 2, DRAIN_GRACE);
     reporting.store(false, Ordering::Relaxed);
+    if let Some(file) = &transcript {
+        if let Ok(mut file) = file.lock() {
+            let _ = writeln!(file, "\n[{} exited with {:?}]", script.file, status.code());
+        }
+    }
 
     let _ = app.emit(
         RUN_EVENT,

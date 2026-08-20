@@ -183,6 +183,14 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     pnpm --filter @intentic/desktop-app build
 fi
 
+# THE VERSION, INTO THE BINARY ITSELF. The `--config` override below stamps the installer and the updater
+# manifest, and reaches Rust not at all — CARGO_PKG_VERSION is Cargo.toml's `0.0.0` in every build this repo
+# cuts. src-tauri/build.rs turns this variable into `INTENTIC_VERSION`, which is what the app reports as its
+# own version and, more importantly, what it pins its `ic` download to: an app that fetches
+# `releases/latest` runs a CLI from a different release than its own bundled scripts, and the two then
+# disagree about a protocol neither of them mentions out loud.
+export INTENTIC_VERSION="$VERSION"
+
 # A configured pubkey + createUpdaterArtifacts makes `tauri build` demand the private key — so when the CI
 # variable is absent, updater artifacts must be switched off for the build to succeed at all.
 NO_BEFORE_BUILD='"build":{"beforeBuildCommand":""}'

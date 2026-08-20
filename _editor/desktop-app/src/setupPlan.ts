@@ -161,6 +161,10 @@ export const advance = (state: Progress, event: RunEvent, now: number): Progress
     if (event.kind === `exit`) {
         return { ...state, percent: event.ok ? 100 : state.percent, ended: event.ok ? `ok` : `failed` };
     }
+    // A run announcing itself (and where its transcript is going) is not progress through the plan.
+    if (event.kind !== `line`) {
+        return state;
+    }
     const step = parseStep(event.text);
     if (step !== undefined) {
         const at = state.plan.findIndex((planned) => planned.phase === step.phase);

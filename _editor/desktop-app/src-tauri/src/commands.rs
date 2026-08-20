@@ -29,10 +29,58 @@ pub struct DesktopInfo {
     pub install_id: String,
 }
 
+/// What this build calls itself. `INTENTIC_VERSION` is stamped by build.rs from the release build's own
+/// environment (build-desktop.sh); a checkout that was not built by it says `0.0.0`, which is the value
+/// every "is this a real release" decision below reads.
+pub const VERSION: &str = env!("INTENTIC_VERSION");
+
+/* THE `ic` A SCRIPT DOWNLOADS HAS TO BE THIS APP'S OWN `ic`.
+ *
+ * scripts.rs states the app's whole parity argument: the scripts are bundled rather than fetched, so
+ * "Intentic 1.2.0 ships connect.sh@1.2.0" and a release is one commit. That was true of the `.ps1` files and
+ * quietly false of the binary they spend their first ten lines downloading — every shim fetches
+ * `releases/latest/download/ic-…`, unpinned, on every run. The app updates itself only when the user next
+ * quits it, so an app a release or two behind drives a brand-new CLI.
+ *
+ * That is not a theoretical drift. The `intentic-requirement:` marker and the two-pass consent flow the
+ * Windows setup screen is built around were added at one commit: an app older than it receives those lines,
+ * has no parser for them, has no requirements list to draw, and does not know its first pass is SUPPOSED to
+ * stop — which is exactly a Windows install that reports nothing and appears to hang on "checking Docker".
+ *
+ * So the app names the release it wants, through the `IC_URL` base every shim already honours (connect.sh,
+ * connect.ps1, connect-host.ps1, recreate.ps1 — one spelling, four files). `None` for an unversioned build:
+ * a developer running `tauri dev` out of a checkout has no matching release to pin to, and `latest` is the
+ * right answer there.
+ */
+pub fn ic_url(version: &str) -> Option<String> {
+    if version.is_empty() || version == "0.0.0" {
+        return None;
+    }
+    Some(format!(
+        "https://github.com/intentic/intentic/releases/download/v{version}"
+    ))
+}
+
+/// What EVERY script this app spawns is told, whichever flow it is.
+///
+/// `INTENTIC_NO_PROMPT` is the second half of the same lesson as the pin above. These flows ask questions
+/// when they believe somebody is there, and they work that out by probing — `/dev/tty` on Unix, `CONOUT$` on
+/// Windows. Those probes are good, but this caller does not need to be guessed at: it is a GUI process
+/// spawning a child with no window, no console and closed stdin, and a question asked on that run is a run
+/// that never ends. The flag says so outright, and every prompt in `ic` then reads as "no answer" — which is
+/// what each of them already treats as a refusal.
+fn app_env(version: &str) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = vec![("INTENTIC_NO_PROMPT".into(), "1".into())];
+    if let Some(url) = ic_url(version) {
+        env.push(("IC_URL".into(), url));
+    }
+    env
+}
+
 #[tauri::command]
 pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
     DesktopInfo {
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: VERSION.into(),
         os: std::env::consts::OS.into(),
         app_url: state.app_url(),
         platform_url: state.platform_url(),
@@ -41,9 +89,19 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
     }
 }
 
+/* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here.
+ *
+ * A parked setup is picked up from two directions: the `desktop://pending-setup` event, and the read the
+ * launcher does when it mounts. Both call this, and whichever arrives second used to get a copy of the same
+ * request — or, once `setup_run` had cleared the slot, a `None` that the screen then wrote back over its own
+ * state as "there is no setup here". That is a live race between an arriving link and a mounting window, and
+ * what it produces is the setup screen handing the window back to the manager mid-run, taking whatever the
+ * run had to say with it. Taking it means exactly one of the two callers gets the work, and the other is
+ * told plainly that somebody else has it.
+ */
 #[tauri::command]
-pub fn pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
-    state.pending.lock().unwrap().clone()
+pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
+    state.pending.lock().unwrap().take()
 }
 
 /// Taken, not read: a recreate request is consumed by whichever launcher mount picks it up, so a window
@@ -65,6 +123,8 @@ pub struct SetupContext {
     pub docker_ready: bool,
     pub sandbox_image: Option<String>,
     pub host: Host,
+    /// This build's version — the release its `ic` download is pinned to. See [`ic_url`].
+    pub version: String,
     /* THE USER HAS SEEN THE LIST AND SAID YES.
      *
      * The install flow asks its one question exactly once, and on this path there is no terminal to ask it
@@ -89,6 +149,7 @@ impl SetupContext {
                 .ok()
                 .filter(|image| !image.is_empty()),
             host: Host::current(),
+            version: VERSION.to_string(),
             consented,
         }
     }
@@ -106,7 +167,7 @@ impl SetupContext {
  * The "don't prompt" flag rides both, because this run has no terminal and the "other sandboxes are already
  * running" question would hang it forever. */
 pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
-    let mut env: Vec<(String, String)> = Vec::new();
+    let mut env: Vec<(String, String)> = app_env(&ctx.version);
     env.push((
         "PLATFORM_URL".into(),
         args.platform_url
@@ -153,6 +214,27 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     }
 }
 
+/// End a run and everything it started (scripts.rs). There was no way to do this: the setup card's own
+/// "you can close this — the install keeps going" was the whole of the offer, so a run that had gone wrong
+/// could be abandoned but not stopped, and the next attempt then raced the one still going.
+#[tauri::command]
+pub async fn run_stop(id: String) -> CommandResult<()> {
+    tauri::async_runtime::spawn_blocking(move || scripts::stop(&id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Show a run's transcript in the machine's own file manager, selected. The file is written for every run
+/// (scripts.rs); this is the button that finds it, because "it is in a dot-directory under your profile" is
+/// an instruction most people will not follow at the moment an install has just failed on them.
+#[tauri::command]
+pub fn reveal_log(app: AppHandle, path: String) -> CommandResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .reveal_item_in_dir(std::path::PathBuf::from(path))
+        .map_err(|error| format!("could not open the log folder: {error}"))
+}
+
 /// `install` is the user's answer to the requirements list — see [`SetupContext::consented`]. False on the
 /// first attempt of any setup, which is why a machine that needs changes reports them instead of making them.
 #[tauri::command]
@@ -196,7 +278,28 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
 #[tauri::command]
 pub fn restart_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
     app.state::<AppState>().park_setup(&args);
-    restart_now()
+    end_session(Session::Restart)
+}
+
+/* THE OTHER THING WINDOWS ONLY DOES BETWEEN SESSIONS, and the requirement that had no button.
+ *
+ * Adding an account to `docker-users` succeeds instantly and changes nothing that matters: group membership
+ * lives in the login token, and Windows issues a new one only at sign-in. So that row's only control was
+ * "Check again" — a button that could not possibly work, on a machine where every other step just had. The
+ * fix is the same shape as the restart, one notch smaller: park the setup, register the resume, sign out.
+ */
+#[tauri::command]
+pub fn sign_out_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
+    app.state::<AppState>().park_setup(&args);
+    end_session(Session::SignOut)
+}
+
+/// Which way this session ends. Both come back to the same place — RunOnce fires at the next sign-in either
+/// way — so the only thing that differs is how far the machine goes down in between.
+#[derive(Clone, Copy)]
+pub enum Session {
+    Restart,
+    SignOut,
 }
 
 #[derive(Serialize)]
@@ -229,7 +332,7 @@ pub fn forget_resumable_setup(state: State<'_, AppState>) {
 }
 
 #[cfg(windows)]
-fn restart_now() -> CommandResult<()> {
+fn end_session(how: Session) -> CommandResult<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -258,20 +361,32 @@ fn restart_now() -> CommandResult<()> {
     if !registered.map(|status| status.success()).unwrap_or(false) {
         eprintln!("intentic: could not register the after-restart resume; the setup is saved and will resume when this app is next opened.");
     }
-    let restarted = std::process::Command::new("shutdown.exe")
-        .args(["/r", "/t", "10", "/c", "intentic: finishing Docker setup"])
+    // `/l` signs the session out and `/r` takes the machine down; both end with a sign-in, which is the only
+    // event either of these requirements is actually waiting for. No `/t` on a sign-out — `shutdown /l` does
+    // not accept one, and there is nothing to warn a machine about that is not going down.
+    let (verb, ended) = match how {
+        Session::Restart => (
+            vec!["/r", "/t", "10", "/c", "intentic: finishing Docker setup"],
+            "restart",
+        ),
+        Session::SignOut => (vec!["/l"], "sign out"),
+    };
+    let done = std::process::Command::new("shutdown.exe")
+        .args(&verb)
         .creation_flags(CREATE_NO_WINDOW)
         .status()
-        .map_err(|error| format!("could not restart this PC: {error}"))?;
-    if restarted.success() {
+        .map_err(|error| format!("could not {ended} this PC: {error}"))?;
+    if done.success() {
         return Ok(());
     }
-    Err("Windows refused the restart. Restart this PC yourself and open Intentic again — your setup is saved.".to_string())
+    Err(format!(
+        "Windows refused the {ended}. Do it yourself and open Intentic again - your setup is saved."
+    ))
 }
 
-/// Only Windows ever asks for this: no step of the Unix install needs a reboot to take effect.
+/// Only Windows ever asks for this: no step of the Unix install needs a new session to take effect.
 #[cfg(not(windows))]
-fn restart_now() -> CommandResult<()> {
+fn end_session(_how: Session) -> CommandResult<()> {
     Err("nothing on this system needs a restart to finish installing.".to_string())
 }
 
@@ -416,7 +531,13 @@ pub async fn sandbox_power(slug: String, action: String) -> CommandResult<()> {
 ///
 /// Rollback wins over a hash rather than combining with one: they name two different destination images, and a
 /// caller that asked for both has a bug that must not be resolved silently into a rebuild.
-pub fn recreate_script(slug: &str, hash: Option<&str>, rollback: bool, host: Host) -> ScriptRun {
+pub fn recreate_script(
+    slug: &str,
+    hash: Option<&str>,
+    rollback: bool,
+    host: Host,
+    version: &str,
+) -> ScriptRun {
     // Named on PowerShell, positional on sh — see setup_script for why the two are not interchangeable.
     let mut args = match host {
         Host::Windows => vec!["-Slug".into(), slug.to_string()],
@@ -433,7 +554,8 @@ pub fn recreate_script(slug: &str, hash: Option<&str>, rollback: bool, host: Hos
     ScriptRun {
         file: host.script("recreate.sh", "recreate.ps1"),
         args,
-        env: Vec::new(),
+        // recreate carries its own copy of the `ic` download block, so it needs the same pin the setup does.
+        env: app_env(version),
         elevate: false,
         host,
     }
@@ -446,7 +568,7 @@ pub async fn sandbox_recreate(
     hash: Option<String>,
     rollback: bool,
 ) -> CommandResult<()> {
-    let run = recreate_script(&slug, hash.as_deref(), rollback, Host::current());
+    let run = recreate_script(&slug, hash.as_deref(), rollback, Host::current(), VERSION);
     let id = format!("recreate:{slug}");
     tauri::async_runtime::spawn_blocking(move || scripts::run(&app, &id, run))
         .await
@@ -455,14 +577,17 @@ pub async fn sandbox_recreate(
 
 /// Remove the sandbox, its volumes and its network — cleanup.sh, which is the only thing that also drops the
 /// NAMED /work volume a plain `docker rm -v` leaves behind.
-pub fn remove_script(slug: &str, host: Host) -> ScriptRun {
+pub fn remove_script(slug: &str, host: Host, version: &str) -> ScriptRun {
     ScriptRun {
         file: host.script("cleanup.sh", "cleanup.ps1"),
         args: match host {
             Host::Windows => vec!["-Slug".into(), slug.to_string(), "-Yes".into()],
             Host::Unix => vec![slug.to_string(), "-y".into()],
         },
-        env: Vec::new(),
+        // No `ic` download in this one, but the same no-prompt contract: cleanup asks "which sandbox?" when
+        // it believes somebody is there, and the `-Yes` above is the only thing standing between this window
+        // and a question nobody can answer.
+        env: app_env(version),
         elevate: false,
         host,
     }
@@ -470,7 +595,7 @@ pub fn remove_script(slug: &str, host: Host) -> ScriptRun {
 
 #[tauri::command]
 pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
-    let run = remove_script(&slug, Host::current());
+    let run = remove_script(&slug, Host::current(), VERSION);
     let id = format!("remove:{slug}");
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || scripts::run(&handle, &id, run))
@@ -526,6 +651,21 @@ pub fn setup_frame(app: AppHandle, setup: bool) {
     crate::windows::set_setup_frame(&app, setup);
 }
 
+/// Grow the setup window to the card it is drawing (windows.rs). Called from App.vue whenever the card's
+/// measured height changes — which is what keeps a requirements list from landing below the fold of a window
+/// sized for a run that had nothing to report.
+#[tauri::command]
+pub fn setup_fit(app: AppHandle, height: f64) {
+    crate::windows::fit_setup(&app, height);
+}
+
+/// Ask the OS to point at this window — a stopped setup that nobody is looking at is a stopped setup nobody
+/// finds out about.
+#[tauri::command]
+pub fn setup_alert(app: AppHandle) {
+    crate::windows::alert_setup(&app);
+}
+
 /// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing
 /// that retires the question, and the reason it is worth asking at all.
 ///
@@ -561,6 +701,11 @@ mod tests {
      * bind to connect.ps1's `-PlatformUrl` and point the whole setup at a platform named after a setup code —
      * silently, with a plausible-looking failure much later. */
 
+    /// A version that looks like a release, so the pin below is exercised. `VERSION` itself is `0.0.0` in
+    /// every build of this repo including the test one, which is deliberately the value that means "not a
+    /// release" — a suite that used it would assert the fallback and never the thing that ships.
+    const RELEASE: &str = "1.2.3";
+
     fn context(host: Host, docker_ready: bool) -> SetupContext {
         SetupContext {
             platform_url: "https://api.intentic.dev".into(),
@@ -568,6 +713,7 @@ mod tests {
             docker_ready,
             sandbox_image: None,
             host,
+            version: RELEASE.into(),
             // The default is the FIRST attempt of any setup — nothing agreed to yet. Every test that cares
             // about the second one says so.
             consented: false,
@@ -615,6 +761,70 @@ mod tests {
                 .args
                 .contains(&"-Yes".to_string())
         );
+    }
+
+    /* THE APP AND THE CLI IT DRIVES MUST BE ONE RELEASE.
+     *
+     * Every shim downloads `ic` from `releases/latest` unless `IC_URL` says otherwise, and this app is the
+     * one caller that can be arbitrarily old when it runs one — it installs its own updates only when the
+     * user next quits. An app that predates a protocol the CLI now speaks receives lines it has no parser
+     * for and a first pass it does not know is meant to stop, which is a Windows install that reports
+     * nothing at all. */
+    #[test]
+    fn every_script_fetches_the_cli_from_this_apps_own_release() {
+        let pinned = "https://github.com/intentic/intentic/releases/download/v1.2.3";
+        assert_eq!(ic_url(RELEASE).as_deref(), Some(pinned));
+        for run in [
+            setup_script(&setup_args("c"), &context(Host::Windows, false)),
+            setup_script(&setup_args("c"), &context(Host::Unix, false)),
+            recreate_script("work", None, false, Host::Windows, RELEASE),
+            recreate_script("work", None, false, Host::Unix, RELEASE),
+        ] {
+            assert_eq!(
+                env_of(&run, "IC_URL"),
+                Some(pinned),
+                "{} must not fetch a different release's CLI",
+                run.file
+            );
+        }
+    }
+
+    #[test]
+    fn a_build_that_is_not_a_release_still_takes_the_latest_cli() {
+        // `tauri dev` out of a checkout has no matching GitHub release to pin to, so the shims' own default
+        // is the only workable answer there.
+        assert_eq!(ic_url("0.0.0"), None);
+        assert_eq!(ic_url(""), None);
+        let mut dev = context(Host::Windows, false);
+        dev.version = "0.0.0".into();
+        assert_eq!(
+            env_of(&setup_script(&setup_args("c"), &dev), "IC_URL"),
+            None
+        );
+    }
+
+    /* NO FLOW THIS WINDOW SPAWNS MAY ASK A QUESTION.
+     *
+     * The child has no window, no console and closed stdin. Every prompt in `ic` decides whether somebody is
+     * there by probing for a terminal, and the cost of one of those probes being wrong is not a bad guess —
+     * it is an install that never ends, in front of somebody watching a spinner. The `-y`/`-Yes` flags cover
+     * the questions we know about; this covers the ones we do not. */
+    #[test]
+    fn no_script_this_window_spawns_is_allowed_to_prompt() {
+        for run in [
+            setup_script(&setup_args("c"), &context(Host::Windows, false)),
+            setup_script(&setup_args("c"), &context(Host::Unix, false)),
+            recreate_script("work", None, false, Host::Windows, RELEASE),
+            remove_script("work", Host::Windows, RELEASE),
+            remove_script("work", Host::Unix, RELEASE),
+        ] {
+            assert_eq!(
+                env_of(&run, "INTENTIC_NO_PROMPT"),
+                Some("1"),
+                "{} could stop on a question nobody can answer",
+                run.file
+            );
+        }
     }
 
     #[test]
@@ -728,27 +938,27 @@ mod tests {
     #[test]
     fn recreate_passes_the_slug_and_the_optional_hash_per_host() {
         assert_eq!(
-            recreate_script("work", None, false, Host::Unix).args,
+            recreate_script("work", None, false, Host::Unix, RELEASE).args,
             vec!["work"]
         );
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), false, Host::Unix).args,
+            recreate_script("work", Some("deadbeef"), false, Host::Unix, RELEASE).args,
             vec!["work", "deadbeef"]
         );
         assert_eq!(
-            recreate_script("work", None, false, Host::Windows).args,
+            recreate_script("work", None, false, Host::Windows, RELEASE).args,
             vec!["-Slug", "work"]
         );
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), false, Host::Windows).args,
+            recreate_script("work", Some("deadbeef"), false, Host::Windows, RELEASE).args,
             vec!["-Slug", "work", "-Hash", "deadbeef"]
         );
         assert_eq!(
-            recreate_script("work", None, false, Host::Unix).file,
+            recreate_script("work", None, false, Host::Unix, RELEASE).file,
             "recreate.sh"
         );
         assert_eq!(
-            recreate_script("work", None, false, Host::Windows).file,
+            recreate_script("work", None, false, Host::Windows, RELEASE).file,
             "recreate.ps1"
         );
     }
@@ -758,11 +968,11 @@ mod tests {
     #[test]
     fn rollback_is_a_flag_on_sh_and_a_switch_on_powershell() {
         assert_eq!(
-            recreate_script("work", None, true, Host::Unix).args,
+            recreate_script("work", None, true, Host::Unix, RELEASE).args,
             vec!["work", "--rollback"]
         );
         assert_eq!(
-            recreate_script("work", None, true, Host::Windows).args,
+            recreate_script("work", None, true, Host::Windows, RELEASE).args,
             vec!["-Slug", "work", "-Rollback"]
         );
     }
@@ -771,11 +981,11 @@ mod tests {
     fn a_rollback_never_carries_a_digest() {
         // Two different destination images; a caller asking for both is a bug, not a rebuild.
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), true, Host::Unix).args,
+            recreate_script("work", Some("deadbeef"), true, Host::Unix, RELEASE).args,
             vec!["work", "--rollback"]
         );
         assert_eq!(
-            recreate_script("work", Some("deadbeef"), true, Host::Windows).args,
+            recreate_script("work", Some("deadbeef"), true, Host::Windows, RELEASE).args,
             vec!["-Slug", "work", "-Rollback"]
         );
     }
@@ -784,30 +994,30 @@ mod tests {
     fn an_empty_hash_is_an_update_not_an_overlay_build() {
         // `recreate.sh <slug> ""` would build an overlay pinned to no digest; the update path passes no hash.
         assert_eq!(
-            recreate_script("work", Some(""), false, Host::Unix).args,
+            recreate_script("work", Some(""), false, Host::Unix, RELEASE).args,
             vec!["work"]
         );
         assert_eq!(
-            recreate_script("work", Some(""), false, Host::Windows).args,
+            recreate_script("work", Some(""), false, Host::Windows, RELEASE).args,
             vec!["-Slug", "work"]
         );
     }
 
     #[test]
     fn remove_confirms_itself_per_host() {
-        let unix = remove_script("work", Host::Unix);
+        let unix = remove_script("work", Host::Unix, RELEASE);
         assert_eq!(unix.file, "cleanup.sh");
         assert_eq!(unix.args, vec!["work", "-y"]);
 
-        let windows = remove_script("work", Host::Windows);
+        let windows = remove_script("work", Host::Windows, RELEASE);
         assert_eq!(windows.file, "cleanup.ps1");
         assert_eq!(windows.args, vec!["-Slug", "work", "-Yes"]);
     }
 
     #[test]
     fn no_flow_but_setup_ever_elevates() {
-        assert!(!recreate_script("work", None, false, Host::Unix).elevate);
-        assert!(!remove_script("work", Host::Unix).elevate);
+        assert!(!recreate_script("work", None, false, Host::Unix, RELEASE).elevate);
+        assert!(!remove_script("work", Host::Unix, RELEASE).elevate);
     }
 
     /* The sync agent's own install location, per host. Cross-built like everything else here, so the Windows

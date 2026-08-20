@@ -36,6 +36,7 @@
             }
         },
         "windows": {
+            "signCommand": "bash ../../../_tools/scripts/sign-windows.sh %1",
             "nsis": {
                 "installMode": "currentUser",
                 "installerHooks": "./installer-hooks.nsh"

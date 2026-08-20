@@ -595,6 +595,65 @@ pub fn set_setup_frame(app: &AppHandle, setup: bool) {
     let _ = window.set_focus();
 }
 
+/* THE SETUP WINDOW FOLLOWS ITS CARD, RATHER THAN THE CARD BEING TRUSTED TO FIT.
+ *
+ * `SETUP_SIZE` was measured against what App.vue draws — and the thing it has to draw on the machines that
+ * need this screen most is the LONGEST version of that card: a ten-step plan, and under it a list of four
+ * things wrong with this PC, each with a problem, a remedy and a badge. That is comfortably taller than 640,
+ * so the part of the screen a user actually has to act on — the list, and the button that fixes it — sat
+ * below the fold of a small window, inside a scroll container with no visible affordance, in a window that
+ * may itself be behind the workspace. A reported Windows install failed exactly that way: everything worked,
+ * the diagnosis was correct, the buttons were drawn, and the user saw a spinner and nothing else.
+ *
+ * So the card measures itself and the window grows to it, up to what the screen can hold. Growing DOWNWARD
+ * from where the window already is would push it off the bottom, so it is re-placed in the work area after
+ * the resize — the same placement the frame swap uses, for the same reason.
+ */
+pub fn fit_setup(app: &AppHandle, content_height: f64) {
+    let Some(window) = app.get_webview_window(LAUNCHER) else {
+        return;
+    };
+    // Only the setup face has a card to fit. The manager's height is the frame it inherited.
+    if !app.state::<crate::state::AppState>().in_setup_frame() {
+        return;
+    }
+    let screen = work_area(app);
+    // Never past what the screen can show, and never below the frame's own floor: a card shorter than the
+    // window does not shrink it, because a window that resized on every render would be its own problem.
+    let ceiling = screen
+        .map(|screen| (screen.size.1 - FRAME_ALLOWANCE.1).max(SETUP_SIZE.1))
+        .unwrap_or(SETUP_SIZE.1);
+    let height = content_height.clamp(SETUP_SIZE.1, ceiling);
+    let width = SETUP_SIZE.0;
+    if (height - SETUP_SIZE.1).abs() < 1.0 {
+        return; // already the right size — no resize, no re-placement, no flicker
+    }
+    let _ = window.set_size(LogicalSize::new(width, height));
+    if let Some(screen) = screen {
+        place_in_work_area(&window, screen, (width, height));
+    }
+}
+
+/* A RUN THAT STOPPED HAS TO REACH THE PERSON WHO STARTED IT.
+ *
+ * The setup window is deliberately not topmost and deliberately minimisable — an install runs for minutes
+ * and taking someone's screen for it would be indefensible. The cost of that is the case this exists for: a
+ * setup that fails while the window is minimised, or behind the workspace, changes only pixels nobody is
+ * looking at. "The error did not surface and did not notify user" is precisely that.
+ *
+ * `request_user_attention` is the OS's own way to say so — a flashing taskbar button on Windows, the
+ * equivalent hint on Linux — and it is the polite one: it does not steal focus, it waits to be noticed. The
+ * unminimise and the show are what make there be something to notice.
+ */
+pub fn alert_setup(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(LAUNCHER) else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+}
+
 /// Bring the setup window up in front of the workspace. The parked request is already in state; this is the
 /// frame.
 pub fn show_setup(app: &AppHandle) {

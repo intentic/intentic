@@ -25,6 +25,7 @@
 # Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
 # which is cross-built by cargo-xwin and never otherwise opened before it reaches a user.
 set -euo pipefail
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$(dirname "$0")/repo-root.sh"
 . "$(dirname "$0")/desktop-artifacts.sh"
 
@@ -186,7 +187,31 @@ check_nsis() {
     # No .desktop file on Windows — the scheme is a registry key the installer writes at install time, which is
     # only observable by installing. That assertion lives in @intentic/desktop-smoke-windows, which installs
     # this same artifact on a real Windows session and reads the key back before the app has ever run.
+    check_signature "$exe"
     checked=$((checked + 1))
+}
+
+# THE SIGNATURE, WHEN THIS BUILD WAS MEANT TO MAKE ONE.
+#
+# "Windows protected your PC" is what a user meets when nothing we ship carries a publisher identity, and the
+# only cure is an Authenticode signature (sign-windows.sh, docs/windows-code-signing.md). A release that was
+# configured to sign and produced an unsigned installer anyway is the one failure mode worth failing a build
+# over — it looks exactly like a release that worked, right up until it is in front of somebody.
+#
+# Nothing at all when signing is not configured: that is every developer build and every non-release CI run,
+# and the honest answer there is the one the signer already prints.
+check_signature() {
+    local exe="$1"
+    if [ -z "${WINDOWS_SIGN_TOOL:-}" ]; then
+        echo "    (unsigned build — WINDOWS_SIGN_TOOL is not set)"
+        return 0
+    fi
+    if bash "$SCRIPTS/sign-windows.sh" --check "$exe"; then
+        echo "    signed"
+        return 0
+    fi
+    echo "error: $(basename "$exe") carries no Authenticode signature, but WINDOWS_SIGN_TOOL=${WINDOWS_SIGN_TOOL} says this build signs. Windows will warn about it." >&2
+    failures=$((failures + 1))
 }
 
 echo "==> verifying desktop bundles in ${DIST#"$ROOT"/}"

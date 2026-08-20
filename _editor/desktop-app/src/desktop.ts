@@ -71,12 +71,37 @@ export interface MachineReport {
 
 /* What a running script says, as it says it. `run` is the operation's own id (`setup`, `recreate:<slug>`,
  * `remove:<slug>`) so one window can show several at once, and `stream` is kept because the scripts write
- * progress to stdout and diagnostics to stderr, the failure detail is always in the second one. */
+ * progress to stdout and diagnostics to stderr, the failure detail is always in the second one.
+ *
+ * `started` carries where the run's transcript is being written. It arrives before the first line, so the
+ * screen can offer the log from the moment there is one rather than only after something has gone wrong,
+ * which is the moment somebody most wants a file they can send. */
 export type RunEvent =
-    { kind: `line`; run: string; stream: `stdout` | `stderr`; text: string } | { kind: `exit`; run: string; code: number | null; ok: boolean };
+    | { kind: `started`; run: string; log: string | null }
+    | { kind: `line`; run: string; stream: `stdout` | `stderr`; text: string }
+    | { kind: `exit`; run: string; code: number | null; ok: boolean };
+
+/* WHY `ic docker prepare` STOPPED, when stopping was the plan.
+ *
+ * Two of this flow's outcomes are not failures: a machine that needs consent before anything is changed
+ * (which is EVERY Windows install that needs anything, by design: the first pass reports and stops), and a
+ * machine that has to restart. Both used to leave as `exit 1` with a line on stderr, which is how a run that
+ * did exactly what it was built to do reaches the screen looking like a crash, and how a screen with no
+ * requirements to draw ends up showing "connect.ps1 exited with status 1" and nothing else.
+ *
+ * The codes are `ic`'s (prepare/mod.rs) and ride out through the shim's own `exit $LASTEXITCODE`. */
+export const EXIT_NEEDS_CONSENT = 3;
+export const EXIT_NEEDS_RESTART = 4;
+
+/** Whether an exit code is one of the two designed stops rather than something going wrong. */
+export const expectedStop = (code: number | null): boolean => code === EXIT_NEEDS_CONSENT || code === EXIT_NEEDS_RESTART;
 
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
-export const pendingSetup = (): Promise<SetupArgs | null> => invoke(`pending_setup`);
+/* Taken, not read, see the Rust side. Two callers race for a parked setup (the arrival event, and this
+ * window's own read on mount) and only one of them may have it: the loser used to receive the same request a
+ * second time, or a `null` it then wrote over its own state as "there is no setup here", which took a
+ * running install's screen away with it. */
+export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pending_setup`);
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
 /* `install` is the user's answer to the requirements list, and it is what makes the flow's one question one
  * question. A setup's FIRST attempt always passes false: `ic docker prepare` then examines the machine,
@@ -106,6 +131,16 @@ export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace
  * and movable like any other; the manager fills the frame the workspace was in. windows.rs does the moving,
  * this says which is up. */
 export const setupFrame = (setup: boolean): Promise<void> => invoke(`setup_frame`, { setup });
+/* Grow the setup window to the card it is drawing. The card is at its tallest on exactly the machines this
+ * screen exists for (a ten-step plan plus a list of everything wrong with this PC), and a fixed frame put
+ * the list, and the button that fixes it, below the fold of a window nobody had reason to scroll. */
+export const setupFit = (height: number): Promise<void> => invoke(`setup_fit`, { height });
+/** Ask the OS to point at this window. For a run that stopped while nobody was looking at it. */
+export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
+/** End a run and everything it started. */
+export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id });
+/** Show a run's transcript in the machine's own file manager, selected. */
+export const revealLog = (path: string): Promise<void> => invoke(`reveal_log`, { path });
 // `remember` is the dialog's "always do this": it makes this answer the × from now on, and takes the question
 // away for good. Without it the answer applies to this close only.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
@@ -179,6 +214,47 @@ export interface Requirement {
     readonly detail?: string;
 }
 
+/* HOW ONE REQUIREMENT IS GOING, RIGHT NOW. The marker that turns the list into a live checklist.
+ *
+ * `intentic-requirement:` says a thing is unmet and says nothing about the ten minutes that follow. Through
+ * those ten minutes this screen could draw exactly one row, "Set up Docker", with a spinner on it, while
+ * WSL2 was switched on, 600 MB came down, an installer ran, an engine started and a daemon was waited for.
+ * The reader with the least patience in this whole flow is the one on the machine that needs the most work,
+ * and they were the one shown the least.
+ *
+ * `detail` is the changing measurement under the row: the megabytes, the seconds left on the engine wait. */
+const REQUIREMENT_STATE = /^intentic-requirement-state: (\{.*\})$/;
+
+export type RequirementState = `running` | `done` | `failed`;
+
+export interface RequirementProgress {
+    readonly id: string;
+    readonly state: RequirementState;
+    readonly detail?: string;
+}
+
+const STATES = new Set<string>([`running`, `done`, `failed`]);
+
+export const parseRequirementState = (line: string): RequirementProgress | undefined => {
+    const found = REQUIREMENT_STATE.exec(line);
+    if (found === null) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(found[1] ?? ``) as Partial<RequirementProgress>;
+        if (typeof parsed.id !== `string` || parsed.id === `` || !STATES.has(parsed.state ?? ``)) {
+            return undefined;
+        }
+        return {
+            id: parsed.id,
+            state: parsed.state as RequirementState,
+            ...(parsed.detail ? { detail: parsed.detail } : {}),
+        };
+    } catch {
+        return undefined;
+    }
+};
+
 export const parseRequirement = (line: string): Requirement | undefined => {
     const found = REQUIREMENT.exec(line);
     if (found === null) {
@@ -208,6 +284,10 @@ export const parseRequirement = (line: string): Requirement | undefined => {
 
 /** Save this setup so the app can pick it up after Windows restarts, then restart Windows. */
 export const restartForSetup = (args: SetupArgs): Promise<void> => invoke(`restart_for_setup`, { args });
+/* The same, one notch smaller, for the requirement that is only ever waiting on a new login token. Adding an
+ * account to `docker-users` takes effect at the next sign-in and not before, so "Check again" is a button
+ * that cannot work; this is the one that can. */
+export const signOutForSetup = (args: SetupArgs): Promise<void> => invoke(`sign_out_for_setup`, { args });
 /** The setup that was interrupted by a restart, if there is one and it is still worth resuming. */
 export const resumableSetup = (): Promise<ResumableSetup | null> => invoke(`resumable_setup`);
 /** Forget it, taken when the user backs out, or when its code has expired. */

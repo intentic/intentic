@@ -21,6 +21,7 @@ import SetupProgress from "./components/SetupProgress.vue";
 import { advance, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
     desktopInfo,
+    expectedStop,
     forgetResumableSetup,
     machineReport,
     onPendingRecreate,
@@ -28,22 +29,29 @@ import {
     onRun,
     onUpdateAvailable,
     parseRequirement,
+    parseRequirementState,
     parseStep,
-    pendingSetup,
     restartForSetup,
     resumableSetup,
+    revealLog,
+    runStop,
     sandboxList,
     sandboxLogs,
     sandboxPower,
     sandboxRecreate,
     sandboxRemove,
+    setupAlert,
+    setupFit,
     setupFrame,
     setupRun,
+    signOutForSetup,
     takePendingRecreate,
+    takePendingSetup,
     workspaceOpen,
     type DesktopInfo,
     type MachineReport,
     type Requirement,
+    type RequirementProgress,
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
@@ -108,6 +116,31 @@ const setupError = ref<string | undefined>(undefined);
 const runs = ref<Record<string, RunEvent[]>>({});
 const activeRun = ref<string | undefined>(undefined);
 
+/* WHETHER THIS WINDOW IS A SETUP, HELD RATHER THAN DERIVED.
+ *
+ * This used to be `pending !== undefined || activeRun === 'setup'`, which reads as a definition and behaves
+ * as a race. `pending` is cleared by the run that starts (so a link cannot be run twice) and re-read from
+ * two directions, so any of several perfectly ordinary orderings ends with both halves false WHILE a failed
+ * setup is on screen — and this screen then hands the window to the manager face, taking the failure, the
+ * requirements and the log with it. Nothing about "is this window a setup" is in doubt: a setup arrived, and
+ * it is a setup until it finishes or the user closes it. So it is stated, and only those two things clear it.
+ */
+const setupOpen = ref(false);
+
+/* WHAT EACH REQUIREMENT IS DOING — keyed by id, fed by the installer's own state markers (desktop.ts).
+ * Cleared with the list it belongs to. */
+const requirementState = ref<Record<string, RequirementProgress>>({});
+
+/// Where the running (or last) setup wrote its transcript, and whether a stop has been asked for.
+const setupLog = ref<string | undefined>(undefined);
+const stopping = ref(false);
+/// The exit code of the last setup, so the screen can tell a designed stop from something going wrong.
+const setupExit = ref<number | null | undefined>(undefined);
+/* A run the USER ended. It is neither a failure nor a success, and it needs its own state for one reason:
+ * every way out of this card is drawn off "did something go wrong", so a stop with no error text left the
+ * screen with no error, no requirements and no buttons — the same dead end, reached politely. */
+const wasStopped = computed(() => stopping.value && setupExit.value !== undefined);
+
 /* WHAT THIS COMPUTER STILL NEEDS — the Windows half of a failed setup, and the reason one exists at all.
  *
  * On Linux and macOS a setup that stops has usually hit something unforeseeable, and four lines of stderr is
@@ -119,6 +152,9 @@ const activeRun = ref<string | undefined>(undefined);
  * Cleared at the START of every attempt, not at the end: a re-run that fixed two of three problems has to
  * draw the one that is left, and a list that only ever grows would keep showing the two that are gone. */
 const requirements = ref<Requirement[]>([]);
+/// Whether what is on screen is the PREVIOUS run's list, kept up while this one re-examines the machine. The
+/// first requirement of the new run clears it and takes the list over. See `runSetup`.
+const carried = ref(false);
 /* Whether the user has answered the list. It is the second pass of a setup — the first deliberately changes
  * nothing — and it lives here rather than in the args because it is about this WINDOW's conversation, not
  * about the link the SPA handed over. */
@@ -140,8 +176,38 @@ const openWorkspace = (path?: string): void => void workspaceOpen(path);
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
 // A handed-over setup owns the window from the moment it arrives until it hands the window back — which
-// includes having failed, because a failure is the one state the user most needs undivided.
-const setupMode = computed(() => pending.value !== undefined || activeRun.value === `setup`);
+// includes having failed, because a failure is the one state the user most needs undivided. See `setupOpen`
+// for why that is held rather than inferred.
+const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`);
+
+/* THE WINDOW FOLLOWS THE CARD, RATHER THAN THE CARD BEING TRUSTED TO FIT ONE.
+ *
+ * The setup frame was measured against what this card draws, and the version of it that matters most is the
+ * tallest one there is: a ten-step plan, and under it everything wrong with this PC — four rows, each with a
+ * problem, a remedy and a badge, plus the button that fixes them. That does not fit 640 logical pixels, so
+ * on exactly the machines this screen exists for, the list and its button sat below the fold of a small
+ * window, in a scroll container with no visible affordance. One reported install ended there: the diagnosis
+ * was right, the buttons were drawn, and what the user saw was a spinner.
+ *
+ * So the card measures itself and Rust grows the window to it, capped at what the screen can hold
+ * (windows.rs). A ResizeObserver rather than a watcher on the state, because the height that matters is the
+ * rendered one — a requirement with a long remedy wraps to three lines on a narrow window and to one on a
+ * wide one, and no amount of counting rows knows that. */
+const card = ref<HTMLElement | undefined>(undefined);
+let cardSize: ResizeObserver | undefined;
+watch(card, (element) => {
+    cardSize?.disconnect();
+    cardSize = undefined;
+    if (element === undefined) {
+        return;
+    }
+    cardSize = new ResizeObserver(() => {
+        // The card's own height plus the padding either side of it — what the WINDOW has to be, not what the
+        // card is.
+        void setupFit(element.getBoundingClientRect().height + 32);
+    });
+    cardSize.observe(element);
+});
 
 /* WHETHER THIS SCREEN KNOWS YET WHICH FACE IT IS — and the reason the frame below waits for it.
  *
@@ -293,8 +359,21 @@ const runSetup = async (): Promise<void> => {
         return;
     }
     const startedAt = Date.now();
-    // The list belongs to the attempt that produced it — see `requirements` above.
-    requirements.value = [];
+    /* THE LIST SURVIVES THE START OF THE NEXT PASS, and is replaced rather than emptied.
+     *
+     * It used to be cleared here, which is right in principle — a list belongs to the attempt that produced
+     * it — and wrong in practice on the one click that matters. "Install and continue" re-runs the setup, and
+     * emptying the list means the four things the user just agreed to disappear off the screen for the
+     * seconds it takes the installer to re-examine the machine and say them again. The reader who has just
+     * consented to a 600 MB download watches their reason for consenting vanish.
+     *
+     * So the previous list stays on screen and the FIRST requirement of the new run replaces it wholesale
+     * (`carried`, below) — which is also what drops the ones the last pass fixed, since a run only announces
+     * what is still unmet. */
+    carried.value = requirements.value.length > 0;
+    requirementState.value = {};
+    setupExit.value = undefined;
+    stopping.value = false;
     expired.value = false;
     /* The plan, before the first line of output — that is the point of it. A machine with Docker already up
      * is not shown the step that installs it, and a setup that carries no folder is not shown the one that
@@ -315,8 +394,29 @@ const runSetup = async (): Promise<void> => {
         consented: consented.value,
         resumed: resuming.value,
     });
-    setupError.value = await start(`setup`, () => setupRun(args, consented.value));
-    const ok = setupError.value === undefined;
+    const failure = await start(`setup`, () => setupRun(args, consented.value));
+    const ok = failure === undefined;
+    // Nothing was reported this time, so the list on screen is the last run's and is now a lie — this run got
+    // past the examination, and whatever stopped it is somewhere else entirely.
+    if (carried.value) {
+        requirements.value = [];
+        carried.value = false;
+    }
+    /* WHAT A NON-ZERO EXIT MEANS, WHICH IS NOT ALWAYS "SOMETHING BROKE".
+     *
+     * Every Windows install that needs anything at all ends its first pass non-zero, on purpose: the
+     * installer reports what it would change and stops, because there is no terminal here to ask the one
+     * question on. Reporting that as `connect.ps1 exited with status 3` in a red box is this screen calling
+     * its own design a crash — and on the run that was reported to us, the red box was the only thing that
+     * had anything to say. So the designed stops (desktop.ts) carry no error text: the requirements list IS
+     * the message, and a stop the user asked for is not a failure either.
+     *
+     * …with one guard, because the whole point here is that a stopped run always says SOMETHING. A designed
+     * stop is silent only when the list it defers to actually arrived; if it did not — a marker that failed
+     * to parse, a CLI that never printed one — the raw failure is shown rather than nothing at all. That is
+     * the exact hole the reported install fell through, and it stays closed even if the list breaks again. */
+    const deferredToTheList = expectedStop(setupExit.value ?? null) && requirements.value.length > 0;
+    setupError.value = ok || stopping.value || deferredToTheList ? undefined : failure;
     /* THE DESKTOP FUNNEL'S LAST STEP, REPORTED FROM WHERE IT ACTUALLY HAPPENS. The SPA has its own
      * `sandbox_connected`, but on this path it is fired by a page that has been behind this window for the
      * whole install — late at best, and never at all when the handover came from a browser tab the user then
@@ -330,9 +430,56 @@ const runSetup = async (): Promise<void> => {
     });
     if (ok) {
         pending.value = undefined;
+        setupOpen.value = false;
         // The daemon announced itself to the platform on boot, which is exactly what the SPA's setup screen
         // has been polling for — so handing the window back is one poll away from showing the workspace.
         await workspaceOpen();
+        return;
+    }
+    /* AND IF IT DID NOT FINISH, MAKE SURE SOMEBODY FINDS OUT.
+     *
+     * This window is deliberately not topmost and deliberately minimisable — an install runs for minutes and
+     * holding someone's screen for it would be indefensible. The price is exactly this case: a setup that
+     * stops while the window is minimised, or behind the workspace, changes only pixels nobody is looking
+     * at. A user reported that as "the error did not surface and did not notify user", and they were right.
+     * `setupAlert` is the OS's own way to point at a window without stealing focus from whatever they moved
+     * on to. */
+    await setupAlert();
+};
+
+/* END THE RUN — the button this screen never had.
+ *
+ * "You can close this, the install keeps going" was the whole of what was on offer: a run that had gone
+ * wrong could be walked away from and not stopped, and the next attempt then raced the one still going.
+ * `stopping` is set BEFORE the kill so the exit it produces reads as an answer rather than a failure. */
+const stopSetup = async (): Promise<void> => {
+    if (!running.value) {
+        return;
+    }
+    stopping.value = true;
+    track(`desktop_install_stopped`, { percent: Math.round(progress.value?.percent ?? 0) });
+    try {
+        await runStop(`setup`);
+    } catch (error) {
+        stopping.value = false;
+        setupError.value = String(error);
+    }
+};
+
+/// Put the transcript on the clipboard — the thing somebody stuck on this actually needs to hand over.
+const logCopied = ref(false);
+const copyLog = async (): Promise<void> => {
+    const text = eventsOf(`setup`)
+        .flatMap((event) => (event.kind === `line` ? [`${event.stream === `stderr` ? `! ` : ``}${event.text}`] : []))
+        .join(`\n`);
+    await navigator.clipboard.writeText(text);
+    logCopied.value = true;
+    setTimeout(() => (logCopied.value = false), 2000);
+};
+
+const openLogFolder = async (): Promise<void> => {
+    if (setupLog.value !== undefined) {
+        await revealLog(setupLog.value);
     }
 };
 
@@ -355,7 +502,28 @@ const dismissSetup = async (): Promise<void> => {
         ...(state === undefined ? {} : { percent: Math.round(state.percent), elapsedMs: Date.now() - state.startedAt }),
         ...(step === undefined ? {} : { step }),
     });
+    // The one thing that closes this screen other than a setup finishing — see `setupOpen`.
+    setupOpen.value = false;
     await workspaceOpen();
+};
+
+/* THE WAY OUT THAT IS NOT "GIVE UP".
+ *
+ * This app's whole premise is that the sandbox runs on THIS computer, and for most people it should. But the
+ * list this button sits under is the moment where that premise is being tested hardest: a PC with no WSL2
+ * and no Docker is being asked for administrator, a 600 MB download and a restart, and some of those readers
+ * are on a machine where none of that is going to happen — a work laptop, a locked-down build, a PC too
+ * small for it. Until now the app had nothing to say to them, while the browser has offered a machine in
+ * their own cloud account and one we host for them all along; it was hidden here on the argument that "this
+ * computer" is the whole point of being in the app.
+ *
+ * It is the point right up until it cannot work, and then it is a dead end. Local stays the loud default and
+ * this stays one quiet line under it, in the one place where it is the more useful answer.
+ */
+const setUpElsewhere = async (): Promise<void> => {
+    track(`desktop_install_elsewhere`, { requirements: requirements.value.map((requirement) => requirement.id) });
+    setupOpen.value = false;
+    await workspaceOpen(`/setup?elsewhere=1`);
 };
 
 /* THE ONE QUESTION THIS FLOW ASKS, ANSWERED. The first attempt reported what it would change and changed
@@ -367,21 +535,30 @@ const installRequirements = async (): Promise<void> => {
     await runSetup();
 };
 
-/* Restart Windows and pick this setup up afterwards. The args go to disk before anything else happens, so a
- * machine that goes down between here and the reboot still comes back to a setup it can finish. */
-const restartNow = async (): Promise<void> => {
+/* Restart Windows — or sign out of it — and pick this setup up afterwards. The args go to disk before
+ * anything else happens, so a machine that goes down between here and the reboot still comes back to a setup
+ * it can finish.
+ *
+ * The two are one function because they are one idea: something Windows only applies between sessions, and a
+ * setup that survives the gap. A restart is for features that need one; a sign-out is for the docker-users
+ * group, whose whole problem is that a login token is issued once and this account's was issued before it
+ * joined. That row used to offer "Check again", which could never work. */
+const endSession = async (how: `restart` | `signout`): Promise<void> => {
     const args = pending.value;
     if (args === undefined || running.value) {
         return;
     }
-    // Awaited, unlike every other event here: the line below takes the machine down, and an event still in
+    // Awaited, unlike every other event here: the line below takes the session down, and an event still in
     // flight when that happens is an event nobody ever sees (analytics.ts).
-    await trackBeforeExit(`desktop_install_restart`, { requirements: requirements.value.map((requirement) => requirement.id) });
+    await trackBeforeExit(`desktop_install_restart`, {
+        how,
+        requirements: requirements.value.map((requirement) => requirement.id),
+    });
     try {
-        await restartForSetup(args);
+        await (how === `restart` ? restartForSetup(args) : signOutForSetup(args));
     } catch (error) {
-        // The restart is the one action here with no second chance to explain itself, so a refusal says so
-        // in the card rather than leaving a button that quietly did nothing.
+        // Neither of these gets a second chance to explain itself, so a refusal says so in the card rather
+        // than leaving a button that quietly did nothing.
         setupError.value = String(error);
     }
 };
@@ -398,6 +575,7 @@ const loadResumable = async (): Promise<void> => {
         return;
     }
     pending.value = parked.args;
+    setupOpen.value = true;
     if (parked.agedSeconds > RESUME_WINDOW_SECONDS) {
         await forgetResumableSetup();
         expired.value = true;
@@ -421,7 +599,16 @@ const loadResumable = async (): Promise<void> => {
  * can send, on nothing more than a browser's "Open Intentic?" — is asked about in windows.rs BEFORE it is
  * parked, so anything that reaches this screen has been agreed to one way or the other. */
 const loadPending = async (): Promise<void> => {
-    pending.value = (await pendingSetup()) ?? undefined;
+    /* TAKEN, and a `null` means somebody else took it — never "there is no setup here". Two callers race for
+     * a parked request (the arrival event, and this window's read on mount), and the loser used to write its
+     * empty answer over the winner's state, which handed the window back to the manager face in the middle
+     * of the run it had just started. */
+    const taken = await takePendingSetup();
+    if (taken === null) {
+        return;
+    }
+    pending.value = taken;
+    setupOpen.value = true;
     await runSetup();
 };
 
@@ -548,13 +735,34 @@ onMounted(async () => {
                 now.value = Date.now();
                 progress.value = advance(progress.value, event, now.value);
             }
+            if (event.run !== `setup`) {
+                return;
+            }
+            if (event.kind === `started`) {
+                setupLog.value = event.log ?? undefined;
+                return;
+            }
+            if (event.kind === `exit`) {
+                setupExit.value = event.code;
+                return;
+            }
             // What this computer still needs, collected as the installer names it. Keyed by id so a run that
             // reports the same requirement twice — the fixer re-examines between passes — draws one row.
-            if (event.run === `setup` && event.kind === `line`) {
-                const requirement = parseRequirement(event.text);
-                if (requirement !== undefined) {
-                    requirements.value = [...requirements.value.filter((seen) => seen.id !== requirement.id), requirement];
-                }
+            const requirement = parseRequirement(event.text);
+            if (requirement !== undefined) {
+                // The first one of a new run replaces whatever the last run left on screen; the rest of that
+                // run's requirements join it. Keyed by id, so a run that reports the same one twice — the
+                // fixer re-examines between passes — still draws one row.
+                const kept = carried.value ? [] : requirements.value.filter((seen) => seen.id !== requirement.id);
+                carried.value = false;
+                requirements.value = [...kept, requirement];
+                return;
+            }
+            // …and how each one is going while it is being dealt with, which is the difference between a
+            // checklist and one spinner sitting on "Set up Docker" for ten minutes.
+            const state = parseRequirementState(event.text);
+            if (state !== undefined) {
+                requirementState.value = { ...requirementState.value, [state.id]: state };
             }
         }),
         onPendingSetup(() => void loadPending()),
@@ -576,6 +784,7 @@ onMounted(async () => {
 });
 onUnmounted(() => {
     clearInterval(ticker);
+    cardSize?.disconnect();
     stop.forEach((unlisten) => unlisten());
 });
 </script>
@@ -589,73 +798,110 @@ onUnmounted(() => {
          `m-auto` rather than `items-center`: it centres the card the same way, and keeps the TOP of it
          reachable when the content is taller than the window, where centring in a scroll container cuts it. -->
     <div v-if="setupMode" class="flex h-dvh flex-col overflow-auto bg-canvas p-4 text-content">
-        <Card class="m-auto flex w-full max-w-xl flex-col gap-3">
-            <div class="flex items-start gap-2.5">
-                <Icon name="bolt" class="mt-0.5 text-primary-400" />
-                <div class="min-w-0 flex-1">
-                    <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
-                    <p class="text-2xs text-subtle">
-                        Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your workspace
-                        once it answers.
-                    </p>
-                </div>
-                <!-- Where every installer keeps it, next to the window's own close for people who look here
+        <!-- A plain element around the card, because what the window has to be told is a RECTANGLE and a
+             component ref is an instance. `m-auto` moves here with it, so the centring is unchanged. -->
+        <div ref="card" class="m-auto w-full max-w-xl">
+            <Card class="flex w-full flex-col gap-3">
+                <div class="flex items-start gap-2.5">
+                    <Icon name="bolt" class="mt-0.5 text-primary-400" />
+                    <div class="min-w-0 flex-1">
+                        <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this computer</h1>
+                        <p class="text-2xs text-subtle">
+                            Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
+                            workspace once it answers.
+                        </p>
+                    </div>
+                    <!-- Where every installer keeps it, next to the window's own close for people who look here
                      first. Either one steps back to the workspace and nothing else: the script is a process
                      on this machine, not something this window is holding up. -->
-                <button
-                    type="button"
-                    aria-label="Close"
-                    class="-m-1 shrink-0 rounded-md p-1 text-subtle hover:bg-canvas hover:text-content"
-                    @click="dismissSetup"
-                >
-                    <Icon name="times" />
-                </button>
-            </div>
-            <!-- The code this window came back to is older than the platform will accept. Said plainly, with
+                    <button
+                        type="button"
+                        aria-label="Close"
+                        class="-m-1 shrink-0 rounded-md p-1 text-subtle hover:bg-canvas hover:text-content"
+                        @click="dismissSetup"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </div>
+                <!-- The code this window came back to is older than the platform will accept. Said plainly, with
                  the one thing that fixes it, instead of letting the run fail at the claim with something that
                  reads like a bad code. -->
-            <Notice v-if="expired" tone="warning" class="text-2xs">
-                Your setup code ran out while this computer restarted. Open the setup page again for a fresh one — everything the restart was for is
-                already done.
-            </Notice>
-            <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
-                <Icon name="refresh" class="mt-0.5 shrink-0" />
-                <span>Picking up where the restart left off.</span>
-            </p>
-            <p v-if="info && !info.dockerReady && !expired" class="flex items-start gap-2 text-2xs text-warning">
-                <Icon name="box" class="mt-0.5 shrink-0" />
-                <span v-if="info.os === `windows`"
-                    >Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span
-                >
-                <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
-            </p>
-            <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
+                <Notice v-if="expired" tone="warning" class="text-2xs">
+                    Your setup code ran out while this computer restarted. Open the setup page again for a fresh one — everything the restart was for
+                    is already done.
+                </Notice>
+                <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
+                    <Icon name="refresh" class="mt-0.5 shrink-0" />
+                    <span>Picking up where the restart left off.</span>
+                </p>
+                <p v-if="info && !info.dockerReady && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
+                    <Icon name="box" class="mt-0.5 shrink-0" />
+                    <span v-if="info.os === `windows`"
+                        >Docker isn't running yet — this checks what your PC needs first, and asks before changing anything.</span
+                    >
+                    <span v-else>Docker isn't running yet — setup installs it first, so your system will ask for your password once.</span>
+                </p>
 
-            <!-- WHAT STOPPED IT, WHEN THE INSTALLER KNOWS SPECIFICALLY. This replaces the red box rather than
-                 sitting beside it: "3 things are in the way, here is the button" and a paragraph of the same
-                 text in stderr underneath is one message written twice, and the second copy is the one that
-                 reads like a crash. The log behind "Show detail" still carries every word. -->
-            <Requirements
-                v-if="requirements.length > 0 && !running && !expired"
-                :requirements="requirements"
-                :busy="running"
-                @install="installRequirements"
-                @restart="restartNow"
-                @recheck="runSetup"
-            />
+                <!-- WHAT STOPPED IT, WHEN THE INSTALLER KNOWS SPECIFICALLY — and ABOVE the progress list rather
+                 than under it. This is the only thing on the card the reader has to act on, and it used to be
+                 last: below a header, a caution, a bar and ten plan rows, in a 640-pixel window, inside a
+                 scroll container with nothing on screen to say there was more. On the machines that produce
+                 this list — the ones with no WSL2 and no Docker — that is every pixel of it off the bottom.
+                 So it leads, and the plan it interrupted becomes the thing you scroll to.
+                 It also replaces the red box rather than sitting beside it: "4 things are in the way, here is
+                 the button" and the same text again as stderr underneath is one message written twice, and
+                 the second copy is the one that reads like a crash. -->
+                <Requirements
+                    v-if="requirements.length > 0 && !expired"
+                    :requirements="requirements"
+                    :busy="running"
+                    :progress="requirementState"
+                    @install="installRequirements"
+                    @restart="endSession(`restart`)"
+                    @signout="endSession(`signout`)"
+                    @recheck="runSetup"
+                    @elsewhere="setUpElsewhere"
+                />
 
-            <Notice v-else-if="setupError && !expired" tone="danger" class="text-2xs">{{ setupError }}</Notice>
-            <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this app can
+                <Notice v-else-if="setupError && !expired" tone="danger" class="text-2xs">{{ setupError }}</Notice>
+
+                <!-- A run the user ended is not a failure and gets no red box — but it does get said out loud,
+                     because a card that simply stops moving is the thing this whole screen is here to stop
+                     being. -->
+                <p v-if="wasStopped" class="flex items-start gap-2 text-2xs text-subtle">
+                    <Icon name="times" class="mt-0.5 shrink-0" />
+                    <span>You stopped this install. Nothing else is running on this computer.</span>
+                </p>
+
+                <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
+
+                <!-- Only on failure, and paired with a way out. A setup that stopped is the one place this app can
                  strand someone, and "try again" as the only control is a dead end wearing a button. -->
-            <div v-if="(setupError || expired) && requirements.length === 0" class="flex flex-wrap items-center gap-2">
-                <Button v-if="!expired" label="Try again" :disabled="running" @click="runSetup">
-                    <template #icon><Icon name="bolt" /></template>
-                </Button>
-                <Button severity="secondary" :text="true" label="Back to your workspace" @click="dismissSetup">
-                    <template #icon><Icon name="arrow-up-right" /></template>
-                </Button>
-            </div>
-        </Card>
+                <div v-if="(setupError || expired || wasStopped) && requirements.length === 0" class="flex flex-wrap items-center gap-2">
+                    <Button v-if="!expired" label="Try again" :disabled="running" @click="runSetup">
+                        <template #icon><Icon name="bolt" /></template>
+                    </Button>
+                    <Button severity="secondary" :text="true" label="Back to your workspace" @click="dismissSetup">
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                </div>
+
+                <!-- THE FOOT OF EVERY SETUP: a way to end it, and a way to take the evidence with you.
+                 Stopping had no button at all — "you can close this, the install keeps going" was the whole
+                 offer, so a run that had gone wrong could be abandoned and not ended. The log is written for
+                 every run whether or not anyone asks (scripts.rs); these are the two ways to reach it. -->
+                <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
+                    <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" @click="stopSetup">
+                        {{ stopping ? `Stopping…` : `Stop` }}
+                    </button>
+                    <button type="button" class="text-link hover:underline" @click="copyLog">
+                        {{ logCopied ? `Copied` : `Copy log` }}
+                    </button>
+                    <button v-if="setupLog" type="button" class="text-link hover:underline" @click="openLogFolder">Open log folder</button>
+                    <span v-if="setupLog" class="ml-auto truncate font-mono text-subtle">{{ setupLog }}</span>
+                </div>
+            </Card>
+        </div>
     </div>
 
     <div v-else class="h-dvh overflow-auto bg-surface text-content">

@@ -79,8 +79,64 @@ A parent in `plain` sets nothing: the child inherits the pipe and reaches the sa
 | --- | --- |
 | `INTENTIC_UI` | `plain` \| `rich` \| `nested` — forces the mode. Anything else is ignored. `nested` is a **child's** mode: `ic` sets it on the agents it spawns and never reads it for itself. |
 | `INTENTIC_PLAIN=1` | Forces `plain`. The older spelling; both renderers honour it. |
+| `INTENTIC_NO_PROMPT=1` | **There is nobody to ask.** Every prompt reads as "no answer", which each caller already treats as a refusal. See below. |
 | `NO_COLOR` | Colour off, layout unchanged. |
 | `FORCE_COLOR` | Colour on even when `NO_COLOR` is set. |
+
+### `INTENTIC_NO_PROMPT` — the caller saying it outright
+
+A flow asks a question when it believes a person is there, and it works that out by probing for a controlling
+terminal: `/dev/tty` on Unix, `CONOUT$` on Windows. Those probes are good and they stay. This is the belt to
+their braces, for the one caller that already knows the answer for certain.
+
+The desktop app spawns these flows from a GUI process with no window, no console and closed stdin. If a probe
+is ever wrong there, the cost is not a bad guess — it is an install that never ends, in front of somebody
+watching a spinner. So the app says so outright rather than being inferred about.
+
+Exactly `1`. An unset variable, an empty one and a `0` all leave the probes in charge, because the one thing
+this must never do is silence a question a real person is sitting in front of.
+
+---
+
+## 2b. Machine-readable side channels
+
+`plain` carries two markers that are **not** phases and must never be parsed as one. Both are emitted only
+when stdout is a pipe: in a terminal the same information is already prose, and JSON in the middle of a
+checklist is unreadable.
+
+```
+intentic-requirement: {"id":…,"title":…,"problem":…,"remedy":…,"action":…,"detail":…}
+intentic-requirement-state: {"id":…,"state":"running"|"done"|"failed","detail":…}
+```
+
+- **`intentic-requirement:`** — one per thing standing between this machine and a running sandbox. `action`
+  is a closed set (`fix`, `fixElevated`, `restart`, `firmware`, `hostVm`, `user`, `signOut`, `unsupported`)
+  and decides what the reader can offer: a button, a restart, or a walkthrough.
+- **`intentic-requirement-state:`** — how one of them is going, while it is going. Without it a reader can
+  draw a single spinner for the ten minutes it takes to switch WSL2 on, download 600 MB, run an installer and
+  wait for an engine. `detail` carries the changing measurement.
+
+The prefixes are deliberately one hyphen apart from each other and unrelated to `intentic: [phase]`. A parser
+that took a requirement for a phase would slide its cursor to a step that does not exist.
+
+## 2c. Exit codes
+
+`ic docker prepare` has two outcomes that are **not failures**, and a caller must be able to tell them from
+one without reading prose:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Ready. |
+| `1` | Something went wrong. |
+| `3` | Requirements were reported and **nothing was changed** — come back with `-y` (or `INSTALL_DOCKER=1`). |
+| `4` | Windows has to restart first. Everything that could be done has been. |
+
+Every Windows install that needs anything at all ends its first pass on `3`, by design: the flow reports what
+it would change and stops, because there may be no terminal to ask the one question on. A reader that treats
+that as a crash is calling the design broken — and a reader with nothing else to say then shows the user
+`connect.ps1 exited with status 3` and no diagnosis at all.
+
+The shims pass the code through unread (`exit $LASTEXITCODE`), so it reaches whatever started them.
 
 ---
 
