@@ -541,15 +541,9 @@ export const planCodexTurn = async (
             ? Promise.resolve(input.model)
             : services.codexModels.models().then((catalog) => catalog.default),
         /* Codex plan emulation closes its app-server while a person reviews the plan, then starts a fresh one
-         * for execution. The lazy browser mux treats that first bridge closing as the turn ending and expires
-         * after 15 seconds, so a normal human approval would leave the second process a dead socket. The eager
-         * specs are restartable and preserve the same profile across both phases. Ordinary turns keep the mux. */
-        browserServersOf(
-            granted,
-            services.workspace.root,
-            persona.powers.browser,
-            context.base.permissionMode === "plan" ? undefined : input.conversationId,
-        ),
+         * for execution. The router spec is restartable — a fresh process rereads the same manifest and the
+         * same persisted profiles — so both phases drive the same browsers. */
+        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
     ]);
     const withModel = { ...context.base, model, ...(context.steering !== undefined ? { steering: context.steering } : {}) };
     // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer (the
@@ -568,6 +562,7 @@ export const planCodexTurn = async (
                   browserOutputDir: browserOutputDir(services.workspace.root),
                   browserPorts: browser.ports,
                   browserPasskeys: browser.passkeys,
+                  browserAccounts: browser.accounts,
               };
     return {
         ok: true,
@@ -761,10 +756,10 @@ export const planHarnessTurn = async (
         .map((capability) => capability.id);
     const [extensionAgentDirs, browser, personaKit] = await Promise.all([
         services.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(services)),
-        // Each browser capability (account) grants the @playwright/mcp browser tools, bound to that account's
-        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join) — or signs
-        // the account in itself when it is still pending — filtered to the accounts this turn's persona
-        // speaks for.
+        // The browser capabilities (accounts) grant the ONE routed @playwright/mcp server, each call bound by
+        // its `account` argument to that account's persisted profile so the agent acts as the signed-in owner
+        // (read/reply/comment/post/join) — or signs the account in itself when it is still pending — filtered
+        // to the accounts this turn's persona speaks for.
         services.perf.track("turn.plan.browser", {}, () =>
             browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
         ),
@@ -806,9 +801,14 @@ export const planHarnessTurn = async (
         ...browser.servers,
         /* The browser exit for stored secrets (browser/secrets-tools.ts): type a named value into the focused
          * field of a live page. Mounted only when the turn drives a browser at all — the tool's scope IS the
-         * turn's browser list. */
+         * turn's browser list: the routed accounts, plus `web` when the credential-free browser is up. */
         ...(Object.keys(browser.servers).length > 0
-            ? { secrets: secretsServer({ secrets: secretAccess, browsers: Object.keys(browser.servers) }) }
+            ? {
+                  secrets: secretsServer({
+                      secrets: secretAccess,
+                      accounts: { ...browser.accounts, ...("web" in browser.servers ? { web: "web" } : {}) },
+                  }),
+              }
             : {}),
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
@@ -926,9 +926,12 @@ export const planHarnessTurn = async (
             // The debugging ports those same servers' Chromiums will open, so the first browser tool call can
             // register a session the owner can watch (browser/browser-sessions.ts).
             ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
-            // Each logged-in server's passkey store, so the observer that watches those pages also plugs the
-            // platform's software security key into them (browser/passkeys.ts).
+            // Each logged-in profile owner's passkey store, so the observer that watches those pages also
+            // plugs the platform's software security key into them (browser/passkeys.ts).
             ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
+            // The routed server's account→owner map, so the observer resolves a call's `account` argument to
+            // the profile it drives — the tool prefix no longer says (browser/browser-sessions.ts).
+            ...(Object.keys(browser.accounts).length > 0 ? { browserAccounts: browser.accounts } : {}),
             // The accounts tools ride whenever the turn has browser accounts — the account list is the very set
             // whose servers were just mounted (persona-filtered), which is the scope those tools enforce.
             ...(browserAccountIds.length > 0

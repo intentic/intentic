@@ -1,21 +1,23 @@
 import type { IdentityConfig } from "@intentic/sandbox-contract";
-import { identitySkill } from "../../browser/browser-skill.js";
 import { clearSession, hasSession, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
-import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
+import { loadedSkillFile } from "../../settings/loaded-skills.js";
+import { accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.js";
 
 /* ONE EMAIL IDENTITY THE SANDBOX ACTS AS ONLINE — the container browser accounts are born from (see
  * IdentityConfigSchema for the model). This handler is deliberately the browser handler's sibling: the payload
- * is the same machinery (one persisted Chromium profile, the browser feature pack, a skill file), because an
- * identity IS a browser — the one its accounts share. What differs is what the profile means: not "signed into
- * one site" but "signed into its own email provider, with room for the accounts that will live beside it".
+ * is the same machinery (one persisted Chromium profile, the browser feature pack, a roster line on the shared
+ * `identities` skill), because an identity IS a browser — the one its accounts share. What differs is what the
+ * profile means: not "signed into one site" but "signed into its own email provider, with room for the
+ * accounts that will live beside it".
  *
  * A CORE CARD, NOT A CONTRIBUTION. Platform cards are extension data because sites vary; an identity has no
  * site — it has an email address, and everything a card would pin (where the sign-in starts) is derivable from
  * it or answered on the form. So there is no contribution lookup here, and the skill is rendered from core
- * (identitySkill) rather than a pack's SKILL.md.
+ * (browser-skill.ts identitiesSkill) rather than a pack's SKILL.md — ONE skill for all identities, each a
+ * roster line, converged by account-skills.ts on every apply/remove.
  *
  * The connected marker means "the identity's browser is signed into its provider" — the one login that stays
  * the OWNER's own hands (automated Google sign-ins are what Google blocks), done in the guided window. Its
@@ -59,16 +61,15 @@ export const identityHandler: CapabilityHandler = {
     fragment: () => packFragment("browser"),
     /* An identity's browser is the whole point of it: the Google sign-in that makes "Continue with Google" a
      * click, and every account living beside it. So the profile MOVES rather than being re-made — the re-apply
-     * that follows only rewrites the skill, which is derived from the new name. The accounts that name this
-     * identity are repointed by the route, which is where cross-connection references belong. */
+     * that follows re-converges the shared skill, whose roster line is derived from the new name. The accounts
+     * that name this identity are repointed by the route, which is where cross-connection references belong. */
     rename: {
         carry: async (ctx, from, to) => {
             await moveSession(ctx.workspace.root, from, to);
-            await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
-        const { email, mailbox, openAccounts } = config as IdentityConfig;
+        const { email, mailbox } = config as IdentityConfig;
         if (!email.includes("@")) {
             throw new Error(`"${email}" is not an email address — the identity IS an address, so this field is the card`);
         }
@@ -77,14 +78,15 @@ export const identityHandler: CapabilityHandler = {
         if (mailbox !== undefined && mailbox !== "" && (await ctx.capabilities.get(mailbox)) === undefined) {
             throw new Error(`no capability "${mailbox}" to read mail from — connect the mailbox (IMAP) first, or leave the field empty`);
         }
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, identitySkill(id, email, openAccounts === "on"));
+        // The route upserts AFTER apply, so the entry rides in as the delta rather than being read back.
+        await convergeAccountSkills(ctx, { upsert: { id, kind: "identity", config: config as IdentityConfig } });
         yield {
             kind: "log",
             message: `Identity "${id}" (${email}) is set up. Rebuild the sandbox if prompted, then open "Log in" and sign into the email provider yourself — that one login stays human. Accounts the agent opens through it will share this browser.`,
         };
     },
     status: async (ctx, id) => {
-        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
+        if (!accountSkillNames(await ctx.files.read(loadedSkillFile(ctx.workspace.root, "identities")), id)) {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
@@ -107,7 +109,8 @@ export const identityHandler: CapabilityHandler = {
                 `"${id}" still has accounts living in its browser: ${born.map((capability) => capability.id).join(", ")} — remove them first`,
             );
         }
-        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
+        // The route deletes the entry AFTER this hook, so the converge is told to leave it out.
+        await convergeAccountSkills(ctx, { omit: id });
         await clearSession(ctx.workspace.root, id);
     },
 };

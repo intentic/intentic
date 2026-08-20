@@ -168,6 +168,26 @@ test("a connection's skill, a core feature's and a loose file are told apart", a
     expect(rowFor(rows, "scratch").owner).toBeUndefined();
 });
 
+/* THE SHARED ACCOUNT SKILLS attribute to the entries they are derived from: the `identities` roster to an
+ * identity, a site group's skill to a browser account whose group resolves to that name — the platform slug
+ * for a carded site, the home page's host for the generic card. Without this, every one of them would list as
+ * a loose file the reader is invited to delete, and the converge would just write it back. */
+test("the identities skill and a site group's skill attribute to the accounts behind them", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const loaded = join(root, ".agents", "skills");
+    const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
+    const reddit: Capability = { id: "reddit-work", kind: "browser", config: { platform: "reddit" } };
+    const hunt: Capability = { id: "hunt", kind: "browser", config: { platform: "website", homeUrl: "https://www.producthunt.com/" } };
+    await writeSkill(loaded, "identities", "The sandbox's online identities.");
+    await writeSkill(loaded, "reddit", "Act on Reddit.");
+    await writeSkill(loaded, "producthunt-com", "Act on producthunt.com.");
+
+    const rows = await skillInventory(stubServices(root, [main, reddit, hunt], settingsWith([])));
+    expect(rowFor(rows, "identities")).toMatchObject({ origin: "capability", owner: "main", removable: false });
+    expect(rowFor(rows, "reddit")).toMatchObject({ origin: "capability", owner: "reddit-work", removable: false });
+    expect(rowFor(rows, "producthunt-com")).toMatchObject({ origin: "capability", owner: "hunt", removable: false });
+});
+
 // A switched-on baked tool and a switched-on own skill are both present in the loaded folder too. Listing them
 // twice — once as themselves and once as a loose file — would double every row the owner actually controls.
 test("a skill already accounted for is not listed a second time from the loaded folder", async () => {

@@ -159,8 +159,12 @@ const contributionBase = {
  * because a manifest that could name them would be a manifest that grants itself privilege. That restriction is
  * this discriminated union, not a comment — a manifest naming any other kind fails to parse.
  *
- * `${id}` in a skill file is substituted with the instance name at apply time (so a host pack's tool names read
- * `mcp__my-laptop__run_command`), and, for `cli`, each `$ENVVAR` becomes its per-instance suffixed name. */
+ * `${id}` in a cli/host skill file is substituted with the instance name at apply time (so a host pack's tool
+ * names read `mcp__my-laptop__run_command`), and, for `cli`, each `$ENVVAR` becomes its per-instance suffixed
+ * name. A BROWSER pack's skill renders once per SITE rather than per instance — its seams are `${accounts}`
+ * (the roster of connected accounts), `${tools}` (the core driving/connecting note) and `${site}` (the host,
+ * for the generic card whose text can name no site of its own); `${id}` and per-field substitution do not
+ * apply there (capabilities/account-skills.ts in the sandbox daemon). */
 export const CapabilityContributionSchema = z
     .discriminatedUnion("kind", [
         // A CLI tool the AGENT gets, authenticated: the env vars its shell receives (value templates over the
@@ -215,7 +219,12 @@ export const CapabilityContributionSchema = z
                 .describe(
                     "Where that same profile opens once it HAS a session — the owner's own hands on the connected browser. Separate from loginUrl because for some platforms the login lives on another site entirely (YouTube signs in at accounts.google.com).",
                 ),
-            skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent this site's actions."),
+            skill: z
+                .string()
+                .min(1)
+                .describe(
+                    "Checkout-relative SKILL.md teaching the agent this site's actions — rendered once per site, all its connected accounts on one roster (`${accounts}`), the core tool note at `${tools}`.",
+                ),
         }),
         // An operating system a connected computer can run — the skill pack that teaches the agent THAT machine's
         // shell. The enrollment, the socket and the scope enforcement are core; only the pack varies.

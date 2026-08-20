@@ -164,10 +164,11 @@ export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput):
 /* THE CAPABILITY MANIFEST AS THIS TURN MAY SEE IT — every entry the card grants, and nothing else.
  *
  * Narrowed HERE, before anything is built from it, rather than by trimming tool names afterwards. An account
- * filtered out has no MCP server spawned for it at all, so its Chromium never launches and its profile is never
- * opened; a connector filtered out has no credential in the shell's environment; a computer or an MCP
- * connection filtered out has no server mounted. Each is absent from the turn rather than present-and-
- * discouraged, which is the only version of this that survives an agent misreading its instructions.
+ * filtered out is absent from the browser router's per-turn manifest, so its Chromium never launches, its
+ * profile is never opened, and a call naming it is refused with the granted set spelled out; a connector
+ * filtered out has no credential in the shell's environment; a computer or an MCP connection filtered out has
+ * no server mounted. Each is absent from the turn rather than present-and-discouraged, which is the only
+ * version of this that survives an agent misreading its instructions.
  *
  * The `browser` shelf is deliberately NOT applied here — it governs the credential-free browser, which is not a
  * capability at all (it holds nobody's account and is built from the image, see browser-tools.ts). */

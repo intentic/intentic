@@ -8,6 +8,8 @@ description: Read, reply, post, like, repost, follow, and join Communities on X 
 Home: https://x.com/home  ·  compose: https://x.com/compose/post  ·  profile: https://x.com/<handle>  ·
 Communities: https://x.com/i/communities  ·  notifications: https://x.com/notifications
 
+${accounts}
+
 - Read the timeline or a thread: navigate, then `browser_snapshot`.
 - Reply: open the post → Reply → `browser_type` → Post.
 - New post: go to compose → type → Post.

@@ -120,19 +120,18 @@ export const contributionFragmentPath = (contribution: ResolvedContribution): st
         ? join(contribution.extension.dir, contribution.spec.fragment)
         : undefined;
 
-/* THE CARD'S SKILL.md, read and rendered for ONE instance. Three substitutions, the same for every kind:
- *   `${tools}`   → the kind's core tool-surface note (how to drive the shared browser, what a connected
- *                  computer's tools are and what a refused scope means) — core because the tools are, and
- *                  because a note duplicated across N platform packs is a note that drifts;
+/* THE CARD'S SKILL.md, read and rendered for ONE instance — the cli and host kinds, whose skills stay
+ * per-entry (a browser pack's renders once per SITE instead: capabilities/account-skills.ts). Three
+ * substitutions:
+ *   `${tools}`   → the kind's core tool-surface note (what a connected computer's tools are and what a
+ *                  refused scope means) — core because the tools are, and because a note duplicated across N
+ *                  packs is a note that drifts;
  *   `${id}`      → this instance's name, so the examples are copy-pasteable rather than illustrative;
  *   `${<field>}` → whatever the user answered on the card's form, the same spelling cli's env templates use.
  *
- * The field pass is what lets ONE pack serve a card that knows nothing about its site: the generic browser
- * session's cheatsheet names the page and the purpose the user typed, so the agent can tell which account it is
- * holding and when to reach for it — facts a site pack hardcodes and a generic one cannot. Fields substitute
- * into the FRONTMATTER too, which is the point: `description` is what the agent routes on, and a generic skill
- * whose description said nothing about the site would never be picked for it. An unanswered optional field
- * yields "" rather than the literal `${...}`, so a template can reference one without demanding it.
+ * Fields substitute into the FRONTMATTER too, which is the point: `description` is what the agent routes on.
+ * An unanswered optional field yields "" rather than the literal `${...}`, so a template can reference one
+ * without demanding it.
  *
  * A `secret` FIELD IS NEVER SUBSTITUTED. A skill file is plain text in the workspace that the agent reads every
  * turn and that a `cli` pack could reference by name; copying a token into one would spread a credential from the

@@ -5,6 +5,7 @@ import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
 import { openBrowserSession } from "../browser/browser-sessions.js";
+import { ROUTED_BROWSER_SERVER } from "../browser/browser-tools.js";
 import {
     type CodexEvent,
     type CodexItem,
@@ -311,10 +312,21 @@ interface ImageArtifactContext {
 interface CodexBrowserContext {
     readonly ports: Readonly<Record<string, number>>;
     readonly passkeys: Readonly<Record<string, string>>;
+    // The routed browser server's account→owner map (browser-tools.ts). App-server's tool items carry no
+    // arguments, so a routed call can only be attributed when every route lands on the same profile — the
+    // single-owner turn, which is the common one (soleRoutedOwner below).
+    readonly accounts: Readonly<Record<string, string>>;
     readonly owner?: string;
     // Present on a resumed invocation. A new thread learns its id from thread.started before it can call a tool.
     readonly sessionId?: string;
 }
+
+// The one profile a routed call can be pinned to without seeing its arguments — defined only when the turn's
+// account map resolves everything to a single owner.
+const soleRoutedOwner = (browser: CodexBrowserContext | undefined): string | undefined => {
+    const owners = new Set(Object.values(browser?.accounts ?? {}));
+    return owners.size === 1 ? [...owners][0] : undefined;
+};
 
 // What one Codex turn's stream is normalized AGAINST: where the turn works, where its generated images land, and
 // the two things a question card needs — the signal that settles the card if the turn dies first, and the
@@ -427,14 +439,17 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             } else if (item.type === "mcp_tool_call") {
                 const name = `${item.server}.${item.tool}`;
                 if (event.type === "item.started") {
-                    const port = browser?.ports[item.server];
+                    // `web` names its own profile; the routed server's calls carry the account in arguments this
+                    // item does not echo, so they attach only when the turn holds a single profile anyway.
+                    const profile = item.server === ROUTED_BROWSER_SERVER ? soleRoutedOwner(browser) : item.server;
+                    const port = profile === undefined ? undefined : browser?.ports[profile];
                     const sessionId = capture.threadId ?? browser?.sessionId;
-                    if (port !== undefined && sessionId !== undefined && item.tool.startsWith("browser_")) {
+                    if (profile !== undefined && port !== undefined && sessionId !== undefined && item.tool.startsWith("browser_")) {
                         openBrowserSession({
                             sessionId,
-                            server: item.server,
+                            server: profile,
                             port,
-                            passkeyStore: browser?.passkeys[item.server],
+                            passkeyStore: browser?.passkeys[profile],
                             owner: browser?.owner,
                         });
                     }
@@ -631,6 +646,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                 : {
                       ports: request.browserPorts,
                       passkeys: request.browserPasskeys ?? {},
+                      accounts: request.browserAccounts ?? {},
                       ...(request.conversationId === undefined ? {} : { owner: request.conversationId }),
                   };
         // The run's one consumer of the daemon's steering queue (see steeringRelay). Absent when the turn was

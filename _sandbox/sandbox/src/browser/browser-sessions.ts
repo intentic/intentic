@@ -5,6 +5,7 @@ import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { resolveRequest } from "../agent/agent-requests.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { ROUTED_BROWSER_SERVER } from "./browser-tools.js";
 import { armPasskeys } from "./passkeys.js";
 
 /* THE AGENT'S BROWSER, AS A THING THE DAEMON CAN NAME.
@@ -112,11 +113,26 @@ const prune = (now: number): void => {
     }
 };
 
-// `mcp__web__browser_navigate` → `web`. The server segment is the tool prefix @playwright/mcp was mounted
-// under (browser-tools.ts), which is what says WHICH browser — the credential-free one or a logged-in profile.
+// `mcp__web__browser_navigate` → `web`. The server segment says a browser TOOL was called; which browser is a
+// second question, because the logged-in profiles all live behind the one `browser` server and there the
+// call's own `account` argument is the answer (browser-tools.ts, ownerOfBrowserCall below).
 export const browserServerOfTool = (tool: string): string | undefined => {
     const match = /^mcp__(.+)__browser_/.exec(tool);
     return match?.[1];
+};
+
+/* WHOSE browser one tool call drives — the same resolution the router enforces, done here for the observer.
+ * For the routed server the `account` argument resolves through the turn's account map to a profile owner;
+ * every other server (`web`, and the isolated ones tests mount) is its own answer, as it always was.
+ * Undefined when the routed call names nobody it may act as — the router is refusing that call anyway, so
+ * there is nothing to watch. */
+const ownerOfBrowserCall = (tool: string, toolInput: unknown, accounts: Record<string, string>): string | undefined => {
+    const server = browserServerOfTool(tool);
+    if (server !== ROUTED_BROWSER_SERVER) {
+        return server;
+    }
+    const account = (toolInput as { account?: unknown } | undefined)?.account;
+    return typeof account === "string" ? accounts[account] : undefined;
 };
 
 /* A page's own account of itself, for its tab and the session's label. Title first (that is what a tab says),
@@ -448,25 +464,28 @@ export const runningBrowserOwners = (): string[] => [
     ...new Set([...sessions.values()].flatMap((record) => (record.finishedAt === undefined && record.owner !== undefined ? [record.owner] : []))),
 ];
 
-/* The hooks that make the above happen. PreToolUse fires with the browser tool's name and the SDK session id —
- * everything needed to name the session and start watching — while the tool itself is still launching Chromium,
- * so the session appears on the rail at the START of the first navigation rather than after it. PostToolUse
- * stamps the clock, which is what keeps a long browsing turn reading as active between attaches.
+/* The hooks that make the above happen. PreToolUse fires with the browser tool's name, its input and the SDK
+ * session id — everything needed to name the session and start watching — while the tool itself is still
+ * launching Chromium, so the session appears on the rail at the START of the first navigation rather than
+ * after it. PostToolUse stamps the clock, which is what keeps a long browsing turn reading as active between
+ * attaches.
  *
- * `ports` is the per-turn map browser-tools.ts allocated: server name → the debugging port its Chromium was
- * told to listen on. A tool whose server isn't in it (there is no such call today) simply isn't watched.
- * `passkeys` is its sibling from the same allocation: the logged-in servers' passkey store paths, which is what
- * lets the observer arm the pages it watches. */
+ * `ports` is the per-turn map browser-tools.ts allocated: profile owner (or `web`) → the debugging port its
+ * Chromium was told to listen on. A call whose owner isn't in it simply isn't watched. `passkeys` is its
+ * sibling from the same allocation: the owners' passkey store paths, which is what lets the observer arm the
+ * pages it watches. `accounts` is the router's own account→owner map, because on the routed server the tool
+ * name no longer says whose browser — the call's `account` argument does. */
 export const browserSessionHooks = (
     ports: Record<string, number>,
     passkeys: Record<string, string> = {},
+    accounts: Record<string, string> = {},
     // The conversation this turn belongs to — rides every record the hook opens, so the reaper can close a
     // stopped conversation's browsers by owner (platform/reaper.ts).
     owner?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const matcher = "mcp__.+__browser_.+";
-    const touch = async (tool: string, sessionId: string): Promise<void> => {
-        const server = browserServerOfTool(tool);
+    const touch = async (tool: string, toolInput: unknown, sessionId: string): Promise<void> => {
+        const server = ownerOfBrowserCall(tool, toolInput, accounts);
         const port = server === undefined ? undefined : ports[server];
         if (server === undefined || port === undefined) {
             return;
@@ -480,7 +499,7 @@ export const browserSessionHooks = (
                 hooks: [
                     async (input) => {
                         if (input.hook_event_name === "PreToolUse") {
-                            await touch(input.tool_name, input.session_id);
+                            await touch(input.tool_name, input.tool_input, input.session_id);
                         }
                         return {};
                     },
@@ -493,7 +512,7 @@ export const browserSessionHooks = (
                 hooks: [
                     async (input) => {
                         if (input.hook_event_name === "PostToolUse") {
-                            await touch(input.tool_name, input.session_id);
+                            await touch(input.tool_name, input.tool_input, input.session_id);
                         }
                         return {};
                     },

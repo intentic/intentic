@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, mkdtempSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -15,27 +14,34 @@ import { ensureXvfb } from "./display.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
-// The agent's browser tools come from Microsoft's official @playwright/mcp, one stdio MCP server per turn per
-// kind — though for the account kind what the harness spawns is a thin bridge, and the real server starts only
-// when a tool call actually arrives (see THE LAZY PATH below). We don't reimplement browser tools — this is
-// pure wiring. There are two kinds, and they exist for different reasons:
+// The agent's browser tools come from Microsoft's official @playwright/mcp — we don't reimplement browser
+// tools, this is pure wiring. There are two servers, and they exist for different reasons:
 //
 //   - `web` — ALWAYS available, credential-free, profile in memory (`--isolated`). Reading a page is an
 //     ordinary part of coding work: check a docs page, screenshot your own dev server, look at the site you
 //     just changed. This used to require a logged-in browser capability, which meant an agent asked to
 //     "look at this URL" had no browser at all — and one duly spent a quarter of its turn downloading
 //     114 MiB of Chromium through `npx playwright install` to rebuild what was already sitting in the image.
-//   - one per browser CAPABILITY (account) — bound to that account's PERSISTED profile, headed on Xvfb with
-//     the stealth patch. Everything here (the persistence, the anti-fingerprinting) is in service of acting
-//     as the owner on a site — including a site the account has NOT signed into yet, because performing that
-//     sign-in (or sign-up) is now the agent's job too; the accounts tools mark it connected when it lands.
+//   - `browser` — ONE server for every signed-in account and identity the turn holds, whose tools each take
+//     an `account` parameter (bin/browser-router.mjs). Behind it, one @playwright/mcp backend per PROFILE
+//     OWNER — the identity when an account was born from one, the entry itself otherwise — bound to that
+//     owner's PERSISTED profile, headed on Xvfb with the stealth patch, spawned only when a call names it.
+//     Everything here (the persistence, the anti-fingerprinting) is in service of acting as the owner on a
+//     site — including a site the account has NOT signed into yet, because performing that sign-in (or
+//     sign-up) is the agent's job too; the accounts tools mark it connected when it lands. One server rather
+//     than one per account because the prompt pays per SERVER: N accounts used to pin N copies of the same
+//     ~21 tool schemas into every turn.
 //
 // The server name becomes the tool prefix, so these surface as `mcp__web__browser_*` and
-// `mcp__<capability-id>__browser_*`.
+// `mcp__browser__browser_*`.
+
+// The one server name every signed-in browser stands behind — the router's mount point, and the marker the
+// observer keys on to read a call's `account` argument instead of the prefix (browser-sessions.ts).
+export const ROUTED_BROWSER_SERVER = "browser";
 
 const nodeRequire = createRequire(import.meta.url);
 let mcpCli: string | undefined;
-// The schema cache's key (bin/browser-mux.mjs): the tool list is a property of the @playwright/mcp version,
+// The schema cache's key (bin/browser-router.mjs): the tool list is a property of the @playwright/mcp version,
 // so a cached answer outlives every turn and dies with an upgrade. Filled beside the CLI resolution below.
 let mcpVersion = "unknown";
 
@@ -266,7 +272,7 @@ export const isolatedBrowserSpec = (cli: string, executablePath: string, outputD
  * reads and moves on from. */
 const BROWSER_CALL_TIMEOUT_MS = 120_000;
 
-/* THE LAZY PATH for the logged-in browsers — why a turn no longer starts one process per connected account.
+/* THE LAZY PATH for the logged-in browsers — why a turn starts no process per connected account.
  *
  * The harness connects to every configured stdio server at startup and runs the handshake (initialize +
  * tools/list) whether or not the turn ever uses it — verified against the real binary: DEFERRED servers are
@@ -275,30 +281,13 @@ const BROWSER_CALL_TIMEOUT_MS = 120_000;
  * times every concurrent turn — the sandbox's single largest memory load, nearly all of it for browsers nobody
  * would touch that turn.
  *
- * So the per-account server is now a ~1 MB socat bridge into ONE per-turn mux (bin/browser-mux.mjs, a daemon
- * child): the mux answers the startup questions from a version-keyed schema cache, and the account's REAL
- * server — this very spec — is spawned by the mux only when a tool call actually arrives for it. The specs
- * below therefore describe what the mux launches, not what the harness does.
- *
- * The mux is stamped with the conversation like every other turn workload, so the reaper's ordinary rules own
- * it; each backend additionally dies the moment its bridge closes — i.e. with its turn. Everything degrades to
- * the eager spec (fail-open): no socat in the image, no mux beside this build, or a turn with no conversation
- * behind it (the bench), and the harness simply spawns the account servers directly as it always did. */
-const MUX_SCRIPT = fileURLToPath(new URL("../../bin/browser-mux.mjs", import.meta.url));
-const SOCAT_PATHS = ["/usr/bin/socat", "/usr/local/bin/socat"];
-const muxAvailable = (): string | undefined => (existsSync(MUX_SCRIPT) ? SOCAT_PATHS.find((path) => existsSync(path)) : undefined);
-
-// The bridge the harness actually spawns for one account: a byte pipe into the mux's per-account socket. Same
-// per-call timeout and the same alwaysLoad as the real server, because from the SDK's side this IS the server —
-// the tools stay in the prompt exactly as before; alwaysLoad's startup handshake now lands on the mux, which
-// answers it without a browser process anywhere.
-const bridgeSpec = (socat: string, socket: string): McpServerConfig => ({
-    type: "stdio",
-    command: socat,
-    args: ["STDIO", `UNIX-CONNECT:${socket}`],
-    timeout: BROWSER_CALL_TIMEOUT_MS,
-    alwaysLoad: true,
-});
+ * So the harness spawns ONE process, the router (bin/browser-router.mjs): it answers the startup questions
+ * from a version-keyed schema cache, and an owner's REAL server — this very spec — is spawned by the router
+ * only when a tool call actually names one of that owner's accounts. The specs below therefore describe what
+ * the router launches, not what the harness does. Backends are the router's children and the router is the
+ * harness's, so the turn ending is the whole teardown; the workload stamp on the router's environment lets
+ * the reaper claim anything a hard-killed harness left behind. */
+const ROUTER_SCRIPT = fileURLToPath(new URL("../../bin/browser-router.mjs", import.meta.url));
 
 // What both server kinds need before either can run.
 interface BrowserRuntime {
@@ -321,31 +310,37 @@ const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
     }
 };
 
-// What one turn gets: the MCP servers themselves, the debugging port each one's Chromium was told to open, and
-// each logged-in server's passkey store. The ports travel with the servers because they are the same decision —
-// a browser the agent can drive and a browser the owner can watch have to be the same browser
-// (browser-sessions.ts holds the other end); the passkey stores ride the same map because the observer that
-// watches those pages is also what plugs the account's software security key into them (passkeys.ts).
+// What one turn gets: the MCP servers themselves, the account→owner map behind the `browser` server, the
+// debugging port each owner's Chromium was told to open, and each owner's passkey store. The ports travel with
+// the servers because they are the same decision — a browser the agent can drive and a browser the owner can
+// watch have to be the same browser (browser-sessions.ts holds the other end); the passkey stores ride the
+// same map because the observer that watches those pages is also what plugs the account's software security
+// key into them (passkeys.ts). `accounts` is the same map the router enforces with, exported so the session
+// hooks and the secrets tool resolve a call's `account` argument to a profile exactly the way the router does.
 export interface BrowserTurnTools {
     readonly servers: Record<string, McpServerConfig>;
+    // Account or identity id → the profile owner whose browser it lives in. Owners map to themselves.
+    readonly accounts: Record<string, string>;
     readonly ports: Record<string, number>;
-    // Server id → that account's passkey store path. Absent for `web` — the credential-free browser holds no identity.
+    // Owner → that profile's passkey store path. Absent for `web` — the credential-free browser holds no identity.
     readonly passkeys: Record<string, string>;
 }
 
-// Every browser server for this turn. A capability's own server is added whether or not the account has signed
-// in yet — a PENDING account's server runs over the very same persisted profile the guided login would write,
-// which is what lets the agent perform the sign-in (or sign-up) itself and leave the account exactly as
-// connected as a hand login would have. The one gate left is the profile lock: never while the owner's own
-// window holds it (Chromium locks the --user-data-dir). A capability may take the `web` id, in which case its
-// persisted profile deliberately wins.
+const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {} };
+
+// The turn's browser servers. An account is included whether or not it has signed in yet — a PENDING account's
+// backend runs over the very same persisted profile the guided login would write, which is what lets the agent
+// perform the sign-in (or sign-up) itself and leave the account exactly as connected as a hand login would
+// have. The one gate left is the profile lock: never while the owner's own window holds it (Chromium locks the
+// --user-data-dir).
 //
-// One server PER PROFILE OWNER, keyed by profileOwner's answer — the identity when an account was born from
-// one, the entry itself otherwise. Two standalone accounts of one site (reddit-work, reddit-personal) are two
-// servers over two separate profiles, both drivable in the same turn; an identity and every account born from
-// it are ONE server over the shared profile, because they are one browser and Chromium locks the
-// --user-data-dir. The dedup is also what lets a turn granted only `reddit-work` (not its identity) still act:
-// the account brings its shared browser up by itself, keyed by the identity's id.
+// One backend PER PROFILE OWNER behind the one `browser` server, keyed by profileOwner's answer — the identity
+// when an account was born from one, the entry itself otherwise. Two standalone accounts of one site
+// (reddit-work, reddit-personal) are two backends over two separate profiles, both drivable in the same turn;
+// an identity and every account born from it are ONE backend over the shared profile, because they are one
+// browser and Chromium locks the --user-data-dir. The accounts map is also what lets a turn granted only
+// `reddit-work` (not its identity) still act: the account names its shared browser by itself, keyed by the
+// identity's id.
 //
 // `anonymous` is the credential-free browser — the persona shelf of the same name, and the reason this is a
 // parameter rather than the unconditional server it used to be. It is asked separately from the accounts above
@@ -355,13 +350,13 @@ export const browserServersOf = async (
     capabilities: readonly Capability[],
     root: string,
     anonymous = true,
-    // The conversation the turn belongs to — the mux's workload stamp. Absent (the bench) keeps the eager path:
-    // a lazy fleet nothing could reap is worse than the spawn it saves.
+    // The conversation the turn belongs to — the router's workload stamp, so the reaper can claim anything a
+    // hard-killed harness left behind. Absent (the bench) the router simply runs unstamped.
     conversationId?: string,
 ): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
-        return { servers: {}, ports: {}, passkeys: {} };
+        return NO_BROWSER_TOOLS;
     }
     await sweepConfigs(Date.now());
     const ports: Record<string, number> = {};
@@ -372,25 +367,33 @@ export const browserServersOf = async (
         ports["web"] = webPort;
         servers["web"] = isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root), await writeBrowserConfig("web", webPort));
     }
-    const owners = new Set(
-        capabilities
-            .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
-            .map((capability) => profileOwner(capability))
-            .filter((owner) => !isProfileOpen(owner)),
-    );
+    const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
+    const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
     if (owners.size === 0) {
-        return { servers, ports, passkeys };
+        return { ...NO_BROWSER_TOOLS, servers, ports };
+    }
+    /* The router's manifest: every granted account or identity id resolves to the profile owner whose browser
+     * it lives in — owners map to themselves, so an identity id names its own browser and a standalone account
+     * its own. An id whose owner's profile is held open by the user's own login window is left out with it: the
+     * router's refusal then says so instead of a backend fighting Chromium for the lock. */
+    const accounts: Record<string, string> = {};
+    for (const capability of granted) {
+        const owner = profileOwner(capability);
+        if (owners.has(owner)) {
+            accounts[capability.id] = owner;
+            accounts[owner] = owner;
+        }
     }
     // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
     // must not start a virtual display just to have a browser available.
     const display = await ensureXvfb();
     const stealthPath = await ensureStealthScript(root);
-    const specs: Record<string, McpServerConfig> = {};
+    const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
     for (const owner of owners) {
         const port = await freePort();
         ports[owner] = port;
         passkeys[owner] = passkeyPath(root, owner);
-        specs[owner] = browserServerSpec(
+        const spec = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
             sessionDir(root, owner),
@@ -398,34 +401,12 @@ export const browserServersOf = async (
             display,
             await writeBrowserConfig(owner, port),
         );
-    }
-    const socat = muxAvailable();
-    const lazy =
-        socat !== undefined && conversationId !== undefined ? await startBrowserMux(specs, { display, conversationId, socat, runtime }) : undefined;
-    return { servers: { ...servers, ...(lazy ?? specs) }, ports, passkeys };
-};
-
-/* Launch the per-turn mux and answer with the bridge specs — or undefined when it could not come up, which
- * hands the caller back the eager specs (fail-open, the tmux-run posture). The manifest carries argv and the
- * DISPLAY delta only, never the environment: the mux is a daemon child and its backends inherit the rest —
- * the conversation stamp included — at spawn time. */
-const startBrowserMux = async (
-    specs: Readonly<Record<string, McpServerConfig>>,
-    context: { readonly display: string; readonly conversationId: string; readonly socat: string; readonly runtime: BrowserRuntime },
-): Promise<Record<string, McpServerConfig> | undefined> => {
-    const nonce = randomBytes(4).toString("hex");
-    const owners: Record<string, { socket: string; command: string; args: readonly string[]; env: Record<string, string> }> = {};
-    const bridges: Record<string, McpServerConfig> = {};
-    let index = 0;
-    for (const [owner, spec] of Object.entries(specs)) {
         if (spec.type !== "stdio") {
-            return undefined;
+            return { ...NO_BROWSER_TOOLS, servers, ports };
         }
-        // Socket paths must clear the 108-char sun_path ceiling, so the owner rides in the manifest, not the name.
-        const socket = join(configDir, `s-${nonce}-${index}.sock`);
-        index += 1;
-        owners[owner] = { socket, command: spec.command, args: spec.args ?? [], env: { DISPLAY: context.display } };
-        bridges[owner] = bridgeSpec(context.socat, socket);
+        // Argv and the DISPLAY delta only, never the whole environment: the backends inherit the rest — the
+        // conversation stamp included — from the router at spawn time.
+        backends[owner] = { command: spec.command, args: spec.args ?? [], env: { DISPLAY: display } };
     }
     const manifest = {
         schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
@@ -434,46 +415,26 @@ const startBrowserMux = async (
         // never the tool surface.
         probe: {
             command: process.execPath,
-            args: [
-                context.runtime.cli,
-                "--browser",
-                "chromium",
-                "--executable-path",
-                context.runtime.executablePath,
-                "--no-sandbox",
-                "--isolated",
-                "--headless",
-            ],
+            args: [runtime.cli, "--browser", "chromium", "--executable-path", runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
         },
-        owners,
+        accounts,
+        owners: backends,
     };
-    const manifestPath = join(configDir, `mux-${nonce}.json`);
-    try {
-        await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
-        const mux = spawn(process.execPath, [MUX_SCRIPT, manifestPath], {
-            env: { ...process.env, ...workloadStamp(context.conversationId) },
-            stdio: ["ignore", "ignore", "ignore"],
-        });
-        mux.on("error", () => undefined);
-        mux.unref();
-        /* The harness dials the bridges as soon as its CLI boots, and a socat that finds no listener exits —
-         * the harness would file that account's server as failed for the whole turn. The listeners appear as
-         * socket FILES in one synchronous pass of the mux's startup, so their presence is awaited here, briefly:
-         * a mux that produced no sockets within the window has plainly died, and the eager specs take over. */
-        const last = Object.values(owners).at(-1)?.socket;
-        if (last !== undefined) {
-            for (let waited = 0; ; waited += 50) {
-                if (existsSync(last)) {
-                    break;
-                }
-                if (waited >= 3_000 || mux.exitCode !== null) {
-                    return undefined;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-        }
-        return bridges;
-    } catch {
-        return undefined;
-    }
+    const manifestPath = join(configDir, `router-${randomBytes(4).toString("hex")}.json`);
+    await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
+    /* The one server the harness spawns for every signed-in browser: the router, whose tools are pinned into
+     * the prompt ONCE (alwaysLoad) however many accounts stand behind them — a model that does not know it can
+     * act as its accounts never will. Same per-call ceiling as the backends it launches. */
+    servers[ROUTED_BROWSER_SERVER] = {
+        type: "stdio",
+        command: process.execPath,
+        args: [ROUTER_SCRIPT, manifestPath],
+        env: {
+            ...(Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== undefined)) as Record<string, string>),
+            ...(conversationId === undefined ? {} : workloadStamp(conversationId)),
+        },
+        timeout: BROWSER_CALL_TIMEOUT_MS,
+        alwaysLoad: true,
+    };
+    return { servers, accounts, ports, passkeys };
 };

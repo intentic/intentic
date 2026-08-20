@@ -43,8 +43,9 @@ test("files a carded site on its own card, with the account's purpose and the da
     expect(config.openedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     // The card's own URLs are pinned, so the entry must not carry a second opinion about them.
     expect(config["homeUrl"]).toBeUndefined();
-    // The account is real the moment it is filed: its skill is what gives the agent the site's playbook.
-    expect(written.get(loadedSkillFile(deps.workspace.root, "reddit-scout"))).toContain("reddit-scout");
+    // The account is real the moment it is filed: a roster line on the SITE's skill is what gives the agent
+    // the playbook — one skill per site, never one per account.
+    expect(written.get(loadedSkillFile(deps.workspace.root, "reddit"))).toContain("- `reddit-scout`");
 });
 
 /* THE CASE THAT USED TO BE REFUSED. An uncarded site — the four Product Hunt accounts this replaced were exactly

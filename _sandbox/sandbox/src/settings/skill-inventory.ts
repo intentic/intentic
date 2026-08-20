@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Capability, SkillSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { enabledExtensions, type InstalledExtension } from "../extensions/installed-extensions.js";
+import { accountGroupOf } from "../capabilities/account-skills.js";
 import { pluginDir } from "../capabilities/plugin-dirs.js";
 import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
 import { loadedSkillsRoot } from "./loaded-skills.js";
@@ -69,11 +70,16 @@ const FEATURE_SKILLS: Record<string, string> = {
     iq: "Code search",
 };
 
-// A capability whose id is a loaded skill's directory name, or — for the connections that share ONE skill across
-// every instance (ssh, vpn) — one whose KIND is. Two matches rather than a hardcoded pair of names, so a kind
-// that starts writing a shared cheatsheet is attributed without an edit here.
+/* A capability whose id is a loaded skill's directory name, or — for the connections that share ONE skill
+ * across every instance — one the shared skill is derived FROM. Three shared shapes: a kind's own cheatsheet
+ * (ssh, vpn — the skill is named after the KIND), the `identities` roster (every identity), and a site
+ * group's skill (every browser account whose group resolves to the name — account-skills.ts). Matched rather
+ * than hardcoded, so the row's owner column names a real entry whichever way the skill came to exist. */
 const capabilityFor = (capabilities: readonly Capability[], name: string): Capability | undefined =>
-    capabilities.find((capability) => capability.id === name) ?? capabilities.find((capability) => capability.kind === name);
+    capabilities.find((capability) => capability.id === name) ??
+    capabilities.find((capability) => capability.kind === name) ??
+    (name === "identities" ? capabilities.find((capability) => capability.kind === "identity") : undefined) ??
+    capabilities.find((capability) => capability.kind === "browser" && accountGroupOf(capability.config).name === name);
 
 /* WHERE A PLUGIN'S AND AN EXTENSION'S SKILLS SIT — the same two derivations the turn's plugin list makes
  * (plugin-dirs.ts, extensionAgentDirsOf), pointed one level deeper at the `skills` folder inside. Shared with the

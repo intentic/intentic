@@ -43,11 +43,12 @@ const DISPLAY_NAMES: Record<string, string> = {
 
 /* THE BROWSER TOOLS, SPELLED AS SOMETHING A PERSON READS.
  *
- * @playwright/mcp's tools arrive as `mcp__web__browser_navigate` / `mcp__reddit__browser_click`, and a card
+ * @playwright/mcp's tools arrive as `mcp__web__browser_navigate` / `mcp__browser__browser_click`, and a card
  * headed with that string tells the user nothing they came for. Which SERVER it was is the one part that
- * doesn't earn its place: the credential-free browser and a logged-in profile do the same things, and where a
- * platform matters the URL on the card already names it. What is left — "Browser navigate", "Browser click" —
- * groups on sight in a scrolling transcript and says exactly what happened.
+ * doesn't earn its place: the credential-free browser and the routed logged-in one do the same things, and
+ * where an account matters the call's own `account` argument on the card already names it. What is left —
+ * "Browser navigate", "Browser click" — groups on sight in a scrolling transcript and says exactly what
+ * happened.
  *
  * `take_screenshot` is the one verb that reads badly transliterated ("Browser take screenshot"), so it loses
  * its verb; every other name is the tool's own, underscores opened out. */

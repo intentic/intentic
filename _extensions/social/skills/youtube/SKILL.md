@@ -8,6 +8,8 @@ description: Watch/read, comment, reply, like, and subscribe (join channels) on 
 Home: https://www.youtube.com  ·  a video: https://www.youtube.com/watch?v=<id>  ·  a channel:
 https://www.youtube.com/@<handle>  ·  your subscriptions: https://www.youtube.com/feed/subscriptions
 
+${accounts}
+
 - Read comments / video info: open the video, `browser_snapshot` (scroll to load comments with `browser_wait_for`).
 - Comment: open the video, click "Add a comment", `browser_type`, then Comment.
 - Reply: expand the target comment, click Reply, type, submit.

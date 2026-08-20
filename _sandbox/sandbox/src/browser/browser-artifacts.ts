@@ -39,7 +39,7 @@ const rootOf = (outputDir: string): string => resolve(outputDir, ...BROWSER_OUTP
  * locate the file — while another session, same tools, same prompt, never checked and left the mess behind.
  * The layer that dictates the path is the layer that has to dictate it for named files too. */
 
-// Both browser kinds: the always-on `web` server and a logged-in capability's own (`mcp__reddit__…`).
+// Both browser kinds: the always-on `web` server and the routed logged-in one (`mcp__browser__…`).
 // Capability ids may hold any character an id allows, so the middle segment stays unconstrained.
 const SCREENSHOT_TOOL = "mcp__.+__browser_take_screenshot";
 

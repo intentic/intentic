@@ -185,14 +185,17 @@ export interface AgentRequest {
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
     readonly browserOutputDir?: string;
-    // Each browser MCP server's CDP debugging port (server name → port), so the first browser tool call can
-    // register a watchable session for the Chromium that call is launching (browser/browser-sessions.ts).
+    // Each browser profile owner's CDP debugging port (owner or `web` → port), so the first browser tool call
+    // can register a watchable session for the Chromium that call is launching (browser/browser-sessions.ts).
     // Absent ⇒ the turn has no browser tools at all, and nothing is watched.
     readonly browserPorts?: Record<string, number>;
-    // Each logged-in browser server's passkey store path (server name → file), so the session observer arms
-    // every page with the platform's software security key (browser/passkeys.ts). Absent for turns whose
-    // browsers hold no identity.
+    // Each logged-in profile owner's passkey store path (owner → file), so the session observer arms every
+    // page with the platform's software security key (browser/passkeys.ts). Absent for turns whose browsers
+    // hold no identity.
     readonly browserPasskeys?: Record<string, string>;
+    // The routed browser server's account→owner map (browser/browser-tools.ts), so the observer resolves a
+    // call's `account` argument to the profile it drives — the tool prefix no longer says.
+    readonly browserAccounts?: Record<string, string>;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools,
     // and by the persona's own shelves for every power it switched off (personas/personas.ts).
@@ -623,7 +626,7 @@ const baseOptions = (
             // is where the watchable session is registered. The hook only names what already exists — the browser
             // is the MCP's to launch and to kill (browser/browser-sessions.ts).
             request.browserPorts !== undefined
-                ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.conversationId)
+                ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.browserAccounts ?? {}, request.conversationId)
                 : {},
             // Subagents, the same way: the ids a child's transcript is READ with are only ever named to a hook, so
             // this pair is what makes the Subagents area's door open on anything (agent/subagents.ts). Pure

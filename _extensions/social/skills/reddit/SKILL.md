@@ -8,6 +8,8 @@ description: Read, comment, reply, vote, post, and join subreddits on Reddit as 
 Feed: https://www.reddit.com  ·  subreddit: https://www.reddit.com/r/<name>  ·  inbox:
 https://www.reddit.com/message/inbox  ·  submit: https://www.reddit.com/submit
 
+${accounts}
+
 - Read a subreddit or thread: navigate, then `browser_snapshot` to read posts and comments.
 - Reply to the THREAD: open the post, use the reply box directly under the post itself, `browser_type`, submit.
 - Reply to ONE COMMENT: open that comment's own permalink — `…/comments/<post>/<slug>/<comment>/` — which loads

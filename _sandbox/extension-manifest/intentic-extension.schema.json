@@ -749,7 +749,7 @@
                                     "skill": {
                                         "type": "string",
                                         "minLength": 1,
-                                        "description": "Checkout-relative SKILL.md teaching the agent this site's actions."
+                                        "description": "Checkout-relative SKILL.md teaching the agent this site's actions — rendered once per site, all its connected accounts on one roster (`${accounts}`), the core tool note at `${tools}`."
                                     }
                                 },
                                 "required": [

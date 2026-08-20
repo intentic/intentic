@@ -26,9 +26,10 @@ export const typeableSecret = (registry: readonly NamedSecret[], name: string): 
 
 export interface SecretsToolsDeps {
     readonly secrets: SecretAccess;
-    // The browser server names this turn holds — `web` and/or granted account ids. The tool types only into a
-    // browser the turn could already drive, which is what scopes WHERE a value can land.
-    readonly browsers: readonly string[];
+    // The browsers this turn holds, as the same account→profile-owner map the router enforces with (plus
+    // `web`→`web` when the credential-free browser is up). The tool types only into a browser the turn could
+    // already drive, which is what scopes WHERE a value can land.
+    readonly accounts: Record<string, string>;
 }
 
 export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithInstance =>
@@ -43,7 +44,8 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                     name: z.string().describe("The stored secret's name, e.g. GRAFANA_ADMIN_PASSWORD"),
                 },
                 async ({ browser, name }) => {
-                    if (!deps.browsers.includes(browser)) {
+                    const owner = deps.accounts[browser];
+                    if (owner === undefined) {
                         return fail(`no browser "${browser}" this turn drives — it is "web" or one of the account ids whose tools you hold`);
                     }
                     let entry;
@@ -58,9 +60,9 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                                 "secrets (the Secrets view's own entries) can be typed; ask the owner to add it there if it does not exist yet",
                         );
                     }
-                    const page = browserAccountPage(browser);
+                    const page = browserAccountPage(owner);
                     if (page === undefined) {
-                        return fail(`"${browser}" has no live page — open the site with its browser tools first`);
+                        return fail(`"${browser}" has no live page — open the site with the browser tools first`);
                     }
                     if (!(await focusedEditable(page))) {
                         return fail("no text field is focused on the page — browser_click the field first, then call this again");

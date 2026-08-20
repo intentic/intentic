@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
@@ -130,12 +130,13 @@ test("a browser is available with no capabilities and no login at all", async ()
  * is what lets the agent perform the sign-in (or sign-up) itself and leave the account exactly as connected as
  * a hand login would have; the connected marker gates nothing here any more, only the profile lock does. Needs
  * the virtual display like every persisted-profile server, so guarded like the two-accounts test below. */
-test("a browser capability's server mounts before anyone has logged in", async () => {
+test("a browser capability mounts the ONE routed server before anyone has logged in", async () => {
     if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
         return;
     }
-    const { servers, passkeys } = await browserServersOf([reddit], tempRoot());
-    expect(Object.keys(servers).toSorted()).toEqual(["reddit", "web"]);
+    const { servers, accounts, passkeys } = await browserServersOf([reddit], tempRoot());
+    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    expect(accounts["reddit"]).toBe("reddit");
     // The passkey store is armed from the first page: a sign-UP is exactly when the account enrolls its key.
     expect(passkeys["reddit"]).toBeDefined();
 });
@@ -152,14 +153,14 @@ test("a login in progress suppresses that account's server (the profile is locke
     releaseProfileLock("reddit");
 });
 
-/* TWO ACCOUNTS OF ONE SITE ARE TWO BROWSERS, in the same turn. Each gets its own tool prefix (which it already
- * did) AND its own --user-data-dir (which is the fix): pointed at one shared directory they would not merely be
- * confusable, they would be unusable, because Chromium takes an exclusive lock on a profile — the first server
- * to launch would work and the second would fail on its first call.
+/* TWO ACCOUNTS OF ONE SITE ARE TWO BROWSERS behind the ONE routed server, in the same turn. Each backend in
+ * the router's manifest gets its own --user-data-dir (which is the fix): pointed at one shared directory they
+ * would not merely be confusable, they would be unusable, because Chromium takes an exclusive lock on a
+ * profile — the first backend to launch would work and the second would fail on its first call.
  *
  * The logged-in path needs the virtual display, which the sandbox image has and a dev host may not; guarded like
  * the Chromium probe above rather than left to throw somewhere it was never going to run. */
-test("accounts of the same site each get their own browser on their own profile", async () => {
+test("accounts of the same site each get their own backend on their own profile, behind one server", async () => {
     if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
         return;
     }
@@ -169,17 +170,42 @@ test("accounts of the same site each get their own browser on their own profile"
     await markConnected(root, "reddit-work");
     await markConnected(root, "reddit-personal");
 
-    const { servers, passkeys } = await browserServersOf([work, personal], root);
+    const { servers, accounts, passkeys } = await browserServersOf([work, personal], root);
 
-    expect(Object.keys(servers).toSorted()).toEqual(["reddit-personal", "reddit-work", "web"]);
+    // The prompt pays for ONE server however many accounts stand behind it.
+    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    expect(accounts).toEqual({ "reddit-work": "reddit-work", "reddit-personal": "reddit-personal" });
+    const routerArgs = (servers["browser"] as { args: string[] }).args;
+    const manifest = JSON.parse(readFileSync(routerArgs[1] as string, "utf8")) as {
+        accounts: Record<string, string>;
+        owners: Record<string, { args: string[] }>;
+    };
+    expect(manifest.accounts).toEqual(accounts);
     const dirOf = (id: string): string | undefined => {
-        const args = (servers[id] as { args: string[] }).args;
+        const args = manifest.owners[id]?.args ?? [];
         return args[args.indexOf("--user-data-dir") + 1];
     };
     expect(dirOf("reddit-work")).toBe(join(root, ".intentic", "local", "browser", "reddit-work"));
     expect(dirOf("reddit-personal")).toBe(join(root, ".intentic", "local", "browser", "reddit-personal"));
     // Their software security keys are separate too — one account's second factor is not the other's.
     expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
+});
+
+// An identity and an account born from it are ONE backend — the shared profile — addressable by either id.
+test("an identity-born account routes to its identity's browser", async () => {
+    if (!(await chromiumInstalled()) || !existsSync("/usr/bin/Xvfb")) {
+        return;
+    }
+    const root = tempRoot();
+    const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
+    const born: Capability = { id: "reddit-main", kind: "browser", config: { platform: "reddit", identity: "main" } };
+
+    const { servers, accounts, ports } = await browserServersOf([main, born], root);
+    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    expect(accounts).toEqual({ main: "main", "reddit-main": "main" });
+    // One profile owner, one debugging port — the observer's map is per owner, not per account.
+    expect(ports["main"]).toBeDefined();
+    expect(ports["reddit-main"]).toBeUndefined();
 });
 
 // Without the binary there is nothing to drive, and executablePath() alone never says so.
@@ -189,5 +215,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, ports: {}, passkeys: {} });
+    expect(await browserServersOf([reddit], root)).toEqual({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
 });

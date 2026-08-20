@@ -1,16 +1,17 @@
 import { existsSync, readdirSync } from "node:fs";
-import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
-import { browserToolsNote } from "../../browser/browser-skill.js";
+import type { BrowserConfig } from "@intentic/sandbox-contract";
 import { clearMarker, clearSession, hasSession, moveMarker, moveSession } from "../../browser/session-store.js";
 import { packFragment } from "../../environment/packs.js";
-import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
+import { loadedSkillFile } from "../../settings/loaded-skills.js";
+import { accountGroupOf, accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
-import { browserUrls, contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
+import { browserUrls, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
 // A browser-automation connector: give the AGENT a real, logged-in browser for one platform whose API can't
 // cover "all the actions". The PLATFORM is data in an installed extension's `contributes.capabilities` (its card,
-// its login URL, its cheatsheet); this handler is the generic plumbing over it. `apply` renders the platform's
-// SKILL.md into .agents/skills/<id> (loaded-skills.ts projects it to every runtime) and its `fragment` is the
+// its login URL, its cheatsheet); this handler is the generic plumbing over it. `apply` converges the platform's
+// SKILL.md — rendered ONCE per site group, this account a roster line on it (capabilities/account-skills.ts;
+// loaded-skills.ts projects it to every runtime) — and its `fragment` is the
 // browser feature pack — Chromium + Xvfb as one unit (packs/browser.Dockerfile), nothing when the running base
 // image already bakes it (the standard image does; a core image rides it through an owner rebuild).
 // The login lands in a Chromium profile under .intentic/local/browser/<id> by either of two hands: the owner's own,
@@ -75,7 +76,6 @@ export const browserHandler: CapabilityHandler = {
     rename: {
         carry: async (ctx, from, to, config) => {
             await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
-            await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
     apply: async function* (ctx, id, config) {
@@ -86,8 +86,8 @@ export const browserHandler: CapabilityHandler = {
         }
         /* WHOSE BROWSER THIS ACCOUNT LIVES IN, resolved at add-time for the same reason the URLs are: a card
          * naming an identity that isn't there would otherwise surface later as browser tools over an empty
-         * profile nobody signed in. The identity's email is baked into the skill so the agent knows which
-         * address the signup forms get — a fact the platform pack cannot know. */
+         * profile nobody signed in. The identity's email lands on the skill's roster line so the agent knows
+         * which address the signup forms get — a fact the platform pack cannot know. */
         const born = identity === undefined ? undefined : await ctx.capabilities.get(identity);
         if (identity !== undefined && born?.kind !== "identity") {
             throw new Error(`no identity "${identity}" — add the identity first, or leave the field empty for a standalone account`);
@@ -104,12 +104,12 @@ export const browserHandler: CapabilityHandler = {
         if (site === undefined) {
             throw new Error(`"${urls.homeUrl}" is not a web address — include https:// and the site's host`);
         }
-        const note = browserToolsNote(born === undefined ? undefined : { id: born.id, email: (born.config as IdentityConfig).email });
-        const skill = await contributedSkill(contribution, id, note, config as Record<string, string>);
-        if (skill === undefined) {
+        if (!("skill" in contribution.spec)) {
             throw new Error(`the extension declaring "${platform}" has no readable skill file — reinstall it`);
         }
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
+        // The route upserts AFTER apply, so this entry rides in as the delta. The converge failing to render
+        // this group's skill afterwards is the same rotted-install fact the spec check above fronts.
+        await convergeAccountSkills(ctx, { upsert: { id, kind: "browser", config: config as BrowserConfig } });
         yield {
             kind: "log",
             message:
@@ -121,8 +121,9 @@ export const browserHandler: CapabilityHandler = {
     // Two distinct pending states. The web UI (Capabilities.vue) routes the rebuild one to the Environment card
     // and the login one to the guided-login window — it distinguishes them by the word "rebuild" in the detail,
     // so keep that word in the rebuild detail (and out of the login detail).
-    status: async (ctx, id) => {
-        if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, id))) === undefined) {
+    status: async (ctx, id, config) => {
+        const group = accountGroupOf(config as BrowserConfig);
+        if (!accountSkillNames(await ctx.files.read(loadedSkillFile(ctx.workspace.root, group.name)), id)) {
             return { state: "inactive" };
         }
         if (!browserPackInstalled()) {
@@ -134,10 +135,11 @@ export const browserHandler: CapabilityHandler = {
         return { state: "active" };
     },
     // A standalone account's removal takes its whole profile with it; an identity-born account's takes only its
-    // own marker and skill — the shared browser (and every sibling signed in beside it) belongs to the identity
-    // and outlives any one account.
+    // own marker and roster line — the shared browser (and every sibling signed in beside it) belongs to the
+    // identity and outlives any one account.
     remove: async (ctx, id, config) => {
-        await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
+        // The route deletes the entry AFTER this hook, so the converge is told to leave it out.
+        await convergeAccountSkills(ctx, { omit: id });
         if ((config as BrowserConfig).identity === undefined) {
             await clearSession(ctx.workspace.root, id);
         } else {

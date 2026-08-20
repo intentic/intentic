@@ -267,7 +267,7 @@ export const accountsServer =
                         const mailbox = mailboxId === undefined || mailboxId === "" ? undefined : mailboxOf(await deps.capabilities.get(mailboxId));
                         if (mailbox === undefined) {
                             return fail(
-                                `the identity "${identity.id}" links no readable mailbox — open its webmail in its own browser (mcp__${identity.id}__browser_*) and read the one mail there`,
+                                `the identity "${identity.id}" links no readable mailbox — open its webmail in its own browser (the browser tools with account "${identity.id}") and read the one mail there`,
                             );
                         }
                         // The site is wherever this account's browser is stuck right now — the page asking for
@@ -329,7 +329,7 @@ export const accountsServer =
                         try {
                             const report = await deps.openAccount({ id: account, platform, identity, purpose, homeUrl, loginUrl });
                             return ok(
-                                `${report}\nNow perform the sign-up in the identity's browser (mcp__${identity}__browser_*), SSO first; call mark_connected("${account}") once you verifiably are the account.`,
+                                `${report}\nNow perform the sign-up in the identity's browser (the browser tools with account "${identity}"), SSO first; call mark_connected("${account}") once you verifiably are the account.`,
                             );
                         } catch (error) {
                             return fail(error instanceof Error ? error.message : String(error));

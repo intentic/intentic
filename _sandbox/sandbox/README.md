@@ -235,12 +235,18 @@ reports the profile.
 - [src/browser/session-store.ts](src/browser/session-store.ts) — whose browser an account lives in. An
   IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
   accounts born from it share that browser — which is what makes a site's "Continue with Google" one click —
-  while a hand-connected account keeps its own. A turn's account browsers exist ONLY once a tool call arrives
-  for one: the harness handshakes every configured server at startup, so what it spawns per account is a ~1 MB
-  socat bridge into a per-turn mux ([bin/browser-mux.mjs](bin/browser-mux.mjs), launched by
-  [src/browser/browser-tools.ts](src/browser/browser-tools.ts)) that answers the handshake and the tool list
-  from a version-keyed schema cache — before this, every turn started one node+playwright process per connected
-  account, ~3.5 GB a turn for browsers mostly never touched. The owner signs the email provider in themselves in a live
+  while a hand-connected account keeps its own. All of them stand behind ONE MCP server, `browser`
+  ([bin/browser-router.mjs](bin/browser-router.mjs), configured by
+  [src/browser/browser-tools.ts](src/browser/browser-tools.ts)): every tool takes an `account` argument the
+  router resolves to a profile, so the prompt pays for one schema set however many accounts are connected —
+  before this every account pinned its own copy of ~21 tool schemas. The router also answers the harness's
+  startup handshake from a version-keyed schema cache and spawns an account's real node+playwright backend
+  only when a call names it — before that, every turn started one such process per connected account, ~3.5 GB
+  a turn for browsers mostly never touched — and an `account` outside the turn's persona-filtered manifest is
+  refused by name, which is what makes the persona rule hold at the tool layer. The same collapse holds for
+  the SKILLS: one `identities` skill and one per connected SITE, each account a roster line, converged by
+  [src/capabilities/account-skills.ts](src/capabilities/account-skills.ts) — never a per-account clone. The
+  owner signs the email provider in themselves in a live
   window (`browser-profile.ts`); the agent connects accounts through
   [src/browser/accounts-tools.ts](src/browser/accounts-tools.ts) — stored credentials are typed for it, never
   shown to it; a linked mailbox answers "the newest code from this site" and nothing more

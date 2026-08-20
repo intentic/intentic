@@ -8,6 +8,8 @@ description: Act on npmjs.com as the logged-in user through a real browser — a
 Home: https://www.npmjs.com · a package: https://www.npmjs.com/package/<NAME> · account menu (tokens, 2FA,
 packages) is under the avatar, top right.
 
+${accounts}
+
 This browser holds the account's passkey (the sandbox's own software security key), so WebAuthn/2FA prompts
 complete by themselves — if a 2FA dialog appears, wait a beat and snapshot again before assuming it is stuck.
 

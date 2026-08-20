@@ -20,7 +20,10 @@ import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-pl
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
 vi.mock("./harness-credentials.js", () => ({ resolveHarnessCredentials: () => credentials() }));
 const browserServers = vi.fn();
-vi.mock("../browser/browser-tools.js", () => ({ browserServersOf: (...args: unknown[]) => browserServers(...args) }));
+vi.mock("../browser/browser-tools.js", () => ({
+    ROUTED_BROWSER_SERVER: "browser",
+    browserServersOf: (...args: unknown[]) => browserServers(...args),
+}));
 
 /* A workspace root that is not on disk, which is the whole point of it: planTurn probes the tree for
  * uninstalled dependencies before it dispatches (see honoured), and a root that exists would make every prompt
@@ -83,7 +86,7 @@ beforeEach(() => {
     credentials.mockReset();
     credentials.mockResolvedValue({ ok: true, credentials: { oauthToken: "sk-oauth", account: "acc-1" } });
     browserServers.mockReset();
-    browserServers.mockResolvedValue({ servers: {}, ports: {}, passkeys: {} });
+    browserServers.mockResolvedValue({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
 });
 
 // --- the gates: each refuses for an ordinary state of a sandbox, and says which one -----------------------

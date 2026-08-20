@@ -26,14 +26,19 @@ And one word that people expect to find and **will not**: there is no **Identity
 - the folder its browser profile lives in,
 - the name of the "is it signed in?" marker beside it,
 - the file its passkey (its software security key) is kept in,
-- the name of the skill file that teaches the agent about it,
-- the prefix of every browser tool for it (`mcp__reddit-work__browser_click`),
+- its roster line on the site's skill (one skill per *site*, every account of it a line),
+- the `account` argument every browser tool call names (`mcp__browser__browser_click` with `account:
+  "reddit-work"`),
 - the id a persona card lists,
 - the id an automation's persona resolves down to.
 
 One key, used everywhere, minted once. That is why connecting the same site twice just works: `reddit-work` and
-`reddit-personal` are two capabilities, two profiles, two skills, two tool sets, and removing one cannot touch
-the other. Nothing is keyed by the *site* — keying by site is the version of this that breaks.
+`reddit-personal` are two capabilities, two profiles, two roster lines, and removing one cannot touch the
+other. The **state** is never keyed by the site — keying state by site is the version of this that breaks. The
+two *reading* surfaces are the deliberate exception: the site's skill and the one `browser` MCP server are
+shared, because they are derived text and schemas rather than state, and a copy per account only multiplied
+what every prompt pays (sixteen identities used to mean sixteen skill clones and sixteen copies of the same
+~21 tool schemas).
 
 ## How the pieces relate
 
@@ -41,13 +46,13 @@ the other. Nothing is keyed by the *site* — keying by site is the version of t
 flowchart LR
     persona["<b>Persona card</b> — stored<br/>“these logins are one someone”<br/>name · what it may do · where it works"]
     cap["<b>Capability</b> — stored<br/>one login on one site<br/>site · optional username + password"]
-    disk["<b>What that login grows on disk</b><br/>browser profile · “signed in” marker<br/>its passkey · its skill file"]
-    tools["<b>What this turn is handed</b><br/>one browser per allowed account<br/>+ sign-in helper tools"]
+    disk["<b>What that login grows on disk</b><br/>browser profile · “signed in” marker<br/>its passkey · a roster line on the site's skill"]
+    tools["<b>What this turn is handed</b><br/>one <code>browser</code> server, every tool taking <code>account</code><br/>+ sign-in helper tools"]
 
     persona -->|"lists the ids it speaks for"| cap
     cap -->|"all named after its id"| disk
-    cap ==>|"one browser each"| tools
-    persona ==>|"decides which accounts get one"| tools
+    cap ==>|"an accepted account value"| tools
+    persona ==>|"decides which accounts the server accepts"| tools
 ```
 
 Read it as: a capability is the account, the disk state is what that account grew, and a persona is a
@@ -55,8 +60,8 @@ Read it as: a capability is the account, the disk state is what that account gre
 
 ## Connecting an account
 
-Adding the capability does **not** sign you in. It writes the skill, makes sure the browser is in the image,
-and marks the account *pending*. Signing in happens by one of two hands, into the very same profile:
+Adding the capability does **not** sign you in. It lands the account on its site's skill, makes sure the
+browser is in the image, and marks the account *pending*. Signing in happens by one of two hands, into the very same profile:
 
 - **Yours** — a live browser window streamed into the app; you click through the login like normal.
 - **The agent's** — it drives that account's own browser, and the daemon types the stored username or password
@@ -89,9 +94,10 @@ from *everything* to *nothing* exactly where the supervision stops.
 
 Two details that matter:
 
-- The narrowing happens **before** the browsers are built. An account this turn may not use gets no server, no
-  Chromium and no opened profile — it is *absent*, not present-and-discouraged. That is the version that
-  survives an agent misreading its instructions.
+- The narrowing happens **before** the browsers are built. An account this turn may not use is absent from the
+  `browser` server's per-turn manifest, so no Chromium is launched and no profile is opened for it, and a call
+  naming it is refused with the granted set spelled out — a legible no, not a tool that mysteriously does not
+  exist. That is the version that survives an agent misreading its instructions.
 - Naming a card that does not exist denies everything. Falling back to "all accounts" would turn a typo into
   precisely the accident the layer exists to prevent — and a missing card is ordinary (a workspace cloned
   before its personas were committed).
@@ -184,9 +190,10 @@ merely leads to a reachable one stays lit so the road in is never greyed out.
 a flipped switch is flipped — there is no Save button to leave a card half-decided behind. Creating one is the
 exception and keeps an explicit action, because there is nothing to write to until it has a name.
 
-**The account's skill file stays loaded either way.** The tools for a disallowed account are gone, but the
-skill that describes them is a project file and loads every turn. The failure is safe (the tool is simply not
-there) and mildly confusing to read.
+**The site's skill stays loaded either way.** A skill is a project file and loads every turn, so a disallowed
+account's roster line is still readable. The failure is safe and now legible: the tools exist regardless (they
+are the one shared `browser` server), and a call naming a disallowed account is refused with the granted
+accounts spelled out.
 
 ## Where it lives
 
@@ -197,6 +204,8 @@ there) and mildly confusing to read.
 | The JS execution backend a card can grant | [js-runtime.ts](../_sandbox/sandbox/src/execution/js-runtime.ts) (the fence and the runner) · [js-tool.ts](../_sandbox/sandbox/src/execution/js-tool.ts) (the `Code` tool the Claude Code loop mounts) |
 | The disk state behind a login | [session-store.ts](../_sandbox/sandbox/src/browser/session-store.ts) |
 | Adding / removing a site login | [handlers/browser.ts](../_sandbox/sandbox/src/capabilities/handlers/browser.ts) |
+| The one `browser` server routing every account | [browser-router.mjs](../_sandbox/sandbox/bin/browser-router.mjs) (spawned per turn) · [browser-tools.ts](../_sandbox/sandbox/src/browser/browser-tools.ts) (its manifest — the persona-filtered account map) |
+| The per-site skills, accounts as roster lines | [account-skills.ts](../_sandbox/sandbox/src/capabilities/account-skills.ts) (the converge) · [browser-skill.ts](../_sandbox/sandbox/src/browser/browser-skill.ts) (the core notes) |
 | The agent signing itself in | [accounts-tools.ts](../_sandbox/sandbox/src/browser/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../_sandbox/sandbox/src/agent/turn-plan.ts) |
 | The screens | [SandboxPersonas.vue](../_editor/web/src/pages/sandbox/SandboxPersonas.vue) (who this box is — the whole card) · [DirectoryPersonas.vue](../_editor/web/src/pages/workspace/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../_editor/web/src/pages/Capabilities.vue) (what it is signed into) |
