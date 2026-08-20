@@ -88,20 +88,11 @@ const searchReadings = computed<PanelReading[]>(() => {
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-            <template #below>
-                <!-- No holdout here, unlike its neighbour. What the map removes is the opening look around, and
-                     that is one or two calls on the first message of a conversation — too small a slice of too
-                     few turns for a split to say anything before the layout it describes has changed.
-
-                     ONE LINE, AND IT IS THE ONE A SWITCH OWES: where to go and look at what it just turned on.
-                     The other half of what stood here — that the map follows the project the conversation was
-                     opened in — is a fact about the feature rather than about the click, and the (i) already
-                     gives it a paragraph of its own. Two sentences at one size, one after the other, were read
-                     as a single wrapped paragraph anyway, which is how the second one went unread. -->
-                <p v-if="settings?.workspaceMap === true" class="text-2xs text-muted">
-                    Sent once per conversation, above your first message — you can read exactly what it said.
-                </p>
-            </template>
+            <!-- Nothing below the switch. No holdout, unlike its neighbour: what the map removes is the opening
+                 look around, one or two calls on the first message of a conversation — too small a slice of too
+                 few turns for a split to say anything before the layout it describes has changed. And nothing to
+                 say in 11px text either; where the map lands and which project it follows are both facts about
+                 the feature rather than about the click, and the (i) gives them a paragraph each. -->
         </Row>
     </RowGroup>
 </template>
