@@ -23,7 +23,7 @@ const { node } = defineProps<{ node: WorkflowNode }>();
              IT STOPS SHORT OF BOTH CORNERS, and that inset is the whole reason the card's outline reads as one
              clean line. Run to full height, the bar ends where the card's corner curves, and a CLIP is the only
              thing that can end it there — so the corner gets drawn twice, once as the frame's border and once
-             as this bar's clipped edge, each antialiased against the page with no knowledge of the other. Where
+             as this bar's clipped edge, each anti-aliased against the page with no knowledge of the other. Where
              both land half-covered the page shows between them, and the 2px outline thins to roughly one along
              the curve: measured off the rendered pixels, 1.3px at the 45° point against 2.0px on the straight
              run. That thinning is the ragged corner people see on a selected card.

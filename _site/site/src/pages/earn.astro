@@ -216,21 +216,21 @@ const rules = [
                     creator. Creators receive {creatorSharePct}% of the credits' value, and every payment appears on a public ledger.
                 </p>
                 {/* THREE DOORS, because this page has three readers and the hero is where they sort
-                    themselves: the extension creator, the service provider, and the member who just wants to
-                    see what is listed. The provider door is here rather than only at the foot because the
-                    reader who needs it usually ARRIVES at it: somebody who already runs a paid API reaches
-                    this page from a search, lands at the top, and should not have to read five screens of
-                    member economics to find out there is a way in.
+                    themselves: the service provider, and the two members who want to see what is listed on
+                    either side. The provider door is the primary because the reader who needs it usually
+                    ARRIVES at it: somebody who already runs a paid API reaches this page from a search, lands
+                    at the top, and should not have to read five screens of member economics to find the way
+                    in. The extension creator is not sent from the hero at all — the closing band and the pool
+                    section carry that path — because the hero's job here is the paid economy this page owns,
+                    and the two browse doors let a member step straight into either catalog.
 
-                    "List your work" became "List an extension" in the same move, and had to. It was a fine
-                    label while it was the only creator button on the page: artifact-neutral, so it caught
-                    everybody. Standing next to "Offer a paid service" that neutrality inverts and becomes a
-                    trap, because a provider reads the broader label as the one that includes them and lands
-                    on a page about git registries. Two buttons that name their artifact cannot do that. */}
+                    Both browse buttons name their artifact and sit side by side, so neither reads as the
+                    general case that swallows the other: "Browse extensions" goes to the free gallery,
+                    "Browse paid services" to the metered catalog. */}
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href="/developers/publish/">List an extension</a>
-                    <a class="btn btn-secondary" href="/developers/services/">Offer a paid service</a>
+                    <a class="btn btn-primary" href="/developers/services/">Offer a paid service</a>
                     <a class="btn btn-secondary" href="/extensions/">Browse extensions</a>
+                    <a class="btn btn-secondary" href="/earn/catalog/">Browse paid services</a>
                 </div>
             </div>
         </section>
