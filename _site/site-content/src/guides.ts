@@ -92,7 +92,7 @@ export interface GuidePage {
 export const guidesIndex = {
     eyebrow: "Guides",
     heading: "Straight answers about running AI coding agents",
-    sub: "Practical answers to five common questions. Each guide starts with a direct answer, compares the available approaches and explains the trade-offs.",
+    sub: "Five things people ask before they know intentic exists. Each guide opens with a direct answer, weighs the approaches on the table, and says which one to actually pick.",
     meta: {
         title: "Guides · Running AI coding agents",
         description:
@@ -104,7 +104,7 @@ export const guidesIndex = {
 export const guidePages: GuidePage[] = [
     {
         slug: "run-multiple-coding-agents-in-parallel",
-        question: "How do you run multiple AI coding agents in parallel?",
+        question: "Can several AI coding agents work on the same repository at once?",
         navLabel: "Agents in parallel",
         blurb: "Give each agent its own checkout so they cannot edit the same file, then pick how much isolation the work needs.",
         answer: "Give every agent its own checkout, so two can never edit the same file at once. Git worktrees do this on one machine for free. Containers go further, giving each agent its own processes, ports and installed tools. Then run each on its own branch and merge one at a time, reviewing each.",
@@ -235,7 +235,7 @@ export const guidePages: GuidePage[] = [
     },
     {
         slug: "keep-a-coding-agent-running-after-you-close-your-laptop",
-        question: "How do you keep a coding agent running after you close your laptop?",
+        question: "Will a coding agent keep working after you close your laptop?",
         navLabel: "Agents that persist",
         blurb: "Move the agent off the thing that sleeps. A detached session survives a disconnect; only another machine survives a lid close.",
         answer: "Run the agent somewhere that does not sleep. A multiplexer such as tmux keeps it alive when your SSH connection drops, but not when the machine suspends. To survive a closed laptop the agent has to be on a machine that stays awake: a desktop, a home server, a VPS. Everything else is a workaround.",
@@ -347,7 +347,7 @@ export const guidePages: GuidePage[] = [
     },
     {
         slug: "give-an-ai-agent-database-and-api-access-safely",
-        question: "How do you give an AI agent database or API access without leaking credentials?",
+        question: "Should an AI coding agent ever hold your database password?",
         navLabel: "Credentials for agents",
         blurb: "Keep the secret out of the conversation. The agent should operate a tool that holds the credential, never read the credential itself.",
         answer: "Keep the credential out of the model's context. The agent should run a tool that already holds the secret, not be told the secret and asked to use it. That means a secret store the process reads, credentials scoped to the narrowest rights the job needs, and separate keys per task.",
@@ -469,7 +469,7 @@ export const guidePages: GuidePage[] = [
     },
     {
         slug: "review-ai-generated-code-changes",
-        question: "How do you review code an AI agent wrote before it lands?",
+        question: "Is an AI agent's summary of its own diff enough to merge on?",
         navLabel: "Reviewing agent work",
         blurb: "Read the diff, not the summary. Make the agent's work land somewhere that requires a decision to merge.",
         answer: "Make the agent's work land somewhere that cannot merge itself, then read the diff rather than the agent's description of it. That means a branch per agent, every hunk reviewed before merge, and tests on the branch. The summary is a claim about the change; the diff is the change.",

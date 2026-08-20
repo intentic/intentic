@@ -149,7 +149,7 @@ export const productPages: ProductPage[] = [
                 figure: "worktrees",
             },
         ],
-        guide: { slug: "run-multiple-coding-agents-in-parallel", question: "How do you run multiple AI coding agents in parallel?" },
+        guide: { slug: "run-multiple-coding-agents-in-parallel", question: "Can several AI coding agents work on the same repository at once?" },
         meta: {
             title: "Run a fleet · intentic",
             description:
@@ -215,7 +215,7 @@ export const productPages: ProductPage[] = [
                 },
             },
         ],
-        guide: { slug: "give-an-ai-agent-database-and-api-access-safely", question: "How do you give an AI agent database and API access safely?" },
+        guide: { slug: "give-an-ai-agent-database-and-api-access-safely", question: "Should an AI coding agent ever hold your database password?" },
         meta: {
             title: "Connect agents · intentic",
             description:
@@ -270,7 +270,7 @@ export const productPages: ProductPage[] = [
         ],
         guide: {
             slug: "keep-a-coding-agent-running-after-you-close-your-laptop",
-            question: "How do you keep a coding agent running after you close your laptop?",
+            question: "Will a coding agent keep working after you close your laptop?",
         },
         meta: {
             title: "Automate · intentic",
@@ -339,7 +339,7 @@ export const productPages: ProductPage[] = [
                 figure: "shared-surfaces",
             },
         ],
-        guide: { slug: "review-ai-generated-code-changes", question: "How do you review code an AI agent wrote before it lands?" },
+        guide: { slug: "review-ai-generated-code-changes", question: "Is an AI agent's summary of its own diff enough to merge on?" },
         meta: {
             title: "Review agent work · intentic",
             description:

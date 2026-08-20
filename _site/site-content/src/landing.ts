@@ -163,13 +163,17 @@ export const landingContent: LandingContent = {
         subhead: "A workspace for coding agents. Nothing happens out of sight.",
         /* THE LITERAL SENTENCE, under the two persuasive ones. The headline is a stance and the subhead is a
          * category noun plus a claim; neither ever says the mechanism, because saying it costs the opener its
-         * edge. So it is said here instead, one step down the page, in the words somebody types into a search
-         * box when they do not yet know this product exists: parallel, container, worktree, review.
+         * edge. So it is said here instead, one step down the page, in words a reader already holds — parallel,
+         * branch, review — instead of the ones the copy used to lead with (container, worktree). Those two are
+         * accurate and still show up on the pages a search sends you to (guides, docs, the Run page), where the
+         * reader arrived already knowing the concept. The home page pays the human cost of them and gets very
+         * little back, because a stranger reading "in its own container and git worktree" on the first screen
+         * hears an engineering spec instead of a promise.
          *
          * It is not a fourth persuasive beat and must not become one. It names what the product does and stops.
          * Ownership stays out by the standing rule and is carried by the chip below, which is crawlable text on
          * the same screen — the concept is present without the opener paying for it. */
-        summary: "Run coding agents in parallel, each in its own container and git worktree, and review every change before it lands.",
+        summary: "Run many coding agents on your own machine, each on its own branch, and read every change on its way in.",
         // "Works with Claude, Codex and Grok" replaces "Bring your own agent": the old chip asked the
         // reader to already know what an agent is and that they have one, which is the assumption the
         // whole first screen was making. Three names they recognise do the same job with no decoding.
@@ -215,14 +219,16 @@ export const landingContent: LandingContent = {
     // four are compact cards. Automate carries its trigger list, not a screenshot: it is diagram-led
     // everywhere, because no honest capture of an automations screen exists.
     verbs: {
-        eyebrow: "What you do",
-        // The heading names the actor and the three things you actually do with it, in that order.
-        // It used to read "Run a fleet. Stay in control." over "Run them, wire them to your systems":
-        // two abstractions and a pronoun, so a reader who had not already decoded the hero got a
-        // second screenful with nothing in it to hold. The sub now spends its line on the one
-        // mechanical fact that makes "ten at once" believable instead of restating the heading.
-        heading: "Run agents. Connect your tools. Read every change.",
-        sub: "Each agent works in its own worktree, so many can run at once and they won't conflict.",
+        eyebrow: "A day at the board",
+        // The heading is a picture, not a to-do list. The previous version read "Run agents. Connect
+        // your tools. Read every change." — three verbs in a row that a stranger scanning the second
+        // screen took for a chore chart, which is the opposite of the excitement the page is trying to
+        // build. The heading now names the artefact the reader is about to see (a board) and the
+        // asymmetry that makes it interesting (many agents, one gatekeeper). The sub spends its line
+        // on the one mechanical fact that makes "many at once" believable, in the words a reader
+        // already holds rather than one they would have to look up.
+        heading: "One board holds every agent working for you.",
+        sub: "Each writes on a branch of its own, so many can share a repo without stepping on each other.",
         items: [
             {
                 verb: "Run",
@@ -341,19 +347,21 @@ export const landingContent: LandingContent = {
             {
                 title: "Sign in with Google",
                 // Step 2 is where "sandbox" first meets a reader who has never seen the word, so it is
-                // defined there rather than assumed. It is the only noun the product uses for the thing.
+                // defined there rather than assumed. It is the only noun the product uses for the thing,
+                // and it is defined in plain words instead of via "container", which is the same fix the
+                // hero summary made one screen up: the definition should be shorter than the word.
                 body: "No forms and no card. We keep your email address and your workspace's address, and nothing else.",
             },
             {
                 title: "Your sandbox is waiting",
-                body: "A sandbox is the container your agents live in. We make one for you and give it a private address, with no Cloudflare account needed.",
+                body: "Your sandbox is the private room your agents live and work in. We spin one up and give it its own web address, no Cloudflare account needed.",
             },
             {
                 title: "Paste one command",
                 body: "One line starts it on your own machine. If Docker is missing, it offers to install that first.",
             },
         ],
-        commandNote: "It creates a workspace on your machine. Nothing is deployed and no ports are opened.",
+        commandNote: "It sets up your workspace on your own computer. Nothing is deployed anywhere and no ports are opened.",
         desktop: {
             lead: "Rather not touch a terminal?",
             cta: "Get the app for Windows or Linux",
