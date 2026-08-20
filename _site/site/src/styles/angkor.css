@@ -35,7 +35,7 @@
  *                       serif with moderate contrast and sturdy wedge serifs, so it keeps the carved
  *                       character exactly where Playfair loses it. 500 and 600 only.
  *   Inter             — running copy, all small print, AND EVERY BUTTON LABEL. See below.
- *   Baloo 2           — the wordmark, and nothing else ever.
+ *   Baloo 2           — the wordmark, and the navigation labels. See below.
  *
  * If a new element is between 13 and 24px, it is Spectral. That is the whole rule.
  *
@@ -47,7 +47,15 @@
  *
  * THE WORDMARK IS ITS OWN FACE, because a wordmark is a drawing rather than a setting. Baloo 2 is the
  * rounded geometric with the cut terminals and the angled `t` the brand art uses — a serif version of
- * this word is a different company's logo. One weight, one place. */
+ * this word is a different company's logo.
+ *
+ * AND IT IS THE BAR'S FACE TOO, which took two wrong answers to arrive at. The nav was Inter and read
+ * as another site's furniture bolted onto this one; it was then the titling serif, and six labels of
+ * high-contrast serif at 15px is a row you have to look at twice. The bar is the one strip of the page
+ * that is pure brand — a logo and six words — so it takes the logo's own face. A rounded geometric is
+ * about as legible as small type gets (open counters, tall x-height, no contrast to lose), and it makes
+ * the bar read as one object rather than as a mark with a menu beside it. Nothing else may use it: the
+ * moment a card heading asks for the brand face, it stops being the brand's. */
 @font-face {
     font-family: "Playfair Display";
     font-style: normal;
@@ -126,6 +134,25 @@
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
+/* 600 for the bar's labels: at 15px on a dark ground, 500 is a shade light to hold a row of six. */
+@font-face {
+    font-family: "Baloo 2";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/baloo2-600-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Baloo 2";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/baloo2-600-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 .a-page {
     /* The two serifs, named by the job rather than by the typeface, so a call site says which TIER it
@@ -161,13 +188,27 @@
     --a-line-mid: rgba(201, 160, 92, 0.3);
     --a-line-strong: rgba(201, 160, 92, 0.5);
 
-    /* THE CARVED TOP BAND, as one number two files share. The plate's frame is not decoration around
-     * the hero, it is the hero's edge — so the bar has to sit on the middle of it rather than at a
-     * height of its own choosing. In the art the band runs from the outer glow to an inner rule about
-     * 9.8% of the plate's height down; at the widths this page is read at that lands near 5.5rem, and
-     * the bar takes that as its minimum height so its content centres inside the frame.
-     * If the plate art is ever recut, re-measure the rule and change this. */
-    --a-plate-band: 5.5rem;
+    /* THE CARVED TOP BAND — the one number the navigation bar takes its height from.
+     *
+     * The plate's frame is not decoration around the hero, it is the hero's edge, so the bar has to sit
+     * on the middle of the frame's top band rather than at a height of its own choosing. Scanning the
+     * art (1600×900) for its horizontal rules: the outer one is at y=9 and the inner one at y=81, so the
+     * band's centre is y=45. The bar hangs from the plate's TOP, not from the band's, so for its content
+     * to land on that centre the bar's height must be twice the offset: 90 art-units, times whatever
+     * scale `cover` chose.
+     *
+     * AND THAT SCALE CANNOT BE WRITTEN IN CSS. `cover` scales by `max(boxWidth/1600, boxHeight/900)`,
+     * and the plate's box is the hero's box — whose height comes from its CONTENT, not from a fraction
+     * of the viewport (measured: 810px at 1280 wide, 956 at 1920, 1156 at 2560, 1556 at 3840). Which
+     * term wins therefore changes with the window, and neither term is a unit CSS can name. A `vw`
+     * formula is only right in the narrow range where width happens to be the driver AND the content
+     * height happens to agree: the previous one was tuned at 1680 and measured up to 48px out at the
+     * extremes — the bar sitting well above the rule it is supposed to be centred in.
+     *
+     * So the real value is measured off the painted box at runtime; see the observer in angkor.astro.
+     * What is left here is the fallback used before that runs and if it never does — correct from about
+     * 1440 to 1920, and sane either side of that. */
+    --a-plate-band: clamp(3.6rem, 5.625vw, 7.5rem);
 
     /* ── The plate, and the two dials that tame it ───────
      * `--a-plate-dim`  how much of the photograph survives at all.
@@ -592,15 +633,6 @@ body:has(.a-page) {
     background-repeat: no-repeat;
     opacity: var(--a-plate-dim);
 }
-/* The band is a fraction of the PLATE, and on a phone the plate is scaled up rather than down — the
- * art is narrower than the crop needs, so `cover` enlarges it and the carved band with it lands nearer
- * 4rem than 5.5. The bar follows, or it stands taller than the frame it is meant to sit inside. */
-@media (max-width: 48rem) {
-    .a-page {
-        --a-plate-band: 4.2rem;
-    }
-}
-
 @media (max-width: 40rem) {
     .a-page .a-plate-img {
         background-image: url("/assets/angkor/temple-900.webp");
@@ -785,11 +817,15 @@ body:has(.a-page) {
         0 2px 0 rgba(201, 160, 92, 0.06),
         0 24px 60px -12px rgba(0, 0, 0, 0.85);
 }
+/* THE RAIL IS A LEDGE, NOT A TITLE BAR. It carried an address pill — "acme-shop · /agents" — which was
+ * doing no work: the screenshot under it already says which surface it is, in the product's own type,
+ * and a second label above it only competed. Dropping it takes the pill's height with it, so the rail
+ * is now three studs deep and the picture starts sooner. */
 .a-page .a-window-rail {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.9rem;
+    gap: 0.45rem;
+    padding: 0.42rem 0.75rem;
     border-bottom: 1px solid var(--a-line);
     background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
 }
@@ -803,21 +839,6 @@ body:has(.a-page) {
     background: linear-gradient(150deg, #6b6459, #46413a);
     transform: rotate(45deg);
 }
-/* NOT MONOSPACE. This is an address — a workspace and the screen it is on — and setting it in the code
- * face made the one label on the frame read as a terminal echo, all slab-sided glyphs and wide gaps, on
- * a page whose whole argument is that this is a workspace rather than a console. The titling serif at
- * 12px says the same words and belongs to the frame it sits on. */
-.a-page .a-pill {
-    border: 1px solid var(--a-line);
-    background: rgba(10, 7, 5, 0.6);
-    padding: 0.22rem 0.75rem;
-    font-family: var(--a-font-title);
-    font-weight: 500;
-    font-size: 0.75rem;
-    letter-spacing: 0.01em;
-    color: var(--a-muted);
-}
-
 /* Each screen is stacked in one box and cross-faded, exactly as the live hero does it, so a reader who
  * watches sees the product's several surfaces instead of one still. */
 .a-page .a-screen {

@@ -101,7 +101,7 @@ import Lotus from "./Lotus.astro";
             <a href={discordUrl} target="_blank" rel="noopener" class="a-bar-icon" aria-label="Discord community" title="Discord community">
                 <DiscordIcon size={17} />
             </a>
-            <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm">Get started free</a>
+            <a href={APP_URL} class="a-btn a-btn-primary a-btn-sm">Create your workspace</a>
         </div>
     </div>
 </header>
@@ -216,11 +216,11 @@ import Lotus from "./Lotus.astro";
         align-items: center;
         gap: 0.35rem;
     }
-    /* THE TITLING SERIF, not the body sans. The bar was the one run of type on the page still set in
-       Inter for no reason but habit: it is not running copy and it is not a control, it is a row of
-       six labels read one word at a time — which is exactly the tier Spectral exists for. At 15px in
-       500 it stays as legible as the sans was and stops the bar reading as a different website's
-       furniture bolted onto this one. */
+    /* THE BRAND'S OWN FACE — see the long note in angkor.css. Inter here read as another site's
+       furniture; the titling serif read as something you have to look at twice. The bar is a logo and
+       six words, so it takes the logo's face: a rounded geometric, which is about as legible as small
+       type gets and makes the strip read as one object. 16px rather than 15, because this face runs a
+       touch small for its point size. */
     .a-bar-link {
         display: inline-flex;
         align-items: center;
@@ -228,10 +228,10 @@ import Lotus from "./Lotus.astro";
         padding: 0.45rem 0.65rem;
         border: 0;
         background: none;
-        font-family: var(--a-font-title);
-        font-weight: 500;
-        font-size: 0.9375rem;
-        letter-spacing: 0.008em;
+        font-family: var(--a-font-mark);
+        font-weight: 600;
+        font-size: 1rem;
+        letter-spacing: 0.004em;
         color: var(--a-cream);
         text-decoration: none;
         opacity: 0.86;
@@ -382,15 +382,32 @@ import Lotus from "./Lotus.astro";
             display: none;
         }
     }
+    /* On a phone the bar is the brand and the one call, side by side, and "Create your workspace" is a
+       longer call than the one it replaced — long enough to push itself off the right edge at 390px. So
+       both sides give a little: the marks go, the wordmark drops a step, and the cartouche tightens.
+       Shortening the words instead would mean the button saying something different here than it says
+       four inches lower down, which is the one thing a call to action must not do.
+
+       The padding stays vertically zero for the same reason it does at full width: the bar's height is
+       the plate's carved band, set by `min-height`, and any vertical padding here would add to it. */
     @media (max-width: 30rem) {
         .a-bar-icon {
             display: none;
         }
         .a-wordmark {
-            font-size: 1.6rem;
+            font-size: 1.45rem;
+        }
+        .a-brand .a-brand-mark {
+            width: 1.9rem;
+            height: 1.9rem;
         }
         .a-bar-inner {
-            padding: 0.75rem 1.1rem;
+            gap: 0.75rem;
+            padding: 0 1rem;
+        }
+        .a-bar-end .a-btn-sm {
+            padding: 0.5rem 0.8rem;
+            font-size: 0.8125rem;
         }
     }
 
