@@ -5,7 +5,7 @@ import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../perf";
 
 /* A daemon-backed vue-query: every direct sandbox read is gated on the ACTIVE daemon being reachable (the
- * liveness probe's verdict — see useSandbox), and a failure surfaces as the user-facing message the daemon
+ * liveness probe's verdict, see useSandbox), and a failure surfaces as the user-facing message the daemon
  * threw. Callers derive their own data computeds and reach the rest of vue-query's surface through `query`. */
 
 const { reachable } = useSandbox();
@@ -13,7 +13,7 @@ const { reachable } = useSandbox();
 export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
     const resolved = toValue(options);
     /* Every daemon-backed read is timed HERE rather than at each call site, so no query can be added without
-     * one — the fan-out that makes the review panel expensive is invisible precisely when someone adds the
+     * one, the fan-out that makes the review panel expensive is invisible precisely when someone adds the
      * query that causes it.
      *
      * This span is wider than `rpc.request`: it covers the queryFn's own work (parsing a six-figure change
@@ -38,12 +38,12 @@ export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
             enabled: computed(() => toValue(reachable) && (resolved.enabled === undefined || toValue(resolved.enabled) !== false)),
         },
         /* THE APP'S ONE CLIENT, HANDED OVER RATHER THAN INJECTED. Left to itself vue-query resolves it with
-         * `inject()`, which needs Vue's injection context — and a daemon read is not always reached from a
+         * `inject()`, which needs Vue's injection context, and a daemon read is not always reached from a
          * setup: a run button names its model from a computed, and an extension may ask for the same fact from
          * a click handler. Neither has a context, so the injected lookup THREW there (`vue-query hooks can only
          * be used inside setup()`), taking the whole surface down with it. There is exactly one QueryClient in
          * this app (main.ts installs this same object), so naming it here is the same client with none of the
-         * ceremony — and no way for the ceremony to fail. */
+         * ceremony, and no way for the ceremony to fail. */
         queryClient,
     );
     return { query, error: computed(() => query.error.value?.message) };

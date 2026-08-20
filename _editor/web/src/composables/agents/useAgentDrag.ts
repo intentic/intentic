@@ -9,12 +9,12 @@ import { useAgents, type FleetAgent } from "./useAgents";
  * AgentCard instead of a browser drag image, Escape cancels, and the drop target is hit-tested against the
  * live DOM so a scrolled lane still answers correctly.
  *
- * The dragged card STAYS in its lane, dimmed, while a fixed ghost follows the pointer — the lane's
+ * The dragged card STAYS in its lane, dimmed, while a fixed ghost follows the pointer, the lane's
  * TransitionGroup is never asked to FLIP a child that is already moving. Nothing changes lane on drop either:
  * the action fires and the daemon's next roster frame moves the card. So the board never paints a lane the
  * status machine disagrees with, which is the whole point of laneOf being a pure projection.
  *
- * Mouse and pen only. Touch is deliberately excluded — a drag would fight the lanes' own scrolling, and the
+ * Mouse and pen only. Touch is deliberately excluded, a drag would fight the lanes' own scrolling, and the
  * mobile layout stacks the lanes anyway; land and discard stay reachable there from the review panel.
  *
  * Module-level singleton (one board), like useAgents and useChat. */
@@ -28,7 +28,7 @@ const draggedId = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
-// The one action this board is running, and which card it is running against — the action and not just the id
+// The one action this board is running, and which card it is running against, the action and not just the id
 // because the card's own buttons report their progress in place (see PendingAction).
 const busy = ref<{ id: string; action: PendingAction } | undefined>(undefined);
 const ghostWidth = ref(0);
@@ -55,7 +55,7 @@ const ghostStyle = computed(() => ({
     transform: `translate3d(${pointer.value.x - grabOffset.x}px, ${pointer.value.y - grabOffset.y}px, 0)`,
 }));
 
-// A drag's pointerup also lands as a click on the source card — the board asks this before opening the agent,
+// A drag's pointerup also lands as a click on the source card, the board asks this before opening the agent,
 // the same handshake titleEdit uses to protect its blur-commit.
 const consumeSuppressedOpen = (): boolean => {
     if (!suppressOpen) {
@@ -80,7 +80,7 @@ const cancel = (): void => {
     over.value = undefined;
 };
 
-// The card doesn't move lane here — the roster frame the action provokes does that. Until it arrives the card
+// The card doesn't move lane here, the roster frame the action provokes does that. Until it arrives the card
 // shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
 const perform = async (id: string, chosen: PendingAction): Promise<void> => {
     busy.value = { id, action: chosen };
@@ -89,14 +89,14 @@ const perform = async (id: string, chosen: PendingAction): Promise<void> => {
         if (chosen === `stop`) {
             await stopAgent(id);
         } else if (chosen === `land` || chosen === `reland`) {
-            // One runner for both spans, because a re-land IS a land in every way the board cares about — same
+            // One runner for both spans, because a re-land IS a land in every way the board cares about, same
             // busy flag, same refusal notice, same refresh. What differs is the rung it measures from, and
             // that is one argument rather than a parallel path free to drift on the other three.
             const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`);
             await invalidateAgentAction(id);
             if (!result.landed) {
                 // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves
-                // instead) — either way a first refusal with a report to read, not the repeat of one the user
+                // instead), either way a first refusal with a report to read, not the repeat of one the user
                 // has already seen. A re-land reaches it when the user's own tree has moved over the paths it
                 // is putting back, which is the same report and the same read.
                 notice.value = `Landing hit a conflict — open the agent to see what blocked it.`;
@@ -127,8 +127,8 @@ const perform = async (id: string, chosen: PendingAction): Promise<void> => {
  *
  * Stop, land and discard all act on state this browser already has: what they will do is fully described by
  * the card and the drag hint, and each is either reversible or already carries its own confirmation elsewhere.
- * `resolve` STARTS A TURN — it spends the agent's time and the user's money on work nobody has seen the shape
- * of yet — and a drag is the easiest gesture here to make by accident: a card grabbed to be read, released a
+ * `resolve` STARTS A TURN, it spends the agent's time and the user's money on work nobody has seen the shape
+ * of yet, and a drag is the easiest gesture here to make by accident: a card grabbed to be read, released a
  * few pixels into the wrong lane. So it stops at a dialog naming the agent, and the board performs it only
  * when the user says so. The review panel's button doesn't ask, because a deliberate press under a paragraph
  * explaining the mechanics is already the answer this dialog exists to collect.
@@ -149,27 +149,27 @@ const cancelResolve = (): void => {
     pendingResolve.value = undefined;
 };
 
-/* THE SAME ASK, FROM THE CARD'S OWN BUTTON — and deliberately the same runner, not a second one.
+/* THE SAME ASK, FROM THE CARD'S OWN BUTTON, and deliberately the same runner, not a second one.
  *
  * A conflicted card's press and a conflicted card's drop are one action on one board, so they share `perform`:
  * one busy flag (the card dims in place), one notice strip for a refusal, one refresh closing the gap on a
  * quiet stream. A parallel implementation here would be free to drift on all three, and the first thing to
- * drift would be the report of a failure — the half nobody exercises by hand.
+ * drift would be the report of a failure, the half nobody exercises by hand.
  *
  * It does NOT go through pendingResolve's dialog, and that is the whole difference between the two. The dialog
  * guards a GESTURE: a card grabbed to be read and released a few pixels into the wrong lane starts a turn the
  * user never asked for, and nothing about a drag says what it is about to cost. A press on a button labelled
- * with the action, under a tooltip that states the mechanics, IS the answer that dialog exists to collect —
+ * with the action, under a tooltip that states the mechanics, IS the answer that dialog exists to collect,
  * the same reasoning the review panel's own button already rests on. Asking twice for the same intent teaches
  * people to click through dialogs. */
 const resolveNow = (id: string): Promise<void> => perform(id, `resolve`);
 
-// The ready card's "Land now" — the same runner for the same reasons resolveNow shares it (one busy flag, one
+// The ready card's "Land now", the same runner for the same reasons resolveNow shares it (one busy flag, one
 // notice strip, one refresh). No dialog: landing is reversible in the git sense (the branch keeps everything)
 // and the button states its own mechanics, exactly like the review panel's copy of it.
 const landNow = (id: string): Promise<void> => perform(id, `land`);
 
-// The way back for a card whose landed work was discarded from the workspace — the same runner again, one
+// The way back for a card whose landed work was discarded from the workspace, the same runner again, one
 // argument apart (see perform). No dialog, for the reason the two above have none and one of their own: this
 // press UNDOES a destruction rather than causing one, and the only thing it can put in the tree is work the
 // user has already reviewed once.
@@ -210,7 +210,7 @@ const onKey = (event: KeyboardEvent): void => {
     }
 };
 
-// Arms a drag on the card's pointerdown — it only becomes one once the pointer travels far enough, so a plain
+// Arms a drag on the card's pointerdown, it only becomes one once the pointer travels far enough, so a plain
 // click still opens the agent and the rename affordances keep their own gestures.
 const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void => {
     // Ahead of every guard: a press on ANY card ends the previous drag's claim on the next click. A drop onto
@@ -220,7 +220,7 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
     if (event.pointerType === `touch` || event.button !== 0) {
         return;
     }
-    // A draft is an open tab that never ran, and a refused one never got past the door — no registry entry
+    // A draft is an open tab that never ran, and a refused one never got past the door, no registry entry
     // either way, so no drop on it could do anything.
     if (unregistered(agent.status)) {
         return;

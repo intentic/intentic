@@ -14,8 +14,8 @@ import { useEndpoint } from "./useEndpoint";
 import { signalConnection, useSandbox } from "./useSandbox";
 
 /* The DRIVER: hold one long-lived `/events` stream open to the active sandbox daemon, and reconnect when it
- * breaks. Everything it used to ALSO do now lives next door — the transition rules in connection.ts (pure,
- * tested), the frame routing in systemEvents.ts (typed, tested) — so what is left here is exactly the part
+ * breaks. Everything it used to ALSO do now lives next door, the transition rules in connection.ts (pure,
+ * tested), the frame routing in systemEvents.ts (typed, tested), so what is left here is exactly the part
  * that genuinely needs the network: opening the stream, watching for silence, and sleeping between attempts.
  *
  * The stream is the typed oRPC event iterator, not a hand-parsed SSE body: the daemon has always declared
@@ -25,7 +25,7 @@ import { signalConnection, useSandbox } from "./useSandbox";
  *
  * Started by the workspace shell for the lifetime of the post-login session. Module-level singleton. */
 
-// No frame for this long means the connection silently half-opened (origin gone without a TCP FIN) — trip
+// No frame for this long means the connection silently half-opened (origin gone without a TCP FIN), trip
 // offline. The daemon emits a heartbeat every ~2s, so this tolerates ~4 missed beats before reconnecting.
 // Sized for a daemon on a REAL machine, not an idealized one: a container under build/test IO pressure
 // legitimately misses a couple of beats, and at 6s (the old value) every such blip tore the stream down and
@@ -41,7 +41,7 @@ let running = false;
 let controller: AbortController | undefined;
 let watchdog: ReturnType<typeof setTimeout> | undefined;
 // Set when the abort came from the watchdog rather than the network, so the failure is CLASSIFIED as a timeout
-// instead of being sniffed out of `error.name === "AbortError"` after the fact — the two are identical at the
+// instead of being sniffed out of `error.name === "AbortError"` after the fact, the two are identical at the
 // error object, because the watchdog aborts the very same request.
 let watchdogTripped = false;
 // Resolver of the in-flight sleep, so a sandbox switch cuts a backoff short instead of stalling the reconnect
@@ -96,17 +96,17 @@ const failureOf = (error: unknown): ConnectionFailure => {
 const switchedDuring = (sandboxId: string): boolean => activeSandboxId.value !== sandboxId;
 
 // Did the ADDRESS move out from under an in-flight attempt? Promoting to the loopback shortcut aborts the
-// stream on purpose (see the watch below), and that abort is not the sandbox failing — checked BEFORE the
+// stream on purpose (see the watch below), and that abort is not the sandbox failing, checked BEFORE the
 // demotion branch, or a promotion would read its own abort as "local is broken" and immediately undo itself.
 const retargetedDuring = (base: string | undefined): boolean => daemonBase.value !== base;
 
-// Consume the stream until it ends or breaks. Returns normally only when the daemon closed it cleanly — a
+// Consume the stream until it ends or breaks. Returns normally only when the daemon closed it cleanly, a
 // healthy stream never does, so the caller treats that as its own throttled failure rather than a success.
 const stream = async (sandboxId: string): Promise<void> => {
     controller = new AbortController();
     watchdogTripped = false;
     // Armed before the connect, not just after: a hung connect (a dead tunnel that neither answers nor
-    // refuses) must not leave the optimistic paint up — the watchdog trips it and aborts.
+    // refuses) must not leave the optimistic paint up, the watchdog trips it and aborts.
     armWatchdog();
     // Per-CONNECTION presence id, never reused across attempts: the daemon keys this tab's roster entry by it,
     // so a lingering old connection's teardown can only ever remove its own entry, never this one's.
@@ -114,10 +114,10 @@ const stream = async (sandboxId: string): Promise<void> => {
     const frames = await sandboxRpc.system.events({ clientId }, { signal: controller.signal });
     signalConnection({ kind: `opened` });
     armWatchdog();
-    // The daemon just registered this connection's blank roster entry — announce the tab's current activity.
+    // The daemon just registered this connection's blank roster entry, announce the tab's current activity.
     presenceStreamOpened(clientId);
     // Reconnect recovery: refetch the tree on every (re)connect, since file changes during a disconnect carried
-    // no frame. Empty paths = "just refetch" (no per-file re-read/highlight — we don't know what was missed).
+    // no frame. Empty paths = "just refetch" (no per-file re-read/highlight, we don't know what was missed).
     markWorkspaceChanged([]);
     for await (const frame of frames) {
         signalConnection({ kind: `frame` });
@@ -126,10 +126,10 @@ const stream = async (sandboxId: string): Promise<void> => {
     }
 };
 
-// One attempt, from "we have an address" to a settled outcome. Nothing here decides how long to wait next —
+// One attempt, from "we have an address" to a settled outcome. Nothing here decides how long to wait next,
 // that is the machine's `retryDelayMs`.
 const attempt = async (): Promise<void> => {
-    // Need the daemon's address to open the stream — reload the sandbox list if we don't have one yet. A
+    // Need the daemon's address to open the stream, reload the sandbox list if we don't have one yet. A
     // rejected platform call must not escape (it would kill liveness for good, with `running` still true so
     // start() never restarts it); the failure signals below cover it.
     if (daemonUrl.value === undefined) {
@@ -144,14 +144,14 @@ const attempt = async (): Promise<void> => {
         });
         return;
     }
-    /* Still no address after the refresh — so say that, BEFORE signalling `connect`. Reaching the try below
+    /* Still no address after the refresh, so say that, BEFORE signalling `connect`. Reaching the try below
      * without one is not an attempt that happens to fail: `sandboxRpc` cannot build a URL, and the first thing
      * it does on the way to finding that out is ask for a bearer, which raises the browser→sandbox Google
      * sign-in gate. So a sandbox that was named and never started asked the user to sign in to reach it, and
-     * behind that prompt the connecting gate read "Your sandbox reported in" — the optimistic copy the
+     * behind that prompt the connecting gate read "Your sandbox reported in", the optimistic copy the
      * `connect` signal paints, about a machine that has never spoken to us.
      *
-     * `unaddressed` is exactly this condition and already has honest words for it ("isn't connected yet —
+     * `unaddressed` is exactly this condition and already has honest words for it ("isn't connected yet,
      * finish setup"), with setup as its offered action. It just has to be reached without pretending first. */
     if (daemonUrl.value === undefined) {
         signalConnection({
@@ -161,7 +161,7 @@ const attempt = async (): Promise<void> => {
         });
         return;
     }
-    // Qualify the fastest address for this sandbox IN THE BACKGROUND — never awaited, so a hung loopback
+    // Qualify the fastest address for this sandbox IN THE BACKGROUND, never awaited, so a hung loopback
     // probe cannot delay the connect. The attempt below opens against the tunnel (or an already-resolved
     // shortcut); if the probe qualifies mid-stream the watch at the bottom retargets us onto it.
     void resolveEndpoint().catch(() => undefined);
@@ -178,7 +178,7 @@ const attempt = async (): Promise<void> => {
             return;
         }
         // The daemon answered and then closed the body without erroring. Reported as a failure so the machine
-        // throttles the next attempt — otherwise a 200-then-immediately-close daemon is a zero-delay hot loop.
+        // throttles the next attempt, otherwise a 200-then-immediately-close daemon is a zero-delay hot loop.
         signalConnection({
             kind: `failed`,
             failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }),
@@ -212,14 +212,14 @@ const attempt = async (): Promise<void> => {
             // A revoked member must not keep a cached (IndexedDB-persisted) copy of the sandbox on disk.
             queryClient.removeQueries({ predicate: sandboxQueryPredicate(sandboxId) });
         }
-        // Presence is a claim about who is here NOW — meaningless while disconnected, so it clears. The agents
+        // Presence is a claim about who is here NOW, meaningless while disconnected, so it clears. The agents
         // roster only DESYNCS: the revision guard resets (a restarted daemon's counter starts over, and a held
         // high-water mark would reject its every frame) while the painted list stays up, stale, until the
-        // reconnect's immediate snapshot overwrites it — blanking the chat list for every reconnect is what
+        // reconnect's immediate snapshot overwrites it, blanking the chat list for every reconnect is what
         // used to turn a two-heartbeat stall into a visible outage.
         resetPresence();
         desyncAgents();
-        // A restarted sandbox may have re-registered a fresh daemonUrl — pick it up before retrying. Swallowed
+        // A restarted sandbox may have re-registered a fresh daemonUrl, pick it up before retrying. Swallowed
         // on failure for the same reason as the refresh above: the next attempt handles it.
         await refresh().catch(() => undefined);
     } finally {
@@ -228,7 +228,7 @@ const attempt = async (): Promise<void> => {
 };
 
 // `for (;;)` rather than `while (running)`: `running` is flipped by stop(), from outside this function, so a
-// loop condition on it proves nothing to a reader — the two explicit exits are where stopping takes effect.
+// loop condition on it proves nothing to a reader, the two explicit exits are where stopping takes effect.
 const loop = async (): Promise<void> => {
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- a reconnect loop is sequential by definition
@@ -267,12 +267,12 @@ watch(activeSandboxId, (id, previous) => {
         lastKnown.set(previous, connection.value.phase === `online`);
     }
     // Switching away and back is the user's own "try again" for a shortcut that was demoted earlier in this
-    // session — the machine they are on may well have changed since.
+    // session, the machine they are on may well have changed since.
     if (id !== undefined) {
         resetEndpoint(id);
     }
     signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
-    // Another sandbox runs another image, on its own clock — attributing the outgoing daemon's route surface
+    // Another sandbox runs another image, on its own clock, attributing the outgoing daemon's route surface
     // to it would hide or invent features on the incoming one, and its boot state would gate (or ungate) the
     // wrong daemon's reads. Both re-report on the next hello.
     resetDaemonRoutes();
@@ -281,7 +281,7 @@ watch(activeSandboxId, (id, previous) => {
     wake?.();
 });
 
-// The address changed under the open stream — the loopback shortcut qualified (promotion), the daemon
+// The address changed under the open stream, the loopback shortcut qualified (promotion), the daemon
 // re-announced a new URL, or a demotion put us back on the tunnel. Abort so the loop reconnects against it
 // immediately: the alternative is a stream that keeps running on the address we stopped choosing, for as long
 // as it happens to stay healthy. The attempt itself tells this abort from a real break (retargetedDuring).

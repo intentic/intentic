@@ -7,9 +7,9 @@ const STORAGE_KEY = `ui-command-os`;
 
 /* Owns the preferred OS for command examples as a module-level singleton, so the Linux/Windows toggle
  * stays in sync across every screen that shows a command. Seeded from the browser platform, then persisted
- * once the user picks one — reads fall back to detection until a choice is stored. */
+ * once the user picks one, reads fall back to detection until a choice is stored. */
 
-// `startsWith`, not a /win/ match — "Darwin" contains "win".
+// `startsWith`, not a /win/ match, "Darwin" contains "win".
 const detect = (): CommandOs => {
     const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform;
     return platform.toLowerCase().startsWith(`win`) ? `windows` : `unix`;
@@ -43,8 +43,8 @@ export function useOsPreference() {
 }
 
 /* The two options every command block offers, and the Shiki grammar each implies. They ship from here, beside
- * the preference itself, because three screens were writing both out by hand — the sandbox switcher's cleanup
- * command, the connect-a-host step and the setup wizard — and a fourth would have had to guess whether the
+ * the preference itself, because three screens were writing both out by hand, the sandbox switcher's cleanup
+ * command, the connect-a-host step and the setup wizard, and a fourth would have had to guess whether the
  * label is "Windows (PowerShell)" or "Windows", and whether the lang id is `powershell` or `ps1`. The MARKUP
  * is deliberately not shared: one of the three wraps these in a third "Docker Compose" option with its own
  * component behind it, so a component here would have to grow a slot for a case only one caller has.

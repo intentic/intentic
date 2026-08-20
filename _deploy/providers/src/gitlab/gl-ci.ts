@@ -36,13 +36,13 @@ const DOCKERFILE_PATH = "Dockerfile";
 
 const VAR_KOMODO = "KOMODO_PASSWORD";
 
-// A YAML block-sequence item that is a JSON double-quoted scalar — YAML 1.2 is a JSON superset, so
+// A YAML block-sequence item that is a JSON double-quoted scalar. YAML 1.2 is a JSON superset, so
 // JSON.stringify robustly escapes any command (quotes, $, backslashes) into a valid script line.
 const scriptLine = (command: string): string => `    - ${JSON.stringify(command)}`;
 
 // One build job: build on docker-in-docker, push to the GitLab Container Registry via the built-in job-token
 // creds, then log into Komodo and trigger an immediate Deploy. Gated to its env's branch via rules:. The
-// host is never SSHed from CI — its Periphery pulls outbound.
+// host is never SSHed from CI, its Periphery pulls outbound.
 const jobYaml = (parsed: GlCiInputs, environment: GlCiInputs["environments"][number]): string => {
     const image = registryImage({ registry: parsed.registry, owner: parsed.owner, repoName: parsed.repoName, tag: environment.tag });
     const shaImage = `${parsed.registry}/${parsed.owner}/${parsed.repoName}:$CI_COMMIT_SHA`;

@@ -21,7 +21,7 @@ export interface WorkspaceTool {
 // The sandbox's preview-proxy port (the app preview the host's wildcard `*.<zone>` tunnel ingress routes to,
 // ordered last so it loses to every explicit host; apps declare their own ports behind it) and the daemon's
 // HTTP port (host-internal
-// only — the server workspace is preview-only; the browser-direct path is connect.sh, not this).
+// only, the server workspace is preview-only; the browser-direct path is connect.sh, not this).
 // The shared internal docker network the sandbox attaches to.
 const NETWORK = "intentic-workspace";
 
@@ -29,7 +29,7 @@ const NETWORK = "intentic-workspace";
 // Forgejo/Komodo) from the pinned sandbox image, plus its WILDCARD `*.<zone>` Cloudflare route to the
 // sandbox's own preview proxy. The node carries the host SSH creds + internal ip; it gates on the daemon's
 // host-internal /health so readiness passes before the tunnel + DNS route exist. Returns the exposure's ingress
-// pair so the caller aggregates it onto the host's tunnel — the sandbox is just another service on that tunnel.
+// pair so the caller aggregates it onto the host's tunnel, the sandbox is just another service on that tunnel.
 export const resolveWorkspace = (
     intent: WorkspaceIntent,
     host: HostInput,
@@ -71,7 +71,7 @@ export const resolveWorkspace = (
                 // The agent's MCP tools (intent-declared internal services); omitted when none are exposed.
                 ...(toolEntries.length > 0 ? { tools: toolEntries } : {}),
                 // The approved overlay Dockerfile content; the provider builds + runs it instead of `image`.
-                // It lands in desired-state.json verbatim — the git review there IS the server-path approval.
+                // It lands in desired-state.json verbatim, the git review there IS the server-path approval.
                 ...(intent.dockerfile !== undefined ? { dockerfile: intent.dockerfile } : {}),
             },
             explicitDependsOn: [],

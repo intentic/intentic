@@ -3,12 +3,12 @@ import { ref, watch, type Ref } from "vue";
 const STORAGE_KEY = `ui-changes-by-module`;
 
 /* Whether the review lists read by MODULE (a package header over its files, the default) or by PATH (one
- * repo-relative path per row). A module-level singleton persisted to localStorage, mirroring useFileNesting —
+ * repo-relative path per row). A module-level singleton persisted to localStorage, mirroring useFileNesting,
  * and read by BOTH review surfaces, the workspace Changes panel and the fleet's agent review, because it is a
  * way of reading a change list rather than a property of either screen.
  *
  * On by default: "which part of the system did this touch" is the first question of a review, and the module
- * prefix is the repeated half of the path — the half a 270px sidebar truncates away. A repo with no manifests
+ * prefix is the repeated half of the path, the half a 270px sidebar truncates away. A repo with no manifests
  * to group by (a Rust/Python/Go tree, a bare docs repo) costs nothing for it being on: every path lands in the
  * one unclaimed bucket, which draws no header and keeps full paths (changeModules' moduleView and its `named`,
  * the rule both panels share), so those repos read exactly as they would with this off. */

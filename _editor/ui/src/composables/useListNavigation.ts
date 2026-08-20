@@ -8,8 +8,8 @@ export function useListNavigation<T>(rows: Ref<readonly T[]>, keyOf: (row: T) =>
     const activeIndex = ref(0);
     const rowEls = new Map<string, HTMLElement>();
 
-    /* Reset on WHAT THE ROWS ARE, not on the array holding them. Every caller derives its list — a slice of a
-     * ranked file search, a flatMap over the picker's sections — so each recompute hands over a new array whose
+    /* Reset on WHAT THE ROWS ARE, not on the array holding them. Every caller derives its list, a slice of a
+     * ranked file search, a flatMap over the picker's sections, so each recompute hands over a new array whose
      * contents are usually identical, and resetting on identity took the highlight back to the top for reasons
      * the user had nothing to do with: an agent saving a file refreshes the workspace tree, the @mention list is
      * rebuilt from it, and the row someone was arrowing towards is suddenly row one again.

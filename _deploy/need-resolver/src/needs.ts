@@ -9,7 +9,7 @@ export type Capability = "source-control" | "docker-registry" | "infra-control" 
 export type Plane = "control" | "application";
 
 // One required capability at one scope, on one plane. Control-plane capabilities (source-control,
-// docker-registry, infra-control) are scoped to the control-plane host — one platform shared across
+// docker-registry, infra-control) are scoped to the control-plane host, one platform shared across
 // all hosts. Deployment-target is host-scoped (one per host with apps/services). Domain is
 // cloud-scoped (one per Cloudflare account).
 export interface Need {

@@ -16,9 +16,9 @@ export interface HostSshTunnelResult {
 // sshd at `ssh-<id>.<zone>` as an `ssh://localhost:22` ingress, and return the connector token connect.sh runs
 // cloudflared with. `<id>` is a stable per-host digest of (connection token + host name), so re-runs reuse the
 // same tunnel/hostname and each enrolled host gets a distinct one. The sandbox then SSH-deploys to this host with
-// `cloudflared access tcp --hostname ssh-<id>.<zone>` (host registered via:"cloudflared") — a NAT'd machine it
+// `cloudflared access tcp --hostname ssh-<id>.<zone>` (host registered via:"cloudflared"), a NAT'd machine it
 // can't reach by IP. This is a SEPARATE tunnel from the sandbox's: its connector runs ON the host to reach
-// localhost:22, whereas the sandbox connector runs on the workspace bridge — one Cloudflare tunnel cannot mix
+// localhost:22, whereas the sandbox connector runs on the workspace bridge, one Cloudflare tunnel cannot mix
 // connectors on different networks (the edge load-balances across them).
 export const createHostSshTunnel = async (args: {
     readonly apiToken: string;

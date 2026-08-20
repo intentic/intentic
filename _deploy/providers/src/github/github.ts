@@ -36,6 +36,6 @@ export const createGitHubProvider = (api: GitHubApi = githubApi): Provider => ({
         return { owner: parsed.owner ?? user.login };
     },
     delete: async () => {
-        // Inventory node — nothing to clean up.
+        // Inventory node, nothing to clean up.
     },
 });

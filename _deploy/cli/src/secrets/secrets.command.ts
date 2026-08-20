@@ -41,7 +41,7 @@ const list = buildCommand<{ artifact?: string }>({
 
 // Re-push changed/new secret values into the provisioned Forgejo's Actions secrets, keeping CI in lockstep with
 // the local .env / .secrets.json after `adopt`. Digest-diffed against .secrets-sync.json so unchanged values are
-// never re-PUT. A workspace that was never adopted (no sync record — `adopt` seeds it) is a graceful no-op: the
+// never re-PUT. A workspace that was never adopted (no sync record, `adopt` seeds it) is a graceful no-op: the
 // sandbox daemon fires this after every secrets.set without knowing whether adopt has happened.
 export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi = forgejoApi): Promise<void> => {
     const targetDir = dirname(artifact);
@@ -65,7 +65,7 @@ export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi
     const baseUrl = `https://${domain}`;
     if (changed.length > 0) {
         await setRepoSecrets({ api, baseUrl, user, password, owner: user, name: TARGET_DIR, secrets: Object.fromEntries(changed) });
-        // The resolve pipeline reads the Cloudflare token from the intent repo — keep its copy in step too.
+        // The resolve pipeline reads the Cloudflare token from the intent repo, keep its copy in step too.
         const cloudflare = changed.find(([key]) => key === "CLOUDFLARE_API_TOKEN");
         if (cloudflare !== undefined) {
             await setRepoSecrets({
@@ -80,7 +80,7 @@ export const pushSecrets = async (out: Output, artifact: string, api: ForgejoApi
         }
     }
 
-    // A new key changes the set apply.yaml injects — regenerate it (left as a local change for the next
+    // A new key changes the set apply.yaml injects, regenerate it (left as a local change for the next
     // commit/push of the desired-state repo).
     const keySetChanged = Object.keys(current).some((key) => sync[key] === undefined);
     if (keySetChanged) {

@@ -7,14 +7,14 @@ import type { TurnEffect } from "./turnReducer";
 import type { TurnContext } from "./turnStream";
 import { bindingWindow, formatReset, formatWait, usageStatusFor } from "./usageStatus";
 
-/* WHAT A FAILED TURN DOES TO THE CONVERSATION — one place, because the answer is a product decision rather than
+/* WHAT A FAILED TURN DOES TO THE CONVERSATION, one place, because the answer is a product decision rather than
  * a transcript rule and the codes only differ in that decision. Three things vary and nothing else does: whether
  * the user is NEEDED (the red error line) or merely informed (a muted notice), whether the words they typed
  * survived (a turn refused before it ran produced nothing, so the bubble comes back out and the queue holds it),
  * and whether the turn is COMING BACK on its own.
  *
- * Split out of the reducer because most of these codes need state it has no business reaching for — the
- * account's usage windows, the provider's account list — to phrase themselves at all.
+ * Split out of the reducer because most of these codes need state it has no business reaching for, the
+ * account's usage windows, the provider's account list, to phrase themselves at all.
  *
  * The two codes that ARE coming back own state of their own here (the outage's countdown, the credential
  * renewal's spinner) plus the probe that hunts the resumed run down, which is why the recovery lives beside the
@@ -23,7 +23,7 @@ import { bindingWindow, formatReset, formatWait, usageStatusFor } from "./usageS
 type TurnError = Extract<TurnEffect, { kind: "error" }>;
 
 /* A provider outage the daemon is working through, as this window sees it: when the next attempt is due, how
- * many are left, and whether it is armed or waiting on the setting. Drives the composer's outage banner — the
+ * many are left, and whether it is armed or waiting on the setting. Drives the composer's outage banner, the
  * one place that can honestly answer "is anything still happening?", which is the only question a user has
  * during an outage. */
 export interface OutageResume {
@@ -34,13 +34,13 @@ export interface OutageResume {
 }
 
 /* HOW THIS WINDOW FINDS A TURN THE DAEMON RESTARTED. The daemon owns every automatic resume (turn-resume.ts);
- * what the client owns is RENDERING it — attach streams are pull, and an open tab re-probes only on reachability
+ * what the client owns is RENDERING it, attach streams are pull, and an open tab re-probes only on reachability
  * flips, so a resumed run plays to nobody unless a local probe goes looking for it. That is the whole reason a
  * chat could sit dead on "the credential is being renewed" while the agent it describes was working away on the
  * board: the notice was printed and nothing was ever armed to catch what it promised.
  *
  * The two conditions differ only in how long the wait is worth. A CREDENTIAL RENEWAL is due within one scheduler
- * pass (5s), so it probes fast and gives up shortly after the daemon does — past that the re-mint failed, and the
+ * pass (5s), so it probes fast and gives up shortly after the daemon does, past that the re-mint failed, and the
  * honest answer is "reconnect the account" rather than a spinner. An OUTAGE resume is due on a backoff that grows
  * to twenty minutes, so it probes slowly and keeps looking for the best part of an hour. Both give up quietly:
  * the resumed run's transcript replays on the next hydrate either way.
@@ -55,7 +55,7 @@ const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const
 /* The conversation, as much of it as a failure may touch. Written out rather than taking the Conversation whole
  * because it is the useful half of the split: everything a failure can reach is on this list. */
 export interface FailureHost {
-    // Where a failure's own words go — the muted notice line, and the bubble a refused turn is taken back out of.
+    // Where a failure's own words go, the muted notice line, and the bubble a refused turn is taken back out of.
     readonly transcript: TranscriptClock;
     readonly provider: Ref<AgentProvider>;
     readonly account: Ref<string | undefined>;
@@ -63,10 +63,10 @@ export interface FailureHost {
     readonly session: Ref<SessionRef | undefined>;
     // The red line: this needs the user.
     readonly error: Ref<string | null>;
-    // This turn died with its work half done and nothing to fix first, so the way on is one press — see
+    // This turn died with its work half done and nothing to fix first, so the way on is one press, see
     // Conversation.resumable, and the one branch below that raises it.
     readonly resumable: Ref<boolean>;
-    // A probe stands down while a turn is live — the run it was hunting is already here.
+    // A probe stands down while a turn is live, the run it was hunting is already here.
     readonly streaming: Ref<boolean>;
     // Take the user's undelivered message back out of the transcript and hold it in the queue, where it waits
     // for their own next send rather than flushing into a turn nobody asked for.
@@ -76,7 +76,7 @@ export interface FailureHost {
     hold(): void;
     // Attach to a run the daemon restarted; whether one was found.
     reattach(): Promise<boolean>;
-    // Mirror the transcript to the local cache — a notice this raised is part of the conversation.
+    // Mirror the transcript to the local cache, a notice this raised is part of the conversation.
     persist(): void;
 }
 
@@ -85,7 +85,7 @@ export class TurnFailures {
      * landing or the user's own send superseding it. */
     readonly outageResume = ref<OutageResume | undefined>();
 
-    /* A credential renewal this conversation is waiting out — set the moment the API refuses this turn's token and
+    /* A credential renewal this conversation is waiting out, set the moment the API refuses this turn's token and
      * cleared by whatever ends the wait: the resumed turn attaching (beginTurn), or the probe budget running out
      * with nothing to attach to (giveUpOnRenewal). Its presence IS the spinner on the notice line, which is why
      * it carries the instant it started rather than a bare flag: it is the only thing that can say how long the
@@ -107,7 +107,7 @@ export class TurnFailures {
         switch (code) {
             case `claude-reauth`:
                 /* The Claude credential is dead and the daemon refused the turn before running any of it. Nothing
-                 * was processed, so the message is not part of the conversation yet — pull the bubble back out of
+                 * was processed, so the message is not part of the conversation yet, pull the bubble back out of
                  * the transcript and return it to the queue, which is exactly what the queue means (written, not
                  * delivered) and what makes reconnecting REPLAY it instead of asking the user to retype into every
                  * chat that bounced. The queue is held until then, so it can't immediately re-fail. */
@@ -129,12 +129,12 @@ export class TurnFailures {
                 return;
             case `unknown-command`:
                 /* The harness claimed the leading `/` as a command name it doesn't have and threw the rest of the
-                 * message away — nothing ran, and the words are not in the transcript the daemon stores either.
+                 * message away, nothing ran, and the words are not in the transcript the daemon stores either.
                  * So this is the claude-reauth shape rather than a red line: pull the bubble back out and hold the
                  * text, which is the only copy of it left.
                  *
                  * Held because the queue would otherwise flush the moment this turn settles, re-sending a message
-                 * the harness just ate without the user asking — and if the daemon still can't tell the leading
+                 * the harness just ate without the user asking, and if the daemon still can't tell the leading
                  * token from a command (an unlearned list is the only way this frame is reached), that is a loop
                  * rather than a recovery. The turn did teach it the list, so the user's own next send is the one
                  * that goes through. */
@@ -142,12 +142,12 @@ export class TurnFailures {
                 this.host.transcript.notice(`${message} Your message is held below — send it again and it goes as written.`);
                 return;
             case `session-not-found`:
-                /* The runtime could not pick this chat's session back up mid-turn — drop the dead id so the next
+                /* The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
                  * send starts a fresh one instead of replaying the failure forever. A muted notice, not the error
                  * ref: the condition is self-healed, so the red line + error tab status would overstate it.
                  *
-                 * The runtime's OWN sentence, not one written here. This used to state a cause — "the sandbox was
-                 * rebuilt or the session was deleted" — for a condition it cannot see the cause of, and the two it
+                 * The runtime's OWN sentence, not one written here. This used to state a cause, "the sandbox was
+                 * rebuilt or the session was deleted", for a condition it cannot see the cause of, and the two it
                  * named were usually both wrong: the daemon now seeds a fresh session from its record whenever it
                  * can, so what still reaches this line is an agent that lost the session inside its own process. */
                 this.host.session.value = undefined;
@@ -185,7 +185,7 @@ export class TurnFailures {
                 // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI
                 // named), so its code reaches us only when that failed; Codex can't (OpenAI names no alternative),
                 // so its code always lands here. Either way: surface it (red) and reload the provider's live catalog
-                // so the picker — and any conversation still pinning the dead id — repoints to what the daemon
+                // so the picker, and any conversation still pinning the dead id, repoints to what the daemon
                 // actually serves. Dynamic import breaks the static cycle (useChat imports the conversation).
                 void import(`./useChat`).then((chat) => chat.loadProviderModels(this.host.provider.value));
                 this.host.error.value = message;
@@ -208,13 +208,13 @@ export class TurnFailures {
                  *
                  * An uncoded failure is one the daemon could not name: the harness died mid-run, the agent
                  * stopped answering, a turn ended in a subtype nobody has a sentence for ("agent did not
-                 * complete"). Those have one thing in common that every code above them lacks — nothing is
+                 * complete"). Those have one thing in common that every code above them lacks, nothing is
                  * broken that the user could go and fix, the session is intact, and the only thing between the
                  * work and its finish is somebody saying carry on. That is exactly what `resumable` offers.
                  *
                  * The three NAMED codes here are excluded by hand, because for them the sentence is the point:
                  * a seat nobody enabled, an agent already running a turn, a subscription that isn't there. A
-                 * Continue button under any of those re-fails on the press, which is worse than no button —
+                 * Continue button under any of those re-fails on the press, which is worse than no button,
                  * it converts a clear refusal into one the user now blames themselves for. */
                 if (code === undefined) {
                     this.host.resumable.value = true;
@@ -230,7 +230,7 @@ export class TurnFailures {
         markAccountReauth(this.host.provider.value, this.host.account.value, detail);
     }
 
-    /* Claude's subscription usage cap, not a crash — the daemon's message renders as a muted notice (like
+    /* Claude's subscription usage cap, not a crash, the daemon's message renders as a muted notice (like
      * session-not-found) rather than the red error ref, so it reads as "wait and retry" instead of "the
      * workspace broke". Nothing re-runs the turn: unlike an outage or a rotated token, the allowance is the
      * user's OWN budget, so naming the reset instant and leaving the next send to them is the whole response.
@@ -250,17 +250,17 @@ export class TurnFailures {
      *
      * Muted rather than red, for the same reason a spent allowance is: the red line means "this needs you", and
      * the whole point of the resume is that it doesn't. What the user needs to know instead is the three things a
-     * red line cannot say — that the provider was at fault and not their work, that the turn is coming back, and
+     * red line cannot say, that the provider was at fault and not their work, that the turn is coming back, and
      * WHEN. The wait is escalating (30s to 20 minutes as an outage drags on), so naming the instant matters more
      * here than it does for a limit: "retrying" alone, on a wait that silently grows, is indistinguishable from
      * nothing happening.
      *
-     * The one-press opt-out rides the notice because this is the moment of regret — the automation just fired, and
+     * The one-press opt-out rides the notice because this is the moment of regret, the automation just fired, and
      * anyone who did not want it wants it gone now, not after a trip to Sandbox ▸ Agent.
      *
      * With no resume armed (the daemon's attempts are spent, so `outage` is absent) this is a plain failure and
      * gets the red line: promising a retry that will not come is worse than admitting the turn is dead. The user's
-     * words are handed back either way — the message never reached the model, and a 500 that eats what somebody
+     * words are handed back either way, the message never reached the model, and a 500 that eats what somebody
      * typed is the one part of this failure that is genuinely our fault. */
     private applyOutageError(error: TurnError, turn: TurnContext): void {
         const { message, outage } = error;
@@ -286,10 +286,10 @@ export class TurnFailures {
      *
      * Almost always a rotation the daemon itself performed: Anthropic retires an access token the instant its
      * successor is minted, and a turn's token is snapshotted into the agent subprocess at spawn, so one rotation
-     * 401s every turn holding it at once. Nobody's work was wrong and nobody has anything to fix — the daemon
+     * 401s every turn holding it at once. Nobody's work was wrong and nobody has anything to fix, the daemon
      * re-mints and re-runs each of them within a scheduler pass (turn-resume.ts).
      *
-     * So: muted, phrased as an interruption being undone, and — the part that was missing — actually WATCHED.
+     * So: muted, phrased as an interruption being undone, and, the part that was missing, actually WATCHED.
      * The resumed run is a fresh detached run on this same conversation, and nothing in a pull-based attach model
      * would have brought it to this window; the notice promised a continuation the tab then never showed, while
      * /agents happily reported the same agent working. The queue is held over the same gap, so a message waiting
@@ -314,8 +314,8 @@ export class TurnFailures {
     }
 
     /* A credential wait opened by a turn's failure starts hunting for its replacement when that turn ENDS rather
-     * than at the frame that opened it. The frame arrives mid-stream — the harness still has a `done` to send and
-     * the daemon a finally to run — and a probe that fires into that tail finds the conversation streaming, reads
+     * than at the frame that opened it. The frame arrives mid-stream, the harness still has a `done` to send and
+     * the daemon a finally to run, and a probe that fires into that tail finds the conversation streaming, reads
      * it as "the run I was looking for is already here", and abandons the hunt. Which is the very bug this exists
      * to fix, reintroduced one second later.
      *
@@ -331,7 +331,7 @@ export class TurnFailures {
      * whatever the posture said, so the write alone arms it and this window only has to reflect that and be
      * there when it lands.
      *
-     * The notice says the scope out loud — "this chat" — and names where the standing default lives, because
+     * The notice says the scope out loud, "this chat", and names where the standing default lives, because
      * this is the one moment where both are worth knowing and neither fits on the button. It is deliberately
      * said AFTER the press rather than before it: the press is one dead turn's business and must stay cheap,
      * while "make every agent do this" is a decision someone should go and make on purpose. */
@@ -349,7 +349,7 @@ export class TurnFailures {
     }
 
     /* The user has just stopped this chat resuming itself, mid-countdown. The banner goes back to being the
-     * OFFER — the turn is still stranded and still re-armable, which is the truth: the daemon holds it for the
+     * OFFER, the turn is still stranded and still re-armable, which is the truth: the daemon holds it for the
      * hour either way, so a stop that read as "this turn is gone" would be a lie the next press disproves.
      *
      * The probe stands down with it. Nothing is coming, and a hunt left running would spend twenty minutes
@@ -377,7 +377,7 @@ export class TurnFailures {
      * daemon is expected to fire), then on its cadence until the resumed run answers or the attempts run out.
      * Takes an instant rather than an attempt number because for an outage that instant moves with the backoff.
      *
-     * `exhausted` runs when the whole budget went by without a run to attach to — the resume did not happen, and
+     * `exhausted` runs when the whole budget went by without a run to attach to, the resume did not happen, and
      * a caller that promised the user one has to withdraw that promise rather than leave it hanging. */
     private scheduleReattach(dueAt: number, profile: { delayMs: number; intervalMs: number; tries: number }, exhausted?: () => void): void {
         clearTimeout(this.timer);
@@ -402,7 +402,7 @@ export class TurnFailures {
     }
 
     // Called off a send (which supersedes whatever the probe was hunting) and off a closed tab or sandbox switch
-    // — the daemon still fires the resume, and reopening the conversation replays it like any other detached run.
+    //, the daemon still fires the resume, and reopening the conversation replays it like any other detached run.
     cancelProbe(): void {
         clearTimeout(this.timer);
     }

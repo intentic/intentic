@@ -30,7 +30,7 @@ export const capabilitiesKey = QUERY_KEY;
 export const fetchCapabilities = async (): Promise<{ capabilities: CapabilitySummary[]; recommendations: CapabilityRecommendation[] }> =>
     CapabilitiesListSchema.parse(await sandboxJson(`/capabilities`));
 
-// Resolve a Claude Code plugin marketplace repo into installable entries — the daemon clones it, reads its
+// Resolve a Claude Code plugin marketplace repo into installable entries, the daemon clones it, reads its
 // .claude-plugin/marketplace.json, and maps each entry's source onto plugin-capability config. POST so the
 // optional token for a private marketplace never rides a URL.
 export const browseMarketplace = async (url: string, token?: string): Promise<Marketplace> =>
@@ -42,7 +42,7 @@ export const browseMarketplace = async (url: string, token?: string): Promise<Ma
         }),
     );
 
-// Replace just a capability's secret (the Sandbox Secrets tab's pencil on a capability row). Mutation only — no
+// Replace just a capability's secret (the Sandbox Secrets tab's pencil on a capability row). Mutation only, no
 // useQuery bundled, so a SecretField mount never refires /capabilities (the observer-refetch problem the
 // useSecrets doc comment describes). A secret edit can't recompose the environment, so only the capability
 // list + secret inventory refresh.
@@ -64,13 +64,13 @@ export function useCapabilitySecret() {
  *
  * Every other fact on this screen changes only when the reader changes it, so an invalidate on each mutation is
  * the whole story. A capability that is PENDING is the exception: it is waiting on something happening outside
- * the browser — a phone linking, a machine checking in, a login window finishing — and the moment it lands is
+ * the browser, a phone linking, a machine checking in, a login window finishing, and the moment it lands is
  * not a moment this app is told about. Read once and never again, the card sat on a status captured before the
  * work had begun; WhatsApp's pairing code arrives a few seconds after the add and simply never appeared.
  *
  * Three seconds because the thing being watched is a CODE THE READER IS COPYING OFF THE SCREEN: WhatsApp mints
  * a fresh one whenever it drops an unlinked socket, and a card a minute behind that is showing a dead code with
- * every appearance of a live one. Only while something is pending — a fully connected sandbox goes quiet. */
+ * every appearance of a live one. Only while something is pending, a fully connected sandbox goes quiet. */
 const PENDING_POLL_MS = 3_000;
 
 export function useCapabilities() {
@@ -82,11 +82,11 @@ export function useCapabilities() {
         refetchInterval: ({ state }) =>
             (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending`) ? PENDING_POLL_MS : false,
     });
-    // Adding/removing a capability can recompose the environment overlay (image fragments) — refresh the
+    // Adding/removing a capability can recompose the environment overlay (image fragments), refresh the
     // Environment card alongside the list so "Pending rebuild" shows up immediately. A platform capability
     // (devops/monorepo) also scaffolds repos that appear as rail panels, so refresh the panels list too.
     const invalidate = async (): Promise<void> => {
-        // Three disjoint caches, no ordering — refetch them concurrently.
+        // Three disjoint caches, no ordering, refetch them concurrently.
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
             queryClient.invalidateQueries({ queryKey: ENVIRONMENT.of() }),
@@ -126,7 +126,7 @@ export function useCapabilities() {
     });
 
     // "Not needed": stop suggesting this card until the workspace evidence behind it changes. Only the catalog
-    // moves, so only the capability list is refreshed — nothing is installed, removed or recomposed.
+    // moves, so only the capability list is refreshed, nothing is installed, removed or recomposed.
     const dismissRecommendation = useMutation({
         mutationFn: (card: string) => sandboxJson(`/capabilities/recommendations/${encodeURIComponent(card)}`, { method: `DELETE` }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
@@ -138,12 +138,12 @@ export function useCapabilities() {
         capabilities,
         // Presence of a kind = the user activated it (status reports its live health separately).
         hasCapability: (kind: string): boolean => capabilities.value.some((capability) => capability.kind === kind),
-        // What the workspace asks for but isn't activated, by CATALOG CARD — github, gitlab and every other
+        // What the workspace asks for but isn't activated, by CATALOG CARD, github, gitlab and every other
         // connector share the `cli` kind, so a kind would badge all of them at once. The evidence is rendered
         // verbatim beside the claim, so the card says why rather than asking to be trusted.
         recommendationFor: (card: string): CapabilityRecommendation | undefined =>
             recommendations.value.find((recommendation) => recommendation.card === card),
-        // The manifest has actually arrived (or definitively failed) — the rail's other half of "is this tile
+        // The manifest has actually arrived (or definitively failed), the rail's other half of "is this tile
         // absent or merely late", alongside the panels list (see usePanels.settled).
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

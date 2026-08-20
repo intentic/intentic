@@ -9,7 +9,7 @@ export { BrowserError, type Browser, type PageElement, type PageState } from "./
 
 /* The browser, as one object a caller holds.
  *
- * It keeps at most one CDP session open — to the tab it is working on — and re-attaches when asked for a
+ * It keeps at most one CDP session open, to the tab it is working on, and re-attaches when asked for a
  * different one. Holding a session per tab would be tidier in a diagram and worse in practice: the sessions
  * outlive the tabs, the user closes things while an agent is mid-task, and the failure arrives later as a socket
  * error nobody can place. One session, re-established on demand, fails at the moment of the request instead.
@@ -30,7 +30,7 @@ const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> 
     return result.result?.value as T;
 };
 
-// Acting on a ref is always "find it again, then do the thing" — so the not-found case is written once, here,
+// Acting on a ref is always "find it again, then do the thing", so the not-found case is written once, here,
 // with the sentence that tells the caller what to do about it.
 const withElement = (ref: string, body: string): string => {
     const index = refIndex(ref);
@@ -107,7 +107,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
         },
 
         // Key events go through CDP rather than the page, because a page cannot be made to believe a synthetic
-        // KeyboardEvent it did not receive from the browser — Enter in particular.
+        // KeyboardEvent it did not receive from the browser. Enter in particular.
         press: async (combo) => {
             const live = await connect(targetId);
             const key = combo.split("+").pop() ?? combo;

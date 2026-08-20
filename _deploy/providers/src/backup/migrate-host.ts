@@ -4,7 +4,7 @@ import { REPO_VOLUME } from "./backup.js";
 
 // Cross-machine host migration: the live old host still runs the control plane, but a NAT'd local host opens
 // no inbound ports, so the new host cannot pull from it directly. These helpers therefore relay everything
-// THROUGH the CLI's two SSH sessions — snapshot on the old host, stream the on-host restic repo old->new, and
+// THROUGH the CLI's two SSH sessions, snapshot on the old host, stream the on-host restic repo old->new, and
 // the caller restores it on the new host. The fixed container names mirror the providers that create them
 // (forgejo.ts / forgejo-runner.ts / workspace.ts / backup.ts / tunnel.ts).
 const BACKUP_CONTAINER = "intentic-backup";
@@ -24,7 +24,7 @@ export const managedContainers = async (session: SshSession): Promise<string[]> 
 // Quiesce the old host before the snapshot + cutover: stop the writers (CI runner, agent workspace sandbox) so
 // no new control-plane writes race the snapshot, and remove every Cloudflare tunnel connector so the old host
 // stops serving public traffic the instant we cut over (no split-brain). Forgejo + Komodo stay UP so the
-// snapshot's logical dumps (forgejo dump / pg_dump) are app-consistent. Best-effort — a container may be gone.
+// snapshot's logical dumps (forgejo dump / pg_dump) are app-consistent. Best-effort, a container may be gone.
 export const quiesceHost = async (session: SshSession): Promise<void> => {
     await session.exec("docker stop intentic-forgejo-runner intentic-sandbox-workspace 2>/dev/null || true");
     await session.exec('ids=$(docker ps -aq -f name=intentic-tunnel-); [ -n "$ids" ] && docker rm -f $ids || true');
@@ -49,7 +49,7 @@ export const snapshotNow = async (session: SshSession, log: (message: string) =>
 
 // Move the on-host restic repo from the old host to the new one through the CLI: pack the repo volume into a
 // single tarball on the old host (a throwaway container off the restic image, already present), SFTP it down
-// then up (streamed, binary-safe), and unpack it into the new host's repo volume — so a local-repo restore on
+// then up (streamed, binary-safe), and unpack it into the new host's repo volume, so a local-repo restore on
 // the new host reads a repo that is present before it runs. `localTarPath` is the CLI's scratch file.
 export const streamRepoVolume = async (
     oldSession: SshSession,

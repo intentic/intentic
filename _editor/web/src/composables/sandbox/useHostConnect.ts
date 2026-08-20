@@ -4,12 +4,12 @@ import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
-/* Drives the "Connect this computer" flow on a host capability's card — the desktop-sync card's shape, narrowed
+/* Drives the "Connect this computer" flow on a host capability's card, the desktop-sync card's shape, narrowed
  * to one machine.
  *
  * Connect mints a single-use pairing token BOUND TO THIS CAPABILITY, so the one-liner it produces can only ever
  * connect the computer the user is looking at. While that token is live we poll /system/hosts, because the
- * machine coming online is the thing the user is waiting for and it happens out-of-band — the moment they paste
+ * machine coming online is the thing the user is waiting for and it happens out-of-band, the moment they paste
  * the command into their laptop, this card should say so without a refresh.
  *
  * The token is shown once and never stored: a re-click mints a fresh one, which is cheaper than keeping a live
@@ -18,7 +18,7 @@ export function useHostConnect() {
     const { daemonUrl } = useSandbox();
 
     const hosts = ref<readonly HostSummary[]>([]);
-    // The capability id the last Connect click minted for, and its token — the pair the one-liners are built
+    // The capability id the last Connect click minted for, and its token, the pair the one-liners are built
     // from. Cleared when the dialog closes, so a stale command can never be copied from a reopened card.
     const pairId = ref<string | undefined>(undefined);
     const pairToken = ref<string | undefined>(undefined);
@@ -45,7 +45,7 @@ export function useHostConnect() {
             }
             hosts.value = ((await response.json()) as { hosts?: HostSummary[] }).hosts ?? [];
         } catch {
-            // Sandbox not reachable — leave the last known state rather than blanking the card.
+            // Sandbox not reachable, leave the last known state rather than blanking the card.
         }
     };
 
@@ -70,7 +70,7 @@ export function useHostConnect() {
     };
 
     let timer: ReturnType<typeof setInterval> | undefined;
-    // Poll ONLY while a pairing is live — that is the one window where this state changes without the user
+    // Poll ONLY while a pairing is live, that is the one window where this state changes without the user
     // touching the page. Just having the card open costs nothing.
     const start = (): void => {
         void refresh();
@@ -92,7 +92,7 @@ export function useHostConnect() {
     };
 
     // Revoke: the machine's key is dropped and its socket cut. The capability stays, so the card can offer
-    // Connect again — reconnecting is a fresh pairing, not a recovered one.
+    // Connect again, reconnecting is a fresh pairing, not a recovered one.
     const revoke = async (id: string): Promise<void> => {
         await sandboxRequest(`/system/hosts/${encodeURIComponent(id)}`, { method: `DELETE` });
         await refresh();

@@ -8,7 +8,7 @@ import type { ForgejoApi, ForgejoHook } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — the hooks API is reached over an SSH port-forward.
+// The ssh block is the control-plane host's, the hooks API is reached over an SSH port-forward.
 const forgejoNotifySchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
@@ -27,7 +27,7 @@ const FORGEJO_EVENTS: readonly string[] = ["push"];
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((value) => b.includes(value));
 
 // The Discord webhook has no comment/stamp field, so it is matched by (type "discord", config.url === the
-// Discord webhook url) — one Discord sink per (repo, url).
+// Discord webhook url), one Discord sink per (repo, url).
 const findDiscordHook = (hooks: readonly ForgejoHook[], webhook: string): ForgejoHook | undefined =>
     hooks.find((hook) => hook.type === "discord" && hook.config["url"] === webhook);
 

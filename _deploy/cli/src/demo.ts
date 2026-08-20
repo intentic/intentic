@@ -22,10 +22,10 @@ const { utils } = createRequire(import.meta.url)("ssh2") as {
 // A PERSISTENT local demo of the whole intentic flow: boots a long-lived Docker-in-Docker "host" on this
 // machine, drives the real CLI (init/resolve/apply) to stand up Forgejo + Komodo behind a Cloudflare tunnel
 // and to WIRE the app's CI/CD (Forgejo Actions workflow + a Komodo registry deployment). intentic itself
-// never builds or deploys the app — pushing the Dockerfile triggers the Action, which builds + pushes the
+// never builds or deploys the app, pushing the Dockerfile triggers the Action, which builds + pushes the
 // image and Komodo rolls it out. Prints the live URLs + generated admin logins and LEAVES everything running
 // so the services can be browsed. `demo down` tears it all back down (host container + tunnel + DNS). This is
-// a dev harness — not a shipped `intentic` command — and reuses exactly what the e2e proved.
+// a dev harness, not a shipped `intentic` command, and reuses exactly what the e2e proved.
 
 const exec = promisify(execFile);
 const root = repoRoot(import.meta.url);
@@ -47,7 +47,7 @@ const config = loadConfig();
 const zone = config.cloudflareZone;
 const sshPort = config.demo.sshPort;
 // Forgejo (3000) and Komodo (9120) are also published straight to localhost so the stack can be browsed
-// and the app repo seeded WITHOUT waiting on public DNS — the tunnel/public URLs come up alongside.
+// and the app repo seeded WITHOUT waiting on public DNS, the tunnel/public URLs come up alongside.
 const forgejoPort = config.demo.forgejoPort;
 const komodoPort = config.demo.komodoPort;
 
@@ -188,7 +188,7 @@ const up = async (): Promise<void> => {
     }
 
     // Bootstrap into the repo's own gitignored scratch dirs (intent/, desired-state/) instead of a throwaway
-    // /tmp workspace, so the generated .secrets.json lands at desired-state/.secrets.json — exactly where
+    // /tmp workspace, so the generated .secrets.json lands at desired-state/.secrets.json, exactly where
     // `pnpm intentic deploy adopt` (default repo-root paths) reads the Forgejo admin password from.
     const workspace = root;
     const configPath = join(workspace, "intent", "deploy.config.ts");
@@ -249,7 +249,7 @@ const up = async (): Promise<void> => {
             content: DOCKERFILE,
             message: "seed demo app",
         });
-        // intentic only WIRES CI/CD — the apply above committed the Forgejo Actions workflow + repo secrets and
+        // intentic only WIRES CI/CD, the apply above committed the Forgejo Actions workflow + repo secrets and
         // registered the Komodo deployment; it does NOT build or deploy. CI seeded a placeholder Dockerfile, so
         // pushing the real one above triggers the Action: build -> push to the registry -> Komodo rolls it out.
         log(`▶ CI builds + pushes the image and Komodo rolls it out — polling http://127.0.0.1:${appPort} …`);
@@ -304,7 +304,7 @@ interface DemoState {
 
 // Stop the demo without touching Cloudflare: remove the host container (which kills the cloudflared
 // connector). The tunnel + DNS records are LEFT intact, so the next `up` reuses the tunnel by name and the
-// records already point at it — the connector reconnects in seconds with no DNS delete/recreate, so resolvers
+// records already point at it, the connector reconnects in seconds with no DNS delete/recreate, so resolvers
 // never cache NXDOMAIN (which would make the domains look dead for up to the zone's negative-TTL). Use `clear`
 // to also purge the Cloudflare tunnel + DNS.
 const down = async (): Promise<void> => {
@@ -327,7 +327,7 @@ const clear = async (): Promise<void> => {
 
     log("▶ deleting the Cloudflare tunnel + DNS records …");
     // Account + zone id both come from resolving the zone name (the same discovery resolve does), so the
-    // teardown needs only the zone name + token — no separately-configured account.
+    // teardown needs only the zone name + token, no separately-configured account.
     const cfZone = await cloudflareApi.getZone({ apiToken, zone: zoneName }).catch(() => undefined);
     if (cfZone !== undefined) {
         const tunnel = await cloudflareApi.findTunnel({ accountId: cfZone.accountId, apiToken, name: TUNNEL }).catch(() => undefined);
@@ -350,7 +350,7 @@ const clear = async (): Promise<void> => {
         }
     }
 
-    // intent/ + desired-state/ are gitignored scratch dirs holding the generated .secrets.json — left in place
+    // intent/ + desired-state/ are gitignored scratch dirs holding the generated .secrets.json, left in place
     // so `intentic deploy adopt` can still run after teardown.
     await rm(stateDir, { recursive: true, force: true }).catch(() => {});
     log("✅ demo cleared — host container, tunnel, and DNS records removed (intent/ + desired-state/ kept).");

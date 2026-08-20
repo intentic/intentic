@@ -44,7 +44,7 @@ export const resolveCommand = buildCommand<ResolveFlags>({
         const intent = await loadIntent(flags.config ?? CONFIG_PATH);
         const artifactOut = flags.out ?? ARTIFACT_PATH;
         const dir = dirname(artifactOut);
-        // Capture the artifact being replaced BEFORE overwriting it — the control-plane sync diffs against it.
+        // Capture the artifact being replaced BEFORE overwriting it, the control-plane sync diffs against it.
         const previousGraph = flags.syncControlPlane && existsSync(artifactOut) ? await readArtifact(artifactOut) : undefined;
         const zone = await discoverZone(intent, dir);
         const graph = resolveState(intent, zone);

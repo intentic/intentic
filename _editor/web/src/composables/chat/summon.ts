@@ -5,26 +5,26 @@ import { snapshotTab } from "./tabSnapshot";
 import { type Reveal, reveal, type RevealEntry } from "./useChat";
 import { useSandbox } from "../sandbox/useSandbox";
 
-/* SUMMONING THE CHAT, FOR EVERY WINDOW AT ONCE — the one way a surface outside the panel puts something on it.
+/* SUMMONING THE CHAT, FOR EVERY WINDOW AT ONCE, the one way a surface outside the panel puts something on it.
  *
  * The app runs as a full copy per browser window, and the copies share nothing but the daemon: agents,
- * transcripts and rosters converge everywhere, while the chat panel's own state — which tabs are open, which is
- * focused — is deliberately per window. A popped-out chat is drawn by whichever window opened it, so a board
+ * transcripts and rosters converge everywhere, while the chat panel's own state, which tabs are open, which is
+ * focused, is deliberately per window. A popped-out chat is drawn by whichever window opened it, so a board
  * click that only mutated the clicking window's store was invisible out there: "I pressed New agent and the
  * popped-out chat kept showing an old conversation" was this, and nothing else.
  *
  * So a summons is not a store call, it is a BROADCAST: the same reveal (useChat.reveal) is applied in this
- * window and posted to every other window of this origin, each of which applies it to its own panel — docked,
+ * window and posted to every other window of this origin, each of which applies it to its own panel, docked,
  * popped out, or parked. One channel, one apply, no ownership question: there is no "attached" window to
  * find and no fallback when it is missing, because every window is told and every window obeys.
  *
  * WHAT RIDES THE CHANNEL is the portable description of a tab (StoredTab), never the live object: a window
  * that has never heard of the chat rebuilds it exactly as a reload would and hydrates it from the daemon. Two
  * things deliberately do NOT ride it:
- *   · queued messages — user-written turns waiting to be SENT. A copy of those in another window would be
+ *   · queued messages, user-written turns waiting to be SENT. A copy of those in another window would be
  *     sent again by that window's own queue drain: acts happen once, in the window that was pressed; the
  *     resulting turn reaches everyone through the daemon.
- *   · gestures INSIDE the panel — its rail, its tabs, its pane ×. A gesture on the panel acts on the panel it
+ *   · gestures INSIDE the panel, its rail, its tabs, its pane ×. A gesture on the panel acts on the panel it
  *     was made in: the reader is pointing at the thing itself, so there is nothing to route.
  *
  * Scoped by SANDBOX, because the summons names conversations of one sandbox's daemon: a window looking at
@@ -55,7 +55,7 @@ const apply = (summons: Summons): void => {
     reveal(summons);
 };
 
-// Another window's summons, arriving here — the channel's receiving half, named so a test can hand it a wire
+// Another window's summons, arriving here, the channel's receiving half, named so a test can hand it a wire
 // message without a second window to post one.
 export const receiveSummons = (summons: WireSummons): void => {
     if (summons.sandbox !== useSandbox().activeSandboxId.value) {
@@ -76,7 +76,7 @@ const channel = typeof window === `undefined` || window.BroadcastChannel === und
 
 channel?.addEventListener(`message`, (event: MessageEvent<WireSummons>) => receiveSummons(event.data));
 
-// Apply here, tell everyone else — a BroadcastChannel does not deliver to its own poster, so the local apply
+// Apply here, tell everyone else, a BroadcastChannel does not deliver to its own poster, so the local apply
 // and the broadcast together are what make every window (this one included) run the identical reveal.
 export const summonChat = (summons: Summons): void => {
     apply(summons);

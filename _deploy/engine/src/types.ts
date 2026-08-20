@@ -21,7 +21,7 @@ export interface Orphan {
 }
 
 // An orphan plus the inputs its provider's `delete` acts on (from the ListedResource that found it).
-// Inputs carry connection secrets — plumb entries to pruneOrphans or strip to Orphan, never serialize.
+// Inputs carry connection secrets, plumb entries to pruneOrphans or strip to Orphan, never serialize.
 export interface OrphanEntry extends Orphan {
     readonly inputs: Readonly<Record<string, unknown>>;
     readonly protected?: boolean;
@@ -44,11 +44,11 @@ export interface PrunedResource {
 export interface PruneOutcome {
     // Resources removed from desired state that were torn down.
     readonly deleted: readonly PrunedResource[];
-    // Resources removed from desired state whose provider has no `delete` — left in place (logged).
+    // Resources removed from desired state whose provider has no `delete`, left in place (logged).
     readonly skipped: readonly PrunedResource[];
 }
 
-// Structured lifecycle events the engine emits as it runs — the machine-readable counterpart to `log`
+// Structured lifecycle events the engine emits as it runs, the machine-readable counterpart to `log`
 // (which carries providers' free-form strings). A driver (the CLI, a control plane) renders these into a
 // live progress stream; the final result is built from the returned outcomes, not from events.
 export type EngineEvent =

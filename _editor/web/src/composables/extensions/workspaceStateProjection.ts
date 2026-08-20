@@ -1,11 +1,11 @@
 import { type AccessEntry, AccessEntrySchema, groupOf, type ResourceView, type WorkspaceState } from "@intentic-app/api-contract";
 
 /* Shapes the infrastructure read-model from the sandbox's desired-state graph (desired-state.json, the
- * compiled deploy.config.ts) joined with the last reconcile result (status.json) — read directly from the
+ * compiled deploy.config.ts) joined with the last reconcile result (status.json), read directly from the
  * daemon's git file routes and projected locally. Shared by the infrastructure + live-status extensions
  * (ported from the retired infra operator panel). */
 
-// The slice of @intentic/graph's DesiredStateGraph this projection reads — inlined so the web app needs no
+// The slice of @intentic/graph's DesiredStateGraph this projection reads, inlined so the web app needs no
 // dependency on the graph package (the compiled desired-state.json matches this shape).
 interface ResourceNode {
     readonly id: string;
@@ -18,7 +18,7 @@ interface DesiredStateGraph {
     readonly resources: Record<string, ResourceNode>;
 }
 
-// status.json has no named type in @intentic — the CLI writes it as `unknown` — so the slice we read is local.
+// status.json has no named type in @intentic, the CLI writes it as `unknown`, so the slice we read is local.
 interface StatusStep {
     readonly id: string;
     readonly action: string;

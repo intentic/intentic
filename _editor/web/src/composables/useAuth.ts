@@ -45,14 +45,14 @@ const refresh = async (): Promise<User | null> => {
     return pending;
 };
 
-// Kicks off Google OAuth, returning to `callbackPath` on the SPA origin afterwards (any path is allowed — the
+// Kicks off Google OAuth, returning to `callbackPath` on the SPA origin afterwards (any path is allowed, the
 // origin is a Better Auth trusted origin). Defaults to `/`; the invite-accept page passes its own URL so an
 // unauthenticated invitee lands back on the invite after signing in.
 const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
     await client.signIn.social({ provider: `google`, callbackURL: `${globalThis.location.origin}${callbackPath}` });
 };
 
-/* THE SAME SIGN-IN, DONE IN THE BROWSER — where the credential can be kept.
+/* THE SAME SIGN-IN, DONE IN THE BROWSER, where the credential can be kept.
  *
  * The redirect above proves the user to the platform and leaves this window with nothing, so the sandbox had
  * to ask for Google a second time: the daemon authenticates the end user against Google directly (it does not
@@ -60,7 +60,7 @@ const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
  * spending it on the platform too collapses the two asks into one.
  *
  * Deliberately one-directional: this sends a Google credential the browser already holds INTO the platform.
- * The platform never hands one back, so nothing the sandbox trusts depends on the platform being honest — a
+ * The platform never hands one back, so nothing the sandbox trusts depends on the platform being honest, a
  * daemon that is forked, older, or modified to distrust the platform entirely sees exactly what it sees today.
  *
  * Throws when the platform will not take it (a self-hosted build without the endpoint, a client-id mismatch,
@@ -72,7 +72,7 @@ const signInWithGoogleCredential = async (idToken: string): Promise<void> => {
         throw new Error(error.message ?? `Google sign-in was refused.`);
     }
     // The session cookie is set by the call above; this only fills the shared `user` ref early. A failure here
-    // is a blip AFTER a sign-in that already happened, and throwing would tell the caller the opposite — so
+    // is a blip AFTER a sign-in that already happened, and throwing would tell the caller the opposite, so
     // let the route guard resolve the session on the way in, as it does on every reload.
     await refresh().catch(() => undefined);
 };
@@ -98,7 +98,7 @@ const updateProfile = async (input: { name?: string; image?: string }): Promise<
 };
 
 // GDPR account deletion (Settings → danger zone). Prisma cascades remove sessions/accounts/sandboxes/grants
-// with the user row. Better Auth requires a fresh session for password-less users — a stale one surfaces as
+// with the user row. Better Auth requires a fresh session for password-less users, a stale one surfaces as
 // the returned error.
 const deleteAccount = async (sandboxes: readonly SandboxSummary[]): Promise<void> => {
     await retireAccountAccess(sandboxes);

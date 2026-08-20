@@ -163,7 +163,7 @@ export const gitlabApi: GitLabApi = {
     },
 
     setCiVariable: async ({ url, token, owner, name, key, value }) => {
-        // Plaintext project CI/CD variables — no sealed-box encryption (the big simplification vs GitHub Actions
+        // Plaintext project CI/CD variables, no sealed-box encryption (the big simplification vs GitHub Actions
         // secrets). Same POST=create / PUT=update split as files. protected:false so all branches see it;
         // masked:false because multi-line values (SSH keys) fail GitLab's masking constraints.
         const varsBase = `${base(url)}/projects/${projectPath(owner, name)}/variables`;

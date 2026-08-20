@@ -1,10 +1,10 @@
 import type { WarmTask } from "./warmPlan";
 
-/* READING WHAT THE READER IS ABOUT TO ASK FOR — for the whole app, not for one panel.
+/* READING WHAT THE READER IS ABOUT TO ASK FOR, for the whole app, not for one panel.
  *
  * Everything in this product is a round trip to a daemon on the far side of a tunnel, on a machine that may be
- * busy building something. The user pays that trip at the exact moment they are standing still waiting for it —
- * the click — while the seconds before it, spent scanning a board deciding what to open, went unused. This walks
+ * busy building something. The user pays that trip at the exact moment they are standing still waiting for it,
+ * the click, while the seconds before it, spent scanning a board deciding what to open, went unused. This walks
  * that gap: it asks the surfaces what they would want in hand (warmPlan) and reads it, one thing at a time, in
  * the spaces between what the user and the app are already doing.
  *
@@ -12,7 +12,7 @@ import type { WarmTask } from "./warmPlan";
  * it is the shape of the loop, and every rule that makes it true is here rather than scattered across callers:
  *
  *   · ONE AT A TIME. The next read is not issued until the previous one has answered. The daemon therefore sees
- *     a single reader working down a list — which is what this is — instead of forty simultaneous ones, and the
+ *     a single reader working down a list, which is what this is, instead of forty simultaneous ones, and the
  *     loader SELF-THROTTLES against a busy daemon for free: slow answers space the walk out on their own.
  *   · A GAP PROPORTIONAL TO WHAT THE LAST READ COST. One-at-a-time alone still means a fast daemon is asked
  *     continuously. So each read is followed by a pause scaled to how long it took: a quick answer earns a short
@@ -30,7 +30,7 @@ import type { WarmTask } from "./warmPlan";
  *     instead of walking the rest of the plan into the same wall.
  *   · AND NEITHER DOES A SUCCESS THAT CHANGED NOTHING. A read that resolves without its wish becoming satisfied
  *     is the one failure mode the rules above do not cover: it is not an error, so nothing counts it, and the
- *     loader takes the first unsatisfied wish — so it would pick the same one again on the very next beat, and
+ *     loader takes the first unsatisfied wish, so it would pick the same one again on the very next beat, and
  *     on every beat after that, forever. One wish shaped that way is the whole plan lost. See STALL_RETRY_MS.
  *
  * Nothing here reports and nothing here is user-visible. A loader that surfaced its own progress would be
@@ -39,7 +39,7 @@ import type { WarmTask } from "./warmPlan";
 /* --- the constants, and what each one is bounding ------------------------------------------------------- */
 
 // The floor between two reads, however cheap the last one was. At this spacing a perfectly fast daemon is asked
-// four times a second at the absolute most — enough to warm a board in a few seconds, slow enough that the
+// four times a second at the absolute most, enough to warm a board in a few seconds, slow enough that the
 // network panel reads as a trickle rather than a flood.
 const MIN_GAP_MS = 250;
 // The ceiling, so a single pathological read (a huge diff over a cold tunnel) doesn't park the loader for a
@@ -50,12 +50,12 @@ const MAX_GAP_MS = 4_000;
 // else, this asks for no more than an equal share of the time it has left.
 const GAP_RATIO = 1;
 
-// The beat when there is nothing to do — no plan, paused, or standing aside. Long enough to cost nothing while
+// The beat when there is nothing to do, no plan, paused, or standing aside. Long enough to cost nothing while
 // the user works for an hour, short enough that the loader picks a new plan up promptly.
 const IDLE_BEAT_MS = 1_000;
 
-/* HOW LONG STANDING ASIDE IS ALLOWED TO LAST. `busy` is meant to describe a moment — a click's read is in
- * flight — and yielding to it is free because it clears in one round trip. But nothing in this app times a
+/* HOW LONG STANDING ASIDE IS ALLOWED TO LAST. `busy` is meant to describe a moment, a click's read is in
+ * flight, and yielding to it is free because it clears in one round trip. But nothing in this app times a
  * daemon read out, so a single hung request would otherwise hold the gate closed for the rest of the session
  * and the loader would sit there politely forever. Past this many consecutive yields it takes its beat anyway:
  * one extra request beside a request that is never coming back is not the thing that broke that session. */
@@ -63,7 +63,7 @@ const MAX_YIELDS = 10;
 
 /* HOW LONG A WISH THAT WILL NOT SETTLE IS LEFT ALONE.
  *
- * A read that resolves is supposed to make its wish satisfied — `have` is a cache lookup and the read is the
+ * A read that resolves is supposed to make its wish satisfied, `have` is a cache lookup and the read is the
  * fetch that fills it (warmQuery). When those two agree, this constant never comes into play: the wish flips to
  * "in hand" and the walk moves on. When they DISAGREE, this is the only thing standing between one malformed
  * wish and a loader that spends the entire session re-reading it, because a stall is not an error and the
@@ -86,8 +86,8 @@ const COOL_OFF_MS = 30_000;
  *
  * `paused` is about the SESSION: nobody is looking, the daemon is unreachable, the loader is sleeping off a run
  * of failures. `busy` is about THIS MOMENT: the user's own read is in flight, or an agent is streaming. They
- * are separated because they resolve on completely different timescales — a pause can last an hour, a busy
- * moment lasts one round trip — and folding them together made the loader either too eager after a pause or too
+ * are separated because they resolve on completely different timescales, a pause can last an hour, a busy
+ * moment lasts one round trip, and folding them together made the loader either too eager after a pause or too
  * sleepy after a click. */
 export interface LoaderGates {
     readonly paused: () => boolean;
@@ -102,23 +102,23 @@ export interface LoaderPace {
     readonly now: () => number;
 }
 
-/* What one beat did, for the tests and for the debug counters — never for the user (see the header).
+/* What one beat did, for the tests and for the debug counters, never for the user (see the header).
  *
  * `stalled` is its own outcome rather than a flavour of `read`: the request was made and answered, so it cost
- * exactly what a read costs, but the plan is no closer to being warm than it was — and a loader reporting those
+ * exactly what a read costs, but the plan is no closer to being warm than it was, and a loader reporting those
  * as reads would look like it was working while getting nothing done. */
 export interface LoaderBeat {
     readonly outcome: "read" | "stalled" | "failed" | "idle" | "paused" | "yielded";
     readonly key?: string;
 }
 
-/* THE GAP AFTER A READ. Proportional to what the read cost, clamped at both ends — see GAP_RATIO for why the
+/* THE GAP AFTER A READ. Proportional to what the read cost, clamped at both ends, see GAP_RATIO for why the
  * proportion is the rule rather than a fixed number of milliseconds. Exported because it is the whole of the
  * pacing policy and a test that has to reproduce the arithmetic to assert on it is testing its own copy. */
 export const gapAfter = (elapsedMs: number): number => Math.min(MAX_GAP_MS, Math.max(MIN_GAP_MS, elapsedMs * GAP_RATIO));
 
 // Answered defensively: a `have` that throws is a surface reading a cache that has been torn down under it.
-// Treat it as "in hand" — the safe answer, because the alternative is warming into a store that is gone.
+// Treat it as "in hand", the safe answer, because the alternative is warming into a store that is gone.
 const inHand = (task: WarmTask): boolean => {
     try {
         return task.have();
@@ -131,7 +131,7 @@ const inHand = (task: WarmTask): boolean => {
  *
  * A linear scan, every beat, over a plan bounded at PLAN_LIMIT. That looks wasteful and is the point: `have` is
  * a cache lookup, so scanning past four hundred satisfied wishes costs less than one of the round trips it
- * avoids — and it means a wish that goes COLD AGAIN (its list refreshed, its query invalidated) is picked up on
+ * avoids, and it means a wish that goes COLD AGAIN (its list refreshed, its query invalidated) is picked up on
  * the very next beat without anything having to notify the loader that it did. A source can therefore declare
  * its list once and leave it declared, which is the property that makes the whole registry cheap to use.
  *
@@ -161,7 +161,7 @@ export const runBackgroundLoader = async (
     // since left the plan costs one map lookup that no scan will ever reach.
     const resting = new Map<string, number>();
     while (!stopped()) {
-        // Idle FIRST, always — before the gates are even read. Whatever this beat turns out to be, it happens in
+        // Idle FIRST, always, before the gates are even read. Whatever this beat turns out to be, it happens in
         // a gap the browser offered rather than in the middle of a frame the user is watching.
         await pace.idle();
         if (stopped()) {
@@ -195,7 +195,7 @@ export const runBackgroundLoader = async (
         }
         if (ok) {
             failures = 0;
-            // Did the read do what the wish said it would? Asked once, here, rather than trusted — see
+            // Did the read do what the wish said it would? Asked once, here, rather than trusted, see
             // STALL_RETRY_MS for what one wish that answers "no" costs everything behind it.
             const settled = inHand(task);
             if (settled) {
@@ -214,7 +214,7 @@ export const runBackgroundLoader = async (
             await pace.wait(COOL_OFF_MS);
             continue;
         }
-        // A lone failure is one unreadable thing, not a broken daemon — pace off it normally so the plan's next
+        // A lone failure is one unreadable thing, not a broken daemon, pace off it normally so the plan's next
         // entry still gets its turn.
         await pace.wait(gapAfter(pace.now() - started));
     }
@@ -222,7 +222,7 @@ export const runBackgroundLoader = async (
 
 /* --- the pace the browser actually runs at ---------------------------------------------------------------- */
 
-// Safari has no idle callback, so a beat of setTimeout stands in for it — the same bargain the chat
+// Safari has no idle callback, so a beat of setTimeout stands in for it, the same bargain the chat
 // transcript's warm-up makes.
 const IDLE_FALLBACK_MS = 200;
 

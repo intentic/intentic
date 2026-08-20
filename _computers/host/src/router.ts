@@ -12,7 +12,7 @@ import { manageSandbox, removeSandbox, swapSandbox, tailSandboxLogs } from "./to
  * dialled is independent of which peer serves.
  *
  * `scopes` is a live reference, not a copy: `setScopes` replaces what the whole agent enforces, and the MCP
- * handler reads it per call — so a switch the owner turns off is in force on the very next tool call rather than
+ * handler reads it per call, so a switch the owner turns off is in force on the very next tool call rather than
  * at the next reconnect. */
 export interface HostRuntime {
     readonly scopes: () => HostScopes;
@@ -24,7 +24,7 @@ export interface HostRuntime {
  *
  * The flow functions take an `onLine` because their OTHER caller is an MCP tool, which wants one answer at the
  * end and has no use for a line as it arrives. This adapts those same calls rather than adding a second
- * implementation of any of them — so what a person watches and what the agent is told can never describe the
+ * implementation of any of them, so what a person watches and what the agent is told can never describe the
  * same run differently.
  *
  * Lines are queued rather than dropped when the consumer is slower than the machine: an image pull prints
@@ -57,7 +57,7 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
             yield { kind: "line", text: next };
             continue;
         }
-        // Drained AND finished — every line the flow produced has been sent, so the terminal frame is next.
+        // Drained AND finished, every line the flow produced has been sent, so the terminal frame is next.
         if (settled !== undefined) {
             break;
         }
@@ -103,10 +103,10 @@ export const createHostRouter = (runtime: HostRuntime) => {
             return { ok: true };
         }),
         ping: os.ping.handler(() => ({ ok: true })),
-        // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and by the tool it names —
+        // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and by the tool it names,
         // not by this contract, and deliberately not by the daemon (see the contract for why).
         mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, runtime.scopes)),
-        // The scopes are read HERE, per call, exactly as the MCP handler reads them — a stream opened before the
+        // The scopes are read HERE, per call, exactly as the MCP handler reads them, a stream opened before the
         // owner flipped a switch must not outlive the decision.
         runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes()))),
     });

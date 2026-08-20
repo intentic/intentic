@@ -1,11 +1,11 @@
-/* Composer message recall — what the user has SENT, cycled back into the composer with ↑ / ↓, the way a shell
+/* Composer message recall, what the user has SENT, cycled back into the composer with ↑ / ↓, the way a shell
  * cycles its command history. Distinct from the transcript: the transcript is one conversation's record and is
  * already on screen, while recall is workspace-wide and its whole point is reaching a prompt from a chat that
  * is no longer open ("run the tests", "review the diff") without retyping it.
  *
  * Scoped per sandbox, alongside the tab snapshot in useChat: the prompts worth recalling are properties of the
  * workspace, and mixing two sandboxes' prompts into one list would make the ring mostly noise. localStorage
- * rather than the daemon — this is a client-side typing convenience, and it must work before a sandbox is
+ * rather than the daemon, this is a client-side typing convenience, and it must work before a sandbox is
  * reachable (the composer is usable while the tunnel wakes). */
 
 const historyKey = (sandboxId: string): string => `intentic.inputHistory.${sandboxId}`;
@@ -36,7 +36,7 @@ const write = (key: string, entries: readonly string[]): void => {
     }
 };
 
-/* Whether the caret sits on the first / last LINE of the draft — the only lines from which the arrows can reach
+/* Whether the caret sits on the first / last LINE of the draft, the only lines from which the arrows can reach
  * recall at all. Anywhere else the key belongs to the browser, which is what lets a recalled MULTI-LINE message
  * still be navigated and edited natively before it is sent. */
 export const onFirstLine = (text: string, caret: number): boolean => !text.slice(0, caret).includes(`\n`);
@@ -59,12 +59,12 @@ export class InputHistory {
         return this.cursor !== undefined;
     }
 
-    // Whether there is anything to recall — the composer's hint advertises ↑ only once the ring is non-empty.
+    // Whether there is anything to recall, the composer's hint advertises ↑ only once the ring is non-empty.
     get recallable(): boolean {
         return this.entries.length > 0;
     }
 
-    // Record a sent message. Consecutive duplicates are dropped — re-running the same prompt three times should
+    // Record a sent message. Consecutive duplicates are dropped, re-running the same prompt three times should
     // cost one slot in the ring, not three presses of ↑ to get past it.
     record(text: string): void {
         const entry = text.trim();
@@ -81,7 +81,7 @@ export class InputHistory {
     }
 
     // Step to the older entry, stashing `draft` on the first step. Undefined when there is nothing to recall
-    // (an empty ring, or already at the oldest entry) — the caller then leaves the key to the browser.
+    // (an empty ring, or already at the oldest entry), the caller then leaves the key to the browser.
     previous(draft: string): string | undefined {
         if (this.entries.length === 0) {
             return undefined;
@@ -119,7 +119,7 @@ export class InputHistory {
         return draft;
     }
 
-    // Drop recall state without touching the composer — for a send, a keystroke, or a tab switch, all of which
+    // Drop recall state without touching the composer, for a send, a keystroke, or a tab switch, all of which
     // mean the text on screen is the user's again and the stashed draft is no longer anyone's to restore.
     reset(): void {
         this.cursor = undefined;
@@ -137,9 +137,9 @@ export type RecallStep =
 /* The composer's whole arrow contract, decided from the key, the draft and the caret.
  *
  * A line here is a line of TEXT, but on screen it wraps into as many rows as it needs, and inside those rows ↑
- * reads as "move up", not "recall" — pressing it to reach the row above must not paste yesterday's prompt over
- * what is being typed. So on the line that gates recall the arrows first walk the caret to that line's edge —
- * start for ↑, end for ↓ — and only the press that finds it ALREADY at the edge steps through history. Two
+ * reads as "move up", not "recall", pressing it to reach the row above must not paste yesterday's prompt over
+ * what is being typed. So on the line that gates recall the arrows first walk the caret to that line's edge,
+ * start for ↑, end for ↓, and only the press that finds it ALREADY at the edge steps through history. Two
  * presses reach the ring from anywhere in the draft, however tall it has grown.
  *
  * The one position exempt from that first step is where recall itself leaves the caret (the end of the message

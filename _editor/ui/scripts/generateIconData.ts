@@ -1,4 +1,4 @@
-// Codegen: emits src/icons/iconData.generated.ts — a trimmed Iconify collection holding only the ~106 icons
+// Codegen: emits src/icons/iconData.generated.ts, a trimmed Iconify collection holding only the ~106 icons
 // the app actually uses, so installUi() can addCollection() it and every <Icon> resolves offline. The full
 // @iconify-json/ri set is thousands of icons; we ship only what ICONS references.
 // Run with `bun run scripts/generateIconData.ts` (or `pnpm --filter @intentic/ui generate:icons`)
@@ -11,7 +11,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { ICONS } from "../src/icons/iconSets.js";
 
 // The one set the app draws from. An id naming any other prefix fails here rather than rendering as a hole in
-// the running app — which is what an unbundled icon looks like: Iconify draws nothing and says nothing.
+// the running app, which is what an unbundled icon looks like: Iconify draws nothing and says nothing.
 const PREFIX = "ri";
 
 const names = new Set<string>();

@@ -8,7 +8,7 @@ import type { FigureAccent } from "../markdown/figures.js";
  *
  * Building the var name at runtime is safe HERE and nowhere by accident: those tokens live in an `@theme static`
  * block precisely because Tailwind only emits a theme variable it can SEE used, and a chart picks its slot at
- * runtime. That block's comment records what happened when they were not static — slots 3 and 4 vanished from
+ * runtime. That block's comment records what happened when they were not static, slots 3 and 4 vanished from
  * the bundle and painted nothing. */
 export const seriesColor = (accent: FigureAccent | undefined): string => {
     if (accent === undefined) {

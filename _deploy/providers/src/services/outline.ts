@@ -95,7 +95,7 @@ const composeYaml = (parsed: OutlineInputs, id: string, hash: string): string =>
 // Dex: sqlite storage, one static OAuth client (Outline's callback) whose secret comes from the .env, and
 // one static password user. The bcrypt hash is inlined here (not via .env/compose ${…}) because this config
 // is rewritten every apply from the CURRENT OUTLINE_ADMIN_PASSWORD, so the login always matches the printed
-// password — whereas the write-once .env would freeze a stale hash if the secret store were regenerated.
+// password, whereas the write-once .env would freeze a stale hash if the secret store were regenerated.
 // The first OIDC sign-in to a fresh Outline becomes its admin.
 const dexConfigYaml = (parsed: OutlineInputs): string =>
     [
@@ -116,7 +116,7 @@ const dexConfigYaml = (parsed: OutlineInputs): string =>
         "staticPasswords:",
         `  - email: ${parsed.adminUser}`,
         // YAML double-quotes do no interpolation and the config rides a quoted heredoc, so the $-laden
-        // bcrypt hash lands literally — no compose ${…} round-trip to mangle it.
+        // bcrypt hash lands literally, no compose ${…} round-trip to mangle it.
         `    hash: "${hashSync(parsed.adminPassword, 10)}"`,
         "    username: intentic",
         "    userID: intentic-admin",

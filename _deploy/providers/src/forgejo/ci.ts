@@ -9,7 +9,7 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — commitFile + setRepoSecret go over an SSH port-forward to
+// The ssh block is the control-plane host's, commitFile + setRepoSecret go over an SSH port-forward to
 // Forgejo, like repo/forgejo-notify.
 const ciSchema = sshSchema.extend({
     // The shared admin username (Forgejo + Komodo). adminPassword is the FORGEJO one this provider authes with;
@@ -44,7 +44,7 @@ const DOCKERFILE_PATH = "Dockerfile";
 
 // The Forgejo Actions workflow: on a push to the env branch it builds the Dockerfile, pushes the image to the
 // Forgejo registry (registry/owner/repo:<env> + :<sha>), then logs into Komodo and triggers an immediate
-// Deploy. `${{ ... }}` are Forgejo expressions and `$JWT`/`$KOMODO_PASSWORD`/`$( )` are shell — kept literal;
+// Deploy. `${{ ... }}` are Forgejo expressions and `$JWT`/`$KOMODO_PASSWORD`/`$( )` are shell, kept literal;
 // only the resolve-time values (registry/branch/admin/komodoUrl/deployment) are interpolated here.
 const workflowYaml = (parsed: CiInputs): string => {
     const base = `${parsed.registry}/${parsed.owner}/${parsed.repoName}`;
@@ -82,7 +82,7 @@ const workflowYaml = (parsed: CiInputs): string => {
 };
 
 // The app's CI/CD wiring: commits the build-and-deploy workflow into the repo and sets the registry-push +
-// Komodo-login secrets it consumes. Replaces the old Komodo Build — intentic no longer builds or deploys; a
+// Komodo-login secrets it consumes. Replaces the old Komodo Build, intentic no longer builds or deploys; a
 // developer push triggers this workflow which builds, pushes, and tells Komodo to redeploy. read keys off the
 // committed workflow file (the secrets cannot be read back, so they are re-set every apply, idempotently);
 // PENDING-guards on the ref'd Komodo url + packages token so a plan proceeds before the platform is up.

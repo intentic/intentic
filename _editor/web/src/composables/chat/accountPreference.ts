@@ -1,7 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { perProvider } from "./providerCatalog";
 
-/* Which account of each provider the user last picked for a turn, per sandbox — what a new conversation's
+/* Which account of each provider the user last picked for a turn, per sandbox, what a new conversation's
  * account selection seeds from, and what a reloaded window comes back wearing. Without it the pick lived in
  * memory only, so every refresh resolved the selection to "the provider's first account" and silently undid a
  * choice the user had made deliberately (headroom left on one account, a different organization on another).
@@ -11,17 +11,17 @@ import { perProvider } from "./providerCatalog";
  * a chat to an account that does not exist there. The tab snapshot is keyed this way for the same reason.
  *
  * localStorage, and one store rather than tabSnapshot's two: this is a PREFERENCE, not a window's own state, so
- * the last pick made anywhere is the one the next window opens on — the same last-writer-wins the other turn
+ * the last pick made anywhere is the one the next window opens on, the same last-writer-wins the other turn
  * prefs (turnDefaults) have. What a window is CURRENTLY showing never comes from here; `selectedAccountId` holds
  * that in memory, and this is read only when a window binds to a sandbox.
  *
- * A pick is remembered whether or not the account still exists, because only the daemon's account list can say —
+ * A pick is remembered whether or not the account still exists, because only the daemon's account list can say,
  * so validating it belongs to the reader (rememberedAccountFor) and to the moment that list lands
  * (refreshAccounts), not here. */
 
 const key = (sandboxId: string): string => `intentic.chatAccounts.${sandboxId}`;
 
-// The last pick per provider, or a blank slate — for an unbound sandbox, an unreadable blob, or storage that
+// The last pick per provider, or a blank slate, for an unbound sandbox, an unreadable blob, or storage that
 // isn't there at all (private mode, where merely touching it throws).
 export const readAccountPreference = (sandboxId: string | undefined): Record<AgentProvider, string | undefined> => {
     const blank = perProvider<string | undefined>(() => undefined);
@@ -34,7 +34,7 @@ export const readAccountPreference = (sandboxId: string | undefined): Record<Age
             return blank;
         }
         const stored = JSON.parse(raw) as Record<string, unknown>;
-        // Any provider is a candidate key — the vocabulary is open (native ids plus installed ACP agents) — and a
+        // Any provider is a candidate key, the vocabulary is open (native ids plus installed ACP agents), and a
         // value is usable only as a non-empty id. Anything else is dropped to the blank slate's `undefined`,
         // which every reader already handles as "no pick yet".
         const picks = Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === `string` && entry[1] !== ``);

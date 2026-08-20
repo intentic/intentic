@@ -10,7 +10,7 @@ import { withRunLog } from "../lib/run-log.js";
 
 const DEFAULT_TAIL = 200;
 
-// Node ids/types are interpolated into a host shell command — restrict them to the safe charset rather than
+// Node ids/types are interpolated into a host shell command, restrict them to the safe charset rather than
 // quote-escaping (real ids already match; anything else is not a resource we deployed).
 const SAFE_NAME = /^[a-zA-Z0-9_.-]+$/;
 
@@ -52,7 +52,7 @@ export const logsCommand = buildCommand({
         const dir = dirname(artifact);
         loadEnvFile(dir);
         const graph = await readArtifact(artifact);
-        // A resource has host logs iff it was deployed over SSH — its inputs carry the copied ssh block
+        // A resource has host logs iff it was deployed over SSH, its inputs carry the copied ssh block
         // (state-resolver's sshOf). Komodo-managed app deployments keep runtime logs in Komodo by design:
         // `intentic deploy deployments` deep-links there.
         const loggable = Object.values(graph.resources).filter((node) => node.inputs["address"] !== undefined && node.inputs["sshKey"] !== undefined);

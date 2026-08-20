@@ -36,7 +36,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
     async func(this: CommandContext, flags: { artifact?: string; baseUrl?: string }) {
         const config = loadConfig();
         // As the second half of the daemon's `apply && adopt` job, adopt appends its events (and terminal
-        // {kind:"exit",command:"adopt"}) to the same durable file apply wrote — the web's whole-job completion
+        // {kind:"exit",command:"adopt"}) to the same durable file apply wrote, the web's whole-job completion
         // signal. The sink appends and never truncates, so apply's record is preserved.
         const primary = createOutput(withRunLog(this.process.stdout, "adopt"), config.intenticOutput);
         const out =
@@ -49,7 +49,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
         const intentDir = join(dirname(targetDir), INTENT_DIR);
         loadEnvFile(targetDir);
         const graph = await readArtifact(artifact);
-        // Services-only (and github/gitlab-backed) intents provision no Forgejo control plane — nothing to adopt.
+        // Services-only (and github/gitlab-backed) intents provision no Forgejo control plane, nothing to adopt.
         if (!Object.values(graph.resources).some((node) => node.type === "forgejo")) {
             out.text("no forgejo in the artifact (no control plane) — nothing to adopt");
             out.result({ repos: [], reason: "no control plane" });
@@ -108,7 +108,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
             return repos;
         };
 
-        // Default transport: an SSH port-forward to Forgejo on the host — adopt works with the tunnel down
+        // Default transport: an SSH port-forward to Forgejo on the host, adopt works with the tunnel down
         // or before public DNS exists at all, and never depends on the route apply may be reconciling.
         let repos: { readonly name: string; readonly cloneUrl: string }[];
         if (flags.baseUrl !== undefined) {

@@ -8,7 +8,7 @@
  *
  * A SOURCE-level door, for in-repo extensions (whose code vite compiles into the app bundle) and their tests.
  * A git-installed bundle resolves its bare specifiers through the import map in index.html, which carries the
- * barrel alone — so nothing is exported here that the barrel does not also export, and a third-party author
+ * barrel alone, so nothing is exported here that the barrel does not also export, and a third-party author
  * reaching for `@intentic/extension-ui` is missing none of it. */
 export {
     formatBytes,

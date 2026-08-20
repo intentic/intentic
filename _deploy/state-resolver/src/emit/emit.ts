@@ -29,8 +29,8 @@ const supportedOptions = new Set(["forgejo", "github", "gitlab", "komodo", "ssh-
 // The GitLab instance defaults to gitlab.com; a self-hosted instance sets its own url.
 const GITLAB_DEFAULT_URL = "https://gitlab.com";
 
-// Build the concrete RawNodes for one assignment. One shared control plane — Komodo on every stack, plus
-// Forgejo + its runner when no hosted forge is declared — is derived onto the control-plane host (first
+// Build the concrete RawNodes for one assignment. One shared control plane. Komodo on every stack, plus
+// Forgejo + its runner when no hosted forge is declared, is derived onto the control-plane host (first
 // declared host with apps). Worker hosts get Komodo Periphery in outbound mode and are registered as Komodo
 // Servers. Each host with ingress gets its own Cloudflare Tunnel. All apps share one git/CI/deploy platform
 // regardless of which host they run on.
@@ -172,7 +172,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         const guard = cpHost.input.updatePolicy === "guarded" ? { repo: backupInput.repo, resticImage: IMAGES.backup } : undefined;
 
         // The forge sourcing the apps and its Komodo pull account. The Forgejo stack derives the full git+CI
-        // platform; the hosted forges derive only the Komodo slice — CI runs at the forge, Komodo deploys.
+        // platform; the hosted forges derive only the Komodo slice. CI runs at the forge, Komodo deploys.
         let forge: AppForge;
         let deployRefs: DeployRefs;
         if (intent.github !== undefined) {
@@ -284,7 +284,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         }
 
         // The declared people + teams and the cross-cutting grant graph. One Forgejo, one Komodo, one set of
-        // identity accounts — all scoped to the control-plane host. Forgejo stack only (rejected above).
+        // identity accounts, all scoped to the control-plane host. Forgejo stack only (rejected above).
         if (forge.kind === "forgejo") {
             nodes.push(...resolveIdentities(intent, forge.platform, cpId, cpHost.input));
         }

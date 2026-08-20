@@ -1,16 +1,16 @@
 import type { Desktop, MouseButton, Point, ScrollDirection, WindowInfo } from "@intentic/desktop";
 
-/* The fake desktop the tool tests drive — the repo's `testing.ts` convention (excluded from the build, like the
+/* The fake desktop the tool tests drive, the repo's `testing.ts` convention (excluded from the build, like the
  * sandbox's own), so both tool suites share ONE double rather than each keeping a copy that drifts.
  *
  * It exists because @intentic/desktop's methods end in a real cursor moving on a real screen: they can only be
- * exercised by a human watching. Everything worth asserting about the layer above — was the action refused, was
- * the coordinate checked, did the right method get called with the right arguments — needs a Desktop that
+ * exercised by a human watching. Everything worth asserting about the layer above, was the action refused, was
+ * the coordinate checked, did the right method get called with the right arguments, needs a Desktop that
  * records instead of acts. That is the entire argument for keeping the mechanics in their own package. */
 
 export interface FakeDesktop {
     readonly desktop: Desktop;
-    // Every call, in order, as readable strings — asserted against directly so a test reads as a transcript.
+    // Every call, in order, as readable strings, asserted against directly so a test reads as a transcript.
     readonly calls: string[];
     // What the fake reports as open. Mutable so a test can stage a machine with two windows and a focus change.
     windows: WindowInfo[];
@@ -43,7 +43,7 @@ export const fakeDesktop = (): FakeDesktop => {
         focusWindow: async (id: string) => {
             calls.push(`focus ${id}`);
             // Focus actually moves, so a test can assert on what the tool reports back rather than only that it
-            // asked — which is the half that would otherwise never be covered.
+            // asked, which is the half that would otherwise never be covered.
             state.windows = state.windows.map((window) => ({ ...window, focused: window.id === id }));
         },
         launch: async (target: string) => void calls.push(`launch ${target}`),

@@ -8,7 +8,7 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — the admin API is reached over an SSH port-forward.
+// The ssh block is the control-plane host's, the admin API is reached over an SSH port-forward.
 const forgejoOrgSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
@@ -17,7 +17,7 @@ const forgejoOrgSchema = sshSchema.extend({
 type ForgejoOrgInputs = z.infer<typeof forgejoOrgSchema>;
 const parse = (inputs: ResolvedInputs): ForgejoOrgInputs => parseInputs(forgejoOrgSchema, inputs, "forgejo-org");
 
-// A team's Forgejo organization — the namespace its apps' repos + registry images live under. Created owned by
+// A team's Forgejo organization, the namespace its apps' repos + registry images live under. Created owned by
 // the admin so the admin stays in the org Owners team and its git + packages tokens keep full access (what
 // Komodo clones and pulls with). read returns undefined while Forgejo is unreachable; apply create-or-skips.
 export const createForgejoOrgProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({

@@ -11,7 +11,7 @@ export interface Sink {
 
 const REDACTED = "«redacted»";
 
-/* The length of the longest suffix of `text` that is a PROPER PREFIX of some registered value — the only part
+/* The length of the longest suffix of `text` that is a PROPER PREFIX of some registered value, the only part
  * of what we are about to emit that could still become a secret once the next chunk arrives.
  *
  * This is what makes the hold-back cheap: ordinary output ends in no such suffix and flows straight through,
@@ -29,12 +29,12 @@ const ambiguousTail = (text: string, values: ReadonlySet<string>): number => {
     return longest;
 };
 
-/* Masks known secret VALUES out of everything a command writes (provider logs, ndjson events, results) —
+/* Masks known secret VALUES out of everything a command writes (provider logs, ndjson events, results),
  * providers stream raw command output, which can echo tokens/passwords. Values register after the env and
  * generated secrets load (they aren't known when the sink is built), so `wrap` early, `add` when loaded.
  *
  * Masking is per-STREAM, not per-chunk. A plain replace on each chunk leaks any value that straddles a chunk
- * boundary — and the caller does not choose those boundaries: a provider streaming a remote command's output
+ * boundary, and the caller does not choose those boundaries: a provider streaming a remote command's output
  * gets them from the kernel's read sizes, so the same secret masks or leaks depending on timing. Holding the
  * ambiguous tail back until the next write makes the result depend on the bytes instead.
  *
@@ -88,7 +88,7 @@ export const createRedactor = (): {
 
 // The single seam every command renders through. `onEvent`/`log` feed the engine (structured lifecycle
 // events and providers' free-form strings); `text` is a human summary line; `result` is the final
-// structured payload. Each method's behavior is decided by the mode. Failures are left to propagate —
+// structured payload. Each method's behavior is decided by the mode. Failures are left to propagate,
 // stricli renders them on stderr and sets a non-zero exit code, and a stream consumer still has the
 // events emitted before the throw plus the exit code.
 export interface Output {
@@ -101,7 +101,7 @@ export interface Output {
 
 // The text rendering of lifecycle events. Apply-phase node + readiness events print as live progress lines
 // (an apply's terminal would otherwise sit blank through minutes of SSH reads and image pulls); plan-phase
-// node events stay silent — plan.command prints its own step table. Iteration events exist for the stream.
+// node events stay silent, plan.command prints its own step table. Iteration events exist for the stream.
 const eventText = (event: EngineEvent): string | undefined => {
     if (event.kind === "node" && event.phase === "apply") {
         if (event.state === "start") {
@@ -152,7 +152,7 @@ export const createOutput = (sink: Sink, mode: OutputMode): Output => {
         };
     }
 
-    // text: the human default — identical to the CLI's prior output.
+    // text: the human default, identical to the CLI's prior output.
     return {
         mode,
         onEvent: (event) => {
@@ -167,7 +167,7 @@ export const createOutput = (sink: Sink, mode: OutputMode): Output => {
     };
 };
 
-// Fan one command's rendering out to several Outputs at once — the human/text pane AND a structured ndjson
+// Fan one command's rendering out to several Outputs at once, the human/text pane AND a structured ndjson
 // events file, each a fully-formed Output with its own mode and sink. Every method calls through to every
 // target; `mode` reports the primary (first) target's, the canonical stdout rendering. Used by apply so its
 // pane stays human-readable while the same lifecycle events also land as ndjson for the web to tail.

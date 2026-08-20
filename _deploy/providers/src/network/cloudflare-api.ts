@@ -21,7 +21,7 @@ export interface CloudflareApi {
         readonly zone: string;
     }) => Promise<{ readonly id: string; readonly accountId: string } | undefined>;
     // Every zone the token can see, with the account that owns each. Used to discover which zone the authored
-    // domains live under — the token is the only Cloudflare credential the author supplies.
+    // domains live under, the token is the only Cloudflare credential the author supplies.
     readonly listZones: (args: {
         readonly apiToken: string;
     }) => Promise<{ readonly id: string; readonly name: string; readonly accountId: string }[]>;
@@ -62,7 +62,7 @@ export interface CloudflareApi {
         readonly zoneId: string;
         readonly name: string;
     }) => Promise<{ readonly id: string; readonly content: string } | undefined>;
-    // Every DNS record in the zone whose comment starts with the given prefix — the zone-wide scan behind
+    // Every DNS record in the zone whose comment starts with the given prefix, the zone-wide scan behind
     // cf-route's `list` (records are stamped through their comment).
     readonly listStampedDnsRecords: (args: {
         readonly apiToken: string;
@@ -102,7 +102,7 @@ const envelopeSchema = z.object({
     success: z.boolean(),
     errors: z.array(z.object({ code: z.number(), message: z.string() })),
     result: z.unknown(),
-    // Pagination metadata, present in varying shapes on list endpoints — left unknown so the shared
+    // Pagination metadata, present in varying shapes on list endpoints, left unknown so the shared
     // success-envelope check never trips on an endpoint whose result_info omits total_pages (cfd_tunnel,
     // dns_records). listZones extracts the page count from it defensively.
     result_info: z.unknown().optional(),
@@ -122,7 +122,7 @@ const request = async (apiToken: string, path: string, init?: RequestInit): Prom
                 Authorization: `Bearer ${apiToken}`,
                 ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
             },
-            // A stalled connection would otherwise block for undici's ~5-minute headers timeout — per call.
+            // A stalled connection would otherwise block for undici's ~5-minute headers timeout, per call.
             signal: AbortSignal.timeout(30_000),
         });
     } catch (error) {
@@ -230,7 +230,7 @@ export const cloudflareApi: CloudflareApi = {
         return { id: found.id, content: found.content };
     },
     listStampedDnsRecords: async ({ apiToken, zoneId, commentPrefix }) => {
-        // ponytail: one page of up to 1000 records — paginate if a zone ever carries more stamped records.
+        // ponytail: one page of up to 1000 records, paginate if a zone ever carries more stamped records.
         const records = await call(
             apiToken,
             `/zones/${encodeURIComponent(zoneId)}/dns_records?comment.startswith=${encodeURIComponent(commentPrefix)}&per_page=1000`,

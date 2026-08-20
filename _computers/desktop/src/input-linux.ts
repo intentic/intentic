@@ -6,7 +6,7 @@ import { DesktopError, type MouseButton, type Point, type ScrollDirection } from
 /* Linux input, which is really two backends wearing one coat.
  *
  * X11 lets any client synthesise input, so `xdotool` does everything and needs no privileges. Wayland
- * deliberately does not — a compositor will not let one client type into another — so the only general way
+ * deliberately does not, a compositor will not let one client type into another, so the only general way
  * through is the kernel: `ydotool` writes to /dev/uinput, which needs a group or a daemon. `wtype` is the
  * exception that works without it for TEXT and KEYS via the virtual-keyboard protocol, so it is preferred where
  * it applies and ydotool carries the pointer.
@@ -71,7 +71,7 @@ export const linuxInput = {
     drag: async (from: Point, to: Point): Promise<void> => {
         if (wayland()) {
             await linuxInput.move(from);
-            // 0x40 = press without release, 0x80 = release — the two halves a drag needs around the move.
+            // 0x40 = press without release, 0x80 = release, the two halves a drag needs around the move.
             await ydotool(["click", "0x40"]);
             await linuxInput.move(to);
             await ydotool(["click", "0x80"]);
@@ -103,7 +103,7 @@ export const linuxInput = {
                 return;
             }
             // ydotool's `key` wants keycodes rather than names, which is a different vocabulary than this package
-            // promises — so rather than half-translate it, say what is missing.
+            // promises, so rather than half-translate it, say what is missing.
             throw new DesktopError("Pressing key combinations on Wayland needs wtype.", WTYPE_INSTALL);
         }
         await xdotool(["key", "--clearmodifiers", xdotoolChord(combo)]);

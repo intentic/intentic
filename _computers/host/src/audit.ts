@@ -9,12 +9,12 @@ import { auditPath, baseDir } from "./config.js";
  * asks after something surprising happened.
  *
  * Best-effort, never blocking: a full disk or a locked file must not stop the machine from working. It is a
- * record for a human, not a control — nothing reads it back to make a decision. */
+ * record for a human, not a control, nothing reads it back to make a decision. */
 export const audit = async (entry: { tool: string; ok: boolean; detail: string }): Promise<void> => {
     try {
         await mkdir(baseDir, { recursive: true, mode: 0o700 });
         await appendFile(auditPath, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, { encoding: "utf8", mode: 0o600 });
     } catch {
-        // Deliberately silent — see above.
+        // Deliberately silent, see above.
     }
 };

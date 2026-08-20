@@ -8,13 +8,13 @@ import { AGENTS } from "../queryKeys";
  * surfaces want it.
  *
  * This used to be a bare fetch inside the chat's hydrate path, which made it a round trip charged to the click:
- * open an agent the daemon started — a workflow step, an automation's wake, a turn sent from a phone — and the
+ * open an agent the daemon started, a workflow step, an automation's wake, a turn sent from a phone, and the
  * pane sat empty for the length of a tunnel hop before its first word appeared. It is a cached query now, which
  * changes nothing about that path except that the answer may already be there: the background loader warms the
  * board's cards, and a click then paints in the same tick.
  *
  * ONE ENTRY PER CONVERSATION, and concurrent callers share the one request (fetchQuery dedupes an in-flight
- * fetch per key) — so a click that lands on a card the loader is CURRENTLY reading waits for that read instead
+ * fetch per key), so a click that lands on a card the loader is CURRENTLY reading waits for that read instead
  * of opening a second one.
  *
  * UNPERSISTED, because a transcript is the app's other megabyte-scale record (see queryPersistence for what the
@@ -22,7 +22,7 @@ import { AGENTS } from "../queryKeys";
  * opened is mirrored to disk per record by the Conversation itself, which is the store a reload paints from.
  *
  * staleTime Infinity for the same reason the file diffs use it: time is not what makes a transcript wrong, a
- * turn is — and a turn ending already invalidates this (useAgents' roster watch), so a warmed transcript can
+ * turn is, and a turn ending already invalidates this (useAgents' roster watch), so a warmed transcript can
  * never be older than the card that opens it. */
 
 // The one distinction that matters to the caller: NOT_FOUND is the daemon saying this conversation has no
@@ -32,7 +32,7 @@ export type AgentTranscript = { readonly sessionId?: string; readonly messages: 
 
 export const agentTranscriptKey = (conversationId: string): unknown[] => [...AGENTS.of(conversationId, `transcript`), UNPERSISTED];
 
-// A turn is what makes a transcript wrong — see the header. Called wherever the daemon reports one settled.
+// A turn is what makes a transcript wrong, see the header. Called wherever the daemon reports one settled.
 export const invalidateAgentTranscript = (conversationId: string): void =>
     void queryClient.invalidateQueries({ queryKey: agentTranscriptKey(conversationId) });
 
@@ -55,7 +55,7 @@ const read = async (conversationId: string): Promise<AgentTranscript> => {
 // gives the memory back. Collection makes the loader re-read it, which is a trickle rather than a cost.
 const TRANSCRIPT_GC_MS = 30 * 60 * 1000;
 
-/* The query, named apart from the call — because the background loader warms this same entry and must be handed
+/* The query, named apart from the call, because the background loader warms this same entry and must be handed
  * the QUERY rather than a function that fetches it. A wish that carries a key and a separate "how to read it" is
  * a wish whose two halves can disagree about where the answer lands, which is exactly how the loader once ended
  * up re-reading one thing forever (composables/prefetch/warmQuery). */

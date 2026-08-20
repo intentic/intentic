@@ -114,14 +114,14 @@ export const apply = buildCommand<ApplyFlags>({
                       }
                       return false;
                   };
-        // Deploy targets brought up as part of this flow may still be booting when apply runs — a freshly-minted
+        // Deploy targets brought up as part of this flow may still be booting when apply runs, a freshly-minted
         // ssh-<id>.<zone> tunnel needs its DNS to propagate and its connector to join the edge, during which the
         // dial fails transiently (NXDOMAIN → ECONNRESET). Wait for each host to accept SSH before locking, so the
         // lock (and the prune it guards) is held for the whole run instead of skipped, and the cloudflared
         // forwarder is warm when reconcile reuses it. A host that never comes up fails here after the deadline
-        // with the same actionable error. Only current-graph hosts are gated — a migrated-away old machine may
+        // with the same actionable error. Only current-graph hosts are gated, a migrated-away old machine may
         // legitimately be gone.
-        // Warm every host concurrently — the worst case is one slow host's tunnel warm-up, not the sum of all.
+        // Warm every host concurrently, the worst case is one slow host's tunnel warm-up, not the sum of all.
         await Promise.all(
             targets.map(async (target) => {
                 const session = await connectWithRetry(ssh, target, { log: out.log });
@@ -143,7 +143,7 @@ export const apply = buildCommand<ApplyFlags>({
         };
         process.once("SIGINT", onSignal);
         process.once("SIGTERM", onSignal);
-        // tmux kill-session delivers SIGHUP — a killed pane (the terminal tab's ×, a stale-session sweep) must
+        // tmux kill-session delivers SIGHUP, a killed pane (the terminal tab's ×, a stale-session sweep) must
         // release the host lock too, not orphan it for the 30-minute TTL.
         process.once("SIGHUP", onSignal);
         try {
@@ -151,7 +151,7 @@ export const apply = buildCommand<ApplyFlags>({
             // value minted locally before the host existed is promoted to it). Under the lock this is the only
             // run minting, so two operators can never bake divergent admin passwords into Forgejo/Komodo.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, true, out.log), collectSecrets(graph).generated, process.env);
-            // Every secret value the run can resolve is now in process.env — mask them out of all output.
+            // Every secret value the run can resolve is now in process.env, mask them out of all output.
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
             // A host whose address changed moved machines: snapshot the old host and stream its data to the new
             // one BEFORE reconcile, so its services come up on the new machine atop migrated data, not an empty
@@ -175,7 +175,7 @@ export const apply = buildCommand<ApplyFlags>({
                     { maxIterations: flags.maxIterations ?? DEFAULT_MAX_ITERATIONS },
                 );
             } catch (error) {
-                // A readiness timeout means "the service came up but the gate can't see it" — sweep every
+                // A readiness timeout means "the service came up but the gate can't see it", sweep every
                 // host over SSH (docker state, the node's logs, listeners, addresses, one verbose probe) so
                 // the failure self-explains, then rethrow the same error.
                 if (error instanceof ReadinessTimeoutError && targets.length > 0) {
@@ -184,7 +184,7 @@ export const apply = buildCommand<ApplyFlags>({
                 throw error;
             }
             const access = collectAccess(graph, result.outcome.outputs, process.env);
-            // status.json is committed, so its access entries are VALUE-FREE ({source, key} refs only) — the
+            // status.json is committed, so its access entries are VALUE-FREE ({source, key} refs only), the
             // web renders them and reveals generated values through the daemon's owner-gated reveal route.
             await writeStatus(join(dir, STATUS_FILE), {
                 converged: result.converged,
@@ -196,8 +196,8 @@ export const apply = buildCommand<ApplyFlags>({
             });
             // Prune AFTER convergence (reconcile throws if it never converges, so a failed apply never
             // deletes). Two sources feed it: the baseline diff (resources in the last-applied artifact the
-            // new one no longer declares — covers types without `list`) and the collection scan (live
-            // stamped resources absent from the graph — drift the baseline cannot see: a lost
+            // new one no longer declares, covers types without `list`) and the collection scan (live
+            // stamped resources absent from the graph, drift the baseline cannot see: a lost
             // .last-applied.json, a crashed apply). Rewrite the baseline for in-place renames so prune
             // treats a moved id as "became", not "removed".
             let pruned: PruneOutcome = { deleted: [], skipped: [] };
@@ -212,7 +212,7 @@ export const apply = buildCommand<ApplyFlags>({
                     baseline === undefined ? [] : Object.values(baseline.resources).filter((node) => graph.resources[node.id] === undefined);
                 const orphans = await collectOrphans(graph, pruneConfig);
                 // Deletions actually on the table: protected resources are never deleted, so they don't demand
-                // confirmation — they surface as skipped when the prune runs.
+                // confirmation, they surface as skipped when the prune runs.
                 const pending = [
                     ...removed.filter((node) => node.inputs["protect"] !== true),
                     ...orphans.filter((orphan) => orphan.protected !== true),
@@ -239,7 +239,7 @@ export const apply = buildCommand<ApplyFlags>({
                             `pruned ${pruned.deleted.length} resource(s)${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`,
                         );
                     }
-                    // Snapshot the current artifact so the next apply can prune against it — only after the prune
+                    // Snapshot the current artifact so the next apply can prune against it, only after the prune
                     // actually ran, so an unconfirmed removal is not silently dropped from the baseline.
                     await writeFile(join(dir, LAST_APPLIED_FILE), await readFile(artifact, "utf8"));
                 }
@@ -273,7 +273,7 @@ export const apply = buildCommand<ApplyFlags>({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ content: summary }),
-                        // Non-fatal nicety — a stalled webhook must not hold the whole apply open.
+                        // Non-fatal nicety, a stalled webhook must not hold the whole apply open.
                         signal: AbortSignal.timeout(15_000),
                     });
                 } catch {
@@ -285,7 +285,7 @@ export const apply = buildCommand<ApplyFlags>({
             process.removeListener("SIGTERM", onSignal);
             process.removeListener("SIGHUP", onSignal);
             // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
+            // command's last line goes missing. Runs on the error path too, a throw must not eat output.
             redactor.flush();
             await lock.release();
             // Tear down any cloudflared SSH forwarders this run started (no-op for direct-only applies).

@@ -10,7 +10,7 @@ const baseline = reactive(new Map<string, string>());
 // The live edited text; present once a file has been opened in the editor.
 const buffers = reactive(new Map<string, string>());
 
-// Drop every buffer/baseline when the active sandbox changes (see sandboxScope) — these are keyed by path only,
+// Drop every buffer/baseline when the active sandbox changes (see sandboxScope), these are keyed by path only,
 // so a dirty buffer would otherwise carry from one sandbox onto the next.
 export const resetEditBuffers = (): void => {
     baseline.clear();
@@ -29,7 +29,7 @@ export function useEditBuffers() {
     };
     const setBuffer = (path: string, text: string): void => void buffers.set(path, text);
     const bufferOf = (path: string): string | undefined => buffers.get(path);
-    // The last text known to be on disk — the file viewer reconciles an external-change re-read against this to
+    // The last text known to be on disk, the file viewer reconciles an external-change re-read against this to
     // tell a real edit from its own save echo (equal ⇒ nothing new, leave the view untouched).
     const baselineOf = (path: string): string | undefined => baseline.get(path);
     // After a successful save, the buffer IS the new on-disk text.

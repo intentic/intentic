@@ -6,7 +6,7 @@ import { resolveZone, upsertCname } from "../lib/cf-tunnel.js";
 export interface SandboxTunnelResult {
     readonly token: string;
     readonly hostname: string;
-    // The SSH hostname (ssh-<id>.<zone>) when sshService was routed — undefined otherwise. Used by the local
+    // The SSH hostname (ssh-<id>.<zone>) when sshService was routed, undefined otherwise. Used by the local
     // sync agent (Mutagen) to reach the container's sshd through this same tunnel/connector.
     readonly sshHostname: string | undefined;
 }
@@ -14,7 +14,7 @@ export interface SandboxTunnelResult {
 // Create (or refresh, idempotently) the per-sandbox Cloudflare tunnel + proxied DNS record that exposes the
 // sandbox daemon at `sandbox-<id>.<zone>`, and return the connector token connect.sh runs cloudflared with.
 // `<id>` is a stable, unguessable digest of the connection token, so re-runs reuse the same tunnel/hostname.
-// Reuses the providers' Cloudflare client — the same REST surface `intentic deploy apply` uses for platform tunnels.
+// Reuses the providers' Cloudflare client, the same REST surface `intentic deploy apply` uses for platform tunnels.
 export const createSandboxTunnel = async (args: {
     readonly apiToken: string;
     readonly connectToken: string;
@@ -22,7 +22,7 @@ export const createSandboxTunnel = async (args: {
     // When set, also route the single-label preview wildcard `*.<zone>` straight to the sandbox's dev server.
     readonly previewService?: string;
     // When set, also route `ssh-<id>.<zone>` to the container's sshd (e.g. ssh://intentic-sandbox-workspace:22)
-    // over this SAME tunnel/connector — the transport the local Mutagen sync uses. Same id as the http host.
+    // over this SAME tunnel/connector, the transport the local Mutagen sync uses. Same id as the http host.
     readonly sshService?: string;
     readonly zone?: string;
     // An explicit subdomain prefix chosen by the own-Cloudflare user; default is the derived `sandbox-<id>`.

@@ -1,18 +1,18 @@
-/* Where a WINDOW's own state lives between page loads — the open chat tabs, the workspace's editor tabs, the
+/* Where a WINDOW's own state lives between page loads, the open chat tabs, the workspace's editor tabs, the
  * file tree's expanded folders. All of it answers "what was this window showing", which is why it is stored the
  * same way everywhere:
  *
- *   · sessionStorage — this window's own state. Per browser tab, and it survives a reload (including the dev
+ *   · sessionStorage, this window's own state. Per browser tab, and it survives a reload (including the dev
  *     server's live-reload and a crash restore), which is exactly the lifetime a window's view has. This is the
  *     authority: what this window restores is what this window last showed.
- *   · localStorage — the same blob as a SEED, read only by a window that has never held this state. It is how
+ *   · localStorage, the same blob as a SEED, read only by a window that has never held this state. It is how
  *     "open the app, everything is still there" survives closing the browser.
  *
  * One shared key for both roles is what the split fixes. Every open window rewrites its state on every change,
  * so with several windows open the last writer won and a window came back from a reload wearing another
- * window's tabs and another window's open folders. Windows are supposed to differ — the daemon multiplexes
+ * window's tabs and another window's open folders. Windows are supposed to differ, the daemon multiplexes
  * attach streams and the presence roster counts viewers per connection precisely so two windows can sit on
- * different work — and their view state differs with them. The seed write stays last-writer-wins, which is
+ * different work, and their view state differs with them. The seed write stays last-writer-wins, which is
  * harmless: no window ever reads it back while it is open.
  *
  * Storage can be missing entirely (private mode, disabled site data) and merely TOUCHING it throws there, so

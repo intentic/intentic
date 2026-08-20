@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// A thin typed wrapper over the Stripe REST API — only the one operation intentic needs in v1: confirm an
+// A thin typed wrapper over the Stripe REST API, only the one operation intentic needs in v1: confirm an
 // API key is valid by reading the account. Auth is the secret key as a Bearer token. Injectable for tests
 // (same pattern as DiscordApi / KomodoApi).
 
@@ -13,7 +13,7 @@ export interface StripeAccount {
 const accountSchema = z.object({ id: z.string() });
 
 export interface StripeApi {
-    // GET /v1/account — the account for a valid key, or undefined when the key is rejected (401/403).
+    // GET /v1/account, the account for a valid key, or undefined when the key is rejected (401/403).
     readonly getAccount: (apiKey: string) => Promise<StripeAccount | undefined>;
 }
 

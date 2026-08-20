@@ -17,7 +17,7 @@ import { auditPath, baseDir, configPath, type HostConfigFile, readHostConfig, ru
 import { connect } from "./connection.js";
 import { HOST_VERSION } from "./version.js";
 
-/* `intentic-host` — the agent that lets an intentic sandbox work on this computer.
+/* `intentic-host`, the agent that lets an intentic sandbox work on this computer.
  *
  *   setup      redeem the sandbox's one-time pairing, then connect and stay connected at every login.
  *   run        the connection loop: detached by default, --foreground to watch it, --stop to stop it.
@@ -28,7 +28,7 @@ import { HOST_VERSION } from "./version.js";
  * UI, which is worth exactly one enrollment and expires in minutes. */
 
 // Redeem the pairing for this machine's durable token. Retried through a tunnel that may still be warming (the
-// sync agent's lesson: Cloudflare's edge answers before the origin registers), but never through a 401 — an
+// sync agent's lesson: Cloudflare's edge answers before the origin registers), but never through a 401, an
 // expired pairing is a definitive answer, and retrying it only delays the "click Connect again" the user needs.
 const enroll = async (
     sandboxUrl: string,
@@ -99,7 +99,7 @@ const setup = buildCommand<SetupFlags>({
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
-        /* Rendered through the shared renderer (@intentic/local-agent) — the same one `ic` and the sync agent
+        /* Rendered through the shared renderer (@intentic/local-agent), the same one `ic` and the sync agent
          * render through, so a person meeting two of them in one install meets one program. `ic` runs this
          * command inside its own checklist and sets INTENTIC_UI=nested, which turns everything below into
          * detail under ITS step rather than a second banner in the middle of somebody's setup. */
@@ -114,7 +114,7 @@ const setup = buildCommand<SetupFlags>({
     },
 });
 
-/* Two steps, and the second is the one that can be slow — registering an autostart entry touches systemd,
+/* Two steps, and the second is the one that can be slow, registering an autostart entry touches systemd,
  * launchd or the Windows Task Scheduler, and starting the resident agent waits on a detached process. Phases
  * are this agent's own vocabulary and deliberately absent from the desktop app's plan (setupPlan.ts), where an
  * unknown phase reads as narration under whichever step is running. */
@@ -127,7 +127,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("computer-enrolling", "enrolling this computer with your sandbox…");
     const { id, hostToken } = await enroll(flags.url, flags.pair);
     /* The cached grant starts at NOTHING. The sandbox pushes the real scopes within a second of connecting,
-     * so this only governs the window before that — and an agent that assumed "allowed" for that window
+     * so this only governs the window before that, and an agent that assumed "allowed" for that window
      * would be deciding on somebody's computer using a default nobody chose. Refusing until told is the only
      * defensible starting state. */
     const config: HostConfigFile = {
@@ -138,10 +138,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     };
     await writeHostConfig(config);
     ui.step("computer-starting", "starting the agent on this computer…");
-    // Stop whatever the previous pairing left resident before the new config replaces it — otherwise a
+    // Stop whatever the previous pairing left resident before the new config replaces it, otherwise a
     // process started from an older binary quietly adopts this pairing and every fix since stays inert.
     await stopDetached(() => {});
-    // registerAutostart answers true when the OS mechanism also started this session — a systemd user unit
+    // registerAutostart answers true when the OS mechanism also started this session, a systemd user unit
     // does (`enable --now`). Where it doesn't, or where there is no mechanism at all, we cover the session.
     if (!(await registerAutostart(HOST_AUTOSTART, cliLauncher("intentic-host"), out))) {
         await startDetached(out);
@@ -177,7 +177,7 @@ const run = buildCommand<RunFlags>({
         }
         const config = await readHostConfig();
         await writeSecretFile(runPidPath, baseDir, String(process.pid));
-        // host.log is long-lived, so bare lines in it are useless — every line is stamped.
+        // host.log is long-lived, so bare lines in it are useless, every line is stamped.
         const log: Log = (message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`);
         const connection = connect(config, HOST_VERSION, log);
         const shutdown = (): void => {

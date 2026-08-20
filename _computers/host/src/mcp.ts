@@ -23,25 +23,25 @@ import {
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { HOST_VERSION } from "./version.js";
 
-/* The MCP server — running HERE, on the machine, not in the sandbox.
+/* The MCP server, running HERE, on the machine, not in the sandbox.
  *
  * The sandbox's daemon forwards JSON-RPC verbatim and interprets none of it, so this file is the entire tool
  * surface: what this computer can do is decided by the binary installed on it, and a machine that upgrades
- * learns new tools without anything changing in the sandbox. That is the reason for the split — the alternative
+ * learns new tools without anything changing in the sandbox. That is the reason for the split, the alternative
  * (schemas in the daemon, execution here) makes every new tool a coordinated release of two products.
  *
  * The protocol implemented is the subset that a Streamable HTTP client actually uses against a stateless server:
  * initialize, tools/list, tools/call, ping, and notifications (which get no reply). Anything else answers
  * "method not found", which is the correct JSON-RPC response and not an error worth logging.
  *
- * A FAILED TOOL IS NOT A FAILED CALL. Every error — a refused scope, a missing file, a command that exited 1,
- * an argument that does not typecheck — comes back as a normal result with isError, because that is what a model
+ * A FAILED TOOL IS NOT A FAILED CALL. Every error, a refused scope, a missing file, a command that exited 1,
+ * an argument that does not typecheck, comes back as a normal result with isError, because that is what a model
  * can read and act on; a JSON-RPC error surfaces as a transport fault and invites a retry loop against a
  * computer that will refuse it exactly the same way the second time.
  *
  * EACH TOOL'S ARGUMENTS ARE DESCRIBED ONCE. The schema below is what the model is shown (`tools/list` publishes
  * it as JSON Schema) AND what an arriving call is checked against, so the advertised shape and the accepted one
- * cannot drift — the failure mode of writing both by hand, where a renamed field keeps validating and the model
+ * cannot drift, the failure mode of writing both by hand, where a renamed field keeps validating and the model
  * keeps being told about the old name. It also means a handler receives its arguments typed: no per-tool
  * coercion helpers, and no casting an untyped bag into the shape it was hoped to have. */
 
@@ -83,7 +83,7 @@ const tool = <Schema extends z.ZodType>(spec: {
 const NO_ARGS = z.object({});
 
 /* The screen, plus the size of it. The dimensions ride along because they are the frame every coordinate the
- * agent sends back is in — a model that can see the image but not its bounds guesses at the edges, and a click
+ * agent sends back is in, a model that can see the image but not its bounds guesses at the edges, and a click
  * outside them is refused rather than clamped (tools/computer.ts). */
 const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unknown>> => {
     assertScope(scopes, "screen");
@@ -99,8 +99,8 @@ const screenshotResult = async (scopes: HostScopes): Promise<Record<string, unkn
     };
 };
 
-/* ONE browser handle for the life of this process. The handle is cheap — it holds no socket until something is
- * asked of it — but it remembers WHICH TAB the agent is working on, and that continuity is the whole reason a
+/* ONE browser handle for the life of this process. The handle is cheap, it holds no socket until something is
+ * asked of it, but it remembers WHICH TAB the agent is working on, and that continuity is the whole reason a
  * sequence of calls reads as one session rather than as several strangers arriving at the same browser. */
 let webHandle: ReturnType<typeof browser> | undefined;
 const web = (): ReturnType<typeof browser> => (webHandle ??= browser());
@@ -140,7 +140,7 @@ const TOOLS: readonly Tool[] = [
         }),
         run: async ({ command, cwd, timeoutMs }, scopes) => {
             const result = await runCommand({ command, ...(cwd === undefined ? {} : { cwd }), timeoutMs }, scopes);
-            // A non-zero exit is a real answer, not a tool failure — the model reads the code and the streams and
+            // A non-zero exit is a real answer, not a tool failure, the model reads the code and the streams and
             // decides. Only a command that could not be RUN comes back as an error.
             return textResult(describeResult(result, timeoutMs));
         },
@@ -196,7 +196,7 @@ const TOOLS: readonly Tool[] = [
         name: "clipboard",
         description:
             "Read or replace this computer's clipboard — the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
-        /* `text` is required BY the write and meaningless to the read, which is a pairing rather than a shape —
+        /* `text` is required BY the write and meaningless to the read, which is a pairing rather than a shape,
          * so it rides as a rule on the object instead of splitting the tool into two schemas. A union would say
          * it more precisely and publish `anyOf` at the root, which is not the `type: "object"` an MCP client
          * expects an inputSchema to be. */
@@ -291,13 +291,13 @@ const TOOLS: readonly Tool[] = [
             amount: z.number().optional().describe("Wheel notches to scroll. Default 3."),
             ms: z.number().optional().describe('How long to wait (action "wait"). Default 400, maximum 10000.'),
         }),
-        // Which coordinate an action NEEDS, and whether it is on the screen, is act()'s to answer — it is the only
+        // Which coordinate an action NEEDS, and whether it is on the screen, is act()'s to answer, it is the only
         // caller that knows how big the screen is.
         run: async (input, scopes) => {
             await act(desktop(), input, scopes);
             // The confirming frame is the point of a GUI tool: without it the agent is typing blind and has to
             // ask for a screenshot after every action. It needs the `screen` grant too, so a machine that may be
-            // driven but not watched gets the sentence instead — which is a coherent setting, not an error.
+            // driven but not watched gets the sentence instead, which is a coherent setting, not an error.
             if (scopes.screen !== "on") {
                 return textResult(`${describeAction(input)} (No screenshot: "See the screen" is off for this computer.)`);
             }
@@ -328,7 +328,7 @@ const TOOLS: readonly Tool[] = [
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
     }),
     /* The three flows that run `ic`. As an MCP call they answer once, at the end, with everything the flow
-     * printed — a model has nothing to do with a line as it arrives. The BROWSER does, which is why the same
+     * printed, a model has nothing to do with a line as it arrives. The BROWSER does, which is why the same
      * functions take a line callback and the streaming route (host.contract's `runSandboxFlow`) passes one
      * that forwards each line as it happens. One implementation, two ways of watching it. */
     tool({
@@ -373,7 +373,7 @@ const BY_NAME = new Map(TOOLS.map((entry) => [entry.name, entry]));
 /* What the audit log records about a call. Arguments verbatim, EXCEPT typed text: `computer` with action "type"
  * carries whatever the user asked to be entered, which is routinely a password or a message, and writing it to a
  * file on their disk is the one thing an audit trail must not do to earn its place. Its LENGTH still tells the
- * story a reader needs — "typed 24 characters into the focused window" — without becoming a second copy of the
+ * story a reader needs, "typed 24 characters into the focused window", without becoming a second copy of the
  * secret. A key combination is not redacted: "ctrl+c" is the fact, and there is nothing in it to leak. */
 const auditDetail = (name: string, args: Record<string, unknown>): string => {
     const redact =

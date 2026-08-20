@@ -21,10 +21,10 @@ export interface KomodoUser {
     readonly enabled: boolean;
 }
 
-// The Komodo permission level a grant carries (None is never sent — an absent grant is the same as None).
+// The Komodo permission level a grant carries (None is never sent, an absent grant is the same as None).
 export type KomodoPermissionLevel = "Read" | "Execute" | "Write";
 
-// The slice of a Deployment's config the deployment provider diffs against — the one authored MUTABLE field
+// The slice of a Deployment's config the deployment provider diffs against, the one authored MUTABLE field
 // it converges, `environment`. server_id and the build image are fixed at creation (like the deterministic
 // ports); branch is a Build concept that a Deployment does not carry (GetDeployment never returns it). Komodo
 // stores `environment` as a multiline string ("K = V\n") but also accepts the array-of-{variable,value} form
@@ -62,7 +62,7 @@ const getDeploymentSchema = z.object({ config: deploymentConfigSchema });
 // native fetch. Auth is a JWT minted per provider call via local-admin login (never baked in). Build and
 // deployment configs are provider-built and passed through opaquely (their exact v2 JSON shapes are
 // confirmed at integration time); the alerter config is typed because the notify provider diffs it. Builds
-// are gone — CI builds + pushes the image and the workflow's notify step triggers Deploy, so this surface is
+// are gone. CI builds + pushes the image and the workflow's notify step triggers Deploy, so this surface is
 // just login + deployment reconciliation + alerters.
 export interface KomodoApi {
     // POST /auth/LoginLocalUser {username,password} -> jwt (local auth must be enabled).
@@ -83,11 +83,11 @@ export interface KomodoApi {
         readonly id: string;
         readonly config: Readonly<Record<string, unknown>>;
     }) => Promise<void>;
-    // write/DeleteDeployment {id} — tear a deployment down (used by prune). Stops + removes the container too.
+    // write/DeleteDeployment {id}, tear a deployment down (used by prune). Stops + removes the container too.
     readonly deleteDeployment: (args: { readonly baseUrl: string; readonly jwt: string; readonly id: string }) => Promise<void>;
     // read/ListUsers {service_users:"Include"} -> every user (id from "_id", username, enabled).
     readonly listUsers: (args: { readonly baseUrl: string; readonly jwt: string }) => Promise<readonly KomodoUser[]>;
-    // write/DeleteUser {id} — remove a user account (used by prune). The exact op is confirmed at integration time.
+    // write/DeleteUser {id}, remove a user account (used by prune). The exact op is confirmed at integration time.
     readonly deleteUser: (args: { readonly baseUrl: string; readonly jwt: string; readonly userId: string }) => Promise<void>;
     // write/CreateLocalUser {username,password}; admin-only, creates the user DISABLED (enable separately).
     readonly createUser: (args: {
@@ -96,9 +96,9 @@ export interface KomodoApi {
         readonly username: string;
         readonly password: string;
     }) => Promise<void>;
-    // write/UpdateUserBasePermissions {user_id, enabled:true} — flip a freshly-created user on.
+    // write/UpdateUserBasePermissions {user_id, enabled:true}, flip a freshly-created user on.
     readonly enableUser: (args: { readonly baseUrl: string; readonly jwt: string; readonly userId: string }) => Promise<void>;
-    // write/UpdatePermissionOnTarget — grant a user `level` on one Deployment.
+    // write/UpdatePermissionOnTarget, grant a user `level` on one Deployment.
     readonly setPermissionOnTarget: (args: {
         readonly baseUrl: string;
         readonly jwt: string;
@@ -120,7 +120,7 @@ export interface KomodoApi {
         readonly id: string;
         readonly config: AlerterConfig;
     }) => Promise<void>;
-    // write/DeleteAlerter {id} — remove an alerter (used by prune).
+    // write/DeleteAlerter {id}, remove an alerter (used by prune).
     readonly deleteAlerter: (args: { readonly baseUrl: string; readonly jwt: string; readonly id: string }) => Promise<void>;
 }
 

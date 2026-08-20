@@ -10,8 +10,8 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * Unlike a capability there is no apply and no stream to follow: saving a card provisions nothing and removing
  * one disconnects nothing, so both are plain mutations that end in a refetch.
  *
- * The list carries `connected` alongside the cards — which of the accounts they name this sandbox is actually
- * signed into — because a card that cannot act yet is the ordinary state of a freshly cloned workspace, and a
+ * The list carries `connected` alongside the cards, which of the accounts they name this sandbox is actually
+ * signed into, because a card that cannot act yet is the ordinary state of a freshly cloned workspace, and a
  * surface that showed only the cards would present a persona as working when it is one login short. */
 
 const QUERY_KEY = PERSONAS.of();
@@ -23,7 +23,7 @@ export function usePersonas() {
     const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchPersonas });
 
     /* Only this list moves. A card names capabilities but owns none of them, so nothing about the capability
-     * manifest, the environment or the panels can have changed — invalidating them here would refetch three
+     * manifest, the environment or the panels can have changed, invalidating them here would refetch three
      * caches to observe that they are identical. */
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
@@ -43,7 +43,7 @@ export function usePersonas() {
         personas,
         connected,
         // Whether a given account id is signed in far enough to act. Asked per account rather than per card,
-        // because a persona naming three accounts with one connected is still useful — it simply reaches the one.
+        // because a persona naming three accounts with one connected is still useful, it simply reaches the one.
         isConnected: (capabilityId: string): boolean => connected.value.includes(capabilityId),
         error,
         isLoading: query.isLoading,

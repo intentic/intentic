@@ -3,8 +3,8 @@
 // asks it through the viewers extension's manifest, and the binary-diff panes ask it directly to decide between
 // two pictures and a "no visual form to compare" caption.
 //
-// SVG is deliberately absent. It renders through an <img> perfectly well, but it is also TEXT — it diffs by
-// line and reads as markup — so the surfaces that show it pair the picture with a source view rather than
+// SVG is deliberately absent. It renders through an <img> perfectly well, but it is also TEXT, it diffs by
+// line and reads as markup, so the surfaces that show it pair the picture with a source view rather than
 // treating it as an opaque image.
 const RENDERABLE_IMAGE_EXTS: ReadonlySet<string> = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico"]);
 

@@ -1,4 +1,4 @@
-// APIs fronted by Cloudflare can answer with the edge's whole HTML error page instead of a JSON body —
+// APIs fronted by Cloudflare can answer with the edge's whole HTML error page instead of a JSON body,
 // e.g. error 1033 when the host's tunnel has no connected connector. Dumping that page into an Error buries
 // the actual cause, so collapse any error body to one bounded, classified line before it reaches a message.
 

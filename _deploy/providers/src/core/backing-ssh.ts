@@ -11,7 +11,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 /* A docker-compose-safe project / path fragment derived from a node id (lowercase, non-alnum -> "-").
  *
  * Refuses to return "" instead of letting the caller build a path one level too high. An id of nothing but
- * punctuation — `"---"`, `"__"` — used to slug to the empty string, and every use below is a path or project
+ * punctuation, `"---"`, `"__"`, used to slug to the empty string, and every use below is a path or project
  * built by CONCATENATION: stateDir became `/opt/intentic/postgres/` rather than a directory inside it, so the
  * `rm -rf ${dir}` on delete took every postgres instance on the host with it. An id that cannot name one
  * instance must not silently name all of them. */

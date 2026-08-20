@@ -4,12 +4,12 @@ import { assertScope } from "../policy.js";
 
 /* The browser, driven by what is ON the page rather than where it is on screen.
  *
- * `computer` can already click a browser — badly. Coordinates move when the window moves, a scroll invalidates
+ * `computer` can already click a browser, badly. Coordinates move when the window moves, a scroll invalidates
  * every one of them, and "the Submit button" is a guess about which grey rectangle is which. A browser will
  * simply say what it is showing, so these tools ask it: snapshot the page, act on an element by reference. The
  * same instruction then works at any window size, on any machine, after any re-render.
  *
- * SCOPES, following the rule the rest of the tools use — what the action DOES, not what implements it:
+ * SCOPES, following the rule the rest of the tools use, what the action DOES, not what implements it:
  *   snapshot / read   → `screen`, because they are ways of seeing what is on the machine.
  *   click / fill / key → `control`, because they change what the machine is doing.
  *   open               → `shell`, because it may start a browser process.
@@ -17,7 +17,7 @@ import { assertScope } from "../policy.js";
  * THE BROWSER IT DRIVES IS NOT THE USER'S OWN. A browser only speaks this protocol if it was started with a
  * debugging port, and nobody's everyday browser was; restarting theirs would close every tab they had open. So a
  * separate instance runs against its own profile, which the user signs into once. Their session is never
- * automated and never at risk from a misfired click — and the sign-in is a thing they do deliberately, in a
+ * automated and never at risk from a misfired click, and the sign-in is a thing they do deliberately, in a
  * window they can watch, rather than a credential handed to an agent. */
 
 export const openPage = async (web: Browser, url: string, scopes: HostScopes): Promise<string> => {

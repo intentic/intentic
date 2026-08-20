@@ -10,21 +10,21 @@ import type { WarmBand, WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 import { reviewsToRead, type ReviewToRead } from "./reviewsToRead";
 
-/* THE BOARD'S WISH LIST — every card on /agents, with the two reads that stand between clicking it and reading
+/* THE BOARD'S WISH LIST, every card on /agents, with the two reads that stand between clicking it and reading
  * it already made.
  *
  * Opening an agent costs two round trips today, and both are paid at the click: its TRANSCRIPT (the daemon's
- * record of the conversation, which is the only copy for every agent this device did not itself start — a
+ * record of the conversation, which is the only copy for every agent this device did not itself start, a
  * workflow step, an automation's wake, a turn sent from a phone) and its CHANGES (the file list the review
  * opens on). Between them that is a blank pane for as long as the tunnel takes, on the app's most-clicked
  * gesture. Both are cached reads, so warming them is simply making them early.
  *
  * WHICH CARDS: the ones on the board, and no others. The Finished lane collapses everything past its window
- * behind a "N earlier" row, so this walks the same window the lane draws (windowFinished — shared with the
+ * behind a "N earlier" row, so this walks the same window the lane draws (windowFinished, shared with the
  * lane itself, because a wish list that disagreed with the board about which cards are visible would be warming
  * the ones the user cannot see). Archived agents are not on the board at all and are not here either.
  *
- * WHICH ORDER: attention first, then active, then the finished window — the board's own reading order, left to
+ * WHICH ORDER: attention first, then active, then the finished window, the board's own reading order, left to
  * right, because reading ahead in a different order than the lanes are drawn in warms the cards the user
  * reaches last. Per card the transcript comes before the changes: clicking a card opens its conversation, and
  * only the review affordance opens the diff.
@@ -35,7 +35,7 @@ import { reviewsToRead, type ReviewToRead } from "./reviewsToRead";
 
 // The board's card count is bounded by nothing but the sandbox's history, and a fleet that has been running for
 // a week is a real thing. Past this the tail is cold, which costs exactly what opening any card cost before any
-// of this existed. Two reads per card, so this is ~80 wishes at full stretch — well inside the plan's own cap,
+// of this existed. Two reads per card, so this is ~80 wishes at full stretch, well inside the plan's own cap,
 // deliberately, because the board must not be able to crowd the review's diffs out of the plan entirely.
 const MAX_CARDS = 40;
 
@@ -50,11 +50,11 @@ const wishesFor = (agent: FleetAgent, focused: boolean): readonly WarmTask[] => 
     ];
 };
 
-/* ONE REVIEW'S ROWS — the read that works out the +/− the review prints beside each file with the comments taken
+/* ONE REVIEW'S ROWS, the read that works out the +/− the review prints beside each file with the comments taken
  * out (useCodeStats), and therefore the read that decides whether those numbers are TRUE when the page opens. It
  * used to be declared for the open page alone, and the arithmetic of that was hopeless: the reader lands, the walk
  * starts, and the numbers arrive over the following seconds into a list that is being scanned right then. Warming a
- * review after its reader has arrived is warming the wrong thing — WHICH reviews are read ahead of that, and how
+ * review after its reader has arrived is warming the wrong thing. WHICH reviews are read ahead of that, and how
  * near each is, is reviewsToRead.
  *
  * Only ever from a list already in hand: the rows follow on the beat after their list lands, never before it. A card
@@ -75,7 +75,7 @@ const openAgentId = (): string | undefined => {
 
 /* WHOSE WORK IS ALREADY IN THE USER'S TREE. `landed` is the status the auto-land flow flips a cleanly-completed
  * turn to within ms of it ending (agentStatus' laneOf), and it means exactly what reviewsToRead needs it to: the
- * delta is sitting in the workspace as uncommitted changes, so the workspace review is reading the same files —
+ * delta is sitting in the workspace as uncommitted changes, so the workspace review is reading the same files,
  * differently, and it is the one being read ahead. `ready` is deliberately NOT here: that is work HELD on the
  * branch because auto-land is off, so this review is the only place it can be read at all. */
 const landedAgents = (board: readonly (readonly FleetAgent[])[]): ReadonlySet<string> =>
@@ -88,7 +88,7 @@ const landedAgents = (board: readonly (readonly FleetAgent[])[]): ReadonlySet<st
 
 export const agentsWarmSource = (): readonly WarmTask[] => {
     const board = lanes.value;
-    /* The card the chat is pointing at gets the `now` band — it is not "one click away", it is the thing on
+    /* The card the chat is pointing at gets the `now` band, it is not "one click away", it is the thing on
      * screen, and its review is one press from where the user's hand already is. It is also the card the
      * finished window pins rather than culls, for the same reason, so passing it here keeps this list and the
      * lane agreeing about what is visible. */
@@ -99,7 +99,7 @@ export const agentsWarmSource = (): readonly WarmTask[] => {
         .slice(0, MAX_CARDS)
         .flatMap((agent) => wishesFor(agent, agent.id === focused));
     /* The reviews' rows come FIRST in the list, not because the plan is ordered by position (it is ordered by band)
-     * but because within a band the source's own order decides — and a review that is open, or one press away, is
+     * but because within a band the source's own order decides, and a review that is open, or one press away, is
      * nearer than the card list behind it. Which reviews those are needs the lanes, which is why it is worked out
      * here and not above. */
     const reviews = reviewsToRead(

@@ -31,7 +31,7 @@ const checkPeriphery = async (session: SshSession, serverName: string): Promise<
 // Stateless: a version bump just recreates the container; it reconnects to Core automatically.
 export const createKomodoPeripheryProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "coreAddress")) {
             return undefined;
@@ -72,7 +72,7 @@ export const createKomodoPeripheryProvider = (executor: SshExecutor = sshExecuto
                 [
                     `docker run -d --restart unless-stopped --network host`,
                     `--name ${name}`,
-                    // /proc is bind-mounted on purpose (host stats), so masked paths are moot — and masking
+                    // /proc is bind-mounted on purpose (host stats), so masked paths are moot, and masking
                     // over a bind-mounted /proc hard-fails on WSL2 kernels. Unconfine system paths.
                     `--security-opt systempaths=unconfined`,
                     `-v /var/run/docker.sock:/var/run/docker.sock`,

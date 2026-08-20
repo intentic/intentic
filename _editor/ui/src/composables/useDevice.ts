@@ -4,7 +4,7 @@ export type Device = "mobile" | "tablet" | "desktop";
 
 /* Module-level singleton (same pattern as useOsPreference): every consumer shares one set of media-query
  * listeners. Breakpoints mirror Tailwind's `md` (768) and `lg` (1024) so template classes and JS agree.
- * `mobile` is the only flag that swaps component trees — tablet keeps the desktop shell and only picks up
+ * `mobile` is the only flag that swaps component trees, tablet keeps the desktop shell and only picks up
  * the coarse-pointer affordances (long-press menus, 44px targets). */
 
 const track = (query: string): Ref<boolean> => {
@@ -29,7 +29,7 @@ const device: ComputedRef<Device> = computed(() => {
 });
 
 /* Pixels of layout occluded by the on-screen keyboard (0 when closed). iOS Safari does not resize the
- * layout viewport for the keyboard, only the visual viewport — this ref bridges the gap so composers can
+ * layout viewport for the keyboard, only the visual viewport, this ref bridges the gap so composers can
  * pad themselves above it. On browsers that do resize the layout (interactive-widget=resizes-content),
  * the delta stays 0 and the padding is a no-op. */
 const keyboardInsetState = ref(0);

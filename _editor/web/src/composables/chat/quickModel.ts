@@ -5,7 +5,7 @@ import { providerReady } from "./access";
 import { modelChoiceLabel } from "./modelPins";
 import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 
-/* WHICH MODELS THE ONE-CLICK HELPERS RUN, AND IN WHAT ORDER, browser-side — the same rule the daemon walks
+/* WHICH MODELS THE ONE-CLICK HELPERS RUN, AND IN WHAT ORDER, browser-side, the same rule the daemon walks
  * before it spends the call (contract quick-model.ts), read here for the three things only a UI needs: NAMING
  * the model in the sparkle's tooltip, rendering the settings row's "Auto (…)" label, and showing the fallbacks
  * underneath it so the order is something you can see rather than something you have to remember.
@@ -18,7 +18,7 @@ import { endpointProviders, modelOptionsFor, providerDisplayLabel } from "./prov
 // Every native provider AND every configured model endpoint, as the resolver sees it: whether a turn on it can
 // be sent (the same predicate the picker's rows and the connect gate use) and what its catalog holds. Options
 // come from the live daemon catalog with the static seed floor beneath it, so this is answerable before any
-// catalog has loaded. Endpoints are in the list because their models are in the OPTIONS below — a pin the daemon
+// catalog has loaded. Endpoints are in the list because their models are in the OPTIONS below, a pin the daemon
 // would honour but this side dropped would name one model in the settings row and run another.
 const quickModelSources = computed(() =>
     [...NATIVE_PROVIDERS, ...endpointProviders.value.map((endpoint) => endpoint.id)].map((provider) => ({
@@ -28,7 +28,7 @@ const quickModelSources = computed(() =>
     })),
 );
 
-// Every model a user could pin, cheapest-first within each provider and grouped by it — the settings row's
+// Every model a user could pin, cheapest-first within each provider and grouped by it, the settings row's
 // option list. Only READY providers: pinning a model this sandbox has no credential for would resolve straight
 // back to Auto, so offering it would be offering a no-op.
 export interface QuickModelGroup {
@@ -50,14 +50,14 @@ export const quickModelGroups = computed<readonly QuickModelGroup[]>(() =>
 );
 
 export interface QuickModel {
-    // Every model a helper may run, in the order it will try them — the pinned list, or Auto's own ladder when
+    // Every model a helper may run, in the order it will try them, the pinned list, or Auto's own ladder when
     // nothing is pinned. Empty while settings load and when nothing is connected at all.
     readonly chain: ComputedRef<readonly QuickModelChoice[]>;
     // The one that answers when nothing goes wrong, which is what every surface naming the spend up front means
-    // by "the quick model". Undefined while settings are loading, and — once they have — with nothing connected.
+    // by "the quick model". Undefined while settings are loading, and, once they have, with nothing connected.
     readonly choice: ComputedRef<QuickModelChoice | undefined>;
     readonly label: ComputedRef<string | undefined>;
-    // The whole chain as people read it, head first — for the tooltip line that says what happens if the first
+    // The whole chain as people read it, head first, for the tooltip line that says what happens if the first
     // one is out. Empty when the chain is one model long: there is no fallback to describe.
     readonly fallbackLabels: ComputedRef<readonly string[]>;
     // The stored setting: the ordered `${provider}:${model}` keys, empty for Auto. Empty while settings load.

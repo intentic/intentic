@@ -5,7 +5,7 @@ import { cloudflareApi } from "@intentic/providers";
 import { collectDomains, selectZone } from "@intentic/state-resolver";
 import { loadEnvFile } from "../lib/artifact.js";
 
-// Load the intent a deploy.config.ts exports by importing it IN PLACE — so its `@intentic/sdk` and
+// Load the intent a deploy.config.ts exports by importing it IN PLACE, so its `@intentic/sdk` and
 // `@intentic/graph` imports resolve from the project the config lives in (Node strips the TS types).
 // The resolvers turn this intent into the desired state at resolve time.
 export const loadIntent = async (configPath: string): Promise<IntentSet> => {
@@ -17,10 +17,10 @@ export const loadIntent = async (configPath: string): Promise<IntentSet> => {
 };
 
 // The Cloudflare zone the authored domains live under. An authored `zone` (picked once at connect time) is
-// used directly — the domains are validated against it and no token or network is needed. Otherwise the zone
+// used directly, the domains are validated against it and no token or network is needed. Otherwise the zone
 // is discovered from the API token: load .env so the token is available, list the zones the token can see,
 // and match the declared domains against them. Returns undefined when there is nothing to expose (no
-// apps/services) — the resolver then needs no zone. This is the one place resolve can reach the network;
+// apps/services), the resolver then needs no zone. This is the one place resolve can reach the network;
 // everything downstream (plan/apply) reads the baked artifact.
 export const discoverZone = async (intent: IntentSet, dir: string): Promise<string | undefined> => {
     const cloudflare = intent.cloudflare;

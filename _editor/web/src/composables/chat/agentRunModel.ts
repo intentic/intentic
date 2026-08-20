@@ -6,14 +6,14 @@ import { modelChoiceLabel } from "./modelPins";
 import { pickerEntries } from "./modelPicker";
 import { endpointProviders, providerDisplayLabel } from "./providerCatalog";
 
-/* WHICH MODEL A RUN SOMEBODY'S BUTTON STARTED WILL OPEN ON, browser-side — the same rule the daemon reads
+/* WHICH MODEL A RUN SOMEBODY'S BUTTON STARTED WILL OPEN ON, browser-side, the same rule the daemon reads
  * before it spends the session (contract agent-run-model.ts), read here for what only a UI needs: NAMING the
  * model on the run button before the click, and drawing the ordered list in Sandbox ▸ Agent ▸ Models.
  *
  * Sibling to quickModel.ts, and the differences between the two files are all differences between the settings
  * they serve rather than incidental: the options are in CATALOG order rather than cheapest-first (these runs
  * have to read a failing suite and repair it, so being on the budget tier is not a virtue here), and an empty
- * chain resolves to NOTHING rather than to an Auto ladder — the caller's floor is the user's own composer pick,
+ * chain resolves to NOTHING rather than to an Auto ladder, the caller's floor is the user's own composer pick,
  * which is a choice they made rather than one this file guessed. */
 
 // Every model a user could pin here, grouped by provider in the picker's own catalog order. Only READY
@@ -40,13 +40,13 @@ export const agentRunModelGroups = computed<readonly AgentRunModelGroup[]>(() =>
 
 export interface AgentRunModel {
     // Every model a surface-started run may open on, in the order the daemon will try them. Empty while settings
-    // load, and once they have when nothing pinned is reachable — which is a real state the callers render as
+    // load, and once they have when nothing pinned is reachable, which is a real state the callers render as
     // "whatever the composer is set to" rather than as an error.
     readonly chain: ComputedRef<readonly QuickModelChoice[]>;
     // The one a run actually opens on. Undefined ⇒ the caller's own floor answers instead.
     readonly choice: ComputedRef<QuickModelChoice | undefined>;
     readonly label: ComputedRef<string | undefined>;
-    // The rest of the chain as people read it — for the line that says what happens if the first account is out.
+    // The rest of the chain as people read it, for the line that says what happens if the first account is out.
     // Empty when there is no fallback to describe.
     readonly fallbackLabels: ComputedRef<readonly string[]>;
     // The stored setting: the ordered `${provider}:${model}` keys. Empty while settings load.

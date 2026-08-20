@@ -11,17 +11,17 @@ import { scopeQuery } from "./workspaceScope";
  * iq engine's full sweep, so the two never disagree about a reference both can see.
  *
  * Split from fileRefs because it reaches the sandbox client: markdown RENDERING resolves against the tree
- * synchronously and must not pull the request/auth graph in — only the click does. */
+ * synchronously and must not pull the request/auth graph in, only the click does. */
 
 // The workspace path a reference means, or undefined when nothing in the workspace matches it. A failed
 // request resolves to undefined rather than throwing: the caller falls back to the literal path, which lands on
-// the file viewer's not-found state — the same place an unresolvable reference has always landed.
+// the file viewer's not-found state, the same place an unresolvable reference has always landed.
 export const resolveWorkspaceRef = async (path: string): Promise<string | undefined> => {
     const local = resolveInTree(path);
     if (local !== undefined) {
         return local;
     }
-    // Scoped, so a file that exists ONLY in a conversation's checkout resolves at all — which is the whole
+    // Scoped, so a file that exists ONLY in a conversation's checkout resolves at all, which is the whole
     // point of a link written inside that conversation (see workspaceScope).
     const query = scopeQuery(new URLSearchParams({ path }));
     const resolved = await sandboxJson<WorkspaceResolveResponse>(`/workspace/resolve?${query.toString()}`).catch(() => undefined);

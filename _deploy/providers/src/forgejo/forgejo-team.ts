@@ -8,7 +8,7 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — the admin API is reached over an SSH port-forward.
+// The ssh block is the control-plane host's, the admin API is reached over an SSH port-forward.
 const forgejoTeamSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
@@ -27,7 +27,7 @@ const parse = (inputs: ResolvedInputs): ForgejoTeamInputs => parseInputs(forgejo
 // A team inside its org: members + the repos they get access to at the team's permission. read keys on the
 // team's existence + its current permission (so a permission change re-applies); membership and repo
 // attachment are idempotent PUTs re-asserted on apply. Depends (via the resolver's refs) on the org, every
-// member's account, and every attached repo, so all exist before apply runs. A pure sink — no outputs.
+// member's account, and every attached repo, so all exist before apply runs. A pure sink, no outputs.
 export const createForgejoTeamProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);

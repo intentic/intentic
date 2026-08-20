@@ -2,7 +2,7 @@ import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDi
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertScope } from "../policy.js";
 
-/* GUI work: the tool that lets the agent do the things with no command-line way in — a dialog with an OK button,
+/* GUI work: the tool that lets the agent do the things with no command-line way in, a dialog with an OK button,
  * a native app with no API, a settings pane.
  *
  * THE MECHANICS ARE NOT HERE. @intentic/desktop knows how to move a pointer on Windows and on Wayland; this file
@@ -17,7 +17,7 @@ import { assertScope } from "../policy.js";
  *
  * COORDINATES ARE SCREENSHOT PIXELS. That is the only frame the model has ever seen, so it is the frame the tool
  * accepts; the package puts them back into the OS's space. Out-of-frame coordinates are refused rather than
- * clamped — a click 200px off the right edge is a misread screenshot, and silently landing it on the edge turns
+ * clamped, a click 200px off the right edge is a misread screenshot, and silently landing it on the edge turns
  * a visible mistake into a mysterious one. */
 
 export type ComputerAction =
@@ -78,7 +78,7 @@ export const describeAction = (input: ComputerInput): string => {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 
-// Perform one action. Returns nothing — what the caller reports is describeAction plus, when it may look, a
+// Perform one action. Returns nothing, what the caller reports is describeAction plus, when it may look, a
 // fresh screenshot.
 export const act = async (screen: Desktop, input: ComputerInput, scopes: HostScopes): Promise<void> => {
     assertScope(scopes, "control");

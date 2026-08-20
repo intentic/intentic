@@ -1,15 +1,15 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from "@intentic/sandbox-contract";
 
-/* THE TURN AS THE DAEMON RECEIVES IT — what a send carries, which session it may resume, and the body that
+/* THE TURN AS THE DAEMON RECEIVES IT, what a send carries, which session it may resume, and the body that
  * states both on the wire. Assembled as values here instead of inline in Conversation.send so the rules can be
- * read — and tested — without a conversation and a fetch wrapped around them.
+ * read, and tested, without a conversation and a fetch wrapped around them.
  *
- * The provider (AgentProvider) and harness (AgentHarness) a turn runs on are the contract's wire enums — see
+ * The provider (AgentProvider) and harness (AgentHarness) a turn runs on are the contract's wire enums, see
  * schemas.ts for their semantics. Both are switchable mid-conversation: a session id only resumes on the runtime
  * that minted it, so a switched turn simply omits it. Seeding the replacement session with what came before is
- * the DAEMON's job, from its own record of the conversation — this client sends the prompt and nothing else. */
+ * the DAEMON's job, from its own record of the conversation, this client sends the prompt and nothing else. */
 
-// The turn settings passed into a send — the active conversation's own selected provider/model/effort/thinking
+// The turn settings passed into a send, the active conversation's own selected provider/model/effort/thinking
 // (see useChat's active-conversation facades), captured at send time.
 export interface TurnSettings {
     readonly agent: AgentProvider;
@@ -17,35 +17,35 @@ export interface TurnSettings {
     readonly harness: AgentHarness;
     // Which connected account of the provider serves the turn; undefined ⇒ the daemon's first account.
     readonly account: string | undefined;
-    /* WHO THE TURN IS TO THE OUTSIDE WORLD — a persona id, and the one setting on this line that is not about
+    /* WHO THE TURN IS TO THE OUTSIDE WORLD, a persona id, and the one setting on this line that is not about
      * the model. `account` above pays for the turn; this decides whose logged-in accounts it may act through
      * and how big a toolbox it holds. Undefined is the ordinary chat: somebody is watching, so every connected
-     * account stays reachable (the daemon's own rule — see turnPersona). */
+     * account stays reachable (the daemon's own rule, see turnPersona). */
     readonly actsAs: string | undefined;
     readonly model: string;
     readonly effort: string;
     readonly thinking: boolean;
     // Whether to ask for fast speed. Already reconciled against the selected model when it gets here (see
-    // Conversation.turnSettings) — this is the answer to send, not the toggle's raw position.
+    // Conversation.turnSettings), this is the answer to send, not the toggle's raw position.
     readonly fast: boolean;
 }
 
-// A provider-minted resumable session and the runtime/account it belongs to — the trio is coherent by
+// A provider-minted resumable session and the runtime/account it belongs to, the trio is coherent by
 // construction (captured together from the stream's session frame). A session only resumes on its own
 // runtime/account; a mismatched selection at send time retires it.
 export interface SessionRef {
     readonly id: string;
     readonly provider: AgentProvider;
     readonly account: string | undefined;
-    // The harness that minted it — a session only resumes on the same runtime, so a harness switch retires it too.
+    // The harness that minted it, a session only resumes on the same runtime, so a harness switch retires it too.
     readonly harness: AgentHarness;
 }
 
 /* WHETHER A SESSION SURVIVES THE NEXT SEND. A provider mints a session on one runtime under one credential, so
  * all three have to still match the selection for it to resume; any one of them moving retires it and the next
  * turn starts a fresh session seeded with the transcript so far. Written once because two places ask it about
- * two different things — the composer's "switched to…" divider asks BEFORE the send (is there anything to
- * announce), send() asks at the moment of truth — and a drift between them would show a divider promising a
+ * two different things, the composer's "switched to…" divider asks BEFORE the send (is there anything to
+ * announce), send() asks at the moment of truth, and a drift between them would show a divider promising a
  * fresh session for a turn that then resumed, or say nothing before one that didn't. */
 export const resumes = (
     session: SessionRef | undefined,
@@ -53,7 +53,7 @@ export const resumes = (
 ): boolean =>
     session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
 
-/* Every field here is a rule about what the daemon then does — an omitted `model` makes it resolve its own
+/* Every field here is a rule about what the daemon then does, an omitted `model` makes it resolve its own
  * live-catalog default, an omitted `harness` means the native loop, an omitted `sessionId` means "start a fresh
  * session and seed it from the conversation's record", `isolated` decides whether the turn runs in this
  * conversation's worktree or on /work. Undefined keys drop out at JSON.stringify, which is what makes "omitted"
@@ -67,11 +67,11 @@ export const turnRequestBody = (input: {
     readonly settings: TurnSettings;
     // The session this turn resumes, when the selection still matches the runtime/account that minted it.
     readonly resume: SessionRef | undefined;
-    // Where this conversation was forked from, on a fork's first turn — the daemon copies that many rows of the
+    // Where this conversation was forked from, on a fork's first turn, the daemon copies that many rows of the
     // source's record into this one before running, and `files` tells it whether this fork starts on the files
     // as they were at the cut or as they are now (see Conversation.forkFrom).
     readonly forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined;
-    // Uploaded attachments plus @-mentioned workspace paths — the daemon resolves both the same way.
+    // Uploaded attachments plus @-mentioned workspace paths, the daemon resolves both the same way.
     readonly attachmentPaths: readonly string[];
     readonly editorContext: EditorContext | undefined;
 }) => ({
@@ -85,13 +85,13 @@ export const turnRequestBody = (input: {
     // own git worktree (branch agent/<conversationId>) instead of /work.
     conversationId: input.conversationId,
     ...(input.isolated ? { isolated: true } : {}),
-    // `native` is the daemon's default, so only `claude-code` rides the wire — that's what routes codex/grok
+    // `native` is the daemon's default, so only `claude-code` rides the wire, that's what routes codex/grok
     // through the translator under the Claude Code loop.
     ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
     // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
     account: input.settings.account,
     // The persona this turn wears. Omitted when none is picked, which for an attended chat means "every
-    // connected account" — sending an empty string instead would name a card that does not exist, and a named
+    // connected account", sending an empty string instead would name a card that does not exist, and a named
     // card that cannot be found is the one case the daemon answers with nothing at all.
     ...(input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
     sessionId: input.resume?.id,

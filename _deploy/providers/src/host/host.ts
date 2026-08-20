@@ -8,11 +8,11 @@ import { sshExecutor } from "../core/ssh.js";
 type HostInputs = z.infer<typeof sshSchema>;
 const parse = (inputs: ResolvedInputs): HostInputs => parseInputs(sshSchema, inputs, "host");
 
-// Gather the host's facts over an open session. The host is OWNED infra — this verifies it is reachable
+// Gather the host's facts over an open session. The host is OWNED infra, this verifies it is reachable
 // and Docker-ready and reads its addresses; it does not provision anything. internalIp is the default
 // route's source address; publicIp is the address we connect to (no third-party egress).
 const gather = async (session: SshSession, address: string): Promise<Record<string, unknown>> => {
-    // Two independent read-only execs — concurrent channels on the one connection, so a plan pays one SSH
+    // Two independent read-only execs, concurrent channels on the one connection, so a plan pays one SSH
     // round-trip per host instead of two. Docker's code is checked first to keep the error priority.
     const [docker, route] = await Promise.all([
         session.exec("docker version --format '{{.Server.Version}}'"),
@@ -56,7 +56,7 @@ export const createHostProvider = (executor: SshExecutor = sshExecutor): Provide
             await session.dispose();
         }
     },
-    // The host is OWNED infra, not provisioned by intentic — removing it from desired state never deletes the
+    // The host is OWNED infra, not provisioned by intentic, removing it from desired state never deletes the
     // machine. Implemented as a logged no-op so prune treats it as handled rather than an unhandled orphan.
     delete: async (_inputs, ctx) => {
         ctx.log(`host "${ctx.id}" removed from desired state — owned infra is never torn down by intentic`);

@@ -33,7 +33,7 @@ export const restore = buildCommand<RestoreFlags>({
         loadEnvFile(dir);
         const graph = await readArtifact(artifact);
         // Recovery re-applies against the same host, so read the admin passwords from the host-authoritative
-        // store (no backfill — restore reads what's there rather than reconciling layers).
+        // store (no backfill, restore reads what's there rather than reconciling layers).
         const ssh = createSshExecutor(createKnownHostsStore(dir));
         try {
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
@@ -76,7 +76,7 @@ export const restore = buildCommand<RestoreFlags>({
             });
             out.result({ snapshot: flags.snapshot ?? "latest", scope });
         } finally {
-            // Tear down the executor's cloudflared forwarders — a live forwarder child holds the event loop
+            // Tear down the executor's cloudflared forwarders, a live forwarder child holds the event loop
             // open forever after the result (cli.ts has no process.exit), hanging the caller.
             await ssh.dispose?.();
         }

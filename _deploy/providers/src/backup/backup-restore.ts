@@ -27,12 +27,12 @@ const RESTORE_VOLUME = "intentic-restore";
 // plain file-copy steps so a restore needs no extra image on the host.
 const resticPrefix = (args: RestoreArgs): string => {
     // `docker run -e KEY=value` takes the value literally once the shell is done with it, so the shell is the
-    // only layer here — but it IS a layer: these are the same restic password and backend credentials the
+    // only layer here, but it IS a layer: these are the same restic password and backend credentials the
     // backup provider writes, and spliced into bare `'…'` an apostrophe in either ran the remainder on the host.
     const creds = Object.entries(args.credentials ?? {})
         .map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`)
         .join(" ");
-    // A local (on-host) repo lives in REPO_VOLUME — mount it at the repo path so restic can read it. The
+    // A local (on-host) repo lives in REPO_VOLUME, mount it at the repo path so restic can read it. The
     // migration streams that volume onto this host first, so the repo is present before restore runs.
     const repoMount = isLocalRepo(args.repo) ? `-v ${shellQuote(`${REPO_VOLUME}:${args.repo}`)} ` : "";
     return `docker run --rm -e ${shellQuote(`RESTIC_PASSWORD=${args.password}`)} ${creds} ${repoMount}-v ${RESTORE_VOLUME}:/restore ${shellQuote(args.image)} -r ${shellQuote(args.repo)}`;
@@ -49,7 +49,7 @@ const wants = (scope: RestoreScope, part: "forgejo" | "komodo"): boolean => scop
 // Restore the control plane from a restic snapshot, then leave the operator to `intentic deploy apply` so the
 // services are recreated on top of the recovered volumes. This is a deliberate one-shot recovery action, not
 // a reconcile step: it stops the affected containers, overwrites their data volumes from the snapshot, and
-// (for `all`) restores the /opt/intentic host state — none of which is idempotent or convergent. It NEVER
+// (for `all`) restores the /opt/intentic host state, none of which is idempotent or convergent. It NEVER
 // runs `restic forget`/deletes the repo: the snapshots are the user's data.
 export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
     const executor = args.executor ?? sshExecutor;

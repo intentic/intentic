@@ -9,7 +9,7 @@ import { validateOutputs } from "./outputs-check.js";
 import { decideDiff, makeContext, narratedRead, requireProvider } from "./reconcile.js";
 
 // Converge: walk the graph in dependency order, reconcile each node (create/update/noop), record its
-// outputs for downstream refs, then gate on readiness. Strictly sequential — a dependent must observe
+// outputs for downstream refs, then gate on readiness. Strictly sequential, a dependent must observe
 // its dependencies' outputs in the store, which holds because linearize() places deps first.
 export const apply = async (graph: DesiredStateGraph, config: EngineConfig): Promise<ApplyOutcome> => {
     const env = config.env ?? process.env;

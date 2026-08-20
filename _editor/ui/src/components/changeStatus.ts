@@ -1,6 +1,6 @@
-/* Git's one-letter status vocabulary and the colour each letter is read in — the data behind <ChangeStatusMark>.
+/* Git's one-letter status vocabulary and the colour each letter is read in, the data behind <ChangeStatusMark>.
  *
- * `!` for a conflict, git's own porcelain letter being `U` — but `U` next to `M`/`A`/`D` reads as one more
+ * `!` for a conflict, git's own porcelain letter being `U`, but `U` next to `M`/`A`/`D` reads as one more
  * flavour of change, and a conflict is a stop sign. Danger-coloured for the same reason.
  *
  * Not exported from the barrel: the mark is the only thing that should be rendering these, and a caller reaching

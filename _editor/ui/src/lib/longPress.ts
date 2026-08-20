@@ -1,9 +1,9 @@
 import type { Directive } from "vue";
 
-/* `v-longpress="handler"` — the touch replacement for right-click ContextMenus: pointerdown starts a 500ms
+/* `v-longpress="handler"`, the touch replacement for right-click ContextMenus: pointerdown starts a 500ms
  * timer, movement beyond a 10px slop or pointerup cancels it, firing vibrates (Android; no-op on iOS) and
  * suppresses the click that follows the release so row-tap handlers don't also run. Mouse pointers are
- * ignored — desktop keeps its real context menus. */
+ * ignored, desktop keeps its real context menus. */
 
 const DURATION_MS = 500;
 const SLOP_PX = 10;

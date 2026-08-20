@@ -8,7 +8,7 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — the admin API is reached over an SSH port-forward.
+// The ssh block is the control-plane host's, the admin API is reached over an SSH port-forward.
 const forgejoUserSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),

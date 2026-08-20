@@ -6,7 +6,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { TERMINALS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* The ONE session list every surface reads — the rail's activity badge, the background-process rows, AND the
+/* The ONE session list every surface reads, the rail's activity badge, the background-process rows, AND the
  * terminal panel's tab strip. One cache entry, so however many surfaces are mounted they share a single
  * in-flight request; and, because the panel's own relists go through `listTerminals` (which writes that entry),
  * the badge moves WITH the strip instead of trailing it.
@@ -14,13 +14,13 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * UNPOLLED. Three surfaces each held their own 10s timer over the tunnel, asking a question the daemon could
  * always answer better: tmux tells nobody when a pane's command exits, so the daemon watches its own tmux and
  * pushes the `terminals` domain when what it sees changes (runtime-watch.ts). One look, in the sandbox, shared
- * by every tab — instead of one round trip per surface per tab per 10s, almost always answering "no change".
+ * by every tab, instead of one round trip per surface per tab per 10s, almost always answering "no change".
  *
 
  * PENDING sessions are the other half of the truth. A `web-*` shell exists in tmux only once its socket connects
  * and runs `tmux new-session -A`, so from the click until that handshake the daemon does not list it. Held
  * nowhere, that gap costs both symptoms at once: the badge lags every new tab, and a list taken inside the
- * window (a poll, or the panel's own relist) DROPS the brand-new tab — orphaning a live session whose socket
+ * window (a poll, or the panel's own relist) DROPS the brand-new tab, orphaning a live session whose socket
  * keeps streaming into a strip that no longer shows it. A pending entry is this browser's claim on a name it
  * just created; it retires the moment the daemon lists it, or when the session ends. */
 
@@ -35,7 +35,7 @@ export const fetchTerminals = async (): Promise<TerminalSession[]> =>
 
 // A read at most this old counts as current. The panel relists in reaction to the shared entry's own poll, so
 // without a freshness window every arriving poll would echo one redundant request back at the daemon. Mutations
-// don't go through it — `refreshTerminals` forces the refetch, because a kill must not read the list that still
+// don't go through it, `refreshTerminals` forces the refetch, because a kill must not read the list that still
 // contains what it just killed.
 const FRESH_MS = 1000;
 
@@ -56,7 +56,7 @@ export const clearPendingTerminals = (): void => {
     pending.value = [];
 };
 
-// A listed name is real now, so its claim is spent — filtered out here rather than pruned, so this stays pure
+// A listed name is real now, so its claim is spent, filtered out here rather than pruned, so this stays pure
 // and a claim can't be lost to a list that raced the socket handshake. `listTerminals` does the actual prune.
 const withPending = (listed: TerminalSession[]): TerminalSession[] => {
     const known = new Set(listed.map((session) => session.name));
@@ -69,7 +69,7 @@ export const useTerminalsQuery = (): { sessions: ComputedRef<TerminalSession[]>;
 };
 
 // The imperative read behind the terminal panel's tab machinery (it relists on demand around spawns, kills,
-// restarts and surfaces). Cache-first within FRESH_MS, and the result lands in the SHARED entry — that write is
+// restarts and surfaces). Cache-first within FRESH_MS, and the result lands in the SHARED entry, that write is
 // what keeps the rail's badge and the process rows in step with the strip.
 export const listTerminals = async (): Promise<TerminalSession[]> => {
     const listed = await queryClient.fetchQuery({ queryKey: terminalsKey, queryFn: fetchTerminals, staleTime: FRESH_MS });
@@ -78,7 +78,7 @@ export const listTerminals = async (): Promise<TerminalSession[]> => {
     return withPending(listed);
 };
 
-// Drop a session from the shared list the moment its kill is ISSUED, ahead of the daemon's confirmation — the
+// Drop a session from the shared list the moment its kill is ISSUED, ahead of the daemon's confirmation, the
 // strip removes the tab synchronously, so without this the rail's badge would keep counting it for a tunnel
 // round-trip, which is exactly what made closing a terminal feel unacknowledged. A kill that then fails is
 // undone by the refetch that follows it.

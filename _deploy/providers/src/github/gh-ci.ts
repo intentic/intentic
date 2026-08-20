@@ -29,9 +29,9 @@ const workflowPath = (tag: string): string => `.github/workflows/build-${tag}.ym
 const DOCKERFILE_PATH = "Dockerfile";
 
 // The GitHub Actions workflow: on a push to the env branch it builds the Dockerfile, pushes the image to
-// GHCR (with the job's own GITHUB_TOKEN — no extra registry secret), then logs into Komodo and triggers an
+// GHCR (with the job's own GITHUB_TOKEN, no extra registry secret), then logs into Komodo and triggers an
 // immediate Deploy. Mirrors the Forgejo stack's workflow: CI only builds + pushes; Komodo rolls out. The
-// host is never SSHed from CI — its Periphery pulls outbound.
+// host is never SSHed from CI, its Periphery pulls outbound.
 const workflowYaml = (parsed: GhCiInputs): string => {
     const image = `ghcr.io/${parsed.owner}/${parsed.repoName}`;
     return [

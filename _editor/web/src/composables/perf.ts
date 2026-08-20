@@ -1,4 +1,4 @@
-/* WHERE THE BROWSER'S TIME GOES — the daemon's platform/perf.ts, on this side of the wire.
+/* WHERE THE BROWSER'S TIME GOES, the daemon's platform/perf.ts, on this side of the wire.
  *
  * The daemon can only ever account for the half of a slow interaction that it served. When the user says the
  * /agents board stutters or a popped-out chat lags, the daemon's log is often completely clean, because
@@ -8,7 +8,7 @@
  *
  * Three outputs, mirroring the daemon's:
  *
- *  - SLOW spans warn to the console as they happen, ALWAYS — not behind the verbose toggle. A stall the user
+ *  - SLOW spans warn to the console as they happen, ALWAYS, not behind the verbose toggle. A stall the user
  *    only notices once has to leave a trace without having been armed for in advance, which is the entire
  *    difference between this being useful and being a thing nobody remembers to turn on.
  *  - Every span at debug, behind `__intenticPerf.verbose(true)` (persisted, so it survives the reload you are
@@ -18,7 +18,7 @@
  *    same call 900 times during one streamed answer is ten seconds of dropped frames.
  *
  * The ring buffer records unconditionally (it is an array write), so the spans leading up to a stall are still
- * there afterwards — `__intenticPerf.dump()` in the console after the fact is the intended workflow. */
+ * there afterwards, `__intenticPerf.dump()` in the console after the fact is the intended workflow. */
 
 // A span slower than this warns. The browser's budget is a frame, not a request: past ~50ms of main-thread work
 // the user sees a dropped frame, and past ~200ms an interaction feels detached from the click that caused it.
@@ -31,7 +31,7 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     // A daemon round-trip. Generous: the tunnel and the daemon's own work are both inside it, and the daemon's
     // http.request line is what says which side was responsible.
     "rpc.request": 1_500,
-    // One vue-query fetch, including its queryFn — so the gap between this and rpc.request is the cache/query
+    // One vue-query fetch, including its queryFn, so the gap between this and rpc.request is the cache/query
     // machinery's own cost.
     "query.fetch": 1_500,
     // Folding the agent frames that arrived since the last paint into the transcript. Main thread, once per
@@ -78,7 +78,7 @@ let verbose = ((): boolean => {
     try {
         return localStorage.getItem(VERBOSE_KEY) === `1`;
     } catch {
-        // Private mode / storage disabled — measurement is never allowed to be why something breaks.
+        // Private mode / storage disabled, measurement is never allowed to be why something breaks.
         return false;
     }
 })();
@@ -100,8 +100,8 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
         ring.shift();
     }
     if (slow) {
-        // `seen`/`slowSeen` answer the question the single line otherwise raises — is this the first time, or
-        // has it been doing this all along — without needing the table.
+        // `seen`/`slowSeen` answer the question the single line otherwise raises, is this the first time, or
+        // has it been doing this all along, without needing the table.
         console.warn(`[perf] slow ${op} ${round(ms)}ms`, { ...fields, seen: stat.count, slowSeen: stat.slowCount });
         return;
     }
@@ -110,7 +110,7 @@ export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): voi
     }
 };
 
-/** Measure an async operation. Returns what it returns, rethrows what it throws — a failed call is still a
+/** Measure an async operation. Returns what it returns, rethrows what it throws, a failed call is still a
  *  span, and a slow failure is the most interesting kind. */
 export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Promise<T>): Promise<T> => {
     const from = performance.now();
@@ -121,14 +121,14 @@ export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Pr
     }
 };
 
-// Ranked by total time — see the module comment for why that and not max.
+// Ranked by total time, see the module comment for why that and not max.
 const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
 
 /* The console handle. Attached to the window rather than exported for a component, because the moment it is
  * wanted is the moment something is already going wrong and the only tool in reach is devtools:
  *
- *   __intenticPerf.table()          ranked — start here, the top row is your bottleneck
- *   __intenticPerf.dump()           the last 1000 spans, newest last — what led up to a stall
+ *   __intenticPerf.table()          ranked, start here, the top row is your bottleneck
+ *   __intenticPerf.dump()           the last 1000 spans, newest last, what led up to a stall
  *   __intenticPerf.dump('chat')     …filtered to ops starting with 'chat'
  *   __intenticPerf.verbose(true)    log every span from now on (survives reload)
  *   __intenticPerf.reset()          zero the table before reproducing something deliberately

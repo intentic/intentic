@@ -1,7 +1,7 @@
 import type { DesiredStateGraph, SecretSource, SerializedValue } from "./types.js";
 
 // Read the source + env-var key behind a serialized secret input ({ $secret: { source, key } }), or undefined
-// if `value` is not a secret node. Enumeration/display only — never reads the secret VALUE (that is the
+// if `value` is not a secret node. Enumeration/display only, never reads the secret VALUE (that is the
 // engine's resolve-inputs path).
 export const secretRef = (value: SerializedValue | undefined): { readonly source: SecretSource; readonly key: string } | undefined => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -27,7 +27,7 @@ export interface SecretUsage {
 // Every secret the graph requires, with the resource nodes that reference it. Secrets nest (an app
 // environment's `env` map, the platform nodes the resolver injects), so walk inputs recursively; the graph is
 // the only complete source (a hand-written list drifts). Sorted by key, each `requiredBy` de-duplicated and
-// sorted by node id. A key declared under BOTH sources is a resolver bug — surface it here rather than
+// sorted by node id. A key declared under BOTH sources is a resolver bug, surface it here rather than
 // half-generate it at apply time.
 export const collectSecretUsage = (graph: DesiredStateGraph): SecretUsage[] => {
     const usages = new Map<string, { source: SecretSource; requiredBy: Map<string, string> }>();

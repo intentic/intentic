@@ -28,7 +28,7 @@ export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Prom
         const ctx = makeContext(id, store, env, log);
         // Announce the read before it starts (apply already does): reads go over live SSH/HTTP and can take
         // seconds each, and a consumer showing progress must be able to name the node currently being checked
-        // — especially the one a stalled transport wedges on.
+        //, especially the one a stalled transport wedges on.
         emit({ kind: "node", phase: "plan", state: "start", id, type });
         // Resolve leniently before read: a dependency that is itself a pending create has no real output
         // yet, so its ref resolves to PENDING rather than throwing. read must tolerate that (and return

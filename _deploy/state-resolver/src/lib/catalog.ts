@@ -1,7 +1,7 @@
 import type { Capability, IntentSet } from "@intentic/need-resolver";
 
-// A concrete way to satisfy one or more capabilities. One option can fill several needs at once — Forgejo
-// (the "Gitea" option) provides both source control and a Docker registry — which couples those needs to
+// A concrete way to satisfy one or more capabilities. One option can fill several needs at once. Forgejo
+// (the "Gitea" option) provides both source control and a Docker registry, which couples those needs to
 // the same choice.
 export interface Option {
     readonly id: string;
@@ -21,7 +21,7 @@ const forgejoOptions: readonly Option[] = [
     { id: "cloudflare-tunnel", provides: ["domain"] },
 ];
 
-// The GitHub stack: hosted git + CI (GitHub Actions) + registry (GHCR). Komodo still fills infra-control —
+// The GitHub stack: hosted git + CI (GitHub Actions) + registry (GHCR). Komodo still fills infra-control,
 // the deploy orchestrator is unconditional, so CI only builds + pushes and the host stays outbound-only.
 // Selected when i.have.github is declared.
 const githubOptions: readonly Option[] = [

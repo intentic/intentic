@@ -20,17 +20,17 @@ const exec = promisify(execFile);
 const starterConfig = (): string => renderTemplate("scaffold/deploy.config.ts", {});
 
 // Self-host variant: when the sandbox was wired with a local deploy target (connect.{sh,ps1}), scaffold the
-// example app onto `self` — the host the daemon auto-registers in the managed `// <intentic>` block — so
+// example app onto `self`, the host the daemon auto-registers in the managed `// <intentic>` block, so
 // Provision works with no edits. `self` is referenced, never declared here (the daemon owns that declaration; a
 // second one would duplicate it). The domain is app.<zone> for the sandbox's Cloudflare zone (falls back to the
-// example placeholder when the zone is unknown). No DB env — the zero-dependency starter app needs none.
+// example placeholder when the zone is unknown). No DB env, the zero-dependency starter app needs none.
 export const selfHostConfig = (zone: string | undefined): string =>
     renderTemplate("scaffold/deploy.config.selfhost.ts", { zone: zone ?? "example.com" });
 
 // Scaffold the local workspace: an `intent` repo (holds deploy.config.ts and its package), a `desired-state`
-// repo (holds the artifact `resolve` writes and the status `apply` writes), and — unless `minimal` — an `app`
+// repo (holds the artifact `resolve` writes and the status `apply` writes), and, unless `minimal`, an `app`
 // repo (the application code), each its own git repo so the generated target can later become PR-managed and
-// `adopt` can push it. The intent repo is a self-contained TS project against `@intentic/{graph,sdk}` — pinned
+// `adopt` can push it. The intent repo is a self-contained TS project against `@intentic/{graph,sdk}`, pinned
 // to the CLI's own version, or linked to local source with `--link`. `appRepo`, when set, clones an existing
 // repo as the app instead of scaffolding a starter. `selfHost` scaffolds the example app onto the auto-registered
 // `self` deploy target (domain app.`zone`) so Provision works with no edits; otherwise a placeholder remote host.
@@ -60,7 +60,7 @@ export const scaffold = async (
         await writeFile(join(targetDir, ".gitignore"), TARGET_GITIGNORE);
         // A minimal ledger is reachability-only: no app repo (it arrives with the "Deploy on this machine" flow).
         // Otherwise scaffold the app BEFORE `pnpm install`: a failed install must not also cost us /work/app (the
-        // dev server's cwd — its absence surfaces as a confusing `spawn pnpm ENOENT`). The install goes last, as
+        // dev server's cwd, its absence surfaces as a confusing `spawn pnpm ENOENT`). The install goes last, as
         // the one step that reaches the network and is most likely to fail.
         if (!minimal) {
             await scaffoldApp(appDir, appRepo);

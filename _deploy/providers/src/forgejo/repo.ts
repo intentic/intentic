@@ -8,7 +8,7 @@ import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
 import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-// The ssh block is the control-plane host's — Forgejo's API is reached over an SSH port-forward, never the
+// The ssh block is the control-plane host's. Forgejo's API is reached over an SSH port-forward, never the
 // public git route.
 const repoSchema = sshSchema.extend({
     name: z.string(),

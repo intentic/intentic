@@ -101,7 +101,7 @@ const ensureLayout = async (session: SshSession, id: string): Promise<void> => {
 // reconciles, the volumes persist, the layout bootstrap is guarded). Per-app buckets are the binding's job.
 export const createGarageProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

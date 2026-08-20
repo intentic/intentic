@@ -4,11 +4,11 @@ import { BUNDLED_ICONS } from "@intentic/ui/src/icons/iconData.generated.js";
 import { vTooltip } from "@intentic/ui/src/lib/tooltip.js";
 import type { App } from "vue";
 
-/* THE DESIGN SYSTEM, TO THE EXTENT THIS PAGE USES IT — the icon primitive and the hover label, and nothing
+/* THE DESIGN SYSTEM, TO THE EXTENT THIS PAGE USES IT, the icon primitive and the hover label, and nothing
  * else.
  *
  * The app boots the kit with `installUi`, which also stands up PrimeVue: its theme preset, its cascade layer,
- * its ripple. This page renders no PrimeVue component — a transcript is prose, cards and a fold — so calling
+ * its ripple. This page renders no PrimeVue component, a transcript is prose, cards and a fold, so calling
  * installUi here would put a component framework into a bundle a stranger downloads to read a conversation,
  * for nothing. Reaching past the barrel is what keeps it out: importing anything from `@intentic/ui` pulls
  * `installUi` into the module graph, and a bundler is right to be conservative about dropping a call it cannot

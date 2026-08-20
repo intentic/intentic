@@ -70,7 +70,7 @@ export const planCommand = buildCommand<PlanFlags>({
             out.log(message);
         };
         const work = async (): Promise<void> => {
-            // Read-only command: read generated secrets from the host-authoritative store (no backfill — plan never
+            // Read-only command: read generated secrets from the host-authoritative store (no backfill, plan never
             // mutates a store), falling back to the local cache when the host is unreachable.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, log), collectSecrets(graph).generated, process.env);
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
@@ -80,7 +80,7 @@ export const planCommand = buildCommand<PlanFlags>({
                 out.text(`${step.action}\t${step.type}\t${step.id}${step.reason !== undefined ? `\t(${step.reason})` : ""}`);
             }
             // The collection scan: live stamped resources absent from the graph. Entries carry delete inputs
-            // (connection secrets) — strip to (id, type) before they reach any output. Against a targeted
+            // (connection secrets), strip to (id, type) before they reach any output. Against a targeted
             // subgraph every untargeted declared resource would read as an orphan, so the scan is skipped.
             let orphans: { id: string; type: string }[] = [];
             if (targets === undefined) {
@@ -94,7 +94,7 @@ export const planCommand = buildCommand<PlanFlags>({
             out.result({ steps: outcome.steps, orphans });
         };
         // The deadline rejects and the command exits non-zero (stricli renders the error); the raced work is
-        // abandoned — its transports die with the process. unref keeps a fast plan from being held open.
+        // abandoned, its transports die with the process. unref keeps a fast plan from being held open.
         let deadline: NodeJS.Timeout | undefined;
         try {
             await Promise.race([
@@ -110,10 +110,10 @@ export const planCommand = buildCommand<PlanFlags>({
         } finally {
             clearTimeout(deadline);
             // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
+            // command's last line goes missing. Runs on the error path too, a throw must not eat output.
             redactor.flush();
             // Tear down the executor's cloudflared forwarders. Without this the forwarder child keeps the
-            // event loop alive FOREVER after out.result() — the CLI never exits (cli.ts has no process.exit),
+            // event loop alive FOREVER after out.result(), the CLI never exits (cli.ts has no process.exit),
             // the daemon's SSE never closes, and every preview "stalls" 120s after its last frame.
             await ssh.dispose?.();
         }

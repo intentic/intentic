@@ -5,7 +5,7 @@ import type { SshTarget } from "./ssh.js";
 // The SSH-creds block every host-deploying provider (host/tunnel/forgejo/forgejo-runner/komodo) shares;
 // port defaults to 22 when absent, matching the engine's resolved-input shape. `via` selects the transport:
 // "direct" dials address:port over TCP; "cloudflared" reaches the host's SSH through its Cloudflare tunnel
-// (the sandbox runs `cloudflared access` to the host's ssh-<id>.<zone> hostname) — for a NAT'd self-host the
+// (the sandbox runs `cloudflared access` to the host's ssh-<id>.<zone> hostname), for a NAT'd self-host the
 // sandbox can't reach by IP. Defaults to "direct" so real servers are unaffected.
 export const sshSchema = z.object({
     address: z.string(),
@@ -17,9 +17,9 @@ export const sshSchema = z.object({
 
 const issues = (error: z.ZodError): string => error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ");
 
-// True when any of the named $ref-derived inputs is still the engine's PENDING placeholder (a symbol — its
+// True when any of the named $ref-derived inputs is still the engine's PENDING placeholder (a symbol, its
 // dependency is a pending create under plan's lenient resolution). A read seeing one cannot introspect the
-// resource yet and must return undefined instead of crashing in schema parsing — the engine's read contract.
+// resource yet and must return undefined instead of crashing in schema parsing, the engine's read contract.
 // The symbol test is exact for both required and optional ref fields (authored values are never symbols).
 export const hasPendingRef = (inputs: ResolvedInputs, ...fields: readonly string[]): boolean =>
     fields.some((field) => typeof inputs[field] === "symbol");

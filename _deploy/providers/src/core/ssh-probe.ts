@@ -8,7 +8,7 @@ import { sshExecutor } from "./ssh.js";
 export const hostTarget = (inputs: ResolvedInputs): SshTarget => sshTarget(parseInputs(sshSchema, inputs, "host"));
 
 // Probe readiness FROM THE HOST over SSH. Every readyWhen url in the graph is host-internal
-// (http://<internalIp>:<port>) — reachable from the host itself, never from the CLI process (a laptop/CI
+// (http://<internalIp>:<port>), reachable from the host itself, never from the CLI process (a laptop/CI
 // box deploying to a remote box cannot route to its private ip). Run busybox `wget` over SSH, exactly like
 // the platform providers' own health checks (komodo.ts/forgejo.ts). expectedStatus is ignored: every gate
 // is httpOk (expect 200) and `wget -q` already exits non-zero on 4xx/5xx, matching httpProbe's semantics.

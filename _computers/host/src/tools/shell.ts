@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf } from "../policy.js";
 
-/* Running a command on somebody's computer — the tool that does most of the work, and the one whose failure
+/* Running a command on somebody's computer, the tool that does most of the work, and the one whose failure
  * modes are worth designing around rather than discovering.
  *
  * THE SHELL IS NOT NEGOTIABLE PER CALL. The agent does not get to pick an interpreter (that is an escape from
@@ -13,7 +13,7 @@ import { assertPath, assertScope, rootsOf } from "../policy.js";
  * its first call.
  *
  * A LOGIN SHELL, deliberately, on Linux: the user's PATH, their nvm/asdf/mise shims and their aliases are most
- * of what makes a command work on a developer's machine, and a non-login `sh -c` finds none of it — producing
+ * of what makes a command work on a developer's machine, and a non-login `sh -c` finds none of it, producing
  * "node: command not found" on a box with four node versions installed.
  *
  * EVERY COMMAND HAS A DEADLINE. There is no terminal on the other end: a command that waits for input (an
@@ -70,7 +70,7 @@ export const runCommand = async (
     scopes: HostScopes,
 ): Promise<CommandResult> => {
     assertScope(scopes, "shell");
-    // The working directory is inside the roots like any other path — a command is a file operation with extra
+    // The working directory is inside the roots like any other path, a command is a file operation with extra
     // steps, and starting it in a directory the user walled off is the same breach as reading from there.
     const cwd = input.cwd === undefined ? (rootsOf(scopes)[0] ?? homedir()) : assertPath(input.cwd, scopes, "run a command in");
     const timeout = Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
@@ -80,7 +80,7 @@ export const runCommand = async (
         const child = spawn(shell.command, shell.args(input.command), {
             cwd,
             env: process.env,
-            // No shell:true — the argv is already an interpreter invocation, and letting a second shell parse it
+            // No shell:true, the argv is already an interpreter invocation, and letting a second shell parse it
             // would mean two layers of quoting rules for the agent to get right.
             windowsHide: true,
         });
@@ -112,7 +112,7 @@ export const runCommand = async (
 };
 
 // What the agent reads. The exit code is stated in words as well as in the number, because "exited 1" and
-// "worked" are the two things it must not confuse — and on Windows a native program's failure does not stop the
+// "worked" are the two things it must not confuse, and on Windows a native program's failure does not stop the
 // script, so the code is often the only evidence anything went wrong.
 export const describeResult = (result: CommandResult, timeoutMs: number): string =>
     [

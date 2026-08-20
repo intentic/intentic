@@ -1,13 +1,13 @@
 import { ref } from "vue";
 
 /* The user keymap: per-command chord OVERRIDES layered over each command's declared default. A developer expects to
- * remap shortcuts — the single biggest "familiar" gap once bindings exist — so this is the store that makes them
+ * remap shortcuts, the single biggest "familiar" gap once bindings exist, so this is the store that makes them
  * rebindable. It mirrors useLayout's client-preference idiom (a module-level singleton persisted to localStorage,
  * Storage-failure tolerant): a keymap is per-machine, exactly like VSCode's keybindings.json, so localStorage is the
  * honest home for it. The store is deliberately isolated behind `useKeymap` + `effectiveKeybinding`, so a later run
  * can promote it to daemon-synced settings (keymap-follows-you) by swapping only the read/write here.
  *
- * An entry maps a command id to either a chord string (remapped) or `null` (explicitly UNBOUND — the user removed
+ * An entry maps a command id to either a chord string (remapped) or `null` (explicitly UNBOUND, the user removed
  * the default and wants no shortcut). A command ABSENT from the map keeps its declared default. That three-state
  * model (remapped / unbound / default) is what a real keymap needs and what `effectiveKeybinding` resolves. */
 
@@ -78,7 +78,7 @@ const resetKeybinding = (command: string): void => {
     write(keymapOverrides.value);
 };
 
-// Clear every override — the whole keymap returns to declared defaults.
+// Clear every override, the whole keymap returns to declared defaults.
 const resetKeymap = (): void => {
     keymapOverrides.value = {};
     write(keymapOverrides.value);

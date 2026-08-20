@@ -3,7 +3,7 @@ import { ref, watch, type Ref } from "vue";
 const STORAGE_KEY = `ui-file-nesting`;
 
 /* Owns the file-nesting toggle as a module-level singleton, mirroring useExplorerStyle. Deliberately binary:
- * no per-pattern rules — when on, every directory that holds a package.json folds its other files under it
+ * no per-pattern rules, when on, every directory that holds a package.json folds its other files under it
  * (see pages/workspace/fileNesting.ts). Persisted to localStorage; defaults to on. */
 
 const read = (): boolean => {

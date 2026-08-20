@@ -1,4 +1,4 @@
-/* Split a line into alternating plain / hit runs, so a template can mark the term without v-html — this text
+/* Split a line into alternating plain / hit runs, so a template can mark the term without v-html, this text
  * is a chat's own words (a prompt, a title, a reply), none of which is trusted markup.
  *
  * Every occurrence, not just the first: a snippet is windowed around one hit but usually catches its
@@ -6,12 +6,12 @@
  * when there is nothing to mark, which is also what the unfiltered case renders.
  *
  * A LEAF of its own rather than a member of useAgentFilter, which is what it grew out of: every card that
- * marks a term (the board's, the rail's, the evidence line) would otherwise pull the filter — and through it
- * the chat store, the sandbox client and the app's environment — in to reach one pure string function.
+ * marks a term (the board's, the rail's, the evidence line) would otherwise pull the filter, and through it
+ * the chat store, the sandbox client and the app's environment, in to reach one pure string function.
  *
  * `matchCase` is the field's Aa switch, and the marks obey it for the same reason the results do: with the
  * switch on, highlighting a lowercase twin of the term would show as a match the filter did not actually make.
- * The needle arrives folded the same way the filter folded it — lowercased by default, verbatim under Aa.
+ * The needle arrives folded the same way the filter folded it, lowercased by default, verbatim under Aa.
  */
 export const markSegments = (text: string, needle: string, matchCase = false): readonly { text: string; hit: boolean }[] => {
     if (needle.length === 0) {

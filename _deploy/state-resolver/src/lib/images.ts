@@ -1,5 +1,5 @@
 // The single authority for every docker image intentic deploys. Each third-party value is a fully immutable
-// reference — `repo:tag@sha256:digest` — so an upstream re-push of a tag can never silently change what runs; the
+// reference, `repo:tag@sha256:digest`, so an upstream re-push of a tag can never silently change what runs; the
 // first-party `sandbox` (below) is the deliberate exception, tracking a moving `stable` release tag. Only a
 // commit that edits this file (by hand or a merged Renovate PR) moves a version. The resolver reads these
 // and emits them as resource INPUTS into the desired-state graph, so the deployed version is recorded in
@@ -8,13 +8,13 @@
 //
 // Renovate is pointed at this file (see renovate.json5) with pinDigests on, so it bumps both the tag and the
 // `@sha256:` digest on each pinned third-party entry from the `renovate:` hint comment above it. The first-party
-// `sandbox` carries no hint and no digest — it is unpinned (see its note below), so no manager touches it.
+// `sandbox` carries no hint and no digest, it is unpinned (see its note below), so no manager touches it.
 //
 // SigNoz caveat: the SigNoz stack (signoz/clickhouse/otel/zookeeper) is an interdependent set whose compose +
 // collector + clickhouse configs in signoz.ts mirror SigNoz's reference deploy/docker. They are pinned to the
-// v0.129.0 reference — the NEWEST SigNoz release that still ships a reference compose (v0.130+ dropped compose
+// v0.129.0 reference, the NEWEST SigNoz release that still ships a reference compose (v0.130+ dropped compose
 // self-hosting in favour of "Foundry"). A SigNoz bump is therefore a dedicated migration that re-ports those
-// configs from the matching tag, grouped by Renovate — not an incidental pin bump — and upstream has
+// configs from the matching tag, grouped by Renovate, not an incidental pin bump, and upstream has
 // deprecated this deployment mode, so treat the whole stack as e2e-validated and pinned deliberately.
 export const IMAGES = Object.freeze({
     // renovate: datasource=docker depName=codeberg.org/forgejo/forgejo
@@ -51,7 +51,7 @@ export const IMAGES = Object.freeze({
     // Paperless-ngx (i.want.service kind "paperless"): document scanning/indexing/archive. Runs on SQLite +
     // the valkey broker below. renovate: datasource=docker depName=ghcr.io/paperless-ngx/paperless-ngx
     paperless: "ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f",
-    // OpenProject (i.want.service kind "openproject"): the plain all-in-one tag (NOT -slim) — it bundles
+    // OpenProject (i.want.service kind "openproject"): the plain all-in-one tag (NOT -slim), it bundles
     // postgres + memcached + web + worker under supervisord, so the stack is one container.
     // renovate: datasource=docker depName=openproject/openproject
     openproject: "openproject/openproject:17.5.1@sha256:0232048b00657f6b00369376c4f3f36766b288f0d6e16b953e3f04d5c7ee410a",
@@ -63,7 +63,7 @@ export const IMAGES = Object.freeze({
     dex: "ghcr.io/dexidp/dex:v2.41.1@sha256:bc7cfce7c17f52864e2bb2a4dc1d2f86a41e3019f6d42e81d92a301fad0c8a1d",
     // Invoice Ninja (i.want.service kind "invoiceninja"): invoicing. The Octane/FrankenPHP image is
     // self-serving (the -debian variant is php-fpm behind an nginx sidecar); one image runs the app, worker
-    // and scheduler roles. MySQL/MariaDB only (no Postgres) — backed by the mariadb below + the valkey
+    // and scheduler roles. MySQL/MariaDB only (no Postgres), backed by the mariadb below + the valkey
     // below. renovate: datasource=docker depName=invoiceninja/invoiceninja-octane
     invoiceninja: "invoiceninja/invoiceninja-octane:5.13.26@sha256:5cb4d04646e2e554de82f6f07d1e4bcd4c343ba6361207958097ba2eae77879a",
     // The MariaDB backing Invoice Ninja (upstream's sanctioned mysql alternative, LTS line).
@@ -95,11 +95,11 @@ export const IMAGES = Object.freeze({
     // The first-party intentic image built from _sandbox/sandbox (the AI-agent workspace), published to the repo's
     // GHCR by _tools/scripts/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
     // moving `stable` tag, which only a release moves (_tools/scripts/release-images.sh, as part of the publish),
-    // so it always resolves to the newest RELEASED version — our own component, current, with no pin to bump.
+    // so it always resolves to the newest RELEASED version, our own component, current, with no pin to bump.
     // Never `:latest`: that tag is the continuous push-to-main build carrying internal version 0.0.0 (unpublished),
     // so a scaffolded intent repo's `pnpm install` of ~0.0.0 deps fails and `intentic deploy init` can't resolve
     // @intentic/graph. `stable` only ever points at a published release, so init resolves. The GHCR package must be
     // public so tenant hosts can pull it. (Trade-off of unpinning: a `stable` move is not a desired-state input
-    // change, so the graph-deployed workspace won't auto-recreate on it — connect.sh/ps1 pull `stable` fresh.)
+    // change, so the graph-deployed workspace won't auto-recreate on it, connect.sh/ps1 pull `stable` fresh.)
     sandbox: "ghcr.io/intentic/sandbox:stable",
 } as const);

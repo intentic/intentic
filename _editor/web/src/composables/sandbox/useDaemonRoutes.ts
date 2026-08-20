@@ -6,7 +6,7 @@ import { computed, ref } from "vue";
  * The browser is routinely newer than the daemon it talks to, and that is a supported state, not an error: the
  * released app plane serves every user's sandbox whatever image they last pulled, and in local development the
  * web app runs from the working tree while the daemon is baked into the last `pnpm build:sandbox`. Neither
- * should force an update — an older sandbox must keep working for everything it does implement.
+ * should force an update, an older sandbox must keep working for everything it does implement.
  *
  * What this store removes is the SILENCE. Before it, a route the daemon predates answered 404, indistinguishable
  * from "that file doesn't exist", so a missing feature read as a broken one and the only way to find out was to
@@ -15,7 +15,7 @@ import { computed, ref } from "vue";
  *
  * TWO KINDS OF GAP, because a route surface has two ways to disagree. A route the daemon LACKS answers 404 and
  * is caught by name (`missingRoutes`). A route it HAS but shapes differently answers 200 with the wrong fields
- * in it — no status code to notice, nothing to attribute it to — and is caught by fingerprint
+ * in it, no status code to notice, nothing to attribute it to, and is caught by fingerprint
  * (`driftedRoutes`). Both are non-blocking: an older sandbox is a supported thing to be running, and neither
  * check ever refuses a call. They only stop the disagreement being invisible.
  *
@@ -45,16 +45,16 @@ export const resetDaemonRoutes = (): void => {
     advertisedShapes.value = undefined;
 };
 
-// Can the active daemon serve this contract route? Unknown daemons (and unknown route names) answer true — the
+// Can the active daemon serve this contract route? Unknown daemons (and unknown route names) answer true, the
 // UI only ever hides a feature it has POSITIVE evidence is missing.
 export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
 
 // The three-way answer supportsRoute folds away: true/false from a hello frame, undefined while nothing is
-// advertised (not connected yet, or a pre-advertisement daemon). useSandboxSession needs the distinction — a
+// advertised (not connected yet, or a pre-advertisement daemon). useSandboxSession needs the distinction, a
 // positive "yes" clears its learned-by-404 fallback, a positive "no" skips the exchange without probing.
 export const routeAdvertised = (name: string): boolean | undefined => advertised.value?.has(name);
 
-// Routes this browser's contract has that the daemon does not — i.e. how far behind the sandbox is. Empty when
+// Routes this browser's contract has that the daemon does not, i.e. how far behind the sandbox is. Empty when
 // the daemon is level or newer (a daemon ahead of us simply advertises names we never ask about).
 export const missingRoutes = computed<string[]>(() => {
     const known = advertised.value;
@@ -64,17 +64,17 @@ export const missingRoutes = computed<string[]>(() => {
     return SANDBOX_ROUTE_NAMES.filter((name) => !known.has(name));
 });
 
-// True when the active daemon is demonstrably older than this app. Drives the "your sandbox is behind" notice —
+// True when the active daemon is demonstrably older than this app. Drives the "your sandbox is behind" notice,
 // informational in production (an old sandbox is allowed), actionable in dev (rebuild the image).
 export const daemonBehind = computed(() => missingRoutes.value.length > 0);
 
-/* Routes BOTH builds have, whose payload shape they disagree about — the failure `missingRoutes` structurally
+/* Routes BOTH builds have, whose payload shape they disagree about, the failure `missingRoutes` structurally
  * cannot see. Compared only where both sides published a fingerprint: a route this build cannot express, or one
  * the daemon didn't publish, has no evidence either way and is left alone.
  *
  * The near-total case is thrown away deliberately. These fingerprints come out of `z.toJSONSchema`, so a daemon
  * and a browser built against different zod versions can render the SAME schema differently and disagree about
- * every route at once. That is a fact about the two builds' toolchains, not about any feature — and a list of
+ * every route at once. That is a fact about the two builds' toolchains, not about any feature, and a list of
  * 200 drifted routes tells a user nothing they can act on, which is how a warning teaches people to ignore it.
  * Real drift is a handful of routes someone just edited. */
 const DRIFT_IS_NOISE_ABOVE = 0.5;
@@ -97,7 +97,7 @@ export const daemonDrifted = computed(() => driftedRoutes.value.length > 0);
  * they just changed, a user updates the one someone else released.
  *
  * The dev remedy is a RELOAD, not an image rebuild, and the difference is not a preference. In dev the running
- * container does not execute the daemon baked into the image at all — dev-sandbox.sh bind-mounts the compiled
+ * container does not execute the daemon baked into the image at all, dev-sandbox.sh bind-mounts the compiled
  * output straight from the working tree, so a fresh image is not what makes the daemon current; restarting the
  * process that read it at boot is. `pnpm build:sandbox` does clear it, by recreating the container along the
  * way, which spends minutes on what dev-reload.sh does in seconds. */
@@ -106,7 +106,7 @@ const daemonOlderRemedy = (): string =>
         ? `This sandbox is running older code than this app — reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
         : `Update the sandbox to a newer image to use this feature.`;
 
-/* The same question when NOBODY KNOWS WHICH SIDE IS OLD — see driftedRoutes: a fingerprint that disagrees says
+/* The same question when NOBODY KNOWS WHICH SIDE IS OLD, see driftedRoutes: a fingerprint that disagrees says
  * the two builds differ, never which of them moved. A page left open since before the change is every bit as
  * likely to be the stale one as the daemon, and telling someone to rebuild a sandbox that is already current is
  * how a warning earns its reputation for lying. So this offers both, cheapest first. */
@@ -116,7 +116,7 @@ const eitherSideOlderRemedy = (): string =>
         : `Reload this page, or update the sandbox to a newer image.`;
 
 /* The reason a request to `path` failed, when the cause is that this daemon predates the route. Undefined when
- * the path is not a contract route, or is one the daemon advertises — in which case the 404 is a real 404 and
+ * the path is not a contract route, or is one the daemon advertises, in which case the 404 is a real 404 and
  * must be reported verbatim rather than blamed on the sandbox's build.
  *
  * This one CAN name the older side, which is why it gets the directional remedy: a missing route is a name this
@@ -130,7 +130,7 @@ export const staleDaemonReason = (method: string, path: string): string | undefi
     return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
 };
 
-/* The reason a request that REACHED its route still didn't work — the daemon has it, under a different shape.
+/* The reason a request that REACHED its route still didn't work, the daemon has it, under a different shape.
  *
  * Separate from `staleDaemonReason` because it hangs off a different failure: a drifted route does not 404, it
  * answers, and the answer is missing a field or rejects a field that was sent. So this is what a caller reaches

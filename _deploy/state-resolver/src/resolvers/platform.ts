@@ -30,7 +30,7 @@ export interface RegistryAccount {
     readonly token: Input<string>;
 }
 
-// The [[git_provider]] account Komodo clones private app repos with — Forgejo stack only (hosted-forge
+// The [[git_provider]] account Komodo clones private app repos with. Forgejo stack only (hosted-forge
 // deployments are registry Images Komodo never clones).
 export interface GitAccount {
     readonly url: Input<string>;
@@ -146,7 +146,7 @@ export const resolvePlatform = (
         {
             id: runnerId(hostId),
             type: "forgejo-runner",
-            // The runner runs ON the host, so it reaches Forgejo at its internal url directly — using the
+            // The runner runs ON the host, so it reaches Forgejo at its internal url directly, using the
             // public url would force a needless round-trip through the tunnel (and depend on DNS being live).
             inputs: {
                 server,

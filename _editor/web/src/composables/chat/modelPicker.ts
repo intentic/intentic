@@ -3,21 +3,21 @@ import { computed } from "vue";
 import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor } from "./providerCatalog";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
- * derivation over the live catalogs (conversation.ts) — the picker component owns only its transient UI state
+ * derivation over the live catalogs (conversation.ts), the picker component owns only its transient UI state
  * (query, rail filter, highlight). The harness (Default / Claude Code) is a separate axis, chosen via the
- * picker's footer chips — NOT a row here — because codex/grok run the same subscription model ids under either
+ * picker's footer chips. NOT a row here, because codex/grok run the same subscription model ids under either
  * harness, so the list no longer forks by harness.
  *
- * Every rendered fact about a model — label, description, badges — comes from the provider's own catalog, always
+ * Every rendered fact about a model, label, description, badges, comes from the provider's own catalog, always
  * current, needing no edit when a model ships. Rows a provider publishes nothing about render label-only; that is
  * the intended end state, not a gap to backfill. What a provider does NOT reliably publish is an ORDER: only
  * Anthropic's catalog arrives ranked (newest-first), the rest arrive in registry order out of an
  * OpenAI-compatible /v1/models. So tier and recency are derived from the model id by the contract's
- * model-order.ts — one rule the daemon's catalogs and this picker share — and catalog order survives only as the
+ * model-order.ts, one rule the daemon's catalogs and this picker share, and catalog order survives only as the
  * tiebreak between ids that rule cannot separate. */
 
 export interface PickerEntry {
-    // `${provider}:${value}` — the model id is unique within a provider's (harness-independent) catalog.
+    // `${provider}:${value}`, the model id is unique within a provider's (harness-independent) catalog.
     readonly key: string;
     readonly provider: AgentProvider;
     readonly value: string;
@@ -36,7 +36,7 @@ const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => 
 });
 
 // Every pickable model across providers, in PROVIDERS order: each provider's catalog (live, with the static
-// floor pre-load). Then the capability-derived providers, which append rows on opposite terms — a model endpoint
+// floor pre-load). Then the capability-derived providers, which append rows on opposite terms, a model endpoint
 // contributes its whole catalog (its server publishes one, read on the same seam as everyone else's), while an
 // installed ACP agent contributes exactly one row, because the agent owns its own model and so the row IS the
 // provider (empty model id).
@@ -46,7 +46,7 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
-// What the app CALLS a (provider, model) pair — the catalog's own published label, falling back to the raw id
+// What the app CALLS a (provider, model) pair, the catalog's own published label, falling back to the raw id
 // for a model no catalog offers (a custom id the user typed, a row that has aged out). Every surface that shows
 // a chosen model without showing the list reads it from here, so the chip and the row it came from agree.
 export const modelLabelFor = (provider: AgentProvider, model: string): string =>
@@ -73,7 +73,7 @@ const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {
 
 // Case-insensitive substring search, multi-token AND: every whitespace-separated token must match somewhere
 // in the entry's label/id/provider/badges. `rail` scopes to one provider first (the rail filter persists
-// while searching). Descriptions are deliberately not matched — copy produces baffling hits. `isReady` is the
+// while searching). Descriptions are deliberately not matched, copy produces baffling hits. `isReady` is the
 // same connection predicate the browse view sorts on (access.ts): a model the user can send to outranks one
 // they'd have to connect a subscription for, however well the id matched.
 export const filterEntries = (
@@ -97,14 +97,14 @@ export const filterEntries = (
 
 // The custom-model escape hatch: any id the user types that no catalog row already offers, mirroring Claude
 // Code's own `/model <id>`, which accepts an arbitrary string and lists it as a "Custom model". A provider's
-// catalog can lag a release — a REST /v1/models entry still has to reach the account — so during that window
+// catalog can lag a release, a REST /v1/models entry still has to reach the account, so during that window
 // typing the id is the ONLY way to drive a model that already serves turns. Offered on an exact-id miss only,
 // so it never competes with a real catalog hit, and it carries no metadata because none is published: an
 // unrecognized id is exactly as unknown to us as it looks.
 export const customEntryFor = (entries: readonly PickerEntry[], query: string, provider: AgentProvider): PickerEntry | undefined => {
     const value = query.trim();
     // A model id is a hyphenated, whitespace-free token (claude-opus-5, gpt-5.1, grok-4-fast). Requiring the
-    // hyphen is what stops an ordinary search word — "fast", "opus" — from offering a junk row on every
+    // hyphen is what stops an ordinary search word, "fast", "opus", from offering a junk row on every
     // keystroke, and it also keeps Claude's bare tier aliases untypeable, which is deliberate: every model this
     // app can be pointed at names its own version (see CLAUDE_SEED_MODELS).
     if (!/^[\w.]+(-[\w.]+)+$/.test(value)) {
@@ -117,16 +117,16 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
 };
 
 /* FAMILY-MAJOR BROWSING. A provider's catalog is a SET OF RELEASES, and rendering it straight made the picker a
- * version history rather than a menu: Claude's account list opened with five Opus versions in a row, so Haiku —
- * a whole tier — sat below the fold and the one axis a user actually decides on (how capable vs. how fast/cheap)
+ * version history rather than a menu: Claude's account list opened with five Opus versions in a row, so Haiku,
+ * a whole tier, sat below the fold and the one axis a user actually decides on (how capable vs. how fast/cheap)
  * was never presented at all. Under the other providers it was worse than a version history: their catalogs
  * arrive in registry order, so the Codex group opened on GPT 5.4 Mini with GPT 5.6 sorted below it. So a group
  * opens as ONE ROW PER FAMILY, newest of each, tier-major, and the older versions live behind the disclosure
- * grouped under their own family — because the intent that reaches for Opus 4.7 is formed as "Opus, an older
+ * grouped under their own family, because the intent that reaches for Opus 4.7 is formed as "Opus, an older
  * one", never as "row 11". Search still spans the whole flat catalog and never truncates (see the component).
  *
  * Membership, recency and tier are all derived from the model id (compareModelIds/familyOf, shared with the
- * daemon's catalogs); catalog order decides only what that rule leaves tied — for Claude, whose catalog really
+ * daemon's catalogs); catalog order decides only what that rule leaves tied, for Claude, whose catalog really
  * is the provider's own newest-first ranking, that is exactly the tie between two same-tier same-version rows. */
 
 // The family's header, taken from its newest row's label with the trailing version words peeled off ("Claude
@@ -143,7 +143,7 @@ const familyLabelOf = (newest: PickerEntry): string => {
 export interface FamilyGroup {
     readonly key: string;
     readonly label: string;
-    // The family's newest by version — the row the collapsed group shows.
+    // The family's newest by version, the row the collapsed group shows.
     readonly latest: PickerEntry;
     readonly older: readonly PickerEntry[];
 }
@@ -172,7 +172,7 @@ export const familyGroups = (entries: readonly PickerEntry[]): readonly FamilyGr
 
 export interface PickerBlock {
     readonly key: string;
-    // Absent on the latest band — the provider header already names it, and a second header above the first row
+    // Absent on the latest band, the provider header already names it, and a second header above the first row
     // of every group would out-shout the rows themselves.
     readonly label?: string;
     readonly entries: readonly PickerEntry[];
@@ -180,7 +180,7 @@ export interface PickerBlock {
 
 // The blocks a provider group renders: collapsed, a single band of one row per family; expanded, that band
 // followed by each family's older versions under their own header. The pinned row is why the collapsed band
-// isn't just the latest band — a user sitting on an older version would otherwise open the picker to a list
+// isn't just the latest band, a user sitting on an older version would otherwise open the picker to a list
 // with no checkmark anywhere in it, and no sign of which model the next turn actually runs.
 export const pickerBlocks = (groups: readonly FamilyGroup[], selected: string | undefined, expanded: boolean): readonly PickerBlock[] => {
     const latest = groups.map((group) => group.latest);
@@ -198,7 +198,7 @@ export const pickerBlocks = (groups: readonly FamilyGroup[], selected: string | 
 };
 
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
-// first — the models pickable without a session restart sit nearest — then every CONNECTED provider, then the
+// first, the models pickable without a session restart sit nearest, then every CONNECTED provider, then the
 // ones that still need a credential, each band in stable PROVIDERS order. Sorting on `isReady` is what stops the
 // list from opening on models the user cannot send to: every provider's catalog is non-empty by construction
 // (the daemon serves a seed floor), so without it an unconnected Kimi outranks a connected Claude purely by
@@ -215,7 +215,7 @@ export const pickerSections = (
         ...endpointProviders.value.map((endpoint) => endpoint.id),
         ...acpProviders.value.map((agent) => agent.id),
     ].filter((provider) => rail === undefined || provider === rail);
-    // The active provider leads whether or not it is connected — it is the one the composer will send on, so
+    // The active provider leads whether or not it is connected, it is the one the composer will send on, so
     // burying it under the connected band would hide the selection the user is actually sitting on.
     const rest = providers.filter((provider) => provider !== activeProvider).toSorted((a, b) => Number(isReady(b)) - Number(isReady(a)));
     const order = providers.includes(activeProvider) ? [activeProvider, ...rest] : rest;

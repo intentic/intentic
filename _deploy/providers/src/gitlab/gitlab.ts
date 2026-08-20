@@ -36,6 +36,6 @@ export const createGitLabProvider = (api: GitLabApi = gitlabApi): Provider => ({
         return { owner: parsed.owner ?? user.username };
     },
     delete: async () => {
-        // Inventory node — nothing to clean up.
+        // Inventory node, nothing to clean up.
     },
 });

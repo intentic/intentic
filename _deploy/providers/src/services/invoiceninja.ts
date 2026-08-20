@@ -20,7 +20,7 @@ type InvoiceninjaInputs = z.infer<typeof invoiceninjaSchema>;
 const PORT = 8083;
 
 // The Octane/FrankenPHP image is self-serving (the -debian variant is php-fpm behind an nginx sidecar); one
-// image runs three roles — the entrypoint picks the artisan command from LARAVEL_ROLE, so app/worker/
+// image runs three roles, the entrypoint picks the artisan command from LARAVEL_ROLE, so app/worker/
 // scheduler share the &env anchor, the .env secrets and the storage volume. --port=80 matches the image's
 // baked healthcheck (curl http://localhost/health). MySQL/MariaDB only (no Postgres); cache/queue/session
 // ride the redis-compatible valkey. TLS terminates at Cloudflare, so REQUIRE_HTTPS stays off while APP_URL
@@ -123,7 +123,7 @@ export const createInvoiceninjaProvider = (executor: SshExecutor = sshExecutor):
             files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
             env: (parsed) => [
                 // Laravel requires the "base64:" key form (32 bytes), which the host-side hex generator can't
-                // produce — minted here; the write-once guard keeps the first apply's value (the outline
+                // produce, minted here; the write-once guard keeps the first apply's value (the outline
                 // bcrypt-hash pattern).
                 { key: "APP_KEY", value: `base64:${randomBytes(32).toString("base64")}` },
                 { key: "DB_PASSWORD" },

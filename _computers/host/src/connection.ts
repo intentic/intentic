@@ -9,15 +9,15 @@ import { createHostRouter } from "./router.js";
  *
  * OUTBOUND ONLY, and that is the entire networking story: no port is opened here, no router is configured, no
  * VPN is joined. A laptop on hotel wifi behind a corporate proxy can hold this connection because it is an
- * ordinary outbound wss:// — the same thing every chat app on the machine is already doing.
+ * ordinary outbound wss://, the same thing every chat app on the machine is already doing.
  *
  * The socket has exactly two phases. First one plain-JSON `hello` carrying the enrollment token (see
  * host-protocol.ts for why a token must not ride the URL). Then the sandbox attaches its client and the socket
- * is pure oRPC — request/response correlation, argument validation and error shape all belong to the link from
+ * is pure oRPC, request/response correlation, argument validation and error shape all belong to the link from
  * that point on, which is why there is no message plumbing left in this file.
  *
  * RECONNECTION IS THE NORMAL CASE, not the failure case. Lids close, wifi changes, tunnels idle out, the sandbox
- * restarts. So the loop treats a dropped socket as routine and comes back with exponential backoff — and the
+ * restarts. So the loop treats a dropped socket as routine and comes back with exponential backoff, and the
  * sandbox's card reads "offline" in the meantime rather than pretending. The one thing that is NOT retried is a
  * refused enrollment (close code 1008): the owner revoked this machine, that never heals on its own, and
  * hammering a door that has been locked is how an agent turns a revocation into a support ticket. */
@@ -26,18 +26,18 @@ import { createHostRouter } from "./router.js";
 // takes seconds; the ceiling is low enough that a laptop opened after a night asleep is back within a minute.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
-// The daemon closes with this when the token is not enrolled — a decision, not a fault.
+// The daemon closes with this when the token is not enrolled, a decision, not a fault.
 const UNAUTHORIZED = 1008;
 
 export interface HostConnection {
-    // Resolves when the loop is asked to stop (and never rejects — a connection error is a retry, not a throw).
+    // Resolves when the loop is asked to stop (and never rejects, a connection error is a retry, not a throw).
     readonly done: Promise<void>;
     readonly stop: () => void;
 }
 
 export const connect = (config: HostConfigFile, version: string, log: Log): HostConnection => {
     /* The live grant. Starts as whatever the last session cached and is replaced by the sandbox's `setScopes`,
-     * which arrives immediately after every connect — so a scope the owner turned off is enforced from the first
+     * which arrives immediately after every connect, so a scope the owner turned off is enforced from the first
      * call of the new session, not from the next restart of this agent. */
     let scopes: HostScopes = config.scopes;
     const handler = new RPCHandler(
@@ -65,7 +65,7 @@ export const connect = (config: HostConfigFile, version: string, log: Log): Host
         ws.addEventListener("open", () => {
             attempt = 0;
             // The handler is attached BEFORE the hello goes out: the sandbox may call the moment it has verified
-            // the token, and a race there would drop the first `setScopes` — the one call whose loss would leave
+            // the token, and a race there would drop the first `setScopes`, the one call whose loss would leave
             // this machine enforcing a stale grant.
             handler.upgrade(ws);
             ws.send(JSON.stringify({ type: "hello", token: config.token, version }));
@@ -92,7 +92,7 @@ export const connect = (config: HostConfigFile, version: string, log: Log): Host
             setTimeout(open, delay);
         });
 
-        // A socket error is always followed by a close event, which owns the retry — this only records the cause,
+        // A socket error is always followed by a close event, which owns the retry, this only records the cause,
         // which the close code alone never carries.
         ws.addEventListener("error", () => log("connection error"));
     };

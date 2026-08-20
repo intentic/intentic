@@ -76,7 +76,7 @@ const composeYaml = (id: string, hash: string, parsed: AuthentikInputs): string 
         "",
     ].join("\n");
 
-// Write compose (always) + the .env (once — the secret key + bootstrap creds + DB password are baked in on
+// Write compose (always) + the .env (once, the secret key + bootstrap creds + DB password are baked in on
 // first init; re-keying would break sessions / the bootstrap token the bindings reuse). Each line is a
 // separate printf arg so one KEY=value lands per line (the komodo .env pattern).
 const ensureFiles = async (session: SshSession, id: string, hash: string, parsed: AuthentikInputs): Promise<void> => {
@@ -112,7 +112,7 @@ const readyProbe = (parsed: AuthentikInputs): string => `wget -q -T 10 -O /dev/n
 // clients are the authentik-client binding's job, over the API.
 export const createAuthentikProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

@@ -1,6 +1,6 @@
 import type { Rule } from "@intentic-app/api-contract";
 
-/* THE RULE TABLE, READ — pure functions over a rule list, with no imports that touch the browser.
+/* THE RULE TABLE, READ, pure functions over a rule list, with no imports that touch the browser.
  *
  * Split from useRules.ts deliberately and not just tidily: the agent menu, the chat notice and the push dialog
  * each need one of these answers, and none of them wants the queries a composable brings. A module that only
@@ -18,7 +18,7 @@ export const NAMED_RULES = { verify: `verify-edits`, prepush: `pre-push`, land: 
  * is about to run so it can name it before the first poll answers.
  *
  * Both are answered by resolving with no facts, which is exactly right rather than a shortcut: a conditional
- * rule cannot match something unknown, so what falls out is the first UNCONDITIONAL rule — "what happens by
+ * rule cannot match something unknown, so what falls out is the first UNCONDITIONAL rule, "what happens by
  * default". That is the honest thing to put on a toggle, and it degrades correctly as conditions are added:
  * the toggle keeps showing the default and the conditional rules stay visible in the list where they were
  * written. Plain functions over a rule list, so a caller that only needs one pays for no queries. */

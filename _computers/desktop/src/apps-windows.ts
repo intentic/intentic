@@ -2,7 +2,7 @@ import { parseWindowsJson } from "./parse.js";
 import { run } from "./run.js";
 import { DesktopError, type WindowInfo } from "./types.js";
 
-/* Windows: what is open, what has focus, and getting things opened — all through PowerShell into user32, the
+/* Windows: what is open, what has focus, and getting things opened, all through PowerShell into user32, the
  * same route the pointer takes.
  *
  * EnumWindows is the source of truth, not Get-Process.MainWindowHandle. A process may own several top-level
@@ -36,7 +36,7 @@ public class IntenticWin {
 "@ -ErrorAction SilentlyContinue;
 `;
 
-// SW_RESTORE — a minimised window cannot take focus until it is restored, and "focus it" is what the caller
+// SW_RESTORE, a minimised window cannot take focus until it is restored, and "focus it" is what the caller
 // meant whether or not the user had minimised it.
 const SW_RESTORE = 9;
 
@@ -81,18 +81,18 @@ export const windowsApps = {
     /* WHY THIS IS NOT ONE `SetForegroundWindow` CALL.
      *
      * Windows refuses that call from a process that is not already the foreground one. It does not fail loudly:
-     * it returns false, flashes the window's taskbar button, and leaves the keyboard exactly where it was — so
+     * it returns false, flashes the window's taskbar button, and leaves the keyboard exactly where it was, so
      * the caller's next `type` or `key` is delivered to whatever the person at that desk had open. That is the
      * worst shape a failure can take here, and it is the ordinary case rather than an edge one: this backend
      * runs from a fresh `powershell.exe` that has never been in the foreground and never received an input
      * event, which is every qualifying condition missed at once. A machine whose foreground-lock timeout has
-     * been raised — gaming and "stop apps stealing focus" utilities do this, and it is what one of our own CI
-     * runners has — closes the last of them permanently.
+     * been raised, gaming and "stop apps stealing focus" utilities do this, and it is what one of our own CI
+     * runners has, closes the last of them permanently.
      *
      * ATTACHING THE INPUT QUEUES IS WHAT EARNS THE RIGHT. While this thread shares an input queue with the
      * thread that owns the foreground, Windows counts it as the foreground process and honours the call; the
      * target's own queue joins too, so a modal dialog owned by another thread is reachable on the same terms.
-     * Both attachments are undone immediately — an input queue left attached couples this process's message
+     * Both attachments are undone immediately, an input queue left attached couples this process's message
      * loop to a stranger's for as long as it lives.
      *
      * THEN IT CHECKS. "Focus it" is a precondition, not a request: a caller that types into the window it
@@ -128,7 +128,7 @@ export const windowsApps = {
         }
     },
 
-    /* `Start-Process` is the one verb for all of it: an executable name, a document, a URL — Windows resolves
+    /* `Start-Process` is the one verb for all of it: an executable name, a document, a URL. Windows resolves
      * each against the shell's own associations, which is exactly the behaviour "open this for me" means. */
     launch: async (target: string): Promise<void> => {
         await powershell(`Start-Process -FilePath ${JSON.stringify(target)};`);

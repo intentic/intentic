@@ -1,7 +1,7 @@
-/* Keybinding notation and matching — the pure core the shell's dispatcher (useKeybindings) and the Command
+/* Keybinding notation and matching, the pure core the shell's dispatcher (useKeybindings) and the Command
  * Palette (QuickOpen) both build on. A binding is a chord string in VSCode-ish notation: modifier tokens plus one
  * key, joined by "+", e.g. "Mod+P", "Mod+Shift+P", "Ctrl+`". Modifiers are case-insensitive; `Mod` is the
- * cross-platform primary (⌘ on Apple, Ctrl elsewhere) so one binding string serves both platforms — the split
+ * cross-platform primary (⌘ on Apple, Ctrl elsewhere) so one binding string serves both platforms, the split
  * VSCode pays for with per-OS keymaps. Everything here is a pure function taking `isMac` explicitly, so it is unit-
  * testable without touching `navigator`; the shell resolves the real platform once via `isApplePlatform()`. */
 
@@ -19,8 +19,8 @@ const KEY_ALIASES: Readonly<Record<string, string>> = { esc: `escape`, space: ` 
 
 // Physical-key fallback for the number/punctuation row, whose `event.key` is unreliable: under Shift the
 // Backquote key reports "~" (or "Dead" on layouts where tilde composes accents) and Digit5 reports "%", and
-// the produced glyph shifts with the layout. Matching a chord's BASE character against `event.code` too — the
-// VSCode approach (physical position) — makes "Ctrl+Shift+`" / "Ctrl+Shift+5" fire regardless. Scoped to this
+// the produced glyph shifts with the layout. Matching a chord's BASE character against `event.code` too, the
+// VSCode approach (physical position), makes "Ctrl+Shift+`" / "Ctrl+Shift+5" fire regardless. Scoped to this
 // row on purpose: letters keep their produced-character semantics (a Dvorak user's Ctrl+P stays the P they
 // typed, not the physical QWERTY position), and the reliable named keys match through `event.key` as before.
 const CODE_TO_KEY: Readonly<Record<string, string>> = {
@@ -76,7 +76,7 @@ const parseChord = (binding: string): Chord => {
 
 // Does a live keydown satisfy this binding? Modifiers are matched EXACTLY (VSCode semantics) so "Mod+P" never
 // also fires on "Mod+Shift+P". `Mod` resolves to the Command key on Apple platforms and Control elsewhere. The
-// key matches on the produced character OR — for the number/punctuation row — the physical key (see
+// key matches on the produced character OR, for the number/punctuation row, the physical key (see
 // CODE_TO_KEY), so a Shift glyph / dead key / foreign layout can't break a symbol chord like Ctrl+Shift+`.
 export const matchesChord = (binding: string, event: KeyboardEvent, isMac: boolean): boolean => {
     const chord = parseChord(binding);
@@ -91,7 +91,7 @@ export const matchesChord = (binding: string, event: KeyboardEvent, isMac: boole
     );
 };
 
-// Turn a live keydown into a binding string in this notation — the "record shortcut" capture the keybindings
+// Turn a live keydown into a binding string in this notation, the "record shortcut" capture the keybindings
 // settings UI uses. Returns undefined for a keystroke that isn't a valid global shortcut: a lone modifier (still
 // waiting for the real key), or a bare key with no modifier that isn't a function key (binding a naked letter
 // globally would hijack typing). The primary modifier is recorded as `Mod` so one capture serves both platforms

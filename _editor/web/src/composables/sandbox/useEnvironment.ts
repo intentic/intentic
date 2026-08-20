@@ -22,7 +22,7 @@ export function useEnvironment() {
         const current = state.value;
         return current?.proposal !== undefined && current.proposal.hash !== current.custom?.hash ? current.proposal : undefined;
     });
-    // Approved but not what the running container was built from — a rebuild is pending.
+    // Approved but not what the running container was built from, a rebuild is pending.
     const pending = computed(() => {
         const current = state.value;
         return current?.approved !== undefined && current.approved.hash !== current.appliedHash ? current.approved : undefined;
@@ -35,7 +35,7 @@ export function useEnvironment() {
     // Server-managed sandboxes use the provider's fixed container name; their rebuild rides `intentic deploy apply`
     // (the overlay content is git-reviewed in desired-state), not a local one-liner.
     const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
-    // Which sandbox a rebuild would name. HostRecreate pairs it with the approved overlay's hash — a button in
+    // Which sandbox a rebuild would name. HostRecreate pairs it with the approved overlay's hash, a button in
     // the desktop app, the equivalent one-liner in a browser.
     const slug = computed(() => state.value?.container?.replace(/^intentic-sandbox-/, ``));
 

@@ -4,7 +4,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { WORKSPACE_MODULES } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* Every repo's modules AS /work HAS THEM — the package dirs the workspace's Changes panel groups its rows
+/* Every repo's modules AS /work HAS THEM, the package dirs the workspace's Changes panel groups its rows
  * under (see the daemon's workspace/modules.ts).
  *
  * This read speaks for the main tree and only for it, which is why the fleet's agent review does NOT use it:
@@ -19,7 +19,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * Rare is not never, so the hold is ended by a PUSH rather than left to expire: a manifest landing on disk
  * invalidates this query (useWorkspaceLive), and the layout is re-read once. That push is what makes a package
  * created mid-session group under its own name straight away. Waiting out the hold instead was wrong at the one
- * moment the panel had most to say — a new package's files are ALL changes, so every one of them sat in the
+ * moment the panel had most to say, a new package's files are ALL changes, so every one of them sat in the
  * repo's unclaimed bucket, and under a named bucket a row is drawn as its bare filename, so the list said
  * "package.json, index.ts, README.md, loose in this repo" about a package that plainly existed. */
 const MODULES_STALE_MS = 5 * 60_000;

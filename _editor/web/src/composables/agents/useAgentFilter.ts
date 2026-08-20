@@ -7,7 +7,7 @@ import { useSandbox } from "../sandbox/useSandbox";
 import { type FleetAgent, useAgents } from "./useAgents";
 import { AGENTS, SESSIONS } from "../queryKeys";
 
-/* Filter the fleet by what was SAID in it — the board's header field and the popped-out rail's.
+/* Filter the fleet by what was SAID in it, the board's header field and the popped-out rail's.
  *
  * A FACTORY, not a singleton. The query is how ONE surface is being looked at right now, exactly like the
  * board's showAllFinished / archiveOpen, and the rail lives in a different WINDOW: a filter typed on the board
@@ -23,7 +23,7 @@ import { AGENTS, SESSIONS } from "../queryKeys";
  *   2. DAEMON, debounced. Everything the browser does not hold: the rest of the conversation for agents this
  *      tab never opened, and every archived agent. Merges in when it lands.
  *
- * They are a union, never a replacement — the local tier keeps answering while the daemon one is in flight,
+ * They are a union, never a replacement, the local tier keeps answering while the daemon one is in flight,
  * so refining a query never flashes the board empty. The daemon tier is the useWorkspaceSearch pattern
  * verbatim (TanStack, keepPreviousData, the abort signal threaded through) so a superseded query is cancelled
  * daemon-side instead of piling up behind the one the user is still typing.
@@ -32,14 +32,14 @@ import { AGENTS, SESSIONS } from "../queryKeys";
  * filter is pure cost. One typed character therefore leaves the board alone rather than emptying it.
  *
  * MATCH CASE (the field's `Aa`) is the one piece of this that is NOT per-surface, and deliberately so: a query
- * is what one board is being looked at right now, while a case rule is how this person reads a search at all —
+ * is what one board is being looked at right now, while a case rule is how this person reads a search at all,
  * the same split useSearchOptions makes for the workspace box, and the same reason it survives a reload. Every
  * field that mounts this filter draws the switch, so a shared rule is never a rule you cannot see from where it
  * is acting. Off means case-INSENSITIVE, never smart case: a filter that changed rule by itself the moment a
  * capital was typed would make the switch beside it a lie.
  */
 
-/* What an OPEN conversation SAID, as this browser holds it — matchable without asking the daemon. Both sides
+/* What an OPEN conversation SAID, as this browser holds it, matchable without asking the daemon. Both sides
  * of the chat: the user's prompts and the agent's own bubbles, which is the daemon's rule too (see
  * AgentSearchQuerySchema). A `notice` row is neither side speaking, and thinking and tool cards live on their
  * own fields of the message rather than in `text`, so what is left here is exactly the spoken half.
@@ -56,7 +56,7 @@ const localLinesOf = (id: string): readonly { text: string; speaker: Speaker }[]
     );
 };
 
-// How much of a matched line a card shows — the daemon's own SNIPPET_CHARS, applied to the local tier so a
+// How much of a matched line a card shows, the daemon's own SNIPPET_CHARS, applied to the local tier so a
 // card looks the same whichever tier found it.
 const SNIPPET_CHARS = 120;
 
@@ -86,7 +86,7 @@ const snippetFor = (lines: readonly { text: string; speaker: Speaker }[], needle
     return said(`user`) ?? said(`agent`);
 };
 
-// A match, and the evidence for it. `snippet` is absent when the hit was the TITLE — the card already shows
+// A match, and the evidence for it. `snippet` is absent when the hit was the TITLE, the card already shows
 // that, and a line repeating the heading above it is noise where evidence was wanted.
 interface AgentHit {
     readonly snippet?: MatchSnippet;
@@ -95,7 +95,7 @@ interface AgentHit {
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
 
-/* The case rule, shared by every filter field and remembered across reloads — the habit, not the query. Written
+/* The case rule, shared by every filter field and remembered across reloads, the habit, not the query. Written
  * through on change so the ref IS the preference and no caller has to remember to save it (useSearchOptions
  * says the same thing at greater length). Storage may be unavailable (private mode); the ref still holds for
  * the session. */
@@ -121,7 +121,7 @@ export function useAgentFilter() {
     const { archived } = useAgents();
 
     const query = ref(``);
-    // Folded ONCE, here, to whatever case rule is in force — every tier then runs one substring test against a
+    // Folded ONCE, here, to whatever case rule is in force, every tier then runs one substring test against a
     // haystack folded the same way, and the marks on the cards are struck by the same needle.
     const needle = computed(() => (matchCase.value ? query.value.trim() : query.value.trim().toLowerCase()));
     const active = computed(() => needle.value.length >= MIN_QUERY);
@@ -142,7 +142,7 @@ export function useAgentFilter() {
     const enabled = computed(() => reachable.value && settled.value.length >= MIN_QUERY);
 
     /* The daemon's half of the query string. The MODE is not debounced with the text: flipping `Aa` is one
-     * deliberate press rather than a keystroke burst, so it re-asks at once — and it is in the key as well as
+     * deliberate press rather than a keystroke burst, so it re-asks at once, and it is in the key as well as
      * the URL, because the same words under the other rule are a different search whose answer is cached
      * separately (useWorkspaceSearch keeps its switches in the key for exactly this reason). */
     const params = computed(() => `query=${encodeURIComponent(settled.value)}${matchCase.value ? `&caseSensitive=true` : ``}`);
@@ -154,7 +154,7 @@ export function useAgentFilter() {
         placeholderData: keepPreviousData,
     });
 
-    /* The never-carded conversations: sessions in this workspace that no agent entry owns — a plain chat, or an
+    /* The never-carded conversations: sessions in this workspace that no agent entry owns, a plain chat, or an
      * agent whose registry entry is long gone. Fetched here rather than through useChat's `loadSessions`,
      * which writes the singleton list the History popover renders: a query typed on the board must not rewrite
      * what a popover in another corner of the app is showing.
@@ -176,7 +176,7 @@ export function useAgentFilter() {
         );
     });
 
-    // One agent against the current query, local tier first — a hit this browser can prove costs nothing and
+    // One agent against the current query, local tier first, a hit this browser can prove costs nothing and
     // is already correct while the daemon's answer is still in flight.
     const hitOf = (agent: FleetAgent): AgentHit | undefined => {
         if (!active.value) {
@@ -196,12 +196,12 @@ export function useAgentFilter() {
     const matches = (agent: FleetAgent): boolean => !active.value || hitOf(agent) !== undefined;
     const snippetOf = (agent: FleetAgent): MatchSnippet | undefined => hitOf(agent)?.snippet;
 
-    /* Matching agents that are OFF the board — the archive. The board would otherwise answer "no matches"
+    /* Matching agents that are OFF the board, the archive. The board would otherwise answer "no matches"
      * for something sitting one click away, which is the failure a filter is least forgiven for.
      *
      * "Off the board" is a live question, not a synonym for "archived": an archived session the user has
      * started writing in is lifted back onto the lanes for as long as those words are there (see useAgents'
-     * `fleet`). Listing it here as well would report one chat as two results — the card the query kept, and a
+     * `fleet`). Listing it here as well would report one chat as two results, the card the query kept, and a
      * row underneath claiming the same chat is somewhere else. */
     const archivedMatches = computed(() => {
         if (!active.value) {
@@ -212,7 +212,7 @@ export function useAgentFilter() {
     });
 
     // Matching conversations that no agent owns. Sessions carried by a fleet agent are dropped here so a
-    // single conversation can't be reported twice — once as its card and once as an anonymous history row.
+    // single conversation can't be reported twice, once as its card and once as an anonymous history row.
     const sessionMatches = computed<readonly ChatSession[]>(() => {
         if (!active.value || settled.value !== needle.value) {
             return [];
@@ -225,7 +225,7 @@ export function useAgentFilter() {
     return {
         query,
         needle,
-        // The `Aa` switch itself, for the field to bind and the cards to mark by — one preference, so every
+        // The `Aa` switch itself, for the field to bind and the cards to mark by, one preference, so every
         // surface showing it shows the same one.
         matchCase,
         active,
@@ -233,7 +233,7 @@ export function useAgentFilter() {
         snippetOf,
         archivedMatches,
         sessionMatches,
-        // "The daemon has not answered for what is currently typed" — the field's icon spins on it. True both
+        // "The daemon has not answered for what is currently typed", the field's icon spins on it. True both
         // while the debounce runs and while the request is in flight, so the indicator never blinks between them.
         searching: computed(() => active.value && (settled.value !== needle.value || fleetSearch.isFetching.value || sessionSearch.isFetching.value)),
     };

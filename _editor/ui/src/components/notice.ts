@@ -1,6 +1,6 @@
 import type { IconName } from "../icons/iconSets.js";
 
-/* WHAT A FAILURE IS, ONCE, FOR THE WHOLE APP — the data behind <Notice> and <NoticeStack>.
+/* WHAT A FAILURE IS, ONCE, FOR THE WHOLE APP, the data behind <Notice> and <NoticeStack>.
  *
  * Every view used to report failure as a `ui.alertDanger()` div holding an interpolated string, and the string
  * was whatever the throw site carried: "fetch failed", a 413, a line of git porcelain. Two things were wrong
@@ -8,12 +8,12 @@ import type { IconName } from "../icons/iconSets.js";
  * And nothing said what to do next, so a failure the app was already retrying and a dead end looked identical.
  *
  * So a notice is a SENTENCE THE APP WROTE (`title`), the raw cause kept underneath for whoever wants it
- * (`detail`), and AT MOST ONE way out (`action`). All three parts are load-bearing:
+ * (`detail`), and AT MOST ONE way out (`action`). All three parts matter:
  *
  * `detail` is optional because a title that already says everything must not repeat itself.
  *
  * `action` is optional because NO ACTION IS A REAL ANSWER. A failure the app is already healing must not offer
- * a button — a button there invites the user to fix something that isn't broken. That distinction is the
+ * a button, a button there invites the user to fix something that isn't broken. That distinction is the
  * connecting gate's (sandbox-gates/connectionNotice.ts, which had it right first), applied to everything else.
  *
  * `tone` decides ORDER when several are on screen, which is the other half of the problem: a view with four
@@ -30,13 +30,13 @@ export interface NoticeModel {
     // `danger` broke what the user was doing; `warning` will break something if ignored; `info` is a standing
     // fact they may want and never have to act on.
     readonly tone: NoticeTone;
-    // The app's own words. Never a caught message — those go in `detail`.
+    // The app's own words. Never a caught message, those go in `detail`.
     readonly title: string;
     // The raw cause, when it says something the title doesn't.
     readonly detail?: string;
     readonly action?: NoticeAction;
     /* Identity, for the stack's duplicate collapsing. Defaults to the title, which is right whenever the same
-     * failure produces the same sentence — give an explicit key only when one sentence covers several distinct
+     * failure produces the same sentence, give an explicit key only when one sentence covers several distinct
      * failures that should each still be shown. */
     readonly key?: string;
 }
@@ -45,8 +45,8 @@ export interface NoticeModel {
  * box in the product would be impossible to review.
  *
  * They live here rather than on `ui` because <Notice> is now the only way to draw one. As a public recipe this
- * was a second, quieter answer to the same question — same tint, same border, same padding, no icon, no ARIA
- * role, no dismiss — and thirty-two views had taken it, so which of the two a reader got came down to whether
+ * was a second, quieter answer to the same question, same tint, same border, same padding, no icon, no ARIA
+ * role, no dismiss, and thirty-two views had taken it, so which of the two a reader got came down to whether
  * the sentence happened to contain a `<code>` tag.
  *
  * Spelled out per tone rather than built from a `border-${tone}/40` template, which is the mistake the series
@@ -68,7 +68,7 @@ export const noticeKey = (notice: NoticeModel): string => notice.key ?? notice.t
 
 /* WHICH FAILURE THE USER READS FIRST, decided here instead of by whichever component rendered last.
  *
- * SEVERITY FIRST, stable within a tone — two equally-bad failures keep the order their view raised them in,
+ * SEVERITY FIRST, stable within a tone, two equally-bad failures keep the order their view raised them in,
  * which is the only ordering their view knows anything about. The index tie-break is explicit rather than
  * leaning on sort stability, so the guarantee survives an edit to the comparator.
  *

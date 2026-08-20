@@ -1,4 +1,4 @@
-/* What <PersonaFace> needs of a persona, and nothing more — so a folder card, a rail row, a picker option and
+/* What <PersonaFace> needs of a persona, and nothing more, so a folder card, a rail row, a picker option and
  * the page's own list all satisfy it without any of them having to hold a whole Persona to draw one.
  *
  * IT LIVES IN ITS OWN MODULE RATHER THAN IN THE COMPONENT because `picker.ts` names this type, and picker.ts is

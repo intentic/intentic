@@ -7,7 +7,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
  *
  * That placement is the whole security argument for this feature. The sandbox could be compromised; the agent
  * running in it reads the open internet all day and can be talked into things. Neither can widen what happens on
- * this computer, because the sandbox does not decide — it only asks, and this file answers. The daemon never
+ * this computer, because the sandbox does not decide, it only asks, and this file answers. The daemon never
  * checks a scope, so there is no second implementation to drift out of agreement with this one.
  *
  * A refusal is a VALUE, not an exception: it travels back as an ordinary tool result saying which switch is off,

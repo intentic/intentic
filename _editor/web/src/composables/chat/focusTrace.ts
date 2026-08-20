@@ -1,4 +1,4 @@
-/* WHY THE FOCUSED CHAT MOVED — the trace behind the one report that keeps coming back and has never been
+/* WHY THE FOCUSED CHAT MOVED, the trace behind the one report that keeps coming back and has never been
  * reproduced here: the popped-out chat showing a different session than the board's ring, after a click on the
  * board that both of them were supposed to hear.
  *
@@ -8,17 +8,17 @@
  *   select · the click, naming the id it asked for
  *   → open-agent / open-session · whether that id was already a tab or had to be minted
  *   → focus · what the writer RESOLVED it to, which is not always what was asked (an id that names no open tab
- *     is not written; the focus falls to the last one instead — a silent divergence that looks exactly like the
+ *     is not written; the focus falls to the last one instead, a silent divergence that looks exactly like the
  *     report), plus anything the same write swept
  *   → render · which conversation the panel actually put on screen, and in WHICH window
  *
  * Read together those four lines say whether a divergence is the store's (the resolved focus was already
- * wrong) or the screen's (the store was right and the pixels are stale) — the split every previous round of
+ * wrong) or the screen's (the store was right and the pixels are stale), the split every previous round of
  * this had to guess at.
  *
  * Always on, and cheap by construction: these are user-scale events (a click, a close, a reconnect), not
  * per-frame ones, so a busy hour is a few hundred lines. It prints to the console of the realm that OWNS the
- * chat, which is the opener even when the panel is floating in its own window — so one console holds both
+ * chat, which is the opener even when the panel is floating in its own window, so one console holds both
  * halves of the story. `window.intenticFocusTrace()` dumps the ring as one block for pasting, for the usual
  * case where nobody had DevTools open when it happened. */
 
@@ -51,7 +51,7 @@ export const traceFocus = (what: string, detail: Record<string, unknown>): void 
 
 declare global {
     interface Window {
-        /** The trace as one pasteable block — see focusTrace.ts. */
+        /** The trace as one pasteable block, see focusTrace.ts. */
         intenticFocusTrace?: () => string;
     }
 }

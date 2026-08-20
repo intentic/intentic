@@ -4,14 +4,14 @@ import { type FleetLane, laneOf } from "../agents/agentStatus";
 import type { Conversation } from "./conversation";
 import { useChat } from "./useChat";
 
-/* What the open-chat list KNOWS about a tab, as projections rather than as component state — because two
+/* What the open-chat list KNOWS about a tab, as projections rather than as component state, because two
  * surfaces read them and they must agree. The chat panel's header names the active conversation (its title,
  * its origin, whether it is archived) and the list beneath it draws the same facts per row; the close sets
  * are asked for by the keyboard commands (which act on the ACTIVE chat) and by a row's right-click menu
  * (which acts on the one under the pointer). When those lived in the strip component, the header could only
- * get at them by being the same file — which is what kept a 1000-line component from being split. */
+ * get at them by being the same file, which is what kept a 1000-line component from being split. */
 
-// What a tab calls a conversation: its derived title, else the noun for where it works — an untitled isolated
+// What a tab calls a conversation: its derived title, else the noun for where it works, an untitled isolated
 // conversation IS a draft agent card on the fleet board.
 export const tabLabel = (conversation: Conversation): string => conversation.title.value ?? (conversation.isolated.value ? `New agent` : `New chat`);
 
@@ -28,7 +28,7 @@ export const isArchived = (conversation: Conversation): boolean => useAgents().a
 /* Which lane a TAB belongs to. laneOf is the board's own projection, so a chat can never sit in a different
  * lane here than its card does on /agents. A conversation the fleet has never carded (a plain non-isolated
  * chat, or the roster briefly down) still needs a shelf: streaming or empty reads as Active, anything else as
- * Finished. The list groups its cards by this, and "Close Finished" takes exactly the lane it names — one
+ * Finished. The list groups its cards by this, and "Close Finished" takes exactly the lane it names, one
  * definition of "finished", so the menu row can't close a card the list is still showing as Active. */
 export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefined): FleetLane => {
     if (agent !== undefined) {
@@ -41,7 +41,7 @@ export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefi
  * than a snapshot taken when a menu opened, so a chat that arrives while the menu sits open (an inbound
  * mention opens one) is folded into the set instead of escaping it.
  *
- * No close asks for a confirm, mass or single — unlike the workspace's file tabs, where closing discards
+ * No close asks for a confirm, mass or single, unlike the workspace's file tabs, where closing discards
  * unsaved edits, closing a chat destroys nothing. A running agent's turn is detached daemon-side
  * (Conversation.abort is soft by design), so it keeps working and lands its work with the chat closed; the
  * conversation stays in the sandbox's store, and reopening it from History reattaches to the still-live turn. */
@@ -60,7 +60,7 @@ export const toRightOf = (id: string): ReadonlySet<string> => {
 
 export const allTabs = (): ReadonlySet<string> => new Set(useChat().conversations.value.map((conversation) => conversation.conversationId));
 
-/* Every chat that has stopped working — the Finished lane, whichever surface is asking. This is the sweep a
+/* Every chat that has stopped working, the Finished lane, whichever surface is asking. This is the sweep a
  * long session actually wants: a dozen chats accumulate, two are still running, and neither Close Others nor
  * Close to the Right can express "clear the done ones" without hunting for them one × at a time. The ACTIVE
  * chat is not spared if it is finished; being the one you are looking at is not a reason to keep a landed

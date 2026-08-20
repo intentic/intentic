@@ -19,10 +19,10 @@ import { sandboxRunCommandCli } from "./sandbox-run/sandbox-run.command.js";
 import { sandboxTunnel } from "./sandbox-tunnel/sandbox-tunnel.command.js";
 import { secretsCommand } from "./secrets/secrets.command.js";
 
-// User-facing errors should read as a one-line message, not a JS stack trace — the CLI is driven by end users
+// User-facing errors should read as a one-line message, not a JS stack trace, the CLI is driven by end users
 // (and by connect.sh inside the sandbox), so a thrown Error renders as "Command failed, <message>". Set
 // INTENTIC_DEBUG to keep the stack when chasing an unexpected failure. This overrides stricli's default
-// formatter, which prints `error.stack`. The failure is also recorded into the run log's exit footer —
+// formatter, which prints `error.stack`. The failure is also recorded into the run log's exit footer,
 // stricli prints it on STDERR, which the run log's stdout tee never sees; without this a crashed run's log
 // reads exactly like a hung run's.
 const formatException = (exc: unknown): string => {
@@ -66,7 +66,7 @@ const deploy = buildRouteMap({
 
 // The image speaking its own run contract (see sandbox-run.command.ts): connect.sh/recreate.sh execute what
 // this prints instead of hand-copying the docker-run shape. `hostProbes` is the same road in the other
-// direction — what the flow must ask its host before running the command.
+// direction, what the flow must ask its host before running the command.
 const sandbox = buildRouteMap({
     routes: {
         runCommand: sandboxRunCommandCli,

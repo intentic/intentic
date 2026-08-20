@@ -15,7 +15,7 @@ const komodoSchema = sshSchema.extend({
     domain: z.string(),
     adminUser: z.string(),
     adminPassword: z.string(),
-    // The git provider Komodo authenticates to when cloning the admin's private app repos — present only on
+    // The git provider Komodo authenticates to when cloning the admin's private app repos, present only on
     // the Forgejo stack. gitUrl is the INTERNAL Forgejo url (http://<internalIp>:3000); Komodo clones the
     // repos from inside the host's Docker, so the git-provider account is registered against this internal
     // authority (the public git.<zone> name does not resolve there). The hosted forges (GitHub/GitLab) omit
@@ -24,7 +24,7 @@ const komodoSchema = sshSchema.extend({
     gitAccount: z.string().optional(),
     gitToken: z.string().optional(),
     // The container registry Komodo PULLS app images from (the Forgejo built-in registry, ghcr.io, or the
-    // GitLab Container Registry) — written as a [[docker_registry]] account so a private image can be pulled.
+    // GitLab Container Registry), written as a [[docker_registry]] account so a private image can be pulled.
     registry: z.string(),
     registryUser: z.string(),
     registryToken: z.string(),
@@ -45,7 +45,7 @@ type KomodoInputs = z.infer<typeof komodoSchema>;
 const parse = (inputs: ResolvedInputs): KomodoInputs => parseInputs(komodoSchema, inputs, "komodo");
 
 const CORE = "intentic-komodo-core";
-// The fixed host port Core publishes — the port every engine-side Komodo consumer forwards to over SSH.
+// The fixed host port Core publishes, the port every engine-side Komodo consumer forwards to over SSH.
 export const KOMODO_CORE_PORT = 9120;
 const STATE_DIR = `${HOST_STATE_ROOT}/komodo`;
 const READY_TIMEOUT_MS = 90_000;
@@ -125,7 +125,7 @@ const composeYaml = (images: Record<string, string>, id: string, hash: string): 
         `    image: ${images["periphery"]}`,
         "    restart: unless-stopped",
         // periphery deliberately bind-mounts the host's /proc (system stats), so docker's default masked
-        // paths are theater here — and masking over a bind-mounted /proc hard-fails on WSL2 kernels
+        // paths are theater here, and masking over a bind-mounted /proc hard-fails on WSL2 kernels
         // ("can't mask path /proc/interrupts"), leaving periphery permanently unable to start. Unconfine.
         "    security_opt: [ systempaths=unconfined ]",
         "    volumes: [ /var/run/docker.sock:/var/run/docker.sock, /proc:/proc, keys:/config/keys ]",
@@ -133,9 +133,9 @@ const composeYaml = (images: Record<string, string>, id: string, hash: string): 
         "",
     ].join("\n");
 
-// The provider accounts Komodo uses: a git_provider (to clone private app repos — Forgejo stack only) and a
+// The provider accounts Komodo uses: a git_provider (to clone private app repos. Forgejo stack only) and a
 // docker_registry (to pull the private app images CI pushes). Neither can be configured via env in Komodo
-// v2 — only via this config file (or the UI/API) — so both are mounted into Core. The docker_registry domain
+// v2, only via this config file (or the UI/API), so both are mounted into Core. The docker_registry domain
 // is the registry authority the deployment's image_registry_account selects.
 const configToml = (parsed: KomodoInputs): string => {
     const lines: string[] = [];
@@ -158,7 +158,7 @@ const configToml = (parsed: KomodoInputs): string => {
     return lines.join("\n");
 };
 
-// Write the compose file + provider config.toml (always) and the .env (once — Core/Periphery secrets must
+// Write the compose file + provider config.toml (always) and the .env (once. Core/Periphery secrets must
 // survive restarts). passkey/jwt/db secrets are host-generated once and never surface as outputs.
 const ensureFiles = async (session: SshSession, parsed: KomodoInputs, images: Record<string, string>, id: string, hash: string): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
@@ -166,10 +166,10 @@ const ensureFiles = async (session: SshSession, parsed: KomodoInputs, images: Re
     await session.exec(`cat > ${STATE_DIR}/config.toml <<'CONFIG_EOF'\n${configToml(parsed)}CONFIG_EOF`);
     // Each line is a separate printf argument so one KEY=value lands per line. Joining with "\n" into a single
     // arg would print the literal characters \n (printf %s does not interpret escapes), leaving compose unable
-    // to parse the file — the image tags would come through blank.
+    // to parse the file, the image tags would come through blank.
     //
     // Everything whose value is known HERE goes through envLine + shellQuote, including the admin password and
-    // domain that used to ride in `echo "KEY=${value}"` — a double-quoted shell string, where a `$(…)` in
+    // domain that used to ride in `echo "KEY=${value}"`, a double-quoted shell string, where a `$(…)` in
     // either ran on the host at deploy time. Only the three values the HOST generates stay in the shell block,
     // because only they need a substitution to happen over there.
     const envPairs: [string, string][] = [
@@ -217,11 +217,11 @@ const waitHealthy = async (session: SshSession, parsed: KomodoInputs): Promise<v
 // Komodo (the deploy orchestrator) as a co-located FerretDB + Core + Periphery compose stack on the host.
 // read returns the resource only when Core is up and answering /api/health (so a noop re-derives the
 // deterministic url/internalUrl); diff is a noop. apply is idempotent: secrets persist host-side and
-// `docker compose up -d` reconciles the stack. No passkey/apiKey output — the CD-notify provider
+// `docker compose up -d` reconciles the stack. No passkey/apiKey output, the CD-notify provider
 // authenticates by admin login.
 export const createKomodoProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp", "gitUrl", "gitAccount", "gitToken", "registry", "registryUser", "registryToken")) {
             return undefined;

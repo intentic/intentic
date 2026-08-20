@@ -5,7 +5,7 @@ import type { HostScopes, MachineSandbox } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 
-/* The Intentic sandboxes running on THIS machine — the supervisor's tools.
+/* The Intentic sandboxes running on THIS machine, the supervisor's tools.
  *
  * A sandbox can never see its siblings by itself (its docker socket is deliberately not mounted), so "what runs
  * on this computer, and start that one back up" can only be answered here, by the machine's own agent. These
@@ -13,12 +13,12 @@ import { assertScope } from "../policy.js";
  * `sandboxes` switch, instead of whatever a model improvises through a full shell.
  *
  * The scopes split by what the action DOES (the apps.ts rule): listing is a way of seeing and is subsumed by
- * EITHER grant — a shell could run `docker ps` itself, and a manager that may not look at what it manages is not
+ * EITHER grant, a shell could run `docker ps` itself, and a manager that may not look at what it manages is not
  * a coherent grant. Start/stop/restart change what the machine is doing, and take only the `sandboxes` switch.
  * Removal is the one that takes a switch of its own: everything else here is undone by doing it again.
  *
  * The three flows that swap or delete a container are NOT reimplemented here. They live in the `ic` CLI, which
- * every door onto this machine already runs — the pasted one-liner, the desktop app's buttons and a hand-typed
+ * every door onto this machine already runs, the pasted one-liner, the desktop app's buttons and a hand-typed
  * `ic` are one implementation, and this is the fourth caller of it rather than a second copy. That is the same
  * argument the desktop app makes for spawning the scripts instead of porting them into Rust. */
 
@@ -54,7 +54,7 @@ export const rowsFrom = (stdout: string): DockerRow[] =>
         });
 
 /* A workspace container and its tunnel sidecar share the `intentic-sandbox-` prefix, and a user's own subdomain
- * may legitimately BE `tunnel-something` — so a name is only a sidecar when the workspace container it would
+ * may legitimately BE `tunnel-something`, so a name is only a sidecar when the workspace container it would
  * belong to actually exists. The same rule the desktop app applies natively; nothing here guesses. */
 export const sandboxesFrom = (rows: readonly DockerRow[]): MachineSandbox[] => {
     const isSidecar = (name: string): boolean => {
@@ -67,7 +67,7 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): MachineSandbox[] => {
             const slug = row.names.slice(PREFIX.length);
             const tunnel = rows.find((candidate) => candidate.names === `${TUNNEL_PREFIX}${slug}`);
             const sandbox: MachineSandbox = { slug, container: row.names, running: row.state === "running", image: row.image };
-            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` KEY —
+            // Assigned rather than spread-in, so a sandbox with no sidecar at all has no `tunnelRunning` KEY,
             // absent and false are different facts (reached over the user's own proxy vs. tunnel down).
             if (tunnel !== undefined) {
                 sandbox.tunnelRunning = tunnel.state === "running";
@@ -77,7 +77,7 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): MachineSandbox[] => {
 };
 
 /* `windowsHide` here and on every other spawn in this agent: the connection loop runs detached, which on Windows
- * means it has no console of its own — and a console child of a console-less process is handed a BRAND-NEW
+ * means it has no console of its own, and a console child of a console-less process is handed a BRAND-NEW
  * console, window and all. Without the flag, every `docker ps` behind a sandbox listing would flash a black
  * window on the user's desktop. */
 const docker = async (args: readonly string[]): Promise<string> => {
@@ -107,7 +107,7 @@ export const listSandboxes = async (scopes: HostScopes): Promise<string> => {
 export const SandboxOpSchema = z.enum(["start", "stop", "restart"]);
 export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
-/* WHICH CONTAINER THE SLUG MEANS, or the machine's own answer that it means none — one lookup for every op,
+/* WHICH CONTAINER THE SLUG MEANS, or the machine's own answer that it means none, one lookup for every op,
  * because a wrong slug deserves the same sentence whichever button sent it, and because a flow that will take
  * minutes is owed the refusal NOW rather than after an image pull. */
 const find = async (slug: string): Promise<MachineSandbox> => {
@@ -123,7 +123,7 @@ const find = async (slug: string): Promise<MachineSandbox> => {
 export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const target = await find(slug);
-    // The tunnel sidecar goes wherever its sandbox goes — a "started" sandbox nobody can reach is not started.
+    // The tunnel sidecar goes wherever its sandbox goes, a "started" sandbox nobody can reach is not started.
     // Stopping fells the tunnel first so nothing routes into a container on its way down; starting raises it last.
     const sidecar = target.tunnelRunning === undefined ? [] : [`${TUNNEL_PREFIX}${slug}`];
     await docker([op, ...(op === "stop" ? [...sidecar, target.container] : [target.container, ...sidecar])]);
@@ -137,7 +137,7 @@ export const manageSandbox = async (op: SandboxOp, slug: string, scopes: HostSco
  * owner-approved overlay, all of them keeping /work and /history. Removal is the separate verb below.
  *
  * `prepare` is the odd one and belongs here anyway: it runs the SAME `ic` flow, over the same minutes, with
- * the same output to narrate — it just stops before the container is touched, downloading and building the
+ * the same output to narrate, it just stops before the container is touched, downloading and building the
  * next update so that the update itself is a restart rather than a wait. Grouping it with the swaps is what
  * keeps one implementation of "run `ic`, stream what it says". */
 export const SandboxSwapSchema = z.enum(["prepare", "update", "rebuild", "rollback"]);
@@ -145,7 +145,7 @@ export type SandboxSwap = z.infer<typeof SandboxSwapSchema>;
 
 /* Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install writes
  * under the home and symlinks ~/.local/bin, and Windows only ever has the profile copy. PATH is the last resort
- * rather than the first, for the reason the desktop app states about the sync agent — a developer's global copy
+ * rather than the first, for the reason the desktop app states about the sync agent, a developer's global copy
  * would answer on the machine where this was written and nothing would answer on a real user's.
  *
  * The separator is chosen from the TARGET platform rather than taken from `node:path`, which would use the one
@@ -159,7 +159,7 @@ export const icCandidates = (platform: NodeJS.Platform, home: string | undefined
 };
 
 /* The argv for each swap, which is the part worth asserting without a machine: `rebuild` takes the approved
- * overlay's digest as a REQUIRED second positional (it is the trust anchor — only content that still hashes to
+ * overlay's digest as a REQUIRED second positional (it is the trust anchor, only content that still hashes to
  * what the owner reviewed is ever built), while update and rollback take the slug alone. Getting this wrong is
  * silent: an argument in the wrong position binds to a different parameter and fails much later as something
  * else. The same class of risk the desktop crate's own argv tests exist for. */
@@ -178,7 +178,7 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
 /* An `ic` run, narrated as it goes. Every line it prints is handed to `onLine` the moment it arrives, which is
- * what lets the browser show progress on an operation that takes minutes — and the same lines are collected for
+ * what lets the browser show progress on an operation that takes minutes, and the same lines are collected for
  * the callers that want one answer at the end (an MCP tool result). Both streams go to one place on purpose:
  * `ic` writes progress to stdout and diagnostics to stderr, and the failure detail is always in the second. */
 const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
@@ -198,7 +198,7 @@ const runIc = async (args: readonly string[], onLine: (line: string) => void): P
             let missing = false;
             child.stdout.setEncoding("utf8").on("data", emit);
             child.stderr.setEncoding("utf8").on("data", emit);
-            // ENOENT here means THIS candidate is not installed, not that the run failed — fall through to the
+            // ENOENT here means THIS candidate is not installed, not that the run failed, fall through to the
             // next one. Any other spawn error is a real failure and is reported as the run's own.
             child.on("error", (error: NodeJS.ErrnoException) => {
                 missing = error.code === "ENOENT";
@@ -231,7 +231,7 @@ export const swapSandbox = async (
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     // Built before the fleet is read, so a rebuild with no digest is refused instantly rather than after a docker
-    // round trip — the argument was already wrong when it arrived.
+    // round trip, the argument was already wrong when it arrived.
     const args = icSwapArgs(swap, slug, hash);
     await find(slug);
     const { code, output } = await runIc(args, onLine);
@@ -261,20 +261,20 @@ export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (l
  * something is wrong, so the tail is what matters; the cap is there because this answer crosses a WebSocket that
  * also carries everything else the machine is doing.
  *
- * Both are exported because the MCP tool's schema is built from them — the ceiling is a rule the model is TOLD,
+ * Both are exported because the MCP tool's schema is built from them, the ceiling is a rule the model is TOLD,
  * in the same sentence that the rule is enforced by, so a bigger tail comes back as "the maximum is 2000"
  * rather than as 2000 lines quietly presented as the 9000 that were asked for. */
 export const DEFAULT_LOG_LINES = 200;
 export const MAX_LOG_LINES = 2_000;
 
-/* The container's own log. Gated like `list_sandboxes` — it is a way of SEEING what you already manage, and a
- * shell on this machine could run `docker logs` itself — so either grant answers it.
+/* The container's own log. Gated like `list_sandboxes`, it is a way of SEEING what you already manage, and a
+ * shell on this machine could run `docker logs` itself, so either grant answers it.
  *
  * Both streams, because a container that died wrote its reason to stderr. `--timestamps` is deliberately off:
  * the daemon stamps its own lines, and docker's wall-clock prefix on every row is mostly noise in a tail.
  *
- * Raw and possibly empty: the two readers phrase "it has said nothing" differently — a model wants a sentence,
- * and the Computers view wants the count for its own — so neither is written into the reading itself. */
+ * Raw and possibly empty: the two readers phrase "it has said nothing" differently, a model wants a sentence,
+ * and the Computers view wants the count for its own, so neither is written into the reading itself. */
 const readLogs = async (slug: string, lines: number, scopes: HostScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
@@ -293,7 +293,7 @@ export const sandboxLogs = async (slug: string, lines: number | undefined, scope
     return text === "" ? `Sandbox "${slug}" has logged nothing yet.` : text;
 };
 
-/* THE SAME READING, AS A FLOW — the Computers view's Logs button, which travels the machine door every other
+/* THE SAME READING, AS A FLOW, the Computers view's Logs button, which travels the machine door every other
  * button on that row travels.
  *
  * It is the one op there that changes nothing, and it needs no separate route for exactly the reason the others

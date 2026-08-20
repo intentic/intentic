@@ -23,7 +23,7 @@ export interface DeploymentView {
 }
 
 // A scalar field is surfaced only when present with the right type; anything else (missing, wrong type, a
-// $ref/$secret object) reads as undefined — `.catch(undefined)` keeps the view best-effort instead of throwing.
+// $ref/$secret object) reads as undefined, `.catch(undefined)` keeps the view best-effort instead of throwing.
 const optionalString = z.string().optional().catch(undefined);
 const optionalNumber = z.number().optional().catch(undefined);
 
@@ -98,7 +98,7 @@ export const collectDeployments = async (
     const komodoUrl = access?.url ?? "";
     const liveIds = new Map<string, string>();
     // Tri-state: undefined = no komodo in the graph (services-only intents deploy via compose and have NO
-    // deployment engine — "unreachable" would be a false alarm); true/false = the declared engine answered
+    // deployment engine, "unreachable" would be a false alarm); true/false = the declared engine answered
     // or didn't. Surfaced on the result (not just the log line) so the UI can show "Komodo is down on your
     // host" instead of silently painting every deployment as not-live.
     let komodoReachable: boolean | undefined = access === undefined ? undefined : true;

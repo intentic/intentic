@@ -3,7 +3,7 @@ import { type SharePayload, SharePayloadSchema } from "@intentic/sandbox-contrac
 /* THE CONVERSATION THIS PAGE WAS BUILT AROUND, read out of the page itself.
  *
  * The daemon writes it into the `<script type="application/json">` block in index.html, so by the time this
- * module runs it is already in the document — there is no load state to render, no request that can fail, and
+ * module runs it is already in the document, there is no load state to render, no request that can fail, and
  * nothing this page needs a network for. A recipient opening the link a month later, from a sandbox that has
  * been off since, sees exactly what was shared.
  *
@@ -26,7 +26,7 @@ export const readPayload = (doc: Document = document): PayloadResult => {
     } catch {
         return { ok: false, reason: `This page's conversation could not be read.` };
     }
-    // An unfilled copy of the template carries a literal `null` — a page that was built but never written to,
+    // An unfilled copy of the template carries a literal `null`, a page that was built but never written to,
     // which is a different sentence than a corrupt one.
     if (parsed === null) {
         return { ok: false, reason: `Nothing has been shared to this address.` };

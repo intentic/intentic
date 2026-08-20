@@ -13,39 +13,39 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { useSandbox } from "../sandbox/useSandbox";
 import { AGENTS } from "../queryKeys";
 
-/* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
- * `agents` roster snapshots (last frame wins, the presence pattern — see useSandboxLiveness) and an explicit
+/* The fleet store, the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
+ * `agents` roster snapshots (last frame wins, the presence pattern, see useSandboxLiveness) and an explicit
  * refresh() from GET /agents on the reachable seam. The FLEET view merges the registry (authoritative:
  * status/branch/cost, agents this tab never opened) with the open Conversation tabs by conversationId (live:
  * in-browser streaming state). Module-level singleton, like useChat. */
 
 // shallowRef, for the same reason Conversation.state is: every write below REPLACES this array (a roster is a
-// snapshot, never a patch — see the ordering note beneath), so there is no in-place mutation for deep
+// snapshot, never a patch, see the ordering note beneath), so there is no in-place mutation for deep
 // reactivity to observe. A deep ref would instead re-proxy every summary in the fleet on each snapshot, and the
-// daemon re-frames the roster about once a second for every running turn — so the board's cost scaled with
+// daemon re-frames the roster about once a second for every running turn, so the board's cost scaled with
 // agents × turns × their fields, which is exactly when the /agents view was reported to get sticky.
 const registry = shallowRef<AgentSummary[]>([]);
 
-// The OTHER half of the fleet — the agents filed away. Declared here, beside the roster it is the counterpart
+// The OTHER half of the fleet, the agents filed away. Declared here, beside the roster it is the counterpart
 // of, because `fleet` reads it: an archived session whose tab holds unsent words is lifted back onto the board.
 // What the list is, when it is read, and why it is pull-only rather than streamed is under "--- Archive" below.
 //
 // shallowRef for the roster's reason, which applies here twice over: every write below REPLACES this array, and
-// this is the half that GROWS WITHOUT BOUND — the board's live roster is bounded by what the user is working
+// this is the half that GROWS WITHOUT BOUND, the board's live roster is bounded by what the user is working
 // on, while the archive is everything they ever finished. A deep ref re-proxied every filed-away summary on
 // each write, so opening the archive on a fleet with a thousand sessions in it paid for a thousand proxies
 // before it drew anything.
 const archived = shallowRef<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 
-/* The wakes HELD at the door — the daemon's approvals queue, projected onto the board so "waiting for you"
+/* The wakes HELD at the door, the daemon's approvals queue, projected onto the board so "waiting for you"
  * sits beside "running" instead of in a page nobody opens. Separate state from the roster on purpose: the
  * /events stream repaints `registry` and knows nothing of holds, so a stream frame must not clobber this.
  * Pull-fed by refresh() (board mount, the reachable seam, pull-to-refresh) and by the approve/reject actions
- * below — a hold appearing while the board sits open lands on the next pull.
+ * below, a hold appearing while the board sits open lands on the next pull.
  *
- * Declared up here rather than beside those actions for two reasons: `attention` counts it — the rail's badge
- * is the only thing that can tell an owner a wake is waiting while they are anywhere else in the app — and
+ * Declared up here rather than beside those actions for two reasons: `attention` counts it, the rail's badge
+ * is the only thing that can tell an owner a wake is waiting while they are anywhere else in the app, and
  * `desync` drops it, which is what keeps one sandbox's held wakes out of another sandbox's count. */
 const heldWakes = shallowRef<AutomationApproval[]>([]);
 
@@ -58,7 +58,7 @@ const heldWakes = shallowRef<AutomationApproval[]>([]);
  * So every snapshot carries the registry revision it was read at (see AgentsListSchema), and:
  *   - a snapshot older than the one already applied is dropped outright; and
  *   - a local add/remove is held as a pending intent until a snapshot at or past the revision that APPLIED it
- *     arrives — at which point the server's own account is authoritative and the intent retires itself.
+ *     arrives, at which point the server's own account is authoritative and the intent retires itself.
  *
  * The second rule is what a revision alone can't do: between sending an archive and the daemon applying it, an
  * unrelated change (a running turn ticks updatedAt about once a second) legitimately produces a NEWER snapshot
@@ -70,7 +70,7 @@ const heldWakes = shallowRef<AutomationApproval[]>([]);
 let appliedRev = -1;
 
 /* WHICH CONNECTION THE REVISION LINE BELONGS TO. The counter above is only comparable within one daemon
- * PROCESS — it lives in that process's memory and starts again at 0 when it restarts — so every reset of it
+ * PROCESS, it lives in that process's memory and starts again at 0 when it restarts, so every reset of it
  * (desync, which the hello frame of every connection performs) opens a new line, and reads issued against the
  * old one must not land on the new. A GET /agents that left before a rebuild and answers after it carries the
  * old daemon's high-water number, and applying it would re-poison the guard the reset had just cleared: the
@@ -97,7 +97,7 @@ const withPending = (agents: AgentSummary[]): AgentSummary[] => {
     return [...kept, ...restored];
 };
 
-// Every conversation in this roster is one the fleet KNOWS, so its open tab is no longer a draft — latched on
+// Every conversation in this roster is one the fleet KNOWS, so its open tab is no longer a draft, latched on
 // the conversation (see Conversation.registered) rather than re-derived from the roster, because the whole
 // point is to outlive the entry: archiving takes it off the roster, and so does a dropped stream.
 // Latched off the server's own list, before the pending projection: a snapshot that still carries an agent
@@ -123,7 +123,7 @@ const applySnapshot = (agents: AgentSummary[], rev: number): void => {
 };
 
 // Record a local move and paint it immediately. `rev` is the revision the daemon reported for the mutation, so
-// the intent survives exactly until a roster that includes it arrives — no timers, no fixed windows.
+// the intent survives exactly until a roster that includes it arrives, no timers, no fixed windows.
 const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], rev: number): void => {
     for (const move of moves) {
         pending.set(move.id, move.present === undefined ? { untilRev: rev } : { untilRev: rev, present: move.present });
@@ -131,22 +131,22 @@ const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], r
     registry.value = withPending(registry.value.filter((agent) => !pending.has(agent.id)));
 };
 
-/* THE SAME REMOVAL, TAKEN BEFORE THE DAEMON HAS ANSWERED — and the way back if it never does.
+/* THE SAME REMOVAL, TAKEN BEFORE THE DAEMON HAS ANSWERED, and the way back if it never does.
  *
  * Archiving is the board's one safe exit: nothing is destroyed, the branch and the conversation are kept, and
- * the counter it lands in is one press from opening. What it is NOT is quick — behind the press sit a commit
+ * the counter it lands in is one press from opening. What it is NOT is quick, behind the press sit a commit
  * of whatever the worktree held, a checkout teardown and a ref park, per repo. So the press held its card in
  * place for as long as the git took, which on a board carrying a thousand sessions reads as a button that did
  * nothing, and the honest response to a button that did nothing is to press it again.
  *
  * The card therefore leaves on the press and the request runs behind it. Everything that CANNOT be taken back
- * cheaply still waits for the answer — the chat tab stays open, the archive list is written from what actually
- * moved, the undo set counts what actually moved — so a refusal costs the user a card sliding back into its
+ * cheaply still waits for the answer, the chat tab stays open, the archive list is written from what actually
+ * moved, the undo set counts what actually moved, so a refusal costs the user a card sliding back into its
  * lane under the error strip, and nothing else.
  *
  * Held at POSITIVE_INFINITY because at this moment there is no revision to hold to: no roster may retire this
  * intent, only the answer that replaces it (holdPending at the rev that applied it) or the rollback below.
- * Returns the rollback, which puts back every card it took but the ones named `keep` — the daemon's own
+ * Returns the rollback, which puts back every card it took but the ones named `keep`, the daemon's own
  * account of what moved, since an aimed-at agent it declined is a card that must come back. */
 const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<string>) => void) => {
     const held = new Map(registry.value.filter((agent) => ids.includes(agent.id)).map((agent) => [agent.id, agent]));
@@ -172,7 +172,7 @@ const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<string>) => 
 };
 
 /* The review panel's diff query (the per-file landed flags behind "Land now", and the conflict report) is
- * pull-only, while this roster is push-fed — so a land this browser didn't perform itself (the auto-land at
+ * pull-only, while this roster is push-fed, so a land this browser didn't perform itself (the auto-land at
  * turn completion, another device's manual land) used to flip the header badge to "Landed" while the panel
  * kept its pre-land answer: every file "not landed" under an armed Land now button, until a remount or a
  * window refocus happened to refetch. A status change is exactly "the daemon settled something about this
@@ -186,7 +186,7 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
             void queryClient.invalidateQueries({ queryKey: AGENTS.of(agent.id, `diff`) });
             /* AND THE TRANSCRIPT WITH IT, on exactly the same signal and for the same reason one step further
              * along. The daemon writes a conversation's record as each turn SETTLES, so a status change is the
-             * one moment that record can have grown — and the copy this browser warmed ahead of the click was
+             * one moment that record can have grown, and the copy this browser warmed ahead of the click was
              * read before it did. Without this the board would hand a clicked card a transcript ending one turn
              * early, which is a worse answer than the round trip it saved. */
             invalidateAgentTranscript(agent.id);
@@ -194,19 +194,19 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
     }
 };
 
-// Roster snapshot from the events stream or an explicit read. Dropped when it predates what we already hold —
+// Roster snapshot from the events stream or an explicit read. Dropped when it predates what we already hold,
 // an out-of-order answer is not news, it is a regression.
 export const setAgents = (agents: AgentSummary[], rev: number): void => {
     if (rev < appliedRev) {
         return;
     }
     invalidateStaleWork(agents);
-    /* WHAT LEFT THE ROSTER BY ANOTHER HAND THAN THIS BROWSER'S — the daemon's retention sweep, an archive or
+    /* WHAT LEFT THE ROSTER BY ANOTHER HAND THAN THIS BROWSER'S, the daemon's retention sweep, an archive or
      * discard on another device. Local moves are excluded: they already wrote both halves, and `pending` is
      * exactly the set of them still unconfirmed. A reset board has no ids to depart, so the reconnect's first
      * snapshot stays quiet.
      *
-     * It is the one signal the pull-only archive list ever gets that it changed, so it is its invalidation —
+     * It is the one signal the pull-only archive list ever gets that it changed, so it is its invalidation,
      * without it the Finished header's count (and the door it gates) kept whatever the last visit read until
      * the next one. And it takes the departed agents' CHAT TABS with it, for the same reason archiving from
      * this board does (see the archive note below): one agent is a card and a tab, and the sweep that keeps
@@ -219,7 +219,7 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
     }
     appliedRev = rev;
     applySnapshot(agents, rev);
-    /* AND WHAT STARTED WORKING BY ANOTHER HAND THAN THIS BROWSER'S — the other half of the same reading. A
+    /* AND WHAT STARTED WORKING BY ANOTHER HAND THAN THIS BROWSER'S, the other half of the same reading. A
      * workflow's steps, an automation's wake, a turn sent from a phone: their tabs may already be open here,
      * opened before the turn existed and therefore showing nothing. This roster is the daemon saying the turn
      * is up, which is the moment those tabs can attach to it (useChat.attachStarted). */
@@ -230,7 +230,7 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
  *
  * The revision always goes: the next daemon we speak to may be a restarted one whose counter began again at
  * 0, and holding onto a higher number would make us reject its every frame. Pending moves and undo offers are
- * promises about ids and revision lines that daemon may never have heard of — dropped with it.
+ * promises about ids and revision lines that daemon may never have heard of, dropped with it.
  *
  * The roster itself is the split. A sandbox SWITCH clears it (another sandbox's agents must never paint), but
  * a mere disconnect KEEPS it: the chat list blanking for the length of a reconnect turned every stall into a
@@ -239,7 +239,7 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
  * Held wakes take the roster's side of that split, not the unconditional side, and for the roster's own reason:
  * they are PAINTED (the rail's Agents badge counts them, which is the only way an owner learns a wake is waiting
  * while they are elsewhere), so blanking them for the length of a reconnect would be the same visible outage. On
- * a switch they must go — they name run ids in a workspace the reader has left, and leaving them in made the
+ * a switch they must go, they name run ids in a workspace the reader has left, and leaving them in made the
  * tile claim work waiting in the box they had just closed. */
 const desync = (keepRoster: boolean): void => {
     if (!keepRoster) {
@@ -260,13 +260,13 @@ export const desyncAgents = (): void => desync(true);
 // Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while no turn of its own is
 // in flight, "has
 // something for you". The read marker itself lives on the daemon entry (AgentSummary.seenAt), not in this
-// browser — read state is a fact about the work, so clearing site data, opening an incognito window, or
+// browser, read state is a fact about the work, so clearing site data, opening an incognito window, or
 // switching to the phone must not resurrect a board full of "New" badges.
 //
-// Writes are optimistic: stamp the roster in place (the card repaints instantly — `registry` is a deep ref),
+// Writes are optimistic: stamp the roster in place (the card repaints instantly, `registry` is a deep ref),
 // then persist through the daemon, whose broadcast re-lands the same value on every other connected surface.
 // Best-effort: a failed write only means the badge returns on the next roster frame, and a card with no
-// registry entry is a draft — nothing to mark, nothing unread.
+// registry entry is a draft, nothing to mark, nothing unread.
 const markSeen = (id: string): void => {
     const entry = registry.value.find((agent) => agent.id === id);
     if (entry === undefined) {
@@ -287,7 +287,7 @@ const markAllSeen = (): void => {
 };
 
 // One fleet entry. Two sources merged by conversationId: the registry (authoritative once a turn has run) and
-// the open tabs — an open conversation the fleet has NEVER registered is a DRAFT card, so a newly created
+// the open tabs, an open conversation the fleet has NEVER registered is a DRAFT card, so a newly created
 // workspace or isolated conversation appears immediately and is replaced by its registry row at begin.
 // `status` widens the wire enum with that client-only draft state; the registry wins the merge the moment the
 // first turn registers the conversation.
@@ -296,31 +296,31 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly open: boolean;
     readonly unread: boolean;
     // The user has words in this chat that have not gone out (Conversation.unsent). A fact about the OPEN TAB,
-    // so it is false for every agent this window isn't holding — including one being written to on another
+    // so it is false for every agent this window isn't holding, including one being written to on another
     // device, whose composer this browser has no account of.
     readonly unsent: boolean;
 }
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
-// to CONFIRM what just completed, not to be the sandbox's permanent record — everything older is still one
+// to CONFIRM what just completed, not to be the sandbox's permanent record, everything older is still one
 // click away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between
 // the board and a TransitionGroup running FLIP over several hundred cards.
 export const FINISHED_WINDOW = 7;
 
 /* The window applied, as ONE answer: the cards on screen and the number the row beneath them collapses. They
- * are computed together because they are rendered a line apart — "N earlier" miscounting the cards above is the
- * lane contradicting itself — and because of the exception below, which changes both.
+ * are computed together because they are rendered a line apart, "N earlier" miscounting the cards above is the
+ * lane contradicting itself, and because of the exception below, which changes both.
  *
  * THE CARD THE USER IS READING IS NEVER CULLED. The window caps BROWSING; it is not a claim about which agents
- * exist. The board's selection ring is a cross-reference between two panes — this card is what the docked chat
- * is pointing at — so applying it to a card the lane dropped leaves the ring nowhere, and the board reads as
+ * exist. The board's selection ring is a cross-reference between two panes, this card is what the docked chat
+ * is pointing at, so applying it to a card the lane dropped leaves the ring nowhere, and the board reads as
  * "this chat is not an agent" rather than "that card is further down". Same argument the FILTER already wins
  * (see cardsFor): hiding a card the user themselves named is the board deciding they meant a different one.
  *
- * It is pinned at the TAIL — beside the row it came from, so the lane's own recency order is otherwise intact —
+ * It is pinned at the TAIL, beside the row it came from, so the lane's own recency order is otherwise intact,
  * and counted OUT of that row, which is the whole reason this is one function rather than two.
  *
- * BOTH FINISHED LANES RUN THROUGH IT — the board's, and the chat list's (ChatTabList), whose lane is the same
+ * BOTH FINISHED LANES RUN THROUGH IT, the board's, and the chat list's (ChatTabList), whose lane is the same
  * lane one card wide and grew without bound while this one stayed capped. Generic over the entry rather than
  * duplicated for it: the two lanes hold different things (fleet agents there, open chats here) and the same
  * rule, and a second copy of the pin-the-selected exception is how the two surfaces start to disagree. */
@@ -339,18 +339,18 @@ export const windowFinished = <T>(
 };
 
 /* WHERE A CARD WITH NO REGISTRY ENTRY STANDS. Three answers, and the order of the tests is the whole of it:
- *   · streaming — a turn has gone but the daemon has not filed it yet, which is `starting`. NOT the wire's
+ *   · streaming, a turn has gone but the daemon has not filed it yet, which is `starting`. NOT the wire's
  *     `running`, which this used to answer and which claims the registry's account of an agent the registry has
  *     never heard of: every guard that asks "does the daemon know this card" then said yes, so clicking one
  *     latched the tab as registered and the card left the board with nothing to replace it (see the standing's
  *     own note in agentStatus.ts);
- *   · an error — the refusal that kept it off the roster in the first place (the daemon turned the request
+ *   · an error, the refusal that kept it off the roster in the first place (the daemon turned the request
  *     away, so no entry was ever made): not a draft waiting to be typed into but a card for work that never
  *     started, which is what `failed` says;
- *   · a TRANSCRIPT or a session — this conversation has a past, so it was reopened from History rather than
+ *   · a TRANSCRIPT or a session, this conversation has a past, so it was reopened from History rather than
  *     newly made. `resumed`, and the reason that standing exists: it used to answer `draft` here, which put a
  *     three-week-old chat at the head of the Active lane dressed as work about to begin.
- * Everything left is what "draft" was always meant to mean — an empty tab the user is about to type into. */
+ * Everything left is what "draft" was always meant to mean, an empty tab the user is about to type into. */
 const clientStatus = (conversation: Conversation): ClientAgentStatus => {
     if (conversation.streaming.value) {
         return `starting`;
@@ -369,12 +369,12 @@ const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
     const carded = new Set(registry.value.map((agent) => agent.id));
-    // The tabs of this window holding words that have not gone out — the one thing the daemon's roster cannot
+    // The tabs of this window holding words that have not gone out, the one thing the daemon's roster cannot
     // know, and the reason the two halves below are joined against it rather than against `openIds` alone.
     const unsentIds = new Set(
         conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId),
     );
-    // A draft is a conversation the fleet has never heard of — NOT one that is merely absent from the live
+    // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
     // not be rendered a second time by this one, whatever the latch says.
@@ -401,7 +401,7 @@ const fleet = computed<FleetAgent[]>(() => {
             if (conversation.session.value !== undefined) {
                 draft.sessionId = conversation.session.value.id;
             }
-            /* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET — which is the whole of what a
+            /* WHAT THIS BROWSER KNOWS ABOUT A TURN THE DAEMON HAS NOT FILED YET, which is the whole of what a
              * `starting` card can honestly say, and it is not nothing.
              *
              * The card used to be built from the four fields above alone, so a sent turn appeared as a title
@@ -409,7 +409,7 @@ const fleet = computed<FleetAgent[]>(() => {
              * DRAFT (there is nothing to say about a tab nobody has typed in) and a bad one of work in flight,
              * because every fact it was missing was sitting on the conversation the card is made of. The
              * settings are the ones the send actually went out under, the elapsed runs from the moment of the
-             * send rather than from whenever the entry appears, and the usage is this tab's own running total —
+             * send rather than from whenever the entry appears, and the usage is this tab's own running total,
              * each of them replaced by the registry's version the moment it lands.
              *
              * Only for `starting`: on a draft they would describe a turn that has not happened, and on a
@@ -422,7 +422,7 @@ const fleet = computed<FleetAgent[]>(() => {
                 if (conversation.turnStartedAt.value !== undefined) {
                     draft.startedAt = conversation.turnStartedAt.value;
                 }
-                // Zero is "nothing counted yet", not a measurement — and a stat row of zeroes is the kind of
+                // Zero is "nothing counted yet", not a measurement, and a stat row of zeroes is the kind of
                 // readout people learn to distrust. The first `usage` frame of the turn fills them in.
                 if (conversation.inputTokens.value > 0) {
                     draft.inputTokens = conversation.inputTokens.value;
@@ -434,15 +434,15 @@ const fleet = computed<FleetAgent[]>(() => {
             }
             return draft;
         });
-    /* ARCHIVED, AND BACK ON THE BOARD ANYWAY — the sessions the user has started writing in.
+    /* ARCHIVED, AND BACK ON THE BOARD ANYWAY, the sessions the user has started writing in.
      *
      * Reading an agent out of the archive opens its chat by design, and typing there is the most ordinary thing
      * to do next. But the board had no card for it (the roster drops archived agents), so clearing the search
-     * that found it left the half-written message with nowhere to be seen from — the user's own words, filed
+     * that found it left the half-written message with nowhere to be seen from, the user's own words, filed
      * away under a query they no longer remember. It is lifted for exactly as long as the words are there and
      * files itself back the moment they are sent or cleared.
      *
-     * NOTHING IS WRITTEN. Typing does not un-archive, re-register, or touch the entry's recency — the daemon's
+     * NOTHING IS WRITTEN. Typing does not un-archive, re-register, or touch the entry's recency, the daemon's
      * account of this agent is the same before and after. The card is a view of an open tab, no more, and it
      * says "archived" on its face (AgentCard reads archivedAt) so it can't be mistaken for live work. */
     const held: FleetAgent[] = [];
@@ -470,21 +470,21 @@ const fleet = computed<FleetAgent[]>(() => {
 // user, and agents merely unread.
 const blocking = computed(() => fleet.value.filter(blocked).length);
 const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
-/* The single aggregate the rail tile and mobile tab badge render — "there is something for you on the board",
+/* The single aggregate the rail tile and mobile tab badge render, "there is something for you on the board",
  * counted per AGENT so one that is both blocked and unread badges once.
  *
  * HELD WAKES COUNT TOO, and they are the reason this is not just a filter over the fleet. An automation set to
  * require approval fires at 3am and parks a wake in the queue; the board has always shown it in the Attention
  * lane, but the rail stayed silent, so the one surface visible from every other area said nothing was owed. A
- * hold is not an agent — it has no conversation, no transcript and no turn until it is approved — which is
+ * hold is not an agent, it has no conversation, no transcript and no turn until it is approved, which is
  * exactly why it needs the badge: nothing else about it is on screen. */
 const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length + heldWakes.value.length);
 
-// A turn that finishes while you are WATCHING its conversation is not news — the reply is already on your
+// A turn that finishes while you are WATCHING its conversation is not news, the reply is already on your
 // screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on a
 // window of the app being ON SCREEN, which is not the same as this tab being visible: the chat may be floating
 // in a pop-out window of its own while the tab it is rendered from sits behind another one (onScreen.ts). An
-// agent that finishes with every one of those windows hidden — a background tab, a locked phone — is exactly
+// agent that finishes with every one of those windows hidden, a background tab, a locked phone, is exactly
 // what the badge exists for, even though its conversation is still technically the active one.
 watch(
     () => {
@@ -503,7 +503,7 @@ watch(
 
 /* An open conversation adopts the roster's name for it.
  *
- * A tab seeds its title once, at open (openAgentConversation), and then owns it — which held while the only
+ * A tab seeds its title once, at open (openAgentConversation), and then owns it, which held while the only
  * thing that ever renamed a conversation was the user typing on this device. It no longer does: the daemon
  * promotes a title on its own when a plan names the job the opening prompt only hinted at, and a rename from
  * the phone has always had to reach the desktop. The registry is the authority, so a tab follows it.
@@ -511,11 +511,11 @@ watch(
  * Following it UNCONDITIONALLY is what makes this safe rather than a race: the daemon refuses every promotion
  * that would overwrite a rename (see promoteTitle), so a title arriving here has already been judged better
  * than the one it replaces, and the browser needs no second opinion. Renames stay instant because rename()
- * writes the registry entry optimistically before it posts — this watch sees the new name on the tick the
+ * writes the registry entry optimistically before it posts, this watch sees the new name on the tick the
  * user typed it, not a round trip later.
  *
- * The roster ARRAY is replaced on every frame it pushes — usage counters tick several times a second through a
- * running turn — so its identity says nothing about whether a title moved, and reconciling on it directly would
+ * The roster ARRAY is replaced on every frame it pushes, usage counters tick several times a second through a
+ * running turn, so its identity says nothing about whether a title moved, and reconciling on it directly would
  * walk every open tab several times a second to write nothing. The filter below is what makes that cheap. */
 const appliedTitles = new Map<string, string | undefined>();
 
@@ -523,7 +523,7 @@ const appliedTitles = new Map<string, string | undefined>();
  * state, which is the whole point: this replaces a change key built by allocating a string per agent and
  * joining them on every roster frame, to catch a change that happens a handful of times per conversation.
  *
- * A SHRUNKEN roster is the one thing a per-entry sweep cannot see, so it is settled by the count — and the
+ * A SHRUNKEN roster is the one thing a per-entry sweep cannot see, so it is settled by the count, and the
  * rebuild that follows runs when an agent actually leaves the fleet, never on the usage frames that are almost
  * all of this traffic. A reset (the registry emptied) lands here too and leaves the memo correctly empty. */
 const titlesMoved = (entries: readonly AgentSummary[]): boolean => {
@@ -559,31 +559,31 @@ watch(registry, (entries) => {
 });
 
 /* May this card be archived from the board? NOT the same question as "is it in the Finished lane", which is
- * what the affordance used to be gated on — and the gate that left an errored agent with no exit at all: its
+ * what the affordance used to be gated on, and the gate that left an errored agent with no exit at all: its
  * only offered drop is a land onto Finished, so a turn that failed with nothing landable sat in Attention
  * permanently, un-archivable because it wasn't finished and unable to finish because there was nothing to land.
  *
  * The daemon is the wrong thing to mirror here too. Its `archivable()` (agents/archive.ts) is the guard on the
  * UNATTENDED retention sweep, which is properly conservative; the named-id archive this button calls takes
- * anything that exists and isn't mid-turn. So the real question is a product one — would archiving DISCARD
- * something the agent is still waiting on? — and that is `awaitingUser`:
- *   · running/stopping — no (the worktree is the live turn's working state, right through the unwind of a
+ * anything that exists and isn't mid-turn. So the real question is a product one, would archiving DISCARD
+ * something the agent is still waiting on?, and that is `awaitingUser`:
+ *   · running/stopping, no (the worktree is the live turn's working state, right through the unwind of a
  *                       Stop; the daemon refuses it too)
- *   · draft         — no registry entry to archive
- *   · awaiting/plan/question/permission — archiving would bury the question instead of answering it
- *   · error/conflict/stopped — YES: a dead end is exactly what wants taking off the board
- *   · landed/idle   — yes, the routine case */
+ *   · draft        , no registry entry to archive
+ *   · awaiting/plan/question/permission, archiving would bury the question instead of answering it
+ *   · error/conflict/stopped. YES: a dead end is exactly what wants taking off the board
+ *   · landed/idle  , yes, the routine case */
 export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
     agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
 
 /* THE LAST WORD IN EVERY LANE'S ORDER, and the only thing it is for: a comparator that can return 0 hands the
- * tie to the input order, and this board's input is `fleet` — re-sorted by `updatedAt` descending on every
+ * tie to the input order, and this board's input is `fleet`, re-sorted by `updatedAt` descending on every
  * frame. That clock ticks per agent, a second at a time and out of step with the others, so a tie is not a
  * settled draw but a coin flipped again every second: tied cards traded places in the column for as long as
  * they ran.
  *
- * Ties are not the exotic case they sound like. Agents resumed TOGETHER — a batch that came back after one
- * credential renewal — begin within the same millisecond and carry the same `startedAt` for the rest of the
+ * Ties are not the exotic case they sound like. Agents resumed TOGETHER, a batch that came back after one
+ * credential renewal, begin within the same millisecond and carry the same `startedAt` for the rest of the
  * turn, which is exactly the report this fixes.
  *
  * The id is arbitrary and that is fine: the requirement is not a meaningful order for cards nothing else
@@ -595,7 +595,7 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     for (const agent of fleet.value) {
         grouped[laneOf(agent)].push(agent);
     }
-    // Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt —
+    // Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt,
     // a turn's start is FIXED for its whole life, so a running agent holds its slot instead of jumping to the
     // top on every activity frame (updatedAt ticks every second, which churns the lane when many run at once).
     // Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
@@ -606,12 +606,12 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
     /* UNSENT FIRST, then ready-to-land, then recency. Both exceptions are the same argument, made about the
      * fold: this lane windows to a handful (FINISHED_WINDOW), and recency alone lets whatever finished a minute
-     * ago push either kind of card behind it — where "waiting for you" quietly becomes "forgotten".
+     * ago push either kind of card behind it, where "waiting for you" quietly becomes "forgotten".
      *
      * A ready card is owed a press. An UNSENT one is owed a sentence, and it goes first because it is the more
      * easily lost of the two: the press is on a card the daemon will keep offering for as long as the branch
      * exists, while the half-written message lives in this window alone. Ordering them this way is also what
-     * makes the promise cheap to keep — a card holding words the user wrote can only fall behind the fold when
+     * makes the promise cheap to keep, a card holding words the user wrote can only fall behind the fold when
      * MORE THAN A WINDOW'S WORTH of such cards exist, at which point they are hiding each other rather than
      * being hidden by unrelated work. */
     grouped.finished.sort(
@@ -624,10 +624,10 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     return grouped;
 });
 
-/* Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
+/* Explicit registry pull, the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
  *
  * Exported as `refreshAgents` for sandboxScope, which calls it on the seam where a switch lands. The roster
- * itself needs no such help — the new daemon's stream frames one on connect — but HELD WAKES do, for the
+ * itself needs no such help, the new daemon's stream frames one on connect, but HELD WAKES do, for the
  * reason they are separate state at all: the stream knows nothing of holds, so this read is the only thing
  * that ever fills them. A switch drops them (desync) and without this they would stay dropped until someone
  * opened the board, which is exactly the surface the rail's badge exists to save them from having to open. */
@@ -637,7 +637,7 @@ const refresh = async (): Promise<void> => {
     const issuedAt = epoch;
     try {
         const body = await sandboxJson<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(`/agents`);
-        // Answered on a revision line nobody is on any more — the daemon this read left for has since been
+        // Answered on a revision line nobody is on any more, the daemon this read left for has since been
         // replaced (see `epoch`). Its number would land as a high-water mark the successor cannot beat.
         if (issuedAt !== epoch) {
             return;
@@ -654,19 +654,19 @@ const refresh = async (): Promise<void> => {
 /* COMING BACK TO THE APP RE-READS THE BOARD.
  *
  * Steady state is pushed and needs nothing: the daemon frames a roster as agents start, park and finish. The
- * gap is at the EDGES of that — a laptop that slept, a phone whose tab was evicted from the foreground, a
+ * gap is at the EDGES of that, a laptop that slept, a phone whose tab was evicted from the foreground, a
  * stream that half-opened and died without a FIN. The connection heals itself, but only once the watchdog has
  * noticed the silence, and until then the board sits showing the moment the user walked away from. Someone
  * looking at it again is the one signal that the delay is now being WATCHED, so it is answered with a read
  * rather than waited out.
  *
- * Asked of every window the app renders into rather than of this tab (onScreen.ts) — a board read in a
+ * Asked of every window the app renders into rather than of this tab (onScreen.ts), a board read in a
  * pop-out is being looked at whatever the tab behind it is doing. Gated on the daemon being reachable: with
  * the stream down this would fail anyway, and the reconnect brings its own roster with it. One request per
  * return, not per second; a refresh that fails leaves the roster exactly where it stood.
  *
  * Module scope, like the unread watch above: this is a fact about the SESSION, not about whether the board
- * happens to be the open route — the rail's badge is drawn from the same roster on every page in the app. */
+ * happens to be the open route, the rail's badge is drawn from the same roster on every page in the app. */
 const { reachable } = useSandbox();
 watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
     if (looking && !wasLooking && live) {
@@ -674,7 +674,7 @@ watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
     }
 });
 
-/* Release or drop a held wake — the automations routes' own verbs, so the board and any other surface cannot
+/* Release or drop a held wake, the automations routes' own verbs, so the board and any other surface cannot
  * come to mean different things by the same press. The entry leaves the list optimistically (the daemon
  * removes it before the detached turn runs); the trailing refresh() repaints whatever else moved. */
 const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void> => {
@@ -685,33 +685,33 @@ const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void
 
 /* --- Archive ---------------------------------------------------------------------------------------------
  * The board's exit. Archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the
- * branch, the transcript and every counter — so it is the ROUTINE action (no confirmation, undoable, bulk),
+ * branch, the transcript and every counter, so it is the ROUTINE action (no confirmation, undoable, bulk),
  * and discard stays the destructive one. See the daemon's agents/archive.ts for what it actually costs.
  *
  * Archived agents are absent from the roster the /events stream carries, which is the point: the board's live
  * state stays the size of the work in flight. The list is PULL-ONLY instead, read where something can have
  * changed it: at the board's mount, when the archive is opened, when the active daemon (re)appears
- * (sandboxScope's reachable watch — a daemon that just booted may have filed agents away itself), and when an
+ * (sandboxScope's reachable watch, a daemon that just booted may have filed agents away itself), and when an
  * id leaves the roster by another hand than this browser's (see setAgents).
  *
- * Archiving TAKES THE AGENT'S CHAT TAB WITH IT. One agent is one thing under two skins — a card on the board and
- * a tab in the strip — so filing it away has to move both, or the strip keeps a row for work the board says is
+ * Archiving TAKES THE AGENT'S CHAT TAB WITH IT. One agent is one thing under two skins, a card on the board and
+ * a tab in the strip, so filing it away has to move both, or the strip keeps a row for work the board says is
  * over and the user is left closing everything twice. Nothing is lost with the tab: the transcript, the branch
  * and the diff all survive daemon-side, and opening the agent from the archive brings the tab straight back.
  *
- * The undo does NOT reopen what it closed. It puts the CARD back — which is the thing the archive took away —
+ * The undo does NOT reopen what it closed. It puts the CARD back, which is the thing the archive took away,
  * and opening a chat is the user's own action, one click from the restored card. Reopening tabs on the user's
  * behalf would also have to guess which of a swept dozen were open before, and be wrong about most of them.
  *
  * A tab CAN still show an archived agent: reading one from the archive view opens it by design, and a follow-up
  * message un-archives it (see the daemon's registry.begin). Such a tab says what it is, with the way back on it
- * (ChatTabs, ChatPanel) — and if the user has started WRITING in it, its card comes back to the board for as
+ * (ChatTabs, ChatPanel), and if the user has started WRITING in it, its card comes back to the board for as
  * long as those words are there (see `fleet`).
  *
  * The two refs the list lives in are declared far above, next to the roster, because `fleet` reads them. */
 
 // A sandbox SWITCH is the one thing the archive list must not survive: another daemon's archive on this board
-// would offer restores of agents this one has never heard of. Deliberately NOT folded into resetAgents — that
+// would offer restores of agents this one has never heard of. Deliberately NOT folded into resetAgents, that
 // also runs on every stream failure, and blanking the count (and the archive door it gates) on a network blip
 // is a disappearing button; the last list is better company for a reconnect than an empty one, and the
 // reachable seam re-reads it the moment the daemon answers again.
@@ -720,12 +720,12 @@ export const resetArchive = (): void => {
 };
 
 /* CONCURRENT CALLERS ARE THE NORMAL CASE, so they share one request. The reachable seam asks for this list, and
- * so does every mounted chat pane's own reachable watch — a three-pane split therefore asked four times in the
+ * so does every mounted chat pane's own reachable watch, a three-pane split therefore asked four times in the
  * same flush, and each answer replaced the array and repainted every reader of it. They all want the same list
  * at the same instant, which is exactly what one shared promise is.
  *
  * Only for the length of the flight: a caller arriving after it settles is asking a new question (the daemon
- * archives on its own — a boot sweep, a retention pass), and gets its own request. */
+ * archives on its own, a boot sweep, a retention pass), and gets its own request. */
 let archiveInFlight: Promise<void> | undefined;
 
 export const loadArchived = async (): Promise<void> => {
@@ -735,8 +735,8 @@ export const loadArchived = async (): Promise<void> => {
             const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
             // Widened to FleetAgent here rather than at render: an archived agent has nothing unread by
             // construction (it left the board), and the archive list's own rows are drawn for agents that are
-            // not open — the one archived agent that IS open, because the user is writing in it, is rebuilt by
-            // `fleet` with those two fields answered live. Object.assign, not a spread — this array is this
+            // not open, the one archived agent that IS open, because the user is writing in it, is rebuilt by
+            // `fleet` with those two fields answered live. Object.assign, not a spread, this array is this
             // call's own freshly-parsed JSON.
             archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
         } catch {
@@ -756,15 +756,15 @@ export const loadArchived = async (): Promise<void> => {
  *   · ONE card archived → nothing. The card visibly leaves its lane and the Finished header's archive counter
  *     ticks up, so a strip that repeats the animation is chrome paid for on every press and read on none. It
  *     also SHIFTED the board, which is how a routine action came to feel like an interruption.
- *   · A BULK sweep      → a receipt, because the thing that vouches for a single archive — watching the card
- *     go — is exactly what clearing twelve at once denies you. It floats over the board instead of shifting
+ *   · A BULK sweep      → a receipt, because the thing that vouches for a single archive, watching the card
+ *     go, is exactly what clearing twelve at once denies you. It floats over the board instead of shifting
  *     it, and it retires itself.
  *   · A FAILURE         → the persistent strip. An error has to be read, so it must not expire on a timer.
  *
  * None of them OWNS the undo. The way back is a fact about the store (`undoable`), so Mod+Z reaches the last
  * archive whether a receipt was ever raised or has long since faded. */
 
-// The board's must-read strip: an action that failed (a drop, an archive, a restore). No timer — an error the
+// The board's must-read strip: an action that failed (a drop, an archive, a restore). No timer, an error the
 // user never saw is one that surprises them later.
 const notice = ref<string | undefined>(undefined);
 
@@ -777,18 +777,18 @@ export interface FleetReceipt {
 const receipt = ref<FleetReceipt | undefined>(undefined);
 
 // The ids an undo would put back. Consecutive archives MERGE: clicking down the Finished lane is one intent,
-// and a stack remembering only the newest press would silently drop the way back to everything before it —
+// and a stack remembering only the newest press would silently drop the way back to everything before it,
 // which is the whole reason archiving is allowed to skip its confirmation. Unbounded in time on purpose: undo
 // means "undo what I did", and putting a card back costs no more than taking it off did.
 const undoable = ref<readonly string[]>([]);
 
-// Bumped by every archive that moved something — the ambient signal the archive counter pulses on. A counter
+// Bumped by every archive that moved something, the ambient signal the archive counter pulses on. A counter
 // rather than a flag because it is the EVENT that matters: two archives in a row owe the user two pulses.
 const archivedFlash = ref(0);
 
 // Which cards are mid-action. A COUNTER per id, not a list: archiving is something the user does card by card
 // as fast as they can click, so two calls overlap constantly, and a shared "the ids in flight" ref meant the
-// first one to finish cleared the second one's spinner — the card went quiet while its request was still open.
+// first one to finish cleared the second one's spinner, the card went quiet while its request was still open.
 // Each call now releases only what it claimed.
 const busyCounts = ref<ReadonlyMap<string, number>>(new Map());
 const busyIds = computed(() => [...busyCounts.value.keys()]);
@@ -820,18 +820,18 @@ const dismissReceipt = (): void => {
     receipt.value = undefined;
 };
 
-// Archive the named agents, or — with no ids — every finished agent that is archivable right now (the lane
+// Archive the named agents, or, with no ids, every finished agent that is archivable right now (the lane
 // header's "Clear"). The daemon answers with the agents that actually moved: "everything finished" cannot be
 // re-derived once the lane is empty, and the summaries are what the archive list renders.
 const archive = async (ids?: readonly string[]): Promise<void> => {
-    // The bulk press has no ids of its own, so it borrows the lane's — the Finished lane IS the archivable set
+    // The bulk press has no ids of its own, so it borrows the lane's, the Finished lane IS the archivable set
     // (it is landed-or-idle by construction), so this is the same set the daemon will pick, and any card it
     // declines is handed back by the rollback below.
     const aimed = ids ?? lanes.value.finished.map((agent) => agent.id);
     const release = claimBusy(aimed);
     // A sweep is the archive with no per-card animation to vouch for it, so it is the archive that reports.
     const sweep = ids === undefined || ids.length > 1;
-    // The cards leave here, not on the answer — see takeOffBoard for why, and for what `restore` puts back.
+    // The cards leave here, not on the answer, see takeOffBoard for why, and for what `restore` puts back.
     const restore = takeOffBoard(aimed);
     try {
         const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(
@@ -848,7 +848,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         }
         // A DELTA, not the roster the daemon happens to hold now: two archives in flight would otherwise race,
         // and the slower response would put the faster one's cards back on the board. Applying only what moved
-        // also means the archive list is correct without a second round-trip to re-read it — which matters most
+        // also means the archive list is correct without a second round-trip to re-read it, which matters most
         // for the agent detail page, whose id lookup spans both halves (agentById).
         //
         // Held as a pending move until the daemon publishes a roster at `rev`: the delta alone still lost to any
@@ -863,12 +863,12 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         // daemon's account of which of it was right.
         restore(gone);
         archived.value = [
-            // Object.assign, not a spread — `moved` is this call's own freshly-parsed JSON.
+            // Object.assign, not a spread, `moved` is this call's own freshly-parsed JSON.
             ...moved.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false })),
             ...archived.value.filter((agent) => !gone.has(agent.id)),
         ];
         // Archiving several cards in a row is ONE intent, so consecutive archives merge into one undo (see
-        // `undoable`). The receipt counts that merged set rather than this press alone — it is the number the
+        // `undoable`). The receipt counts that merged set rather than this press alone, it is the number the
         // Undo beside it would put back, and a receipt whose count disagrees with its own button is a lie.
         undoable.value = [...moved.map((agent) => agent.id), ...undoable.value.filter((id) => !gone.has(id))];
         archivedFlash.value += 1;
@@ -883,7 +883,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             receipt.value = { message: `${count} agent${count === 1 ? `` : `s`} archived`, undo: undoArchive };
         }
     } catch (error) {
-        // The press failed, so the cards it took slide back into their lane — under the strip that says why.
+        // The press failed, so the cards it took slide back into their lane, under the strip that says why.
         restore();
         notice.value = errorMessage(error, `Couldn't archive that.`);
     } finally {
@@ -891,14 +891,14 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
     }
 };
 
-// Put agents back on the board — a per-card restore, and the inverse an archive's undo runs. The checkout is
+// Put agents back on the board, a per-card restore, and the inverse an archive's undo runs. The checkout is
 // not rebuilt here (the daemon does that lazily on the agent's next turn), so this is as cheap for a hundred
 // agents as for one.
 const restore = async (ids: readonly string[]): Promise<void> => {
     const release = claimBusy(ids);
     try {
         const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/unarchive`, jsonBody(`POST`, { ids }));
-        // The same delta, in the other direction — and held the same way, so a snapshot in flight can't take the
+        // The same delta, in the other direction, and held the same way, so a snapshot in flight can't take the
         // restored card straight back off the board.
         const back = new Set(moved.map((agent) => agent.id));
         archived.value = archived.value.filter((agent) => !back.has(agent.id));
@@ -906,7 +906,7 @@ const restore = async (ids: readonly string[]): Promise<void> => {
             moved.map((agent) => ({ id: agent.id, present: agent })),
             rev,
         );
-        // What is back on the board is no longer anyone's to undo — including when the user restored it card
+        // What is back on the board is no longer anyone's to undo, including when the user restored it card
         // by card from the archive view rather than through the undo itself.
         undoable.value = undoable.value.filter((id) => !back.has(id));
         receipt.value = undefined;
@@ -918,12 +918,12 @@ const restore = async (ids: readonly string[]): Promise<void> => {
     }
 };
 
-/* Empty the archive — the fleet's ONE irreversible action, and the reason the archive is a filing cabinet
+/* Empty the archive, the fleet's ONE irreversible action, and the reason the archive is a filing cabinet
  * rather than a one-way door: every other exit on this board keeps the branch, so without this the only way to
  * ever get rid of an agent was to discard it card by card before it was archived.
  *
  * Everything about it is the inverse of `archive`'s grammar, and deliberately so:
- *   · it CONFIRMS first (the view's dialog) — there is no undo to fall back on
+ *   · it CONFIRMS first (the view's dialog), there is no undo to fall back on
  *   · it always reports, even for one agent, and the receipt carries NO Undo. The missing button is the honest
  *     signal that this press was not like the archiving that precedes it
  *   · `undoable` is cleared of what went: an undo that names a deleted agent would fail on the round trip, and
@@ -951,7 +951,7 @@ const purgeArchived = async (): Promise<void> => {
     }
 };
 
-// The ONE undo, so the two affordances offering it — a sweep's receipt and Mod+Z — can never come to mean
+// The ONE undo, so the two affordances offering it, a sweep's receipt and Mod+Z, can never come to mean
 // different things. A no-op with nothing to put back, which is also what lets the keybinding stay out of the
 // way of everything else Mod+Z means (see AgentsView's `when` gate).
 const undoArchive = async (): Promise<void> => {
@@ -962,7 +962,7 @@ const undoArchive = async (): Promise<void> => {
 };
 
 // Resolve one agent by id across BOTH halves of the fleet. The board's roster deliberately drops archived
-// agents, but a surface addressed by id — the /agents/:id detail and its review — must still find one: an
+// agents, but a surface addressed by id, the /agents/:id detail and its review, must still find one: an
 // archived agent keeps its branch, its diff and its transcript, so its detail page is a real destination and
 // not a 404. (The archive half is only populated once loadArchived has run; callers that can be deep-linked
 // into ask for it themselves.)
@@ -971,10 +971,10 @@ const agentById = (id: string): FleetAgent | undefined =>
 
 // Rename an agent: sync the open conversation's title ref first (docked tab, detail header, and the
 // localStorage tab snapshot all follow it), then write the registry through the daemon. A card with no
-// registry entry is a draft — its title lives client-side and rides the next turn body — but the POST still
+// registry entry is a draft, its title lives client-side and rides the next turn body, but the POST still
 // fires best-effort to cover the send→first-roster-frame window where the entry exists but hasn't painted.
 // Registered agents update optimistically; on failure both sides revert (re-resolved against the CURRENT
-// roster — an SSE frame may have replaced it mid-flight) and the error propagates to the caller's inline UI.
+// roster, an SSE frame may have replaced it mid-flight) and the error propagates to the caller's inline UI.
 const rename = async (id: string, title: string): Promise<void> => {
     const trimmed = title.trim();
     const { conversations } = useChat();
@@ -996,7 +996,7 @@ const rename = async (id: string, title: string): Promise<void> => {
         const summary = await post();
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
-        // Revert on whatever the roster holds NOW — an SSE frame may have replaced the array (and `previous`).
+        // Revert on whatever the roster holds NOW, an SSE frame may have replaced the array (and `previous`).
         const target = registry.value.find((agent) => agent.id === id);
         if (target !== undefined) {
             target.title = revertTitle;
@@ -1008,7 +1008,7 @@ const rename = async (id: string, title: string): Promise<void> => {
     }
 };
 
-// Set or clear (null ⇒ inherit the sandbox setting) an agent's auto-land override — whether ITS clean turns
+// Set or clear (null ⇒ inherit the sandbox setting) an agent's auto-land override, whether ITS clean turns
 // keep applying to the workspace at completion, or wait on the branch for a deliberate Land. Same optimistic
 // grammar as rename: the registry entry flips in place (every surface stating the posture repaints on the
 // tick of the click), the daemon's summary replaces it, and a failure reverts against the CURRENT roster and
@@ -1031,11 +1031,11 @@ const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> 
     }
 };
 
-/* Set or clear (null ⇒ inherit the sandbox setting) THIS conversation's outage-resume override — whether a
+/* Set or clear (null ⇒ inherit the sandbox setting) THIS conversation's outage-resume override, whether a
  * turn the model provider killed is picked back up by itself. Identical optimistic grammar to setAutoLand
  * above, and deliberately a sibling of it rather than a call into settings: the press this serves is made
- * inside one chat about one dead turn, and writing the sandbox-wide toggle for it — which is what used to
- * happen — armed every other agent on the board without ever saying so. */
+ * inside one chat about one dead turn, and writing the sandbox-wide toggle for it, which is what used to
+ * happen, armed every other agent on the board without ever saying so. */
 const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | null): Promise<void> => {
     const previous = registry.value.find((agent) => agent.id === id);
     const revert = previous?.resumeAfterOutage;
@@ -1070,20 +1070,20 @@ export const agentSeed = (
     provider: agent.provider,
     harness: agent.harness,
     ...(agent.branch !== undefined ? { branch: agent.branch } : {}),
-    /* A client-only card — a draft, a refused send, a turn the daemon has not filed yet — is NOT a
+    /* A client-only card, a draft, a refused send, a turn the daemon has not filed yet, is NOT a
      * registered conversation, and claiming so here would erase the card under the click and pin the empty
      * tab open past the focus-leave sweep.
      *
      * The erasure is not hypothetical: while a sent-but-unfiled turn reported the wire's `running`, this
      * read it as registered and latched the tab, and the card left the board on the very click meant to open
-     * it — the drafts half skips a registered conversation and the registry has no entry to draw instead, so
+     * it, the drafts half skips a registered conversation and the registry has no entry to draw instead, so
      * the agent was on no lane at all until a reload re-derived it. See `starting` in agentStatus.ts. */
     registered: !unregistered(agent.status),
     ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
     ...(agent.title !== undefined ? { title: agent.title } : {}),
     ...(agent.account !== undefined ? { account: agent.account } : {}),
     // The settings this agent's turns ran under, so the composer opens describing THIS agent rather than
-    // the last pick made in some other tab. Absent on a draft — it has run nothing to describe.
+    // the last pick made in some other tab. Absent on a draft, it has run nothing to describe.
     ...(agent.model !== undefined ? { model: agent.model } : {}),
     ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
     ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
@@ -1091,8 +1091,8 @@ export const agentSeed = (
 });
 
 // Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's
-// (the popped-out chat is drawn by whichever window opened it), so the reveal is broadcast and every window —
-// this one included — applies the same thing (summon.ts).
+// (the popped-out chat is drawn by whichever window opened it), so the reveal is broadcast and every window,
+// this one included, applies the same thing (summon.ts).
 const open = (agent: Parameters<typeof agentSeed>[0]): void => {
     const seed = agentSeed(agent);
     summonChat({ kind: `reveal`, verb: `show`, entries: [agentTabOf(seed)], focus: seed.id, caret: false });

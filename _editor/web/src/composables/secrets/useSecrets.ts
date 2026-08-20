@@ -13,7 +13,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  * refire both): `useSecretKeys` is the KEYS-ONLY list (hasKey checks in credential forms), `useSecretInventory`
  * the unified view (env + generated + capabilities + AI providers, with status/provenance/CI state, never
  * values), `useMissingSecretCount` that same inventory reduced to the one number the always-mounted chrome
- * shows, `useSecrets` the mutations; `reveal` is the single value-returning call — owner-only, and
+ * shows, `useSecrets` the mutations; `reveal` is the single value-returning call, owner-only, and
  * deliberately NOT a query so a secret value never enters the query cache or its IndexedDB persistence. */
 
 // Owner-only; a member gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
@@ -23,7 +23,7 @@ export const reveal = async (key: string): Promise<string> =>
 export function useSecretKeys() {
     const { query } = useSandboxQuery({
         queryKey: SECRETS.of(),
-        // 412 until DevOps is active — treat as "no keys yet" rather than surfacing an error.
+        // 412 until DevOps is active, treat as "no keys yet" rather than surfacing an error.
         queryFn: async (): Promise<string[]> => {
             try {
                 return SecretKeysSchema.parse(await sandboxJson(`/secrets`)).keys;
@@ -42,7 +42,7 @@ const fetchInventory = async (): Promise<SecretInventoryEntry[]> => SecretInvent
 
 // The one definition of "missing" every surface shouts about: a secret the INTENT declares that the sandbox
 // does not have. Generated values (the first deploy produces them) and capability/provider entries are not the
-// user's to set, so an unset one is not an outstanding task — counting those would make the chrome cry wolf.
+// user's to set, so an unset one is not an outstanding task, counting those would make the chrome cry wolf.
 const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
     entries.filter((entry) => entry.kind === `env` && entry.requiredBy.length > 0 && entry.status === `missing`).length;
 
@@ -61,11 +61,11 @@ export function useSecretInventory() {
     };
 }
 
-// Just the attention count, for the AMBIENT chrome — the rail's sandbox chip, the mobile menu row, the sandbox
-// overview — which is mounted app-wide rather than on a secrets surface. Same query, deliberately different
+// Just the attention count, for the AMBIENT chrome, the rail's sandbox chip, the mobile menu row, the sandbox
+// overview, which is mounted app-wide rather than on a secrets surface. Same query, deliberately different
 // observer options: /secrets/inventory is a fan-out (a digest per secret over the desired-state repo, the
 // capability list, the connector registry, an HTTP call to the cliproxy's account API), and the client's
-// default freshness is staleTime 0 + refetch-on-focus — so a permanently mounted observer would re-run that
+// default freshness is staleTime 0 + refetch-on-focus, so a permanently mounted observer would re-run that
 // aggregate on every window focus of every page, for every user, secrets surface open or not. Every write
 // invalidates the key (useSecrets below), so the badge still moves the instant a value is set; only the
 // ambient POLLING is dropped. Kept a separate hook, not an option on the one above, for the same reason the

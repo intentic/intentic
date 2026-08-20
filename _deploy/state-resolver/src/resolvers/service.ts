@@ -9,8 +9,8 @@ import { exposeRoute } from "./route.js";
 
 // The service catalog: each authorable `kind` maps to the concrete resource type its provider deploys and
 // the dashboard port that provider publishes on the host (tunnel-routed to <domain>). Adding a service is
-// one entry here plus a provider — the authoring surface (i.want.service) is unchanged. The OTLP ingest
-// port a service exposes for app telemetry is the signoz provider's concern, not the resolver's — apps
+// one entry here plus a provider, the authoring surface (i.want.service) is unchanged. The OTLP ingest
+// port a service exposes for app telemetry is the signoz provider's concern, not the resolver's, apps
 // reach it through the service's `otlpEndpoint` output, not a routed hostname.
 interface ServiceSpec {
     readonly type: ResourceType;
@@ -105,7 +105,7 @@ export const resolveService = (
     const exposure = exposeRoute(intent.expose, intent.on, intent.domain, spec.port, apiToken);
     // A bundled identity provider (Outline's Dex) must be browser-reachable, so it gets its own hostname. It
     // stays ONE label under the zone (a `<sub>-auth.<zone>` sibling of the service, not an `auth.<domain>`
-    // child) so Cloudflare's Universal SSL `*.<zone>` edge cert covers it — a child of a subdomain would be
+    // child) so Cloudflare's Universal SSL `*.<zone>` edge cert covers it, a child of a subdomain would be
     // two labels deep and have no cert, failing the TLS handshake. On the apex it is just `auth.<zone>`.
     const authDomain =
         spec.authPort === undefined

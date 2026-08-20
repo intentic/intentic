@@ -8,7 +8,7 @@ import type { KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
-// The ssh block is the CONTROL-PLANE host's (where Core runs) — the registration check queries Core over an
+// The ssh block is the CONTROL-PLANE host's (where Core runs), the registration check queries Core over an
 // SSH port-forward, while Periphery on the worker still dials Core over its public route (cross-host).
 const serverSchema = sshSchema.extend({
     adminUser: z.string(),
@@ -23,7 +23,7 @@ const POLL_TIMEOUT_MS = 120_000;
 
 // A worker host registered as a Komodo Server. Periphery's outbound `connect_as` auto-registers the server
 // when it connects to Core; this provider waits for that registration to appear, then reports it as existing.
-// Pure assertion/gate: no write operations — the server is created by Periphery, not by this provider.
+// Pure assertion/gate: no write operations, the server is created by Periphery, not by this provider.
 export const createKomodoServerProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
@@ -66,7 +66,7 @@ export const createKomodoServerProvider = (api: KomodoApi = komodoApi, executor:
     },
     delete: async (inputs, ctx) => {
         // The server in Komodo is managed by Periphery's connection; when Periphery is removed (its own
-        // delete), the server goes offline. We do not delete the server entry in Komodo — it goes stale
+        // delete), the server goes offline. We do not delete the server entry in Komodo, it goes stale
         // harmlessly and can be cleaned up manually.
         ctx.log(`komodo-server "${ctx.id}": server entry left in Komodo (Periphery manages its lifecycle)`);
     },

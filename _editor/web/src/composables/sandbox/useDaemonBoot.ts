@@ -3,13 +3,13 @@ import { computed, ref } from "vue";
 
 /* WHERE THE ACTIVE DAEMON IS IN ITS OWN BOOT, from the /events hello + boot frames.
  *
- * The daemon listens before the state it serves has converged — deliberately, so a restart stops reading as an
+ * The daemon listens before the state it serves has converged, deliberately, so a restart stops reading as an
  * outage (see the sandbox's main.ts). For those seconds it is reachable and unable to answer: /health and
  * /events reply at once while every data route parks on the readiness gate.
  *
  * The browser used to have no way to see that. A live stream meant `online`, `online` meant `reachable`, and a
  * workspace hydrated from the persisted cache painted itself fully operable over a daemon that would answer
- * nothing — so the first click went into the gate and stayed there. The only reliable escape was clearing site
+ * nothing, so the first click went into the gate and stayed there. The only reliable escape was clearing site
  * data, which "worked" for a reason worth naming: with no persisted session the credential exchange parked
  * too, the stream never opened, and the user sat on the honest connecting screen instead.
  *
@@ -17,7 +17,7 @@ import { computed, ref } from "vue";
  * query in one place, and the warm-up gate renders this progress while it waits.
  *
  * Module-level singleton, like useDaemonRoutes next door, and fed only by useSandboxLiveness. Undefined means
- * ASSUME READY — a daemon built before the frame cannot be interrogated, so nothing may be gated on its
+ * ASSUME READY, a daemon built before the frame cannot be interrogated, so nothing may be gated on its
  * silence; that is exactly the pre-existing behaviour. */
 
 const progress = ref<BootProgress | undefined>(undefined);

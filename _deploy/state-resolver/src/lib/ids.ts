@@ -40,9 +40,9 @@ export const deployDomain = (zone: string): string => `deploy.${zone}`;
 export const previewDomain = (zone: string): string => `*.${zone}`;
 // A deterministic host port per deployment so co-located environments don't collide. Resolver-owned so the
 // tunnel's ingress (hostname -> http://<internalIp>:<port>) can be computed without depending on the
-// deployment node — which is what lets the tunnel come up before the control plane uses it.
+// deployment node, which is what lets the tunnel come up before the control plane uses it.
 export const deploymentPort = (id: string): number => 20000 + [...id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 10000, 7);
-// The single admin identity for both Forgejo and the deploy orchestrator — also the repo owner namespace
+// The single admin identity for both Forgejo and the deploy orchestrator, also the repo owner namespace
 // and the deploy orchestrator's git account. NOT "admin": Forgejo reserves that name (it collides with the /admin route), so
 // `forgejo admin user create --username admin` fails.
 export const adminUsername = "intentic";
@@ -64,7 +64,7 @@ export const cacheUser = (appId: string): string => appId.replace(/[^A-Za-z0-9]+
 
 // The Authentik OIDC application slug and the Garage bucket name an app gets on an auth / object-storage
 // instance. Both require a DNS/S3-style label (lowercase alnum + hyphens, no leading/trailing hyphen), so the
-// app id is sanitized to that shape — distinct from dbName/cacheUser, which use underscores for SQL/ACL names.
+// app id is sanitized to that shape, distinct from dbName/cacheUser, which use underscores for SQL/ACL names.
 export const appSlug = (appId: string): string =>
     appId
         .toLowerCase()
@@ -77,7 +77,7 @@ export const bucketName = (appId: string): string => appSlug(appId);
 // build the connection URL (host:port) without depending on the instance's runtime.
 export const backingPort = (instanceId: string): number => 40000 + [...instanceId].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 10000, 7);
 
-// The env var key for an intentic-generated secret derived from a resource id — uppercased + non-alnum
+// The env var key for an intentic-generated secret derived from a resource id, uppercased + non-alnum
 // collapsed to "_", matching userPasswordKey. Used for backing admin + per-app credential secret keys.
 export const secretKey = (prefix: string, id: string): string => `${prefix}_${id.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
 
@@ -85,7 +85,7 @@ export const secretKey = (prefix: string, id: string): string => `${prefix}_${id
 // deployment is the shared Komodo "deployment" type on every stack.
 export const ghCiId = (appId: string, environment: string): string => `${deploymentId(appId, environment)}-gh-ci`;
 
-// GitLab-path IDs. gl-repo reuses repoId. Unlike gh-ci, gl-ci is APP-scoped — one .gitlab-ci.yml holds
+// GitLab-path IDs. gl-repo reuses repoId. Unlike gh-ci, gl-ci is APP-scoped, one .gitlab-ci.yml holds
 // every environment's job, so there is a single node per app.
 export const glCiId = (appId: string): string => `${appId}-gl-ci`;
 

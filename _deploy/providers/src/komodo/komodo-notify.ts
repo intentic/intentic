@@ -8,7 +8,7 @@ import type { AlerterConfig, KomodoApi, ResourceTarget } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
-// The ssh block is the control-plane host's — Komodo's API is reached over an SSH port-forward to Core.
+// The ssh block is the control-plane host's. Komodo's API is reached over an SSH port-forward to Core.
 const komodoNotifySchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),

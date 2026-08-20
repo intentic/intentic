@@ -14,7 +14,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 // and the fleet card is where it is watched.
 export const startLoop = (loop: Loop): Promise<LoopRecord> => sandboxJson<LoopRecord>(`/loops`, jsonBody(`POST`, loop));
 
-// Ask the loop to stop after the iteration in flight. Explicitly NOT a turn abort — the work running right now
+// Ask the loop to stop after the iteration in flight. Explicitly NOT a turn abort, the work running right now
 // finishes and lands. Throwing Stop at the turn as well is `stopAgentTurn`, and pressing both is how a user
 // abandons a loop outright.
 export const stopLoop = (conversationId: string): Promise<void> =>

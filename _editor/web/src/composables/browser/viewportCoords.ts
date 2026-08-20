@@ -1,10 +1,10 @@
-/* WHERE A CLICK LANDS IN THE REMOTE PAGE — the rule both screencast surfaces follow: the agent's browser view
+/* WHERE A CLICK LANDS IN THE REMOTE PAGE, the rule both screencast surfaces follow: the agent's browser view
  * (useBrowserView) and a platform's own profile window (BrowserProfileDialog). One module because it is one geometry problem, and
- * a copy of it in each file is a copy that drifts — they had already drifted into the same bug independently.
+ * a copy of it in each file is a copy that drifts, they had already drifted into the same bug independently.
  *
  * THE ELEMENT'S RECT IS NOT WHERE THE PICTURE IS. Both surfaces render the frame `object-contain` in a box that
  * is almost never the remote viewport's shape, so it paints letterboxed WITHIN that box. Measuring the element
- * therefore puts every click off by half the letterbox — growing with the aspect mismatch, and quietly missing
+ * therefore puts every click off by half the letterbox, growing with the aspect mismatch, and quietly missing
  * exactly the small targets (checkboxes, close buttons) a person is trying to hit when they take the wheel.
  * object-contain scales to fit and centres, which is two lines to reproduce exactly, so the painted rect is
  * derived rather than measured.
@@ -24,12 +24,12 @@ export const viewportCoords = (event: MouseEvent, element: HTMLElement, viewWidt
     };
 };
 
-/* THE SAME GEOMETRY READ BACKWARDS — where something the remote page reported sits on the picture as painted.
+/* THE SAME GEOMETRY READ BACKWARDS, where something the remote page reported sits on the picture as painted.
  *
  * Its one caller is the drop-down menu the client draws for a <select> (see readSelect in screencast.ts): the
  * page answers with the control's rect in its own coordinates, and the menu has to appear over the control the
  * person just clicked rather than somewhere near it. Sharing the letterbox arithmetic with viewportCoords above
- * is the whole point — a menu placed by a second, subtly different copy of it would drift away from the very
+ * is the whole point, a menu placed by a second, subtly different copy of it would drift away from the very
  * control that opened it, which is the bug that put both surfaces on one module in the first place.
  *
  * Answers offsets within the ELEMENT, so the menu positions absolutely inside the same box the frame paints in. */

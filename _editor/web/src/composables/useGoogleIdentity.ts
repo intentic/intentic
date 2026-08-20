@@ -5,7 +5,7 @@ import { removeStoredValue, storedValue, storeValue } from "./browserStorage";
 import { idTokenClaims } from "./googleToken";
 
 // The slim slice of Google Identity Services (accounts.google.com/gsi/client) we use to mint an ID token in
-// the browser. The token is a Google-signed JWT (audience = our web client id) — the sandbox daemon verifies
+// the browser. The token is a Google-signed JWT (audience = our web client id), the sandbox daemon verifies
 // it against Google's JWKS, so the platform never holds or forges this credential.
 interface GoogleIdConfig {
     readonly client_id: string;
@@ -13,7 +13,7 @@ interface GoogleIdConfig {
     // Silent re-auth: a returning user with one approved Google session gets a credential without interaction.
     readonly auto_select?: boolean;
 }
-// The FedCM-era prompt moment surface — display/not-displayed moments no longer fire; skip and dismissal are
+// The FedCM-era prompt moment surface, display/not-displayed moments no longer fire; skip and dismissal are
 // all a listener can observe (dismissal reason `credential_returned` means success, not a dismissal to act on).
 interface PromptMoment {
     isSkippedMoment(): boolean;
@@ -48,18 +48,18 @@ const storageKey = (clientId: string): string => `intentic.gid.${clientId}`;
 
 /* Mints + caches a Google ID token for the configured web client, as a module-level singleton. The persisted
  * token is the steady-state fast-path: a valid one means no prompt at all (across refreshes and tab closes).
- * When none is valid, minting tries FedCM One Tap / auto re-authentication first — a returning user renews
- * silently — and only when that is skipped, dismissed, or blocked does `needsSignIn` raise the gate: a real
+ * When none is valid, minting tries FedCM One Tap / auto re-authentication first, a returning user renews
+ * silently, and only when that is skipped, dismissed, or blocked does `needsSignIn` raise the gate: a real
  * rendered "Sign in with Google" button, the surface for first-ever sign-ins and fallback. Both surfaces feed
  * the same credential callback. The sandbox daemon is the verifier; this never touches the platform.
  *
  * `warmIdToken` only hydrates the persisted fast-path. Google `prompt()` can display One Tap/FedCM UI and is
  * reserved for a real caller waiting on access, never a screen the user is merely reading. */
 
-// True when a token is needed — the workspace shell shows the sign-in gate (a rendered Google button) in
+// True when a token is needed, the workspace shell shows the sign-in gate (a rendered Google button) in
 // response, and flips back once the credential arrives.
 const needsSignIn = ref(false);
-// The email inside the current credential — who the sandbox daemon sees. Set whenever a token materializes
+// The email inside the current credential, who the sandbox daemon sees. Set whenever a token materializes
 // (mint or restore), cleared with it; the "no access" gate names it so the user knows WHICH account was denied.
 const signedInEmail = ref<string | undefined>();
 
@@ -68,7 +68,7 @@ let expiresAt = 0;
 let initialized = false;
 // The single in-flight mint, so concurrent sandbox calls share one prompt/gate instead of racing for it.
 let inflight: Promise<string | undefined> | undefined;
-// Resolves the in-flight mint — called by the credential callback (rendered button) and by cancelSignIn (with
+// Resolves the in-flight mint, called by the credential callback (rendered button) and by cancelSignIn (with
 // undefined when the user dismisses the gate).
 let settle: ((token: string | undefined) => void) | undefined;
 // The shared GIS callback is installed once. It accepts credentials only while a real mint is waiting; a
@@ -108,9 +108,9 @@ const restore = (): string | undefined => {
 };
 
 /* The gsi/client script loads async (see index.html). Wait on its OWN load event rather than polling for
- * `window.google`: a poll only notices the script between ticks, and on the desktop-auth page — where the
- * whole screen is one person waiting for Google to appear — that dead time is charged straight to them. The
- * short settle poll after the event is the belt-and-braces half (the tag can be absent in a test DOM, and a
+ * `window.google`: a poll only notices the script between ticks, and on the desktop-auth page, where the
+ * whole screen is one person waiting for Google to appear, that dead time is charged straight to them. The
+ * short settle poll after the event is the redundant-check half (the tag can be absent in a test DOM, and a
  * load event is not a promise that the global is assigned in the same task). */
 const GIS_SRC = `https://accounts.google.com/gsi/client`;
 
@@ -153,7 +153,7 @@ const ensureInitialized = async (): Promise<void> => {
 };
 
 // If the silent attempt reports nothing by then (FedCM removed the "not displayed" moment; some browsers
-// block the FedCM UI without any moment firing), raise the button gate. Benign if it fires mid-One-Tap —
+// block the FedCM UI without any moment firing), raise the button gate. Benign if it fires mid-One-Tap,
 // both surfaces feed the same credential callback.
 const SILENT_GUARD_MS = 5000;
 
@@ -166,7 +166,7 @@ const trySilent = (gate: boolean): ReturnType<typeof setTimeout> | undefined => 
             needsSignIn.value = true;
         }
     };
-    /* The desktop webview has no silent attempt to make — Google will not talk to it at all — so the five
+    /* The desktop webview has no silent attempt to make. Google will not talk to it at all, so the five
      * seconds the guard exists to wait out are five seconds of certain failure. Raise the gate now; what it
      * offers there is the hand-off to the real browser, which is the only sign-in this window can complete. */
     if (desktopVersion() !== undefined) {
@@ -213,7 +213,7 @@ const mint = async (gate: boolean): Promise<string | undefined> => {
 const NEAR_EXPIRY_MS = 60_000;
 
 // The cached credential while it is still valid past the caller's guard, re-reading storage first when the
-// in-memory copy is missing or near expiry — another tab may have renewed it. Undefined means a mint is due.
+// in-memory copy is missing or near expiry, another tab may have renewed it. Undefined means a mint is due.
 const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
     if (token === undefined || Date.now() >= expiresAt - margin) {
         token = restore();
@@ -222,17 +222,17 @@ const cached = (margin = NEAR_EXPIRY_MS): string | undefined => {
 };
 
 /* A valid (not near-expiry) Google ID token, or undefined if GIS is unavailable or the user dismisses the
- * sign-in gate. Never hangs on a suppressed prompt — the guard surfaces the gate and waits for a real click.
+ * sign-in gate. Never hangs on a suppressed prompt, the guard surfaces the gate and waits for a real click.
  *
  * `gate: false` says the CALLER is already showing a Google button of its own. The shared overlay would be a
- * second button on top of the first, and the timer that raises it would be five seconds of nothing first — so
+ * second button on top of the first, and the timer that raises it would be five seconds of nothing first, so
  * the silent attempt simply races the caller's button, and whichever produces a credential settles this call.
  * The consequence is that a suppressed prompt leaves this pending until that button is clicked, which is only
- * safe because its one caller — the desktop-auth page — is a whole window with no other caller in it.
+ * safe because its one caller, the desktop-auth page, is a whole window with no other caller in it.
  *
  * `usableFor` is how long the caller needs the token to still be good, and it exists because one caller does
  * not spend it here: the desktop hand-off ships it to another process, which cannot use it until a daemon
- * exists to exchange it — sometimes a whole setup later. A cached token one minute from death satisfies every
+ * exists to exchange it, sometimes a whole setup later. A cached token one minute from death satisfies every
  * caller that acts immediately and strands that one, which is a workspace asking for Google again on the
  * screen right after a fresh install. Costing a mint here is the cheaper mistake. */
 const getIdToken = async (options?: { readonly gate?: boolean; readonly usableFor?: number }): Promise<string | undefined> => {
@@ -263,7 +263,7 @@ const clearCredential = (): void => {
     inflight = undefined;
     acceptingCredential = false;
     // Kill a pending silent prompt (a late credential must not repopulate the cache) and stop auto_select from
-    // silently re-signing the account the user just signed out of — the next mint shows a chooser or the gate.
+    // silently re-signing the account the user just signed out of, the next mint shows a chooser or the gate.
     window.google?.accounts?.id?.cancel?.();
     window.google?.accounts?.id?.disableAutoSelect?.();
 };
@@ -278,7 +278,7 @@ const clearCredential = (): void => {
  *
  * THE DESKTOP WEBVIEW IS ALWAYS NO, and that refusal lives here rather than in each of the three surfaces
  * that render this button. Google refuses OAuth from an embedded webview and Identity Services is FedCM-based,
- * which that webview does not implement — so the button renders, accepts clicks, and does nothing at all.
+ * which that webview does not implement, so the button renders, accepts clicks, and does nothing at all.
  * Two surfaces remembered that and one did not, which is the argument for the mechanism knowing instead of
  * the callers: a fourth one added later inherits the answer rather than the bug. What it should offer in
  * exchange is `signInThroughBrowser` (environments/desktop.ts). */
@@ -313,12 +313,12 @@ const cancelSignIn = (): void => {
     settle?.(undefined);
 };
 
-/* Take a credential that was minted somewhere else — the ONE case being the desktop app, whose webview cannot
+/* Take a credential that was minted somewhere else, the ONE case being the desktop app, whose webview cannot
  * run GIS at all (FedCM is absent in WebKitGTK and Google refuses OAuth from an embedded webview), so its
  * sign-in happens in the user's real browser and arrives here over the platform's handoff.
  *
  * It writes to the same cache the callback above writes to, deliberately: from this point the token is
- * indistinguishable from a locally-minted one — the daemon verifies it against Google's JWKS either way, and
+ * indistinguishable from a locally-minted one, the daemon verifies it against Google's JWKS either way, and
  * spends it once for a daemon session that renews without Google. A malformed or already-expired JWT is
  * refused rather than cached, because a cached dead token is a sign-in gate that never resolves. */
 const adoptIdToken = (credential: string): boolean => {

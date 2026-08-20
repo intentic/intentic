@@ -7,7 +7,7 @@ import { cloudflareApi } from "./cloudflare-api.js";
 
 const cfRouteSchema = z.object({ hostname: z.string(), zoneId: z.string(), apiToken: z.string(), cname: z.string() });
 const parse = (inputs: ResolvedInputs): z.infer<typeof cfRouteSchema> => parseInputs(cfRouteSchema, inputs, "cf-route");
-// Delete tears down by hostname alone — parsed separately so it also works from a ListedResource's inputs
+// Delete tears down by hostname alone, parsed separately so it also works from a ListedResource's inputs
 // (which carry no cname; the target of an orphaned record is irrelevant to removing it).
 const deleteSchema = cfRouteSchema.omit({ cname: true });
 
@@ -54,9 +54,9 @@ export const createCfRouteProvider = (
 ): Provider => ({
     read: async (inputs) => {
         // On a fresh plan the cname ($ref to the tunnel's output) and even zoneId ($ref to the cf node) can
-        // still be PENDING symbols — read must tolerate that (it's the engine's read contract), so it parses
+        // still be PENDING symbols, read must tolerate that (it's the engine's read contract), so it parses
         // only what it actually uses (the deleteSchema fields) and never touches cname. A PENDING zoneId
-        // means the zone itself is a pending create — nothing to introspect yet.
+        // means the zone itself is a pending create, nothing to introspect yet.
         if (typeof inputs["zoneId"] !== "string") {
             return undefined;
         }
@@ -68,7 +68,7 @@ export const createCfRouteProvider = (
         return { outputs: { url: `https://${hostname}` }, detail: { content: record.content } };
     },
     diff: (inputs, observed) => {
-        // The route exists but its tunnel is a pending create — the target cname is not derivable yet.
+        // The route exists but its tunnel is a pending create, the target cname is not derivable yet.
         // Report drift; apply resolves the real cname once the tunnel exists.
         if (typeof inputs["cname"] !== "string") {
             return { action: "update", reason: "tunnel not created yet — its cname is not derivable" };
@@ -101,7 +101,7 @@ export const createCfRouteProvider = (
         await api.deleteDnsRecord({ apiToken, zoneId, recordId: record.id });
     },
     // Scan the zone for records stamped through their comment. The zone id is re-resolved from the
-    // cloudflare source's authored (apiToken, zone) — a scan runs without any read pass to seed outputs.
+    // cloudflare source's authored (apiToken, zone), a scan runs without any read pass to seed outputs.
     list: async (sources, ctx) => {
         const account = sources.find((source) => source.type === "cloudflare");
         if (account === undefined) {

@@ -2,37 +2,37 @@ import { parseStep, type RunEvent } from "./desktop";
 
 /* WHAT AN INSTALL IS GOING TO DO, SAID BEFORE IT DOES IT.
  *
- * The window used to show one line — whatever the script last said — and nothing else: no idea how many
+ * The window used to show one line, whatever the script last said, and nothing else: no idea how many
  * steps there were, which one this was, or whether the four silent minutes in the middle were a download or
  * a hang. That is the shape people abandon, and they abandon it during the image pull, which is the one
  * stretch where nothing prints and everything is fine.
  *
- * So the run is modelled as a PLAN the screen can draw in full at t=0 — every step, in order, with the ones
- * that will not happen on this machine left out — and the script's own `intentic: [phase] …` markers move a
+ * So the run is modelled as a PLAN the screen can draw in full at t=0, every step, in order, with the ones
+ * that will not happen on this machine left out, and the script's own `intentic: [phase] …` markers move a
  * cursor down it. The scripts name the phase rather than the screen recognising the sentence (see
  * ic's util::step): copy is reworded all the time, and a progress bar that moves when someone fixes a typo
  * is worse than no progress bar.
  *
  * WEIGHTS ARE SECONDS, AND THEY ARE GUESSES. They exist to keep the bar honest about how much is LEFT rather
- * than how many steps are left — "9 of 10 steps" on the far side of a four-minute pull is a lie a step
+ * than how many steps are left, "9 of 10 steps" on the far side of a four-minute pull is a lie a step
  * counter tells and a weighted bar does not. They are compared to each other and to observed pace, never
  * shown, so being wrong about one costs a slightly-off estimate and nothing more. */
 
 export interface PlanStep {
     /** The phase id the scripts print. */
     readonly phase: string;
-    /** The checklist row — what this step is, in the reader's terms rather than the script's. */
+    /** The checklist row, what this step is, in the reader's terms rather than the script's. */
     readonly label: string;
     /** Roughly how long it takes on a normal machine, in seconds. Only ever compared, never shown. */
     readonly weight: number;
 }
 
 export interface PlanInput {
-    /** Docker is already up, so nothing has to be installed first — the plan's one big conditional step. */
+    /** Docker is already up, so nothing has to be installed first, the plan's one big conditional step. */
     readonly dockerReady: boolean;
     /** This setup also enrols desktop sync (the setup link carried a folder). */
     readonly syncing: boolean;
-    /** `windows` swaps the first two steps and renames them — see below. */
+    /** `windows` swaps the first two steps and renames them, see below. */
     readonly os: string;
 }
 
@@ -40,8 +40,8 @@ export interface PlanInput {
  * installer, then it preflights, redeems the code, pulls, starts, waits, verifies and connects the machine.
  *
  * WINDOWS TAKES THE FIRST TWO IN THE OTHER ORDER, and that is a real difference rather than a cosmetic one.
- * "Does this machine have Docker" is one question on Linux and a dozen on Windows — virtualization,
- * WSL2, the two Windows features behind it, a pending restart, the package manager this PC may not have —
+ * "Does this machine have Docker" is one question on Linux and a dozen on Windows, virtualization,
+ * WSL2, the two Windows features behind it, a pending restart, the package manager this PC may not have,
  * and that examination lives in the installer binary, so the binary has to be here before it can happen.
  * Drawing the steps in the order they will actually run is the entire contract of this screen. */
 export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
@@ -52,7 +52,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         label: windows ? `Check what Docker needs` : `Check Docker`,
         weight: windows ? 12 : 5,
     };
-    // The only step that can dominate the whole install — a ~600 MB download, an installer, a first-run
+    // The only step that can dominate the whole install, a ~600 MB download, an installer, a first-run
     // dialog, and on Windows possibly turning on WSL2 as well. Its weight is the reason the bar crawls
     // honestly on a machine that needs it instead of sitting at 90% for ten minutes.
     const install: PlanStep[] = input.dockerReady
@@ -76,7 +76,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
 /* --- docker's own account of the pull ---
  *
  * Spawned without a terminal, `docker pull` cannot draw its bars, so it prints one line per layer per state
- * change instead — which is better for us than the bars would be: no cursor tricks to undo, and a layer's
+ * change instead, which is better for us than the bars would be: no cursor tricks to undo, and a layer's
  * last word is its state. Counting them is REAL progress through the biggest download in the install, and it
  * is the difference between a bar that creeps on a timer and one that means something.
  *
@@ -101,13 +101,13 @@ export interface Progress {
     readonly plan: readonly PlanStep[];
     /** Which plan step is running: an index, or -1 before the first marker arrives. */
     readonly index: number;
-    /** The running step's own sentence, as the script said it — the detail under the row. */
+    /** The running step's own sentence, as the script said it, the detail under the row. */
     readonly detail: string;
     /** Layer id → its latest state, for the pull's real fraction. Cleared whenever the step changes. */
     readonly layers: Readonly<Record<string, number>>;
     readonly startedAt: number;
     readonly stepStartedAt: number;
-    /** Never allowed to fall — see LAYER above for the one thing that would otherwise make it. */
+    /** Never allowed to fall, see LAYER above for the one thing that would otherwise make it. */
     readonly percent: number;
     /** Set once the run ends, so the bar stops moving and the estimate disappears. */
     readonly ended: `ok` | `failed` | undefined;
@@ -127,7 +127,7 @@ export const startProgress = (plan: readonly PlanStep[], now: number): Progress 
 const total = (plan: readonly PlanStep[]): number => plan.reduce((sum, step) => sum + step.weight, 0);
 
 /* HOW FAR INTO THE RUNNING STEP WE ARE, 0..1. Docker's layers when there are any; otherwise the clock,
- * against this step's own weight and capped short of the end — a timer that reaches 100% is a bar claiming a
+ * against this step's own weight and capped short of the end, a timer that reaches 100% is a bar claiming a
  * step is finished when the only thing that knows is the script, which has not said so yet. */
 const stepFraction = (state: Progress, now: number): number => {
     const layers = Object.values(state.layers);
@@ -166,7 +166,7 @@ export const advance = (state: Progress, event: RunEvent, now: number): Progress
         const at = state.plan.findIndex((planned) => planned.phase === step.phase);
         // A phase this plan does not carry (SELF_HOST's host tunnel, say) is narration, not a step: it says
         // what is happening under the step that is running rather than moving the cursor somewhere the
-        // checklist cannot draw. So is a phase we have already passed — the cursor only ever goes forward.
+        // checklist cannot draw. So is a phase we have already passed, the cursor only ever goes forward.
         const index = at > state.index ? at : state.index;
         const moved = index !== state.index;
         const next: Progress = {
@@ -204,7 +204,7 @@ export interface StepView {
 export interface ProgressView {
     readonly steps: readonly StepView[];
     readonly percent: number;
-    /** "Step 4 of 9" — the position, for the reader who wants the count rather than the bar. */
+    /** "Step 4 of 9", the position, for the reader who wants the count rather than the bar. */
     readonly position: string | undefined;
     /** "about 3 min left", or undefined when there is nothing honest to say yet. */
     readonly remaining: string | undefined;
@@ -212,7 +212,7 @@ export interface ProgressView {
 
 /* WHAT THE ESTIMATE IS MADE OF. The plan's weights are a guess about a normal machine; the run itself is the
  * correction. Pace is how long this machine has actually taken per unit of weight so far, and the estimate is
- * the remaining weight at that pace — so a slow disk or a throttled connection stretches the number instead
+ * the remaining weight at that pace, so a slow disk or a throttled connection stretches the number instead
  * of being contradicted by it.
  *
  * Clamped either side of the nominal second-per-unit, because the first seconds of a run measure almost

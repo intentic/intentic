@@ -1,13 +1,13 @@
-/* Import a VSCode / OpenVSX color theme into Intentic's design tokens — the biggest familiarity lever (themes are
+/* Import a VSCode / OpenVSX color theme into Intentic's design tokens, the biggest familiarity lever (themes are
  * the #1 switch-blocker) and nearly pure data. A VSCode theme JSON has two halves: `colors` (workbench/editor UI
- * colors) and `tokenColors` (TextMate syntax scopes). Syntax is the easy half — Shiki consumes VSCode `tokenColors`
- * natively — so THIS module does the hard, valuable half: mapping the ~13 workbench colors that carry a theme's
+ * colors) and `tokenColors` (TextMate syntax scopes). Syntax is the easy half. Shiki consumes VSCode `tokenColors`
+ * natively, so THIS module does the hard, valuable half: mapping the ~13 workbench colors that carry a theme's
  * visual identity onto the app's semantic CSS variables (`--color-canvas`, `--color-content`, `--color-line`, …).
  *
  * Everything here is pure and unit-tested; wiring the result into the live app (writing the tokens over the
  * picked accent's ramps + feeding `tokenColors` to Shiki/Monaco) is the follow-on. The one piece of real rigor is
  * color handling: VSCode colors are `#RGB[A]` / `#RRGGBB[AA]`, and borders/hovers are frequently ALPHA'd
- * (`#ffffff0a`), so a naive alpha-strip yields the wrong solid — we composite over the resolved canvas instead. */
+ * (`#ffffff0a`), so a naive alpha-strip yields the wrong solid, we composite over the resolved canvas instead. */
 
 export interface Rgb {
     readonly r: number;
@@ -42,7 +42,7 @@ export const parseHexColor = (input: string): Rgba | undefined => {
     return { r: at(0), g: at(1), b: at(2), a: hasAlpha ? at(3) / 255 : 1 };
 };
 
-// Alpha-composite a (possibly translucent) foreground over an opaque background — the "source-over" formula.
+// Alpha-composite a (possibly translucent) foreground over an opaque background, the "source-over" formula.
 export const compositeOver = (fg: Rgba, bg: Rgb): Rgb => ({
     r: Math.round(fg.r * fg.a + bg.r * (1 - fg.a)),
     g: Math.round(fg.g * fg.a + bg.g * (1 - fg.a)),
@@ -52,7 +52,7 @@ export const compositeOver = (fg: Rgba, bg: Rgb): Rgb => ({
 const clamp = (value: number): number => Math.max(0, Math.min(255, Math.round(value)));
 const toHex = (color: Rgb): string => `#${[color.r, color.g, color.b].map((channel) => clamp(channel).toString(16).padStart(2, `0`)).join(``)}`;
 
-// Perceived luminance (0..1) — used to guess light vs dark when the theme omits `type`.
+// Perceived luminance (0..1), used to guess light vs dark when the theme omits `type`.
 const luminance = (color: Rgb): number => (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
 
 export type ThemeMode = "dark" | "light";
@@ -60,7 +60,7 @@ export type ThemeMode = "dark" | "light";
 export interface VscodeTheme {
     readonly type?: string;
     readonly colors?: Readonly<Record<string, string>>;
-    // tokenColors is handled by Shiki, not here — declared so callers can pass a whole theme through.
+    // tokenColors is handled by Shiki, not here, declared so callers can pass a whole theme through.
     readonly tokenColors?: unknown;
 }
 
@@ -70,7 +70,7 @@ export interface ImportedTheme {
     readonly tokens: Readonly<Record<string, string>>;
 }
 
-// The identity token set — the ~13 CSS variables that carry a theme's visual identity. A single `as const` source
+// The identity token set, the ~13 CSS variables that carry a theme's visual identity. A single `as const` source
 // so the DEFAULTS table is provably total (every token has a fallback, no non-null assertions) AND consumers can
 // iterate the exact set to apply/remove overrides (the import UI reverts by removing these).
 export const THEME_TOKEN_VARS = [

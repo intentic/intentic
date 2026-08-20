@@ -4,11 +4,11 @@ import { createSegmenter, resampleTo16k, wavOf16k } from "./voiceAudio";
 
 /* Hands-free voice input for the composer: the microphone is captured in the page (AudioWorklet, any modern
  * browser), the silence segmenter cuts the stream into utterances (voiceAudio.ts), and each utterance's WAV is
- * transcribed privately by the SANDBOX's whisper (POST /speech/transcribe) — audio never leaves the user's own
+ * transcribed privately by the SANDBOX's whisper (POST /speech/transcribe), audio never leaves the user's own
  * infrastructure, and no browser is excluded the way the old Web Speech path excluded everything un-Googled.
  *
  * Per-call state (each caller gets its own refs and capture chain). The caller supplies the transcript sink;
- * what "send" means — the countdown, Escape, the draft — is the composer's business, not this file's. */
+ * what "send" means, the countdown, Escape, the draft, is the composer's business, not this file's. */
 
 // The capture worklet, inlined as a blob module: 128-sample process() blocks are batched to ~2048 before
 // crossing the thread boundary (‾46ms at 44.1kHz — 20 messages/s instead of 375). A string rather than an
@@ -46,7 +46,7 @@ registerProcessor("intentic-voice-capture", IntenticVoiceCapture);
 export type VoiceState = `idle` | `preparing` | `listening`;
 
 // The refusals the composer words for the user. `needs-rebuild` is the image without whisper (the one-time
-// sandbox update); `unavailable` is voice failing to START (a daemon that doesn't answer /speech at all —
+// sandbox update); `unavailable` is voice failing to START (a daemon that doesn't answer /speech at all,
 // e.g. one older than this app); `failed` is an utterance lost mid-session; the rest are the microphone's own.
 export type VoiceError = `mic-blocked` | `no-mic` | `needs-rebuild` | `unavailable` | `failed`;
 
@@ -61,9 +61,9 @@ const ERROR_DISMISS_MS = 8000;
 
 export function useVoiceInput(): {
     state: Ref<VoiceState>;
-    /** Live microphone level (RMS, 0..1) — the listening indicator's pulse. */
+    /** Live microphone level (RMS, 0..1), the listening indicator's pulse. */
     level: Ref<number>;
-    /** Utterances transcribing right now — "Transcribing…" while > 0. */
+    /** Utterances transcribing right now, "Transcribing…" while > 0. */
     pending: Ref<number>;
     error: Ref<VoiceError | undefined>;
     start(onTranscript: (text: string) => void): void;
@@ -138,18 +138,18 @@ export function useVoiceInput(): {
                         return;
                     }
                     // A 409 (model download raced us) or any transient failure: the utterance is lost, say so
-                    // once, keep listening — the next pause retries the whole path naturally.
+                    // once, keep listening, the next pause retries the whole path naturally.
                     fail(`failed`);
                 })
                 .finally(() => {
-                    // teardown() already zeroed the count for a stopped session — never step below it.
+                    // teardown() already zeroed the count for a stopped session, never step below it.
                     pending.value = Math.max(0, pending.value - 1);
                 });
         };
 
         void (async () => {
             try {
-                // Whether this sandbox can hear at all — and the first-use model download, which the status
+                // Whether this sandbox can hear at all, and the first-use model download, which the status
                 // poll both starts and watches ("Preparing voice…" is this loop).
                 for (;;) {
                     const status = await sandboxJson<SpeechStatus>(`/speech/status`, { signal });

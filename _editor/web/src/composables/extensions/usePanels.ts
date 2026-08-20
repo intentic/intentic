@@ -6,7 +6,7 @@ import { PANELS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
- * registry detects on, read via the daemon's /panels routes. Discovery is convention-only — no manifest — so
+ * registry detects on, read via the daemon's /panels routes. Discovery is convention-only, no manifest, so
  * there are just list, start, and stop; a panel's lifecycle lives in the daemon, which is also why this holds no
  * clock. This is the source for the rail's extension activations and every extension view.
  *
@@ -42,7 +42,7 @@ export function usePanels() {
 
     return {
         panels: computed<PanelSummary[]>(() => query.data.value?.panels ?? []),
-        // The list has actually arrived (or definitively failed) — what the rail waits on before deciding an
+        // The list has actually arrived (or definitively failed), what the rail waits on before deciding an
         // extension tile is absent rather than late, since every repo-driven tile is detected from these facts.
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

@@ -5,7 +5,7 @@ import { openWorkspaceRef } from "../workspace/openFileRef";
 
 /* Ctrl/Cmd+click a file reference in terminal output → open it in the workspace editor at the referenced line.
  * Reuses xterm's own WebLinksAddon (its wrapped-line link computer) by handing it a file-path regex instead of
- * the default URL one, so the gesture and hover-underline match the web links we already register — only the
+ * the default URL one, so the gesture and hover-underline match the web links we already register, only the
  * activate handler differs. The value here is the integrated editor: a tsc/eslint/vitest error or a node stack
  * trace becomes click-to-open. The reference grammar and the navigation are shared with the chat's markdown
  * links (see fileRefs / openFileRef), so a path opens the same file wherever it is clicked. */

@@ -4,7 +4,7 @@ import { resolveState } from "@intentic/state-resolver";
 import type { Stack } from "./handles.js";
 import { createStack } from "./stack.js";
 
-// The authoring entry — "what you want": run the declaration and capture it as an IntentSet. `intentic
+// The authoring entry, "what you want": run the declaration and capture it as an IntentSet. `intentic
 // resolve` runs the resolvers (intent → needs → desired state) over it.
 export const defineIntent = (declare: (stack: Stack) => void): IntentSet => {
     const { stack, intent } = createStack();

@@ -1,10 +1,10 @@
-/* What happens when the same command is invoked again while it is still running — as a policy you pick, not
+/* What happens when the same command is invoked again while it is still running, as a policy you pick, not
  * something each call site reinvents.
  *
  * Every one of these had a hand-rolled instance somewhere: a provider catalog load that deduped by checking
  * whether its own UI state ref said "loading" (a mutex made of presentation state), a forced sandbox-list
  * refresh three unrelated callers can fire at once, a search that races its own keystrokes. They are the same
- * four behaviours, and naming them is what makes a call site's intent reviewable — `singleFlight` says "one is
+ * four behaviours, and naming them is what makes a call site's intent reviewable, `singleFlight` says "one is
  * enough", `latest` says "only the newest input matters", and the difference between them is exactly the bug
  * class where a stale response overwrites a fresh one.
  *
@@ -12,11 +12,11 @@
  * SAME provider's catalog collapse. */
 
 export type ConcurrencyPolicy<I> =
-    // Every invocation runs independently — the default behaviour of a bare async function.
+    // Every invocation runs independently, the default behaviour of a bare async function.
     | { readonly mode: "parallel" }
     // FIFO per key: every invocation runs, but never two at once and never out of order.
     | { readonly mode: "serial"; readonly key: (input: I) => string }
-    // An invocation arriving while one is in flight SHARES it — same promise, one request. For idempotent
+    // An invocation arriving while one is in flight SHARES it, same promise, one request. For idempotent
     // reads where a second answer would be identical anyway.
     | { readonly mode: "singleFlight"; readonly key: (input: I) => string }
     // At most one running and one queued per key; a new invocation REPLACES whatever was queued. Callers whose
@@ -127,7 +127,7 @@ export const withConcurrency = <I, O>(run: (input: I) => Promise<O>, policy: Con
             return start(key, slot, input);
         }
         return new Promise<O>((resolve, reject) => {
-            // Supersede whatever was queued — its input is stale by definition — but INHERIT its waiters, so a
+            // Supersede whatever was queued, its input is stale by definition, but INHERIT its waiters, so a
             // caller whose input was dropped still settles, with the newer run's result.
             const waiters = slot.queued?.waiters ?? [];
             waiters.push({ resolve, reject });

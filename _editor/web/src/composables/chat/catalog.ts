@@ -5,22 +5,22 @@ import type { ConversationStatus } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the permission modes
  * and the small presentational helpers (tab status icon, relative time). The provider/harness/model catalog
- * lives in @intentic/sandbox-contract (agent-catalog.ts) — shared with the automations dialog; the live
+ * lives in @intentic/sandbox-contract (agent-catalog.ts), shared with the automations dialog; the live
  * per-provider model state, and the effort scale that is a property OF a model, live in conversation.ts. */
 
 // How a capability badge renders in the model picker: icon-only chips, the label carried by the tooltip (three
 // text chips per row would starve the description's space). The set is exactly the capability flags a provider
-// reports (see ModelBadgeSchema) — vision/agentic badges existed here while badges were hand-assigned by id
+// reports (see ModelBadgeSchema), vision/agentic badges existed here while badges were hand-assigned by id
 // pattern, but no provider publishes those flags, so claiming them would have been our guess, not the truth.
 export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> = {
     reasoning: { label: `Reasoning`, icon: `sparkles` },
     fast: { label: `Fast`, icon: `bolt` },
 };
 
-/* How each permission mode reads in the selector. WHICH of them a conversation may pick is not decided here —
+/* How each permission mode reads in the selector. WHICH of them a conversation may pick is not decided here,
  * it is `modesFor(capabilities)` in the contract, because it is a property of the runtime rather than of the
  * menu. This split is the fix for the composer's oldest lie: the four modes were rendered unconditionally, so
- * "Ask before each file edit" sat above Codex, Grok and every ACP agent — none of which have an approval
+ * "Ask before each file edit" sat above Codex, Grok and every ACP agent, none of which have an approval
  * channel at all, and each of which ran every tool call anyway. */
 const MODE_META: Record<PermissionMode, { label: string; icon: IconName; description: string }> = {
     default: { label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
@@ -66,11 +66,11 @@ export const statusLabel = (status: ConversationStatus): string => {
     return `Idle`;
 };
 
-// Desktop tab title color by status — layered UNDER statusIcon's glyph rather than replacing it: colour alone
+// Desktop tab title color by status, layered UNDER statusIcon's glyph rather than replacing it: colour alone
 // is invisible to colourblind users and near-illegible on a truncated 2xs string.
 //
 // COLOUR ONLY, no pulse. `statusIcon` puts a turning spinner immediately to the left of this text, so a title
-// that also breathed was the second animation saying the one thing the first had already said — running for as
+// that also breathed was the second animation saying the one thing the first had already said, running for as
 // long as the turn does, in the strip the user looks at most. One live element per state: the spinner moves,
 // the title just changes colour.
 export const statusTabClass = (status: ConversationStatus): string => {

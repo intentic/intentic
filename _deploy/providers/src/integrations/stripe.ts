@@ -9,7 +9,7 @@ const parse = (inputs: ResolvedInputs): { apiKey: string } => parseInputs(stripe
 // Stripe as a validated external integration (v1: validate-only, non-destructive). `read` confirms the API key
 // resolves a live account (treating an unreachable API as not-yet-validated so plan stays forward-moving);
 // `diff` is always noop (intentic mutates nothing on Stripe yet); `apply` re-validates and throws on a rejected
-// key. The key itself is injected into consuming apps as a $secret env elsewhere — this node only proves it works.
+// key. The key itself is injected into consuming apps as a $secret env elsewhere, this node only proves it works.
 export const createStripeProvider = (api: StripeApi = stripeApi): Provider => ({
     read: async (inputs, ctx) => {
         const { apiKey } = parse(inputs);

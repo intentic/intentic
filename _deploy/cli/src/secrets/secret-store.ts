@@ -8,7 +8,7 @@ import { hostTarget, type SshExecutor, type SshTarget } from "@intentic/provider
 import { SECRETS_FILE } from "../lib/artifact.js";
 
 // A key→value store for intentic's generated secrets (the Forgejo/Komodo admin passwords). Storage only,
-// mirroring HostKeyStore: env-first precedence and minting are policy, and live in ensureGeneratedSecrets — so
+// mirroring HostKeyStore: env-first precedence and minting are policy, and live in ensureGeneratedSecrets, so
 // the same policy runs over any backend. The local backend below is the laptop-local cache; a host-backed
 // backend makes the authoritative copy shared across operators instead of local to whoever bootstrapped.
 export interface SecretStore {
@@ -17,7 +17,7 @@ export interface SecretStore {
 }
 
 // The local backend: the gitignored .secrets.json beside the artifact (mode 0o600, 4-space JSON, trailing
-// newline — the same on-disk conventions as .known-hosts.json). `set` is read-modify-write.
+// newline, the same on-disk conventions as .known-hosts.json). `set` is read-modify-write.
 export const createLocalSecretStore = (dir: string): SecretStore => {
     const path = join(dir, SECRETS_FILE);
     const read = async (): Promise<Record<string, string>> =>
@@ -38,7 +38,7 @@ export const createLocalSecretStore = (dir: string): SecretStore => {
 // A per-instance cache makes one read serve a whole ensure() pass; writes are read-modify-write of that cache.
 const HOST_SECRETS_PATH = `${HOST_STATE_ROOT}/secrets.json`;
 export const createHostSecretStore = (target: SshTarget, executor: SshExecutor): SecretStore => {
-    // Memoize the load PROMISE — success and failure alike. One connect attempt serves the whole run: an
+    // Memoize the load PROMISE, success and failure alike. One connect attempt serves the whole run: an
     // unreachable host must cost one connect timeout total, not one per generated key (the layered store
     // calls get() per key and used to re-pay the timeout each time when only successes were cached).
     let loading: Promise<Record<string, string>> | undefined;
@@ -62,7 +62,7 @@ export const createHostSecretStore = (target: SshTarget, executor: SshExecutor):
             const json = JSON.stringify(store, undefined, 4);
             const session = await executor.connect(target);
             try {
-                // Heredoc with a QUOTED delimiter writes the JSON body verbatim (no shell expansion — safe for
+                // Heredoc with a QUOTED delimiter writes the JSON body verbatim (no shell expansion, safe for
                 // arbitrary content); write to a temp file then mv so a concurrent reader never sees a partial file.
                 await session.exec(
                     `mkdir -p /opt/intentic && cat > ${HOST_SECRETS_PATH}.tmp <<'INTENTIC_SECRETS_EOF'\n${json}\nINTENTIC_SECRETS_EOF\nchmod 600 ${HOST_SECRETS_PATH}.tmp && mv ${HOST_SECRETS_PATH}.tmp ${HOST_SECRETS_PATH}`,
@@ -75,7 +75,7 @@ export const createHostSecretStore = (target: SshTarget, executor: SshExecutor):
 };
 
 // Compose stores into a precedence chain (most-authoritative first, e.g. [host, local]). `get` returns the
-// first defined value; with `backfill` on, it then reconciles every other layer to that value — so a secret
+// first defined value; with `backfill` on, it then reconciles every other layer to that value, so a secret
 // minted into the local cache before the host existed is promoted to the host, and an operator who never
 // bootstrapped has the host value mirrored back into their local cache for offline tooling. `backfill` is off
 // for read-only commands (plan) so they never mutate a store. `set` writes every layer (mint persists to all).
@@ -128,10 +128,10 @@ export const createLayeredSecretStore = (
 };
 
 // The generated secrets (Forgejo/Komodo admin passwords) are control-plane secrets whose authoritative home is
-// the control-plane host — the host the Forgejo node runs on (its `server` ref). Anchoring there lets every
+// the control-plane host, the host the Forgejo node runs on (its `server` ref). Anchoring there lets every
 // operator share one value instead of minting its own laptop-local one (which would leave whoever didn't
 // bootstrap unable to authenticate). The host node's inputs are pure SSH creds, so they resolve before the
-// generated secrets exist — resolving the Forgejo node itself would need those very secrets. Falls back to the
+// generated secrets exist, resolving the Forgejo node itself would need those very secrets. Falls back to the
 // local cache alone when there is no Forgejo node or its host can't be found. `backfill` reconciles the layers
 // (promote a locally-minted value to the host, mirror the host value back to a fresh operator's local cache);
 // it is OFF for read-only commands so they never mutate a store.

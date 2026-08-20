@@ -5,7 +5,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 
 // Everything this agent persists lives under ~/.intentic/host: the sandbox it is enrolled with, its enrollment
 // token, the last scopes the sandbox pushed, and the audit log of everything the agent did here. The directory
-// and the 0600 floor on what lands in it belong to @intentic/local-agent — every agent on a user's machine
+// and the 0600 floor on what lands in it belong to @intentic/local-agent, every agent on a user's machine
 // keeps a credential in the same shape, and the one that kept its own copy of this wrote it world-readable.
 const home = agentHome("host");
 export const baseDir = home.dir;
@@ -18,7 +18,7 @@ export const runPidPath = join(baseDir, "host.pid");
  *
  * The scopes are a CACHE, not the source of truth. The sandbox pushes them on every connect, so what is written
  * here only decides how the agent behaves in the seconds before the first push (and if it is ever started while
- * offline). They are stored at all so that a refusal reads the same before and after a reconnect — an agent that
+ * offline). They are stored at all so that a refusal reads the same before and after a reconnect, an agent that
  * allowed everything until the first scopes frame would have a window where the grant was whatever the last
  * install defaulted to.
  *
@@ -27,7 +27,7 @@ export const runPidPath = join(baseDir, "host.pid");
  * file readable by every process running as this user is a weaker boundary than the grant it protects. */
 export interface HostConfigFile {
     readonly sandboxUrl: string;
-    // The capability id on the sandbox — this computer's name, and the prefix of its tools over there.
+    // The capability id on the sandbox, this computer's name, and the prefix of its tools over there.
     readonly id: string;
     readonly token: string;
     readonly scopes: HostScopes;

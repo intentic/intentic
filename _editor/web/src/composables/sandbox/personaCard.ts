@@ -1,11 +1,11 @@
 import type { Persona, PersonaPowers } from "@intentic/sandbox-contract";
 
-/* WHAT EVERY SURFACE THAT WRITES A PERSONA CARD HAS TO AGREE ABOUT — the id a name becomes, what "everything is
+/* WHAT EVERY SURFACE THAT WRITES A PERSONA CARD HAS TO AGREE ABOUT, the id a name becomes, what "everything is
  * on" looks like as a form, which of those answers is worth committing, and which cards belong to a folder.
  *
  * There are two such surfaces now: the full editor on the Personas page, and the quick panel behind a directory
- * row's persona icon in the Workspace tree. They ask different numbers of questions on purpose — the point of the
- * second one is that it asks for a name and nothing else — and that is exactly the shape that drifts. A second
+ * row's persona icon in the Workspace tree. They ask different numbers of questions on purpose, the point of the
+ * second one is that it asks for a name and nothing else, and that is exactly the shape that drifts. A second
  * copy of the slug rule renames nobody until someone types a capital letter; a second copy of "what is worth
  * storing" writes ten fields meaning "yes" into a tracked file the other surface deliberately leaves empty.
  *
@@ -19,7 +19,7 @@ export interface PersonaGrantable {
     label: string;
 }
 
-/* WHICH OF THIS SANDBOX'S CAPABILITIES A CARD MAY GRANT BY ID — the connectors whose credentials reach the shell,
+/* WHICH OF THIS SANDBOX'S CAPABILITIES A CARD MAY GRANT BY ID, the connectors whose credentials reach the shell,
  * the computers the agent can drive, and the MCP connections it can call.
  *
  * Kinds the card has no opinion about (the agent runtimes, the platform entries) are deliberately absent: a
@@ -32,7 +32,7 @@ export const grantablesFrom = (capabilities: readonly { id: string; kind: string
         .filter((capability) => GRANTABLE_KINDS.has(capability.kind))
         .map((capability) => ({ id: capability.id, kind: capability.kind as PersonaGrantable[`kind`], label: capability.id }));
 
-/* The powers half of a draft, held flat and always fully populated — a form with tri-state fields is a form with
+/* The powers half of a draft, held flat and always fully populated, a form with tri-state fields is a form with
  * three ways to render every row. `storedPowers` folds it back into the shape the card commits. */
 export interface PersonaPowersDraft {
     files: `none` | `read` | `write`;
@@ -42,14 +42,14 @@ export interface PersonaPowersDraft {
     browser: boolean;
     delegate: boolean;
     sandbox: boolean;
-    /* Per-id grants. `undefined` means every one of them, including any connected tomorrow — which is a real
+    /* Per-id grants. `undefined` means every one of them, including any connected tomorrow, which is a real
      * answer and the default, and the reason these are not just arrays. */
     connectors: string[] | undefined;
     computers: string[] | undefined;
     mcp: string[] | undefined;
 }
 
-/* A card with no `powers` means the full toolbox, so a NEW draft opens with every shelf on — the form is then the
+/* A card with no `powers` means the full toolbox, so a NEW draft opens with every shelf on, the form is then the
  * same shape whether it was opened on a card that has never thought about powers or one that has, and
  * "everything, until you turn something off" is a sentence the form can state rather than imply. */
 export const FULL_POWERS: PersonaPowersDraft = {
@@ -75,7 +75,7 @@ export const personaSlug = (name: string): string =>
         .replace(/^-+|-+$/g, ``)
         .slice(0, 60);
 
-/* An existing card's powers as a draft — field by field rather than a spread, so a card written by a newer build
+/* An existing card's powers as a draft, field by field rather than a spread, so a card written by a newer build
  * cannot put a shape the form does not understand into a draft it is about to save back. */
 export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     files: persona.powers?.files ?? FULL_POWERS.files,
@@ -90,7 +90,7 @@ export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
 });
 
-/* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all — so the committed file stays a
+/* WHAT IS WORTH STORING. A card that grants everything stores no `powers` at all, so the committed file stays a
  * description of the DECISIONS somebody made rather than a dump of every default, and a diff on it reads as the
  * change it was. `undefined` here means "leave the block off the card". */
 export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefined => {
@@ -122,16 +122,16 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
     };
 };
 
-/* WHICH CARDS BELONG TO A FOLDER — the ones that START there, and pointedly not the ones that merely prefer it
+/* WHICH CARDS BELONG TO A FOLDER, the ones that START there, and pointedly not the ones that merely prefer it
  * (`repos`, a chat-default preference). A folder can hold several: "Docs bot" and "Refactor crew" can both begin
  * in the same repo with different bounds, which is why the tree's icon opens a list rather than one card.
  *
  * Matched exactly rather than by prefix. A persona starting in `intentic/_editor` is not a persona of
- * `intentic` — putting it on the parent's row too would make every ancestor claim work it does not do. */
+ * `intentic`, putting it on the parent's row too would make every ancestor claim work it does not do. */
 export const personasStartingIn = (personas: readonly Persona[], dir: string): Persona[] =>
     personas.filter((persona) => persona.workspace?.startIn === dir);
 
-/* How many cards start in each folder, for the tree — one pass, because the row actions ask per visible row and a
+/* How many cards start in each folder, for the tree, one pass, because the row actions ask per visible row and a
  * filter across every persona on each of them is the same answer computed fifty times. */
 export const personaStartDirs = (personas: readonly Persona[]): Map<string, number> => {
     const counts = new Map<string, number>();

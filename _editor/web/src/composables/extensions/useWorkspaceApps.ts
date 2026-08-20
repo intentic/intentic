@@ -7,7 +7,7 @@ import { usePanels } from "./usePanels";
 
 /* The apps living in workspace monorepos, via the daemon's per-repo apps routes (one round-trip per monorepo).
  * Keyed on the monorepo list, so a repo appearing or vanishing while a consumer is open refetches instead of
- * leaving a frozen snapshot. `active` gates the fan-out — consumers are dialogs that open rarely, and the
+ * leaving a frozen snapshot. `active` gates the fan-out, consumers are dialogs that open rarely, and the
  * round-trips shouldn't run for those who never do. */
 export function useWorkspaceApps(active: Ref<boolean>) {
     const { panels } = usePanels();

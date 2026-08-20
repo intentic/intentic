@@ -3,7 +3,7 @@ import type { IconName } from "@intentic/ui";
 
 /* How a desired-state resource looks in the dependency graph: the icon (or brand logo) that says what it is,
  * and the category accent that says which coarse group it belongs to. One source of truth so the graph node,
- * the details panel, and the legend stay in lockstep — the visual sibling of reconcileStatus.ts (which owns
+ * the details panel, and the legend stay in lockstep, the visual sibling of reconcileStatus.ts (which owns
  * the orthogonal reconcile-status axis). Kept out of the ResourceView wire schema: type + group already ride
  * the wire, and these are pure presentation. Tables are keyed by the open `type` string (the web app doesn't
  * depend on @intentic/resources) with a fallback, mirroring GROUPS in workspaceStateProjection.ts. */
@@ -59,7 +59,7 @@ const ICONS: Readonly<Record<string, IconName>> = {
 export const resourceIcon = (type: string): IconName => ICONS[type] ?? `box`;
 
 // simple-icons slugs for kinds backed by a real product, rendered via https://cdn.simpleicons.org/<slug> with
-// an <img @error> fallback to the semantic glyph — so a missing/renamed slug degrades gracefully. undefined for
+// an <img @error> fallback to the semantic glyph, so a missing/renamed slug degrades gracefully. undefined for
 // infra-native / generic / sub-resource kinds (host, tunnel, komodo*, repo, ci, deployment, backup, buckets…).
 // `github/f5f5f5` forces a near-white glyph (GitHub's near-black brand color is invisible on the dark card).
 const LOGOS: Readonly<Record<string, string>> = {

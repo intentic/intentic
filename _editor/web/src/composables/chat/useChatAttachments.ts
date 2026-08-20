@@ -6,7 +6,7 @@ import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import type { PendingAttachment } from "./conversation";
 import type { ChatAttachment } from "./transcript";
 
-/* FILES STAGED FOR THE NEXT TURN — the chips over the composer, and the three ways they get there: the paperclip
+/* FILES STAGED FOR THE NEXT TURN, the chips over the composer, and the three ways they get there: the paperclip
  * (a file dialog the pane opens), a paste, and a drop.
  *
  * Per-tab like the draft: `attachments` is this pane's conversation's, so a mid-upload tab switch leaves the
@@ -104,7 +104,7 @@ export const useChatAttachments = (composer: {
                 return;
             }
             // collectDroppedFiles must be called synchronously in the drop handler (drag-store validity window).
-            // A dropped folder is walked but attached flat — chat attachments carry no directory structure.
+            // A dropped folder is walked but attached flat, chat attachments carry no directory structure.
             void collectDroppedFiles(event.dataTransfer).then(({ files }) => {
                 for (const dropped of files) {
                     attach(dropped.file);

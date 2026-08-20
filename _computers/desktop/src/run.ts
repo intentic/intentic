@@ -27,7 +27,7 @@ export const run = async (command: string, args: readonly string[], install?: st
         });
     });
 
-// Whether a program is on PATH at all — how a backend picks between the tools a desktop MIGHT have, without
+// Whether a program is on PATH at all, how a backend picks between the tools a desktop MIGHT have, without
 // making the choice by catching a failure from the real action.
 export const has = async (command: string): Promise<boolean> => {
     const probe = process.platform === "win32" ? "where" : "which";

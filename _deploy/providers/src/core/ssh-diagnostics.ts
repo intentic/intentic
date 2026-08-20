@@ -3,7 +3,7 @@ import type { SshExecutor, SshSession, SshTarget } from "./ssh.js";
 // One SSH sweep per host after a readiness timeout, so a field failure self-explains instead of ending in a
 // bare "timed out": is the container running, what did it log, is anything listening on the gated port, and
 // which addresses the host actually holds (the discovered internalIp may not be reachable even from the host
-// itself). Renders a plain string for the CLI to log before rethrowing the timeout. Never throws — a host
+// itself). Renders a plain string for the CLI to log before rethrowing the timeout. Never throws, a host
 // that cannot be reached over SSH degrades to a single line so the sweep still reports the remaining hosts.
 export const readinessDiagnostics = async (
     targets: readonly SshTarget[],
@@ -34,7 +34,7 @@ const diagnoseHost = async (target: SshTarget, executor: SshExecutor, failure: {
             }
         };
         lines.push(await run("docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"));
-        // The failing node's own containers (providers stamp intentic.id) — their last log lines usually
+        // The failing node's own containers (providers stamp intentic.id), their last log lines usually
         // name the actual fault (bind error, crash loop, misconfiguration).
         const labelled = await session.exec(`docker ps -a --filter label=intentic.id=${failure.id} --format '{{.Names}}'`).catch(() => undefined);
         const names =

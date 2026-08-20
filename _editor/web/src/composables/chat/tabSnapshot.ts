@@ -3,8 +3,8 @@ import type { Conversation } from "./conversation";
 import { readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
- * draft (text + done-upload metadata), as one JSON blob per sandbox — this window's own, seeded by the last
- * window's (windowStore holds the two-store mechanics and why). Transcript CONTENT is not in here — it is
+ * draft (text + done-upload metadata), as one JSON blob per sandbox, this window's own, seeded by the last
+ * window's (windowStore holds the two-store mechanics and why). Transcript CONTENT is not in here, it is
  * mirrored to IndexedDB instead (see transcriptCache), so a restored tab paints from disk at once and useChat's
  * rehydration watch then reconciles it with the daemon. */
 
@@ -18,7 +18,7 @@ export interface StoredTab {
     readonly isolated: boolean;
     // Whether the fleet has ever registered this conversation (Conversation.registered). Persisted so a reload
     // doesn't hand every open agent tab back to the board as a fresh draft card while the first roster frame
-    // is still in flight — and never at all for one whose agent has since been archived.
+    // is still in flight, and never at all for one whose agent has since been archived.
     readonly registered: boolean;
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
     readonly provider?: AgentProvider;
@@ -36,7 +36,7 @@ export interface StoredTab {
     readonly effort?: string;
     readonly thinking?: boolean;
     // The fast-speed pick, persisted per TAB for the same reason and NOT remembered globally: it is a property
-    // of this chat, and a reload should show the same chat back — but a new chat starts from off (turnDefaults
+    // of this chat, and a reload should show the same chat back, but a new chat starts from off (turnDefaults
     // deliberately doesn't carry it; see Conversation.fast).
     readonly fast?: boolean;
     // Whether this chat continues itself when a turn stops short (Conversation.autoContinue). Persisted per TAB
@@ -47,12 +47,12 @@ export interface StoredTab {
     // narrowing must not follow the user into their next chat), so this store is the only thing standing
     // between a picked persona and a page reload. Absent ⇒ the ordinary chat, every account reachable.
     readonly actsAs?: string;
-    // `account` is the one the SESSION was minted on, which is not always the tab's current pick — a mid-chat
+    // `account` is the one the SESSION was minted on, which is not always the tab's current pick, a mid-chat
     // switch takes effect at the next send, and until then the two differ on purpose (that difference is what
     // retires the session then). Restoring both keeps a reload from either forging the match or faking the
     // mismatch.
     readonly session?: { id: string; provider: AgentProvider; account?: string };
-    /* Where this tab was cut from, while it is a fork whose first turn the daemon has not accepted yet — until
+    /* Where this tab was cut from, while it is a fork whose first turn the daemon has not accepted yet, until
      * that send, this linkage exists nowhere but the client (Conversation.pendingForkOf). Persisted because the
      * gap between the cut and the send is exactly when a tab can be rebuilt from this snapshot (a reload, the
      * popped window hydrating the strip): a rebuilt fork that lost it sent an ordinary first turn, the daemon
@@ -62,14 +62,14 @@ export interface StoredTab {
     readonly title?: string;
     readonly draft: string;
     readonly attachments: { name: string; path: string }[];
-    // Messages submitted while a turn ran that hadn't reached the agent yet — user-written text, so a refresh
+    // Messages submitted while a turn ran that hadn't reached the agent yet, user-written text, so a refresh
     // must not swallow them. They restore as queued (not as draft, which would collide with the real draft)
     // and go out when the tab's turn settles or with the user's next send. The editor-context chip on one is
     // deliberately dropped: it points at a selection this window no longer has.
     readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
 }
 
-/* One live conversation, as its persisted shape — StoredTab is the ONE portable description of a tab, and this
+/* One live conversation, as its persisted shape. StoredTab is the ONE portable description of a tab, and this
  * is the one place a Conversation is folded into it. Two readers with different lifetimes share it: the
  * tab-snapshot watch (useChat), which persists every open tab on every change, and the summons channel
  * (summon.ts), which sends a tab to the app's OTHER windows so a chat summoned anywhere is on screen
@@ -103,7 +103,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
 });
 
 // A sandbox's whole strip: the open tabs, which one is focused, and which of them are on screen at once (the
-// panes, in their column order). Coherent by construction — `active` always names one of `tabs`, every pane
+// panes, in their column order). Coherent by construction, `active` always names one of `tabs`, every pane
 // names one too, `active` is always among the panes, and no conversation appears twice.
 export interface TabSnapshot {
     readonly active: string;
@@ -113,18 +113,18 @@ export interface TabSnapshot {
 
 const snapshotKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
 
-// Providers are an open string vocabulary (native ids + installed ACP agent ids) — a stored provider is valid
+// Providers are an open string vocabulary (native ids + installed ACP agent ids), a stored provider is valid
 // when non-empty; a since-removed ACP id degrades at send time (the daemon's unknown-provider error frame).
 const validProvider = (value: unknown): value is AgentProvider => typeof value === `string` && value !== ``;
 
-// The persisted shape of one attachment (upload metadata only — previewUrl/controller are client-session
+// The persisted shape of one attachment (upload metadata only, previewUrl/controller are client-session
 // objects), read back defensively from the tab snapshot's draft and queued entries alike.
 const readAttachments = (raw: unknown): { name: string; path: string }[] =>
     (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [])
         .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
         .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string }));
 
-// One optional text field — an account pin, a model id, an effort tier — under the key its owner carries it in.
+// One optional text field, an account pin, a model id, an effort tier, under the key its owner carries it in.
 // Spreadable, so a blob with nothing (or nonsense) where a value should be reads back as the absence the
 // restore already falls back from.
 const readText = <K extends string>(key: K, raw: unknown): { [P in K]?: string } =>
@@ -157,7 +157,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
             : undefined;
     return {
         conversationId: raw[`conversationId`],
-        // A tab that names no tree runs in its own worktree — the default a fresh one gets.
+        // A tab that names no tree runs in its own worktree, the default a fresh one gets.
         isolated: raw[`isolated`] !== false,
         // ...and one that doesn't say the fleet knows it is a draft until a roster frame says otherwise.
         registered: raw[`registered`] === true,
@@ -209,7 +209,7 @@ const parse = (raw: string): TabSnapshot | undefined => {
     }
     const active = typeof stored.active === `string` && seen.has(stored.active) ? stored.active : first.conversationId;
     // The panes, in their stored column order, keeping only those that still name a readable tab. A window
-    // that named none — the ordinary single-pane panel, which has no layout to record — comes back showing the
+    // that named none, the ordinary single-pane panel, which has no layout to record, comes back showing the
     // focused chat alone, which is what an absent pane set MEANS rather than something to patch up.
     const panes = (Array.isArray(stored.panes) ? (stored.panes as unknown[]) : []).filter(
         (id): id is string => typeof id === `string` && seen.has(id),

@@ -3,29 +3,29 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { langLoader } from "../lib/shikiLangs.js";
 
 /* Shared Shiki highlighter. One lazily-built core instance for the whole app, using the JavaScript RegExp
- * engine (no WASM, so no asset-pipeline config) and fine-grained, dynamically-imported grammars/themes —
+ * engine (no WASM, so no asset-pipeline config) and fine-grained, dynamically-imported grammars/themes,
  * only what's actually rendered ships in the bundle.
  *
  * Emits dual-theme HTML (light color inline + a `--shiki-dark` CSS var per token), so light/dark switching
- * is pure CSS keyed off the app's `[data-mode="dark"]` attribute — no re-highlighting on theme toggle (see
+ * is pure CSS keyed off the app's `[data-mode="dark"]` attribute, no re-highlighting on theme toggle (see
  * code.css). Module-level state = one singleton for the whole app. */
 
 const THEME_LIGHT = `light-plus`;
 const THEME_DARK = `dark-plus`;
 
 /* One line's colour tokens, for a surface that must put its OWN markup inside the code and so cannot render
- * Shiki's finished HTML — the workspace search list interleaves a match `<mark>` with the colour spans. Each
+ * Shiki's finished HTML, the workspace search list interleaves a match `<mark>` with the colour spans. Each
  * token's `htmlStyle` is the same inline light colour + `--shiki-dark` var pair the HTML path emits, so
  * code.css's dark-mode flip governs these identically. */
 export type CodeToken = Pick<ThemedToken, "content" | "offset" | "htmlStyle">;
 
-/* A throwaway line, tokenized once per grammar the moment it loads. A grammar's patterns are compiled lazily —
- * the JS engine transpiles each rule's Oniguruma to a RegExp the first time a line reaches that rule — and
+/* A throwaway line, tokenized once per grammar the moment it loads. A grammar's patterns are compiled lazily,
+ * the JS engine transpiles each rule's Oniguruma to a RegExp the first time a line reaches that rule, and
  * vscode-textmate charges that compile to the 500ms budget it runs PER LINE. Over budget, tokenization stops
  * mid-line and hands back the remainder as one token, so the line renders silently mis-coloured (and the search
  * list, which caches what it got, keeps it that way for the session). Cold, the first TypeScript line costs
  * ~100ms; on a machine with every core busy that is over the budget, which is how a correct line came back flat.
- * Paying the compile here — inside the load every caller already awaits, off the render path — leaves a real
+ * Paying the compile here, inside the load every caller already awaits, off the render path, leaves a real
  * line at a millisecond or two, and the budget doing only what it is meant to do: bound a pathological line.
  * The text is nonsense in most languages by design; it only has to drive the scanner through the rules a line
  * of code hits (keywords, strings, brackets, a comment). */
@@ -45,7 +45,7 @@ const ensureCore = (): Promise<HighlighterCore> => {
         core = createHighlighterCore({
             themes: [import(`@shikijs/themes/light-plus`), import(`@shikijs/themes/dark-plus`)],
             langs: [],
-            // forgiving: don't throw on a grammar regex the JS engine can't compile — degrade gracefully
+            // forgiving: don't throw on a grammar regex the JS engine can't compile, degrade gracefully
             // instead, which matters as more languages get added for file preview.
             engine: createJavaScriptRegexEngine({ forgiving: true }),
         });
@@ -54,7 +54,7 @@ const ensureCore = (): Promise<HighlighterCore> => {
 };
 
 // Ensure the core is built and `lang`'s grammar is loaded (both one-time, however many callers ask at once),
-// returning the shared instance — or undefined for a language we don't ship. Shared by highlight (HTML),
+// returning the shared instance, or undefined for a language we don't ship. Shared by highlight (HTML),
 // tokenizeLine and the Monaco bridge (useMonaco).
 const ensureLang = (lang: string): Promise<HighlighterCore | undefined> => {
     const pending = grammars.get(lang);
@@ -72,7 +72,7 @@ const ensureLang = (lang: string): Promise<HighlighterCore | undefined> => {
         return instance;
     })();
     grammars.set(lang, loading);
-    // A grammar chunk that failed to load (offline, a dev optimizer 504) must not be remembered as failed —
+    // A grammar chunk that failed to load (offline, a dev optimizer 504) must not be remembered as failed,
     // forget it so the next render tries again. The rejection still reaches the caller awaiting `loading`.
     void loading.catch(() => grammars.delete(lang));
     return loading;
@@ -84,7 +84,7 @@ const highlight = async (code: string, lang: string): Promise<string | undefined
     (await ensureLang(lang))?.codeToHtml(code, { lang, themes: { light: THEME_LIGHT, dark: THEME_DARK } });
 
 // The colour tokens of a SINGLE line, for the callers that render their own markup around the code (see
-// CodeToken). Tokenized on its own, with no grammar state carried in from the lines above it — all a snippet
+// CodeToken). Tokenized on its own, with no grammar state carried in from the lines above it, all a snippet
 // lifted out of its file can do. Unsupported langs return undefined, like `highlight`.
 const tokenizeLine = async (line: string, lang: string): Promise<readonly CodeToken[] | undefined> =>
     (await ensureLang(lang))?.codeToTokens(line, { lang, themes: { light: THEME_LIGHT, dark: THEME_DARK } }).tokens[0];

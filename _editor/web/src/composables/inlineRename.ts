@@ -1,7 +1,7 @@
 import { reactive, ref, type VNode } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 
-/* THE APP'S ONE INLINE-RENAME STATE MACHINE — a name that reads as text until it is clicked. Per-instance
+/* THE APP'S ONE INLINE-RENAME STATE MACHINE, a name that reads as text until it is clicked. Per-instance
  * factory; each surface owns its editing/draft/error state. Returned reactive() so nested refs unwrap in
  * templates. Conventions match WorkspaceTree's inline rename, which is where they were set: focus+select on
  * mount, enter=commit, esc=cancel, blur=commit, empty or unchanged = silent cancel.

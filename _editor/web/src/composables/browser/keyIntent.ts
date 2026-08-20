@@ -1,20 +1,20 @@
-/* WHAT A KEYSTROKE OVER A LIVE BROWSER PICTURE IS FOR — the rule both screencast surfaces follow: the agent's
+/* WHAT A KEYSTROKE OVER A LIVE BROWSER PICTURE IS FOR, the rule both screencast surfaces follow: the agent's
  * browser view (useBrowserView) and a connected account's own profile window (BrowserProfileDialog). One module
  * because it is one question, and the copy each of them used to carry had already drifted apart in the answer.
  *
- * The picture is a page in another Chromium, but the keyboard belongs to the app around it — so every keystroke
- * has to be assigned to one of them, and BOTH answers are load-bearing:
+ * The picture is a page in another Chromium, but the keyboard belongs to the app around it, so every keystroke
+ * has to be assigned to one of them, and BOTH answers matter:
  *
  *   - Left to the host: the shortcuts a person needs to keep. New tab, close tab, reload, find, print,
  *     devtools. These would be lost to a page that cannot act on them anyway (a remote Chromium driven this way
  *     ignores window-level chords entirely), and swallowing them would make the window a keyboard trap.
  *   - Sent to the page: typing, the control keys a form needs, and the EDITING chords. This is the half that
  *     was missing. Ctrl+A used to fall through to the host, where it selected the entire app instead of the
- *     text in the field the person was looking at — the surest sign that the window had their attention and
+ *     text in the field the person was looking at, the surest sign that the window had their attention and
  *     not their keyboard.
  *
  * PASTE IS DELIBERATELY NOT ONE OF THEM. The remote Chromium has a clipboard of its own, inside the sandbox,
- * that nothing on the user's machine can write to — so forwarding Ctrl+V would paste whatever that browser last
+ * that nothing on the user's machine can write to, so forwarding Ctrl+V would paste whatever that browser last
  * copied rather than what the person meant. It stays with the host, whose paste event carries the real
  * clipboard, and the text rides in as an insert instead (each surface's own onPaste).
  *
@@ -43,11 +43,11 @@ export interface KeyFrame {
 }
 
 export type KeyIntent =
-    // Ordinary typing — insert the character rather than synthesizing a keystroke for it.
+    // Ordinary typing, insert the character rather than synthesizing a keystroke for it.
     | { readonly kind: `text`; readonly text: string }
     // A keystroke for the page, chord or not.
     | { readonly kind: `key`; readonly frame: KeyFrame }
-    // Copy or cut: read the selection back for the user's clipboard FIRST, then let the page have the chord —
+    // Copy or cut: read the selection back for the user's clipboard FIRST, then let the page have the chord,
     // a cut that ran first would delete the very text being read.
     | { readonly kind: `clipboard`; readonly frame: KeyFrame }
     // Not ours. The host app and the user's own browser keep it, default behaviour and all.
@@ -64,7 +64,7 @@ const keyFrame = (event: KeyboardEvent, ctrl: boolean, key?: string): KeyFrame =
     ...(event.shiftKey ? { shift: true } : {}),
 });
 
-/* Assign one keydown. `primary` is Ctrl on Windows/Linux and ⌘ on a Mac — the same chord in a person's hands,
+/* Assign one keydown. `primary` is Ctrl on Windows/Linux and ⌘ on a Mac, the same chord in a person's hands,
  * and the same `ctrl` on the wire. */
 export const keyIntent = (event: KeyboardEvent): KeyIntent => {
     // Alt chords belong to the host (its own back/forward, its menus) and mean almost nothing in a page.
@@ -82,12 +82,12 @@ export const keyIntent = (event: KeyboardEvent): KeyIntent => {
     }
     if (event.key.length === 1) {
         const letter = event.key.toLowerCase();
-        // Paste, and every window-level shortcut, stay with the host — see the note at the top.
+        // Paste, and every window-level shortcut, stay with the host, see the note at the top.
         if (letter === `v`) {
             return host;
         }
         /* ADDING SHIFT MAKES IT THE BROWSER'S. Ctrl+Shift+<letter> is where a browser keeps the shortcuts a
-         * developer reaches for without looking — devtools, reopen the tab I just closed, new incognito window —
+         * developer reaches for without looking, devtools, reopen the tab I just closed, new incognito window,
          * and taking those would be a worse theft than the one this module exists to stop. Redo is the one
          * exception, because it belongs to whatever text field has the caret. */
         if (event.shiftKey && letter !== `z`) {
@@ -98,6 +98,6 @@ export const keyIntent = (event: KeyboardEvent): KeyIntent => {
         }
         return EDITING_LETTERS.has(letter) ? { kind: `key`, frame: keyFrame(event, true, letter) } : host;
     }
-    // Word-wise motion and selection to an edge: Shift is welcome here, and load-bearing.
+    // Word-wise motion and selection to an edge: Shift is welcome here, and required.
     return CHORD_KEYS.has(event.key) ? { kind: `key`, frame: keyFrame(event, true) } : host;
 };

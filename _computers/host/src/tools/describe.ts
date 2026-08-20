@@ -5,15 +5,15 @@ import type { HostFacts, HostScopes } from "@intentic/sandbox-contract";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
 
-/* What this computer IS — the single highest-leverage thing for the quality of the agent's work here.
+/* What this computer IS, the single highest-leverage thing for the quality of the agent's work here.
  *
  * An agent without this guesses: it writes `apt-get` on Fedora, assumes bash on Windows, invents a home
  * directory, and reaches for paths outside its own boundary and then reports the refusal as a bug. One call
- * removes all of that, which is why it is also sent unprompted in the hello frame — the sandbox's capability
+ * removes all of that, which is why it is also sent unprompted in the hello frame, the sandbox's capability
  * card shows it, so the machine is legible before the agent asks anything.
  *
  * The OS name is read from the OS itself rather than from node's `release()`, which on Windows says "10.0.26100"
- * (a build number nobody can act on) and on Linux says the kernel version rather than the distribution — and the
+ * (a build number nobody can act on) and on Linux says the kernel version rather than the distribution, and the
  * distribution is what decides the package manager. */
 
 const exec = promisify(execFile);

@@ -8,7 +8,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * the cleaners' realized per-command savings (exact) and the terse steer's measured A/B (an experiment, with a
  * sample size). Read-only; refetched on focus so the surfaces reflect recent turns.
  *
- * WINDOWED SERVER-SIDE, unlike useUsage — which fetches the whole rolled-up ledger once and lets the browser
+ * WINDOWED SERVER-SIDE, unlike useUsage, which fetches the whole rolled-up ledger once and lets the browser
  * slice it. The difference is the shape of what's behind them: the spend rollup is a handful of rows per active
  * day, while this one is aggregated from a row per Bash COMMAND and a row per turn, so the equivalent payload
  * would be the raw ledgers themselves. The window is in the query key, so a range change refetches.

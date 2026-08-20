@@ -1,7 +1,7 @@
 import type { CloudflareApi } from "@intentic/providers";
 
 // Resolve the zone (id + account) a bootstrap hostname lives under: an explicit override (getZone), else the
-// token's sole zone — erroring when the token sees none or several (the operator must then set ZONE).
+// token's sole zone, erroring when the token sees none or several (the operator must then set ZONE).
 export const resolveZone = async (
     api: CloudflareApi,
     apiToken: string,

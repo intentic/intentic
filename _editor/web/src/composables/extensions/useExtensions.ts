@@ -13,13 +13,13 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { EXTENSIONS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* The installed extensions (extension-kind capabilities resolved to their manifests) for the UI — the Sandbox
+/* The installed extensions (extension-kind capabilities resolved to their manifests) for the UI, the Sandbox
  * hub's Extensions tab. The extension host's boot does its own one-shot fetch of the same route (loader.ts);
  * this query exists for reactive rendering, not for loading code. */
 
 const QUERY_KEY = EXTENSIONS.of();
 
-// What a click would approve — the version story and the mechanical powers diff, read from a staged clone.
+// What a click would approve, the version story and the mechanical powers diff, read from a staged clone.
 // Module-scoped (unlike the verbs below) because it reads nothing back into the query.
 const previewUpdate = async (id: string, ref?: string) =>
     ExtensionUpdatePreviewSchema.parse(
@@ -32,12 +32,12 @@ export function useExtensions() {
         queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)),
     });
     const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
-    // Workspace-extension directories that failed to enumerate, and why — their author's only feedback, since
+    // Workspace-extension directories that failed to enumerate, and why, their author's only feedback, since
     // nothing install-shaped ever rejected them. Rendered by the Extensions tab beside the rows that did load.
     const invalid = computed<InvalidWorkspaceExtension[]>(() => query.data.value?.invalid ?? []);
     // What actually contributes right now. A disabled extension stays LISTED (that is what keeps its switch
-    // reachable) but the daemon wires none of its contributions up, so anything derived from a contribution —
-    // the /capabilities cards above all — must read this list, not `extensions`. Reading the wrong one is how a
+    // reachable) but the daemon wires none of its contributions up, so anything derived from a contribution,
+    // the /capabilities cards above all, must read this list, not `extensions`. Reading the wrong one is how a
     // card for a switched-off extension stayed on the grid and failed at the daemon with an unknown provider.
     const enabledExtensions = computed<ExtensionSummary[]>(() => extensions.value.filter((extension) => extension.enabled));
     // Flip one extension's switch and re-read the list. The daemon converges its own half (declared processes
@@ -48,14 +48,14 @@ export function useExtensions() {
         await query.refetch();
     };
     // Author a new extension in this workspace. The daemon writes a running one and this re-reads the list, so
-    // the row exists before the caller's reloadExtensions() makes it run — which is the order that lets a failed
+    // the row exists before the caller's reloadExtensions() makes it run, which is the order that lets a failed
     // activation still have a row to report itself on.
     const create = async (publisher: string, name: string): Promise<{ id: string; dir: string }> => {
         const created = WorkspaceExtensionCreatedSchema.parse(await sandboxJson(`/extensions/workspace`, jsonBody(`POST`, { publisher, name })));
         await query.refetch();
         return created;
     };
-    // One card's contribution from the enabled extensions' contributes.capabilities — the data capabilityEffects
+    // One card's contribution from the enabled extensions' contributes.capabilities, the data capabilityEffects
     // derives a card's secret/image effects from. Keyed by kind + id because an id is only unique within a kind.
     // Undefined until /extensions loads.
     const contributionOf = (kind: CapabilityKind, id: string): CapabilityContribution | undefined =>
@@ -97,9 +97,9 @@ export function useExtensions() {
         applyUpdate,
         revertUpdate,
         setUpdatePolicy,
-        // When the registry comparison last ran — the honesty line under the tab's update badges.
+        // When the registry comparison last ran, the honesty line under the tab's update badges.
         updatesCheckedAt: computed(() => query.data.value?.updatesCheckedAt),
-        // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
+        // The list has actually arrived (or definitively failed), gates decisions that must not fire against
         // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

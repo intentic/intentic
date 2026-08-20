@@ -8,7 +8,7 @@ import type { KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
 import { KOMODO_CORE_PORT } from "./komodo.js";
 
-// The ssh block is the control-plane host's — Komodo's API is reached over an SSH port-forward to Core.
+// The ssh block is the control-plane host's. Komodo's API is reached over an SSH port-forward to Core.
 const komodoUserSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
@@ -25,7 +25,7 @@ const parse = (inputs: ResolvedInputs): KomodoUserInputs => parseInputs(komodoUs
 // lands the user disabled, so apply creates (when absent), enables, then grants each scoped deployment. read
 // keys on existence + enabled (so a freshly-created-but-not-yet-enabled user re-applies); grants are idempotent
 // re-asserts. Depends (via the resolver's explicit deps) on Komodo + each scoped deployment existing. A pure
-// sink — no outputs.
+// sink, no outputs.
 export const createKomodoUserProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         const parsed = parse(inputs);

@@ -1,7 +1,7 @@
 /* @-file mentions in the chat composer: pure text helpers for detecting the active `@token` at the caret,
  * inserting a picked path, and extracting mentioned workspace paths on send. Mentioned paths ride the turn's
  * existing `attachments` wire field (the daemon resolves workspace-relative paths and folds them into the
- * prompt as a Read-tool note) — no upload involved, they're already workspace files. */
+ * prompt as a Read-tool note), no upload involved, they're already workspace files. */
 
 export interface MentionQuery {
     // Index of the `@` in the draft.
@@ -36,7 +36,7 @@ export const insertMention = (text: string, mention: MentionQuery, caret: number
 };
 
 // Workspace paths referenced as @-mentions in a prompt, deduped. Trailing sentence punctuation is stripped,
-// and only path-looking tokens count (a "/" or "." present) — so a prose handle ("@radarsu") never becomes a
+// and only path-looking tokens count (a "/" or "." present), so a prose handle ("@radarsu") never becomes a
 // phantom attachment; popover-inserted paths always qualify.
 export const mentionPaths = (text: string): string[] => {
     const paths = new Set<string>();

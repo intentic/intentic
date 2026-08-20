@@ -5,7 +5,7 @@ import { useChatPopout } from "../chat/useChatPopout";
 import { useTerminalPopout } from "../terminal/useTerminalPopout";
 
 /* The shell's global keybinding dispatcher: ONE window keydown listener that turns a keystroke into a command
- * invocation. Registered commands are the single source of truth — a command's own `keybinding` is its shortcut,
+ * invocation. Registered commands are the single source of truth, a command's own `keybinding` is its shortcut,
  * so there is no second binding table to drift (the same "the command IS the binding" bet the shell already makes).
  * The first command whose chord matches (and whose `when` gate, if any, is open) wins; its default browser action
  * is suppressed and it runs by id. Because builtins and extension-contributed commands share the registry, an
@@ -24,13 +24,13 @@ export function useKeybindings(): void {
             return;
         }
         event.preventDefault();
-        // A throwing command is its owner's bug — contain it to the console, never break key handling.
+        // A throwing command is its owner's bug, contain it to the console, never break key handling.
         void Promise.resolve(executeCommand(bound.command)).catch((caught: unknown) => console.error(`command ${bound.command} failed`, caught));
     };
 
     onMounted(() => window.addEventListener(`keydown`, onKey));
 
-    /* A popped-out panel's keystrokes dispatch in ITS window, never this one — mirror the listener onto each
+    /* A popped-out panel's keystrokes dispatch in ITS window, never this one, mirror the listener onto each
      * pop-out window while it exists, so shortcuts keep working inside the floating chat/terminal. That document
      * dies with its window, so only a still-open body needs explicit removal on unmount.
      *

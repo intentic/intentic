@@ -10,20 +10,20 @@ import type { Conversation } from "./conversation";
 import { openRunInChat } from "./openRun";
 
 /* --- THE RUN-THROUGH BADGE ------------------------------------------------------------------------
- * ONE control for the one question — what is the next message run THROUGH — and it took two pills far too long
+ * ONE control for the one question, what is the next message run THROUGH, and it took two pills far too long
  * to admit they were asking it. A loop repeats the message here until a bar is cleared; a workflow hands it to a
  * design of sessions that are not this one. Different machines, mutually exclusive answers, and the old row
  * expressed that exclusivity by greying whichever pill you hadn't used yet.
  *
  * FOUR STATES, in this precedence:
  *
- *  - RUNNING a loop — the round count, and the press ENDS it. Outranks everything, including a workflow the user
+ *  - RUNNING a loop, the round count, and the press ENDS it. Outranks everything, including a workflow the user
  *    might otherwise want to arm mid-loop: a loop already going spends money with nobody pressing anything
  *    between rounds, so the one press it needs is the way out, and a badge that hid the stop behind a menu would
  *    leave the fleet board as the only exit. One press ends it and the badge is a picker again.
- *  - WORKFLOW armed — the design's own glyph and name, in the active tint.
- *  - LOOP armed — the same, in the loop's glyph.
- *  - Nothing — a bare `fork`: a message taking some route other than straight down into this chat. Neither of
+ *  - WORKFLOW armed, the design's own glyph and name, in the active tint.
+ *  - LOOP armed, the same, in the loop's glyph.
+ *  - Nothing, a bare `fork`: a message taking some route other than straight down into this chat. Neither of
  *    the two specific glyphs, deliberately, since either would read as one of them already being armed.
  *
  * The state is decided ONCE and the glyph, the name, the tooltip and the aria label are lookups on it. They used
@@ -35,7 +35,7 @@ import { openRunInChat } from "./openRun";
 export type RunThroughState = `running` | `workflow` | `loop` | `idle`;
 
 interface BadgeWords {
-    /** The armed design's name — empty only in states that don't say one. */
+    /** The armed design's name, empty only in states that don't say one. */
     readonly name: string;
     /** Which round a running loop is on. */
     readonly iteration: number;
@@ -58,7 +58,7 @@ const LABEL: Record<RunThroughState, (words: BadgeWords) => string> = {
 };
 
 export interface RunThrough {
-    /** The picker's own open flag — the one control a picked workflow leaves live, because it holds the pick. */
+    /** The picker's own open flag, the one control a picked workflow leaves live, because it holds the pick. */
     readonly open: Ref<boolean>;
     readonly state: ComputedRef<RunThroughState>;
     readonly icon: ComputedRef<IconName>;
@@ -68,7 +68,7 @@ export interface RunThrough {
     readonly label: ComputedRef<string>;
     readonly workflow: ComputedRef<Workflow | undefined>;
     readonly loop: ComputedRef<LoopDesign | undefined>;
-    /** The live loop behind a running badge — its round count. */
+    /** The live loop behind a running badge, its round count. */
     readonly running: ComputedRef<{ readonly iteration: number; readonly maxIterations: number } | undefined>;
     readonly workflowFailure: Ref<string | undefined>;
     readonly loopFailure: Ref<string | undefined>;
@@ -76,7 +76,7 @@ export interface RunThrough {
     readonly pickWorkflow: (workflow: Workflow | undefined) => void;
     /** The way out to the page that owns saved loops AND saved workflows. */
     readonly manage: () => void;
-    /** Stop the loop — the press a running badge is. */
+    /** Stop the loop, the press a running badge is. */
     readonly end: () => Promise<void>;
     /** Drop both picks: what an armed edit does to every other answer to "what happens when I press send". */
     readonly clear: () => void;
@@ -90,7 +90,7 @@ export const useRunThrough = (
     composer: {
         readonly reachable: Ref<boolean>;
         readonly connected: Ref<boolean>;
-        /** Words or files in the box — a loop needs a goal, a workflow does not. */
+        /** Words or files in the box, a loop needs a goal, a workflow does not. */
         readonly staged: Ref<boolean>;
         readonly draft: Ref<string>;
     },
@@ -127,7 +127,7 @@ export const useRunThrough = (
     const words = computed<BadgeWords>(() => ({ name: name.value ?? ``, iteration: activeLoop.value?.iteration ?? 0 }));
 
     /* Send the draft as a run's request. The draft is cleared on success for the reason an ordinary send clears
-     * it — the text has gone somewhere — and KEPT on failure, because the message is all the user has and a
+     * it, the text has gone somewhere, and KEPT on failure, because the message is all the user has and a
      * control that eats it is one nobody presses twice. Then the run takes the screen (openRunInChat), which is
      * the same landing the board's card gives it. */
     const sendThroughWorkflow = async (design: Workflow): Promise<void> => {
@@ -211,12 +211,12 @@ export const useRunThrough = (
             loopFailure.value = undefined;
         },
         /* THE BADGE INTERCEPTS THE SEND, ahead of every gate the composer applies to a message going into this
-         * chat — a pending plan, a running turn to steer, staged attachments. This message is not one: it goes to
+         * chat, a pending plan, a running turn to steer, staged attachments. This message is not one: it goes to
          * a graph of sessions that are not this chat, or to a loop that drives its own turns. `connected` still
          * applies: with no daemon there is nothing to start.
          *
-         * Unlike a workflow's, a loop's send needs a GOAL — a loop with an empty one has nothing to converge on
-         * and the daemon's own schema refuses it — so it gates on the composer actually holding something rather
+         * Unlike a workflow's, a loop's send needs a GOAL, a loop with an empty one has nothing to converge on
+         * and the daemon's own schema refuses it, so it gates on the composer actually holding something rather
          * than on `canSend`, which is also true for the presses that send something OTHER than the draft (a queue
          * to flush, a stopped turn to continue). A loop started off one of those would go up with no goal at all.
          *

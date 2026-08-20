@@ -2,7 +2,7 @@ import { DesktopError } from "./types.js";
 
 /* ONE key vocabulary, rendered per backend.
  *
- * The alternative — letting callers pass whatever their platform's tool wants — makes every caller
+ * The alternative, letting callers pass whatever their platform's tool wants, makes every caller
  * platform-aware, which is the exact coupling this package exists to remove: a model that learned `ctrl+c` on
  * Linux would have to learn `^c` for Windows, and the first thing it would do on an unfamiliar machine is guess.
  * So the vocabulary is fixed here and the backends translate.
@@ -65,7 +65,7 @@ const ALIASES: Record<string, string> = {
 
 /* Split on "+", except when "+" IS the key: "ctrl++" is zoom-in in most applications, and a naive split reads its
  * key as empty. That case is spelled `<modifiers>++`, so it shows up as an empty LAST segment with a real one
- * before it — three parts for one modifier. A trailing separator with nothing to its left ("ctrl+") is not that;
+ * before it, three parts for one modifier. A trailing separator with nothing to its left ("ctrl+") is not that;
  * it is a chord missing its key, and falls through to the error that says so. */
 const segments = (combo: string): string[] => {
     if (combo === "+") {
@@ -103,7 +103,7 @@ export const parseChord = (combo: string): Chord => {
     return { modifiers, key: canonical };
 };
 
-// xdotool speaks this vocabulary natively — it IS X11 keysyms — so rendering is joining it back up.
+// xdotool speaks this vocabulary natively, it IS X11 keysyms, so rendering is joining it back up.
 export const xdotoolChord = (combo: string): string => {
     const chord = parseChord(combo);
     return [...chord.modifiers.map((modifier) => (modifier === "super" ? "super" : modifier)), chord.key].join("+");
@@ -116,8 +116,8 @@ export const wtypeArgs = (combo: string): string[] => {
 };
 
 /* Windows virtual-key codes. The reason keys do NOT go through SendKeys on Windows, though text does: SendKeys
- * has no way to press the Windows key at all, so `super+e` — open Explorer, one of the most useful chords there
- * is — would be silently undeliverable. keybd_event with explicit VK codes can express every chord. */
+ * has no way to press the Windows key at all, so `super+e`, open Explorer, one of the most useful chords there
+ * is, would be silently undeliverable. keybd_event with explicit VK codes can express every chord. */
 const VK: Record<string, number> = {
     ctrl: 0x11,
     alt: 0x12,
@@ -152,7 +152,7 @@ export const windowsChord = (combo: string): WindowsChord => {
     if (named !== undefined) {
         return { modifiers, key: named };
     }
-    // F1–F24 are contiguous from 0x70, letters and digits map to their ASCII code — the two families that would
+    // F1–F24 are contiguous from 0x70, letters and digits map to their ASCII code, the two families that would
     // otherwise need forty table entries each.
     const fkey = /^[fF](\d{1,2})$/.exec(chord.key);
     if (fkey?.[1] !== undefined) {

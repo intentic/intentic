@@ -17,7 +17,7 @@ export const serviceSchema = sshSchema.extend({
 });
 
 // One line of the write-once .env: a literal `value` (single-quoted into the shell AND in the file, so
-// compose never interpolates a `$` inside it), or omitted to generate a host-side `openssl rand -hex 32` —
+// compose never interpolates a `$` inside it), or omitted to generate a host-side `openssl rand -hex 32`,
 // the signoz JWT pattern, so secrets survive restarts and re-applies.
 export interface EnvEntry {
     readonly key: string;
@@ -26,7 +26,7 @@ export interface EnvEntry {
 
 // Everything that distinguishes one compose-stack service from another. The provider skeleton around it
 // (read = ssh + running + healthy, diff = image pins, apply = write files + `up -d` + wait, delete = down -v)
-// is identical across the catalog — signoz predates this factory and keeps its own copy for its extra
+// is identical across the catalog, signoz predates this factory and keeps its own copy for its extra
 // OTLP/seed-admin concerns.
 export interface ComposeServiceSpec<S extends z.ZodType> {
     // Compose project + /opt/intentic/<kind> state dir; the dashboard container carries the node's
@@ -45,14 +45,14 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
     // The long-running compose services' desired images by compose service name; diff drives an update on a
     // pin bump, which `up -d` turns into an in-place recreate of just the changed service.
     readonly images: (parsed: z.infer<S>) => Record<string, string>;
-    // Runs after the stack reports healthy on apply — the seam for signoz-style admin seeding via the
+    // Runs after the stack reports healthy on apply, the seam for signoz-style admin seeding via the
     // service's own API from the host. Must tolerate an already-seeded instance (apply re-runs).
     readonly seed?: (session: SshSession, parsed: z.infer<S>, log: (message: string) => void) => Promise<void>;
 }
 
 const READY_INTERVAL_MS = 4_000;
 
-// Bounded json-file logs for every long-running compose service — docker's default json-file log is
+// Bounded json-file logs for every long-running compose service, docker's default json-file log is
 // unbounded and would grow with the host's uptime; `intentic deploy logs` tails these back over SSH. One line per
 // service in each template, right under its `restart:`.
 export const SERVICE_LOGGING = `    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }`;
@@ -101,10 +101,10 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         }
     };
 
-    // Config files are rewritten every apply; the .env is write-once (its secrets must survive restarts —
+    // Config files are rewritten every apply; the .env is write-once (its secrets must survive restarts,
     // re-keying would invalidate sessions / database credentials). Randoms are generated host-side.
     const ensureFiles = async (session: SshSession, parsed: z.infer<S>, id: string, hash: string): Promise<void> => {
-        // A write that MUST succeed — unlike read's probes, a failed mkdir/cat here leaves the stack unbootable.
+        // A write that MUST succeed, unlike read's probes, a failed mkdir/cat here leaves the stack unbootable.
         // Surface the host's own error (permission on /opt/intentic, disk full) at its origin, rather than letting
         // the later `docker compose up -d` report the confusing "compose.yaml: no such file" for the missing write.
         const write = async (command: string, what: string): Promise<void> => {
@@ -124,7 +124,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         }
         /* Two layers, one call each. The old format quoted the SHELL layer (shellQuote on the value) but wrote
          * the .env layer itself as `KEY='%s'`, so a value containing a single quote closed the line early and
-         * the file read back as something other than what was stored — its own ponytail said as much. envLine
+         * the file read back as something other than what was stored, its own ponytail said as much. envLine
          * now renders the whole line, picking a delimiter the value does not contain, and shellQuote carries
          * that line to the host as one argv word.
          *
@@ -142,7 +142,7 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
 
     return {
         read: async (inputs, ctx) => {
-            // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+            // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
             // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
             if (hasPendingRef(inputs, "internalIp")) {
                 return undefined;

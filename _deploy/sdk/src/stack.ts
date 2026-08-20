@@ -54,7 +54,7 @@ import type {
 } from "./handles.js";
 
 // The builder is a pure intent recorder: i.have.* / i.want.app record what was declared and hand back typed
-// handles for wiring. No derivation happens here — that is the resolver's job. Multiple hosts are supported
+// handles for wiring. No derivation happens here, that is the resolver's job. Multiple hosts are supported
 // (one control plane is derived); there is a single Cloudflare account. The App handle's per-environment
 // ids come from the same deploymentId() the resolver uses, so they cannot drift.
 export const createStack = (): { stack: Stack; intent: IntentSet } => {
@@ -74,7 +74,7 @@ export const createStack = (): { stack: Stack; intent: IntentSet } => {
     const backings: BackingIntent[] = [];
     const moved: Move[] = [];
     const hosts: HostIntent[] = [];
-    // The capability of each declared backing, keyed by its id — so app() can map a `use` handle (an inert
+    // The capability of each declared backing, keyed by its id, so app() can map a `use` handle (an inert
     // ref carrying no runtime capability) back to its BackingCapability for the recorded AppBindingInput.
     const backingCapabilities = new Map<string, BackingCapability>();
     const intent: {
@@ -214,7 +214,7 @@ export const createStack = (): { stack: Stack; intent: IntentSet } => {
     };
 
     // The capability a `use` handle refers to, by its recorded backing id. Throws if the handle is not a
-    // declared backing (a programming error — the type system already guarantees it is a Backing handle).
+    // declared backing (a programming error, the type system already guarantees it is a Backing handle).
     const capabilityOf = (backingId: string): BackingCapability => {
         const capability = backingCapabilities.get(backingId);
         if (capability === undefined) {

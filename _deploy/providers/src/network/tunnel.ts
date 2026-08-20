@@ -23,7 +23,7 @@ const CATCH_ALL: IngressRule = { service: "http_status:404" };
 
 // Each public hostname routes to a co-located service on loopback at its fixed port. The connector runs
 // --network host on the same host as every service it fronts, so 127.0.0.1 always reaches their published
-// ports — and unlike the host's LAN ip, loopback works even where a container netns cannot reach that ip
+// ports, and unlike the host's LAN ip, loopback works even where a container netns cannot reach that ip
 // (e.g. WSL2 published-port hairpin). cloudflared matches rules top-down, first-match-wins, so wildcard
 // hostnames (the preview `*.<zone>`, which overlaps every explicit host on the zone) must sink to the end,
 // after all explicit rules and before the catch-all 404. toSorted is stable, so order within each group
@@ -49,7 +49,7 @@ const ingressEqual = (a: readonly IngressRule[], b: readonly IngressRule[]): boo
 };
 
 // Is the cloudflared connector running on the host, and on which image? A read-only SSH check; a host that
-// is not reachable is reported as not-running (and logged) so a plan proceeds rather than aborting — apply
+// is not reachable is reported as not-running (and logged) so a plan proceeds rather than aborting, apply
 // will surface the connection failure as a hard error. The image lets diff recreate on a version bump.
 const checkConnector = async (
     executor: SshExecutor,
@@ -78,7 +78,7 @@ const checkConnector = async (
 };
 
 // A freshly-run connector registers with the edge asynchronously; until it does, every public hostname on
-// the host answers Cloudflare error 1033 — including control-plane urls a later node in the SAME apply may
+// the host answers Cloudflare error 1033, including control-plane urls a later node in the SAME apply may
 // dial. Poll the tunnel's edge-side status so apply returns only once the tunnel actually serves.
 const CONNECT_TIMEOUT_MS = 120_000;
 const CONNECT_INTERVAL_MS = 3_000;
@@ -103,7 +103,7 @@ const waitConnected = async (api: CloudflareApi, parsed: TunnelInputs, tunnelId:
 };
 
 // (Re)start the cloudflared connector on the host. Idempotent: remove any prior container, then run a
-// fresh one — the connector is stateless (its ingress lives in Cloudflare). --network host lets it dial
+// fresh one, the connector is stateless (its ingress lives in Cloudflare). --network host lets it dial
 // the services' internal urls. Waits out a booting host's tunnel warm-up, then propagates the connection
 // failure as the hard error for a host that never comes up.
 const runConnector = async (
@@ -134,7 +134,7 @@ const runConnector = async (
 // drift; apply ensures the tunnel exists, the connector runs, and the ingress matches.
 export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "accountId")) {
             return undefined;
@@ -179,9 +179,9 @@ export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executo
             tunnelId: tunnel.id,
             ingress: desiredRules(parsed),
         });
-        // A running connector on the desired image needs no restart — the ingress PUT above reaches it as a
+        // A running connector on the desired image needs no restart, the ingress PUT above reaches it as a
         // live config push, with zero downtime. Restarting here would blackhole every public hostname on the
-        // host (Cloudflare 1033) for the re-registration window — including control-plane urls later nodes in
+        // host (Cloudflare 1033) for the re-registration window, including control-plane urls later nodes in
         // this same apply dial. Restart only when the connector is missing or its image drifted, and then
         // wait until the edge reports the tunnel serving before letting dependents proceed.
         const detail = observed?.detail;

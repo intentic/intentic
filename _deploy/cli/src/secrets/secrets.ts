@@ -2,8 +2,8 @@ import { writeFile } from "node:fs/promises";
 import { collectSecretUsage, type DesiredStateGraph } from "@intentic/graph";
 import { renderTemplate } from "../lib/templates.js";
 
-// Every secret the resolved graph requires, split by who provides it: `env` — the user supplies it in the
-// environment; `generated` — intentic creates and persists it. Each bucket is de-duplicated and sorted.
+// Every secret the resolved graph requires, split by who provides it: `env`, the user supplies it in the
+// environment; `generated`, intentic creates and persists it. Each bucket is de-duplicated and sorted.
 export const collectSecrets = (graph: DesiredStateGraph): { readonly env: string[]; readonly generated: string[] } => {
     const usage = collectSecretUsage(graph);
     return {

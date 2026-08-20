@@ -1,11 +1,11 @@
 import type { IconName } from "@intentic/ui";
 import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState } from "@intentic/sandbox-contract";
 
-/* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here —
- * the lane machine, the "why does this need me" label, the drill-in verb, the glyphs — and NOTHING else in the
+/* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here,
+ * the lane machine, the "why does this need me" label, the drill-in verb, the glyphs, and NOTHING else in the
  * app is allowed to answer those questions its own way.
  *
- * That rule is load-bearing rather than tidy. The board, the chat rail and the Changes panel each ask some form
+ * That rule is functional rather than tidy. The board, the chat rail and the Changes panel each ask some form
  * of "is this session done?", and the moment one of them answers from `status` alone it starts contradicting
  * the other two on screen: an agent parked on a question is `idle` in the registry with an attention flag
  * raised, so a status-only reading calls it finished while the board has it sitting in Attention. The user
@@ -15,31 +15,31 @@ import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState 
  * Changes legend's mark all derive from it), and it reads BOTH halves of the state: `status`, the turn
  * lifecycle, and `attention`, the flags a parked turn raises independently of it.
  *
- * This module is deliberately a LEAF — pure functions over plain data, no store, no query, no Vue. That is what
+ * This module is deliberately a LEAF, pure functions over plain data, no store, no query, no Vue. That is what
  * lets the panel, the rail and the tests all reach the same answer without any of them dragging in the app
  * shell (useAgents pulls useChat pulls the router). */
 
-/* THE FOUR STANDINGS THE DAEMON NEVER ASSIGNS — a conversation the fleet has not registered, in the shapes
+/* THE FOUR STANDINGS THE DAEMON NEVER ASSIGNS, a conversation the fleet has not registered, in the shapes
  * that difference comes in. `draft` is one that has not been sent yet; `starting` is one whose turn has GONE
  * but which the daemon has not filed as an agent yet; `failed` is one whose send was REFUSED, so it never
  * became an agent and never will until the user sends again; `resumed` is a past conversation reopened from
- * History, whose agent entry is long gone (or never existed — a plain chat).
+ * History, whose agent entry is long gone (or never existed, a plain chat).
  *
  * They are told apart because they belong in different lanes and offer different things. A draft is the tab you
  * are about to type into and reads as Active; a refused one is a dead end that needs the user, and reading it
  * as a draft is what left the board carrying cards that looked like work in flight, sorted ABOVE the agents
  * actually working, with no action on them at all. A RESUMED one is the same mistake in its oldest form: a
  * conversation from three weeks ago, with a full transcript behind it, was arriving as a "Draft" at the head of
- * the Active lane — the board announcing the user's own history as brand-new work. It is finished, because it
- * is: nothing is running and nothing is owed. What all four share — no registry entry, so nothing to archive,
- * review, land or drop — is `unregistered` below.
+ * the Active lane, the board announcing the user's own history as brand-new work. It is finished, because it
+ * is: nothing is running and nothing is owed. What all four share, no registry entry, so nothing to archive,
+ * review, land or drop, is `unregistered` below.
  *
  * `starting` IS THE ONE THAT USED TO LIE. A sent turn was reported as the wire's own `running`, which reads as
- * "the registry says this agent is working" — so every guard that asks "does the daemon know this card" was
+ * "the registry says this agent is working", so every guard that asks "does the daemon know this card" was
  * answered yes about a card it has never heard of. Clicking one therefore latched the tab as registered and the
  * card vanished off the board with no entry to replace it; nothing could archive it and nothing could close it,
  * and only a reload brought it back. The gap it covers is normally a blink (send → the daemon's first roster
- * frame) and is not always one — a daemon under load takes longer to file the turn than the click takes to draw.
+ * frame) and is not always one, a daemon under load takes longer to file the turn than the click takes to draw.
  * However long it lasts, it is exactly when the board has to be honest about what it does and does not know.
  *
  * None may be widened into AgentStatus: the wire enum is the daemon's account of agents it HAS, and these
@@ -53,7 +53,7 @@ export interface AgentStanding {
     readonly attention: AgentAttention;
 }
 
-/* NO REGISTRY ENTRY BEHIND THIS CARD — the guard every fleet mutation needs and the one question both
+/* NO REGISTRY ENTRY BEHIND THIS CARD, the guard every fleet mutation needs and the one question both
  * client-only standings answer the same way. Archiving, reviewing, landing, discarding and dropping all address
  * an agent BY ID through the daemon, and this card's id names nothing there: the requests 404, and the ones
  * that don't would register the conversation as a side effect of filing it away. */
@@ -64,25 +64,25 @@ export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =
     status === `draft` || status === `starting` || status === `failed` || status === `resumed`;
 
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
-    // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
+    // Not `pencil`, that's the card's rename affordance; the draft glyph is a not-yet-started marker.
     if (status === `draft`) {
         return { icon: `circle`, label: `Draft`, class: `text-subtle` };
     }
     // A conversation reopened from History. It says where it came from rather than how it ended, because how it
-    // ended is not knowable here — the entry that would have said is gone, which is the whole reason this
+    // ended is not knowable here, the entry that would have said is gone, which is the whole reason this
     // standing exists. The glyph is the one the search footer files these under ("In earlier chats"), so the
     // row and the card it turns into wear the same mark.
     if (status === `resumed`) {
         return { icon: `history`, label: `Earlier chat`, class: `text-subtle` };
     }
-    // The send was refused, so there is no turn to have failed and nothing of the user's is at risk — warning
+    // The send was refused, so there is no turn to have failed and nothing of the user's is at risk, warning
     // rather than the `error` danger, the same reading `interrupted` gets for the same reason. What separates
     // it from every state below is that this agent does not exist: it is a card for work that never started.
     if (status === `failed`) {
         return { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` };
     }
     // The turn has gone and the daemon has not filed it yet. The running spinner and the running blue, because
-    // that is what it is — work in flight — and the word is the whole of the difference: this card is drawn from
+    // that is what it is, work in flight, and the word is the whole of the difference: this card is drawn from
     // what THIS BROWSER knows, so nothing on it can be the registry's account of the agent yet.
     if (status === `starting`) {
         return { icon: `spinner`, spin: true, label: `Starting…`, class: `text-link` };
@@ -90,14 +90,14 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
     }
-    // The Stop landed and the turn is walking itself out. STILL, deliberately — a spinner here is the exact
+    // The Stop landed and the turn is walking itself out. STILL, deliberately, a spinner here is the exact
     // thing the user complained about: it says "working on your request" for the seconds between the press and
     // the turn's last breath, which is precisely when they want to be told it is over. Muted for the same
     // reason: this state is the tail of something ending, not an event of its own.
     if (status === `stopping`) {
         return { icon: `stop`, label: `Stopping…`, class: `text-subtle` };
     }
-    // The turn stopped without ending — something underneath it broke and the daemon is already undoing it. The
+    // The turn stopped without ending, something underneath it broke and the daemon is already undoing it. The
     // running spinner and the running blue, deliberately: nothing failed that the user has to know about, the
     // work is still in progress, and the whole point of this state is that the card goes on saying so.
     if (status === `resuming`) {
@@ -110,7 +110,7 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
         return { icon: `check-circle`, label: `Landed`, class: `text-success` };
     }
     // Finished with auto-land off: the delta is safe on the branch, waiting for a deliberate Land. Link-blue,
-    // not the attention hues — the user CHOSE to hold work for review, so a card in this state is an offer to
+    // not the attention hues, the user CHOSE to hold work for review, so a card in this state is an offer to
     // act, never a warning (see blocked()'s note on teaching people to ignore the word "needs you").
     if (status === `ready`) {
         return { icon: `download`, label: `Ready to land`, class: `text-link` };
@@ -121,13 +121,13 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     if (status === `error`) {
         return { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` };
     }
-    // Warning, not danger: nothing FAILED here — the turn was cut off by its daemon dying (a rebuild, a crash),
+    // Warning, not danger: nothing FAILED here, the turn was cut off by its daemon dying (a rebuild, a crash),
     // which is a fact about the sandbox rather than about the work. The glyph is the one the Stop button wears,
     // because that is what happened to it.
     if (status === `interrupted`) {
         return { icon: `stop`, label: `Interrupted`, class: `text-warning` };
     }
-    // The same shape of ending, by the user's own hand — which is why it is quieter than `interrupted` and much
+    // The same shape of ending, by the user's own hand, which is why it is quieter than `interrupted` and much
     // quieter than the `error` it used to be filed as. Nothing here is news to the person reading it: they are
     // the one who pressed Stop. The card's job now is only to say where the turn got to.
     if (status === `stopped`) {
@@ -136,51 +136,51 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
 };
 
-/* A TURN IS IN FLIGHT — running, unwinding after a Stop, or waiting out the blocker that killed it. The one
+/* A TURN IS IN FLIGHT, running, unwinding after a Stop, or waiting out the blocker that killed it. The one
  * question every "hands off this agent" guard is really asking (its worktree is a live turn's working state, so
  * it cannot be archived, discarded or landed), and the one the live readouts are drawn for: the ticking elapsed
  * and the activity line keep their meaning while the daemon walks a stopped turn out, and blinking them off a
  * beat before the card settles is the same flicker this whole state exists to remove.
  *
  * `resuming` belongs here on both counts. Its worktree is the working state of a turn that is about to run
- * again in it, so every hands-off guard means the same thing it means for a running one — and the wait is the
+ * again in it, so every hands-off guard means the same thing it means for a running one, and the wait is the
  * daemon's own bookkeeping being repaired, so a card that stopped reading as work-in-progress halfway through
  * is the flicker again, only slower.
  *
  * `starting` belongs here for the readouts alone, and it costs the guards nothing: a turn that has gone IS in
- * flight — its elapsed should tick from the moment of the send rather than from whenever the daemon gets round
- * to filing it — while every hands-off guard already refuses it one question earlier, because a card with no
+ * flight, its elapsed should tick from the moment of the send rather than from whenever the daemon gets round
+ * to filing it, while every hands-off guard already refuses it one question earlier, because a card with no
  * registry entry has nothing for those verbs to address (`unregistered`).
  *
- * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED — the guards that read
+ * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED, the guards that read
  * this either want it excluded (a parked turn is exactly what awaitingUser answers for) or answer it in their
  * own terms. */
 export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `running` || agent.status === `starting` || agent.status === `stopping` || agent.status === `resuming`;
 
-/* THE AGENT IS WRITING RIGHT NOW — the browser's copy of the daemon's `writing` guard (agents-registry.ts),
+/* THE AGENT IS WRITING RIGHT NOW, the browser's copy of the daemon's `writing` guard (agents-registry.ts),
  * and the narrowest live reading on this file.
  *
  * It exists for Land, which is the one action whose answer differs between a turn that is TYPING and a turn
  * that is PARKED. Everything else on this page treats them alike: `turnInFlight` deliberately excludes
- * `awaiting` and the guards that care answer it in their own terms — this is one of those terms.
+ * `awaiting` and the guards that care answer it in their own terms, this is one of those terms.
  *
  * `stopping` and `resuming` are absent for the same reason the daemon leaves them out: the provider is not
  * producing anything, so nothing can be caught half-written. The two sides must agree on this or the UI offers
  * a press the daemon refuses, so keep them in step. */
 export const writingNow = (agent: AgentStanding): boolean => agent.status === `running` || agent.status === `starting`;
 
-// "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
+// "Blocked on you", the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
 // agents "need you" teaches them to ignore the word.
 //
 // `stopped` sits here beside `interrupted` for the reason the two share: a turn that ended before its work did,
 // leaving a half-written worktree that only a message from the user can carry forward. Nothing is OUTSTANDING
-// on their side (see awaitingUser, which excludes both) — the lane is where the card goes to be picked up again
+// on their side (see awaitingUser, which excludes both), the lane is where the card goes to be picked up again
 // rather than lost among the landed ones.
 //
 // `failed` is the same kind of ending one step earlier: the turn was refused before it ran, so there is no
-// half-written worktree — only the words the user typed, waiting in the composer's queue for a send that works.
+// half-written worktree, only the words the user typed, waiting in the composer's queue for a send that works.
 // It is here rather than in Active because a card nobody can act on has no business sitting among the agents
 // that are working, wearing the lane that says they are.
 export const blocked = (agent: AgentStanding): boolean =>
@@ -195,11 +195,11 @@ export const blocked = (agent: AgentStanding): boolean =>
     agent.status === `stopped` ||
     agent.status === `failed`;
 
-// The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
+// The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING, a plan to approve, a question, a
 // permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
 // turn, an unlandable conflict): those want looking at, but nothing about them is outstanding on the user's
 // side, so ending the agent throws away no answer it was owed. laneDrop draws the same line in the same order
-// for the same reason — a drop is refused for this set and offered for the dead ends.
+// for the same reason, a drop is refused for this set and offered for the dead ends.
 export const awaitingUser = (agent: AgentStanding): boolean =>
     agent.attention.plan ||
     agent.attention.question ||
@@ -208,7 +208,7 @@ export const awaitingUser = (agent: AgentStanding): boolean =>
     agent.attention.capability ||
     agent.status === `awaiting`;
 
-// The one-line "why this card is in the Attention lane" label — shared by the card chip, the Changes legend's
+// The one-line "why this card is in the Attention lane" label, shared by the card chip, the Changes legend's
 // hover card, and any future toast.
 export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (agent.attention.plan) {
@@ -233,17 +233,17 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     }
     // Names the whole of what happened, in the tense that matters: not "failed" (nothing ran to fail) and not
     // "error" (there is no agent to have erred). The chip's job here is to stop the card being read as an agent
-    // at all — what the user does about it is close it, and the reason is on the red line in its chat.
+    // at all, what the user does about it is close it, and the reason is on the red line in its chat.
     if (agent.status === `failed`) {
         return `Didn't start`;
     }
-    // Says what the card cannot: the turn did not fail and did not finish — the daemon under it went away. The
+    // Says what the card cannot: the turn did not fail and did not finish, the daemon under it went away. The
     // user's move is to send it a message, which starts a fresh turn on the same session.
     if (agent.status === `interrupted`) {
         return `Interrupted`;
     }
     // Same unfinished ending, one word of difference that matters: this one was the user's decision, so the chip
-    // reports it rather than reporting it AT them. No "by you" — they know.
+    // reports it rather than reporting it AT them. No "by you", they know.
     if (agent.status === `stopped`) {
         return `Stopped`;
     }
@@ -252,7 +252,7 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
 
 export type FleetLane = "attention" | "active" | "finished";
 
-// THE projection — the board's kanban lanes, and by extension every other surface's answer to "where does this
+// THE projection, the board's kanban lanes, and by extension every other surface's answer to "where does this
 // one stand" (see the header: two of them may never disagree on screen about the same agent). A pure reading of
 // the state machine, so "finished" needs no explicit action or timer: the auto-land flow flips a
 // cleanly-completed turn to landed/idle within ms of it ending, and any follow-up message moves the card
@@ -262,39 +262,39 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
         return `attention`;
     }
     // `stopping` stays ACTIVE, where the card already is: the turn is still live (the daemon holds its worktree
-    // until the unwind finishes), and moving it now would spend a lane change on a state that lasts seconds —
+    // until the unwind finishes), and moving it now would spend a lane change on a state that lasts seconds,
     // then spend another one the moment it settles. The card says "Stopping…" where it stands, and moves once.
     // `resuming` is here for the same reason and is the case that proves it: a card that dropped into Finished
     // for the seconds a credential takes to re-mint, and climbed back out, moved twice to say nothing at all.
     if (turnInFlight(agent) || agent.status === `draft`) {
         return `active`;
     }
-    // landed | idle — the work is in the workspace (or there was none) — and `ready`, work HELD on the branch
-    // because auto-land is off. Ready is finished, not attention: the turn is over and nothing is failing —
+    // landed | idle, the work is in the workspace (or there was none), and `ready`, work HELD on the branch
+    // because auto-land is off. Ready is finished, not attention: the turn is over and nothing is failing,
     // the user opted into a deliberate land, and the card carries that press itself. `resumed` lands here too,
     // and it is the same reading: a conversation reopened from History has nothing running and owes nothing.
     return `finished`;
 };
 
-/* WHAT THE CARD SAYS WHEN LANDED WORK IS NO LONGER IN THE WORKSPACE — the sentence, and the fraction when it
+/* WHAT THE CARD SAYS WHEN LANDED WORK IS NO LONGER IN THE WORKSPACE, the sentence, and the fraction when it
  * is only part of it.
  *
  * A land arrives as uncommitted changes, so the user can discard it in the Changes panel like anything else,
  * and every other reading on a card is taken between commits and cannot see that happen (landed-presence.ts
  * on the daemon side). Unsaid, the card goes on wearing `Landed` and the session menu goes on offering a
- * greyed-out land captioned "Already in your workspace" — over a tree that no longer holds a line of it.
+ * greyed-out land captioned "Already in your workspace", over a tree that no longer holds a line of it.
  *
  * IT IS A QUALIFIER ON `landed`, NOT A STATUS OF ITS OWN, and that is deliberate on both counts. The lane is
  * still Finished: the user discarded that work on purpose, and a card that climbed back into a queue demanding
  * attention would be arguing with a decision they already made. And the fact is orthogonal to the turn
- * lifecycle — an agent that has since been messaged and is running again can equally have had its earlier
+ * lifecycle, an agent that has since been messaged and is running again can equally have had its earlier
  * land discarded, and both things are true of it at once.
  *
  * The COMMITTED half counts as present, which is why the ordinary flow never sees this line: reviewing an
  * agent's work and committing it is the happy path, and a card that announced "removed from your workspace"
  * the moment the user committed would be crying wolf on the one outcome the whole review exists to produce.
  *
- * Undefined for every agent with nothing missing, which is nearly all of them — the daemon only sends a
+ * Undefined for every agent with nothing missing, which is nearly all of them, the daemon only sends a
  * reading when there is something to say (AgentSummarySchema.landedPresence). */
 export const landedAway = (agent: {
     readonly landedPresence?: { readonly landed: number; readonly present: number };
@@ -303,27 +303,27 @@ export const landedAway = (agent: {
     if (presence === undefined) {
         return undefined;
     }
-    /* THE HINT IS A CLAUSE, NOT A PARAGRAPH — it is read as the tail of `text` on the same line, so it carries
+    /* THE HINT IS A CLAUSE, NOT A PARAGRAPH, it is read as the tail of `text` on the same line, so it carries
      * exactly the one fact "removed" does not: the branch still has it. It used to be a 20-word reassurance
-     * ("Nothing is lost — this agent's branch still holds all of it, and \"Land again\" puts back what is
+     * ("Nothing is lost, this agent's branch still holds all of it, and \"Land again\" puts back what is
      * missing.") stacked under a button, which is two lines of prose spent on a card that gets a glance: half
      * of it narrated the button sitting directly above it, and "nothing is lost" announced a loss before
-     * denying it. The recovery is the button's own word — `again` — and needs no sentence of its own. */
+     * denying it. The recovery is the button's own word, `again`, and needs no sentence of its own. */
     // The whole of it, which is the common shape: one discard of one agent's work, and no arithmetic to read.
     if (presence.present === 0) {
         return { text: `Removed from your workspace`, hint: `still on its branch` };
     }
-    // A PART of it — a discarded selection, or a few rows reverted by hand. The fraction rather than the
+    // A PART of it, a discarded selection, or a few rows reverted by hand. The fraction rather than the
     // remainder ("3 files gone") because what the user is deciding is whether enough survived to leave it be,
     // and that reads off "9 of 12" without them having to do the subtraction. Its hint names the OTHER half for
     // the same reason: the fraction already says what is here, so the clause is only useful about what is not.
     return { text: `${presence.present} of ${presence.landed} files still in your workspace`, hint: `the rest is on its branch` };
 };
 
-/* ONE BIT — "this session isn't done with your tree yet" — for surfaces that name an agent while showing its
+/* ONE BIT, "this session isn't done with your tree yet", for surfaces that name an agent while showing its
  * OUTPUT rather than the agent itself (the Changes panel's From legend). Those chips spend their glyph on
  * identity, so the full status vocabulary above cannot ride them; and most of it would say nothing there
- * anyway, because every chip in such a legend is by definition a session that already landed something — the
+ * anyway, because every chip in such a legend is by definition a session that already landed something, the
  * resting state drawn four times.
  *
  * It is `laneOf` narrowed to a boolean and NOT a status list of its own, which is the whole point: the file
@@ -336,7 +336,7 @@ export const landedAway = (agent: {
  * are STATIC for the same reason one step further: the active mark used to pulse so it could be told apart by
  * behaviour from the eight identity hues a chip's tint is drawn from, but there is one of these per chip, so a
  * review carrying work from four sessions blinked four times a second for as long as they ran. The halo does
- * the telling-apart instead — an identity tint is a flat dot, this one is a dot with a ring around it — and it
+ * the telling-apart instead, an identity tint is a flat dot, this one is a dot with a ring around it, and it
  * costs no motion at all.
  *
  * `undefined` in means an agent the roster no longer carries (archived, or retired by the retention sweep),
@@ -356,10 +356,10 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
 };
 
-// The card's drill-in affordance label (desktop) — the verb that names what the review detail opens onto, so
+// The card's drill-in affordance label (desktop), the verb that names what the review detail opens onto, so
 // the button reads as a destination rather than a generic "open". A DRAFT has no worktree/diff yet, so it has
 // no review detail (returns undefined): its click only focuses the docked chat. Everything registered has a
-// destination; the label leads with why-you'd-go — pending approval/question first, then a land conflict or
+// destination; the label leads with why-you'd-go, pending approval/question first, then a land conflict or
 // error, then a diff to look over, falling back to a plain "Review" for a running agent with nothing yet.
 export const reviewAction = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): string | undefined => {
     if (unregistered(agent.status) || agent.branch === undefined) {
@@ -382,22 +382,22 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (agent.attention.capability) {
         return `Set up`;
     }
-    /* NAMES THE REPORT, not the fix — because on a conflicted card the fix is now a button of its own, sitting
+    /* NAMES THE REPORT, not the fix, because on a conflicted card the fix is now a button of its own, sitting
      * one line above this link (AgentCard). While this link WAS the only conflict affordance on the board it
      * read "Resolve conflict", which was the closest a navigation could get to the verb the user wanted; two
      * controls a few pixels apart both promising to resolve the conflict, only one of which does anything to
      * it, is worse than either alone. So the action keeps the verb and the link says what it opens: the report
-     * — which paths refused, why, and whose move each one is. */
+     *, which paths refused, why, and whose move each one is. */
     if (agent.attention.conflict || agent.status === `conflict`) {
         return `See what blocked it`;
     }
     if (agent.status === `error`) {
         return `View error`;
     }
-    // The destination is the transcript, where the cut-off tool call is the last thing in it — that IS the
+    // The destination is the transcript, where the cut-off tool call is the last thing in it, that IS the
     // report for this state, so the label names the place rather than promising a fix the board cannot do.
     // One label for both endings: whether the daemon died or the user pressed Stop, the question the card is
-    // answering is the same one — how far did it get?
+    // answering is the same one, how far did it get?
     if (agent.status === `interrupted` || agent.status === `stopped`) {
         return `See where it stopped`;
     }
@@ -416,7 +416,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
  * setting is folded into an answer, so every surface that states or flips the posture (the review panel's hold
  * toggle, the landed notice's offer) agrees on what it currently is: the agent's own override when it has one,
  * else the sandbox-wide setting, else the schema default (off). Takes the pieces rather than reaching for the
- * stores — this module is a leaf (see the header). */
+ * stores, this module is a leaf (see the header). */
 export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.autoLand ?? sandboxDefault ?? false;
 
@@ -426,7 +426,7 @@ export const effectiveAutoLand = (agent: { readonly autoLand?: boolean } | undef
  * pressing a button that says the opposite of what it does.
  *
  * The one thing worth saying twice: the agent's override wins, and the sandbox setting is only the answer for
- * a conversation that never expressed one. That asymmetry IS the feature — a press inside one chat speaks for
+ * a conversation that never expressed one. That asymmetry IS the feature, a press inside one chat speaks for
  * that chat, and Sandbox ▸ Agent speaks for everything else. */
 export const effectiveOutageResume = (agent: { readonly resumeAfterOutage?: boolean } | undefined, sandboxDefault: boolean | undefined): boolean =>
     agent?.resumeAfterOutage ?? sandboxDefault ?? false;
@@ -442,8 +442,8 @@ const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
     webhook: { icon: `bolt`, label: `Webhook` },
 };
 
-// The card's "this conversation came in from outside" line: what opened it, who sent it, and — in the tooltip
-// — which automation was configured to answer. The user never typed this agent's first message, and a card
+// The card's "this conversation came in from outside" line: what opened it, who sent it, and, in the tooltip
+//, which automation was configured to answer. The user never typed this agent's first message, and a card
 // that doesn't say so reads as an agent they forgot starting.
 //
 // The hint carries ONLY what the mark itself cannot: OriginMark already prints the source and the sender
@@ -460,14 +460,14 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
 };
 
 /* THE UNREAD BADGE, in the two flavours worth telling apart: an agent nobody has opened yet is "New"; one you
- * HAVE opened that has worked since is "Updated" — with "New" on both, every returning agent reads as a
+ * HAVE opened that has worked since is "Updated", with "New" on both, every returning agent reads as a
  * stranger. The marker behind it lives on the daemon entry, so opening it anywhere clears it everywhere.
  * `seenAt` rides out for the hover the "Updated" flavour earns (WHEN you last looked is the fact the one word
  * hides); the caller formats it, because this module owns no clock and no time words. */
 export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
     !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
 
-/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on) — but a parent whose
+/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on), but a parent whose
  * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
  * as it waits on them. So the children lead, and what the parent was doing trails. */
 export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
@@ -497,7 +497,7 @@ export const formatElapsed = (startedAt: number, now: number): string => {
 export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
 
-// The activity line's icon by tool family — a glanceable "what is it doing" glyph, mock-style.
+// The activity line's icon by tool family, a glanceable "what is it doing" glyph, mock-style.
 export const activityIcon = (tool: string | undefined): IconName => {
     if (tool === undefined) {
         return `list-check`; // a todo line without a tool
@@ -517,17 +517,17 @@ export const activityIcon = (tool: string | undefined): IconName => {
     return `sparkles`;
 };
 
-/* HOW A LOOP READS ON A CARD — one line, and the one line has to answer "how far along" and "towards what".
+/* HOW A LOOP READS ON A CARD, one line, and the one line has to answer "how far along" and "towards what".
  *
  * A looping agent is otherwise indistinguishable from any other running one: same spinner, same activity line,
  * same growing cost, for forty minutes. What separates them is that a loop has a DESTINATION and a POSITION, so
- * those are what the line carries, and the goal is the half that is worth the horizontal space — "iteration
+ * those are what the line carries, and the goal is the half that is worth the horizontal space, "iteration
  * 3/12" without it is a progress bar for an unnamed job.
  *
  * The ENDED states are not folded into one "finished". `done` and `stalled` are opposite outcomes that a status
  * dot alone would render identically, and `stalled` is the one that needs a person: it means the agent stopped
  * changing anything while still reporting work to do, which is a prompt problem and not a capacity problem.
- * Colour follows that reading — link while it runs, success for the only success, warning for the three ways it
+ * Colour follows that reading, link while it runs, success for the only success, warning for the three ways it
  * gave up, danger only for a loop that actually broke.
  */
 export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly text: string; readonly class: string; readonly spin: boolean } => {

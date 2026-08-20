@@ -4,7 +4,7 @@ import { SandboxHttpError, sandboxJson } from "./sandboxClient";
 import { ENVIRONMENT_CONTENTS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* THE SANDBOX'S CONTENTS — what it has, grouped by whose decision put it there.
+/* THE SANDBOX'S CONTENTS, what it has, grouped by whose decision put it there.
  *
  * A separate query from useEnvironment on purpose, and not merely for tidiness: this read asks every tool on the
  * overlay for its version, so it costs process spawns, while `environment` is polled by the shell's rebuild
@@ -15,7 +15,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * AND IT FEATURE-DETECTS, because the browser is routinely newer than the daemon it talks to and that is a
  * supported state rather than a fault (see useDaemonRoutes): the app plane serves whatever image a user last
  * pulled, and in local development the web app runs from the working tree while the daemon is the last built
- * one. A daemon that predates this route answers 404 — which the generic path renders as "Could not read what
+ * one. A daemon that predates this route answers 404, which the generic path renders as "Could not read what
  * the sandbox has installed · Request failed (404)", i.e. a broken feature, which is exactly the ambiguity that
  * machinery exists to kill. `unsupported` is what lets the card stop OFFERING the view instead, and fall back to
  * the recipe it has always been able to show. Not gated through `supportsRoute` because this is a hand-written
@@ -26,7 +26,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
 const ENVIRONMENT_CONTENTS_KEY = ENVIRONMENT_CONTENTS.of();
 
 // The order the groups are read in: what an agent asked for and the owner approved, then the price of the
-// capabilities they turned on, then what nobody chose. Narrowest decision first — that is the one they revisit.
+// capabilities they turned on, then what nobody chose. Narrowest decision first, that is the one they revisit.
 const GROUPS = [
     { origin: `custom`, label: `Added for this workspace` },
     { origin: `capability`, label: `From your capabilities` },
@@ -58,7 +58,7 @@ export function useEnvironmentContents(enabled: () => boolean) {
 
     const items = computed(() => query.data.value?.items ?? []);
     /* WHETHER THERE IS AN ANSWER YET, which the view needs kept apart from "the answer is nothing". Probing forty
-     * commands takes a moment, and for that moment the item list is legitimately empty — a view that read it as
+     * commands takes a moment, and for that moment the item list is legitimately empty, a view that read it as
      * empty would tell somebody with a full sandbox that theirs is stock, then correct itself a second later. */
     const loading = computed(() => query.isPending.value || (query.isFetching.value && items.value.length === 0));
     const groups = computed((): ContentsGroup[] =>

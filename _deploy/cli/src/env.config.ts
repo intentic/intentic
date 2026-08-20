@@ -5,9 +5,9 @@ import { z } from "zod";
 
 // Typed process-level config for the CLI. @puristic/env derives each env var name from the schema path
 // (camelToScreamingSnake per segment, joined with "_"): intenticOutput → INTENTIC_OUTPUT, cloudflareApiToken →
-// CLOUDFLARE_API_TOKEN, demo.sshPort → DEMO_SSH_PORT — so the schema shape reproduces the fixed names the
+// CLOUDFLARE_API_TOKEN, demo.sshPort → DEMO_SSH_PORT, so the schema shape reproduces the fixed names the
 // connect scripts / CI / demo set. Only the KNOWN config vars live here. Secret VALUES the graph references by
-// a runtime key (env() secrets, generated passwords) are NOT config — they stay resolved by direct
+// a runtime key (env() secrets, generated passwords) are NOT config, they stay resolved by direct
 // process.env[key] lookups (resolve/adopt/deployments) and by `resolveInputs(..., process.env, ...)`, because
 // their keys come from the user's graph, not this schema.
 const configSchema = z.object({
@@ -19,7 +19,7 @@ const configSchema = z.object({
     // How a command renders: human prose (default), one JSON document, or a live NDJSON event stream. A backend
     // driving the CLI as a subprocess sets it once; humans get `text`.
     intenticOutput: z.enum(["text", "json", "ndjson"]).catch("text"),
-    // Where deploy-lifecycle run logs land (one file per run, pruned to the newest 50 — lib/run-log.ts). The
+    // Where deploy-lifecycle run logs land (one file per run, pruned to the newest 50, lib/run-log.ts). The
     // sandbox daemon points this at /history/logs/intentic-runs; operator shells default to ~/.intentic/logs.
     intenticLogDir: z.string().default(join(homedir(), ".intentic", "logs")),
     // Where resolve/plan/apply/adopt mirror their structured ndjson event stream for the web to tail
@@ -31,7 +31,7 @@ const configSchema = z.object({
     cloudflareApiToken: z.string().default(""),
     connectToken: z.string().default(""),
     zone: z.string().default(""),
-    // The inventory name of the host being enrolled (connect-host.sh) — salts its per-host SSH tunnel id.
+    // The inventory name of the host being enrolled (connect-host.sh), salts its per-host SSH tunnel id.
     hostName: z.string().default(""),
     // demo dev-harness (dist/demo.js) inputs: the Cloudflare zone it provisions under, an extra NODE_OPTIONS to
     // prepend (the DoH import hook), and the host ports it publishes Forgejo/Komodo/SSH on for local browsing.
@@ -46,7 +46,7 @@ const configSchema = z.object({
         .prefault({}),
 });
 
-// Real env only — stricli owns the CLI's flags/args, so there is no cliArgs() source here. The `.env` beside an
+// Real env only, stricli owns the CLI's flags/args, so there is no cliArgs() source here. The `.env` beside an
 // artifact is loaded into process.env (loadEnvFile) before loadConfig() runs, so env() picks those up too.
 const definition = {
     schema: configSchema,

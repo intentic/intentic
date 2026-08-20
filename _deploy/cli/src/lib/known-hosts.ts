@@ -6,7 +6,7 @@ import { KNOWN_HOSTS_FILE } from "./artifact.js";
 
 // A file-backed HostKeyStore: the host-key lockfile beside the artifact, mapping "address:port" → base64
 // public key. Same on-disk conventions as .secrets.json (mode 0o600, 4-space JSON, trailing newline). `set`
-// is read-modify-write — safe because apply reconciles strictly sequentially, so no two writes race.
+// is read-modify-write, safe because apply reconciles strictly sequentially, so no two writes race.
 const hostKeyId = (host: string, port: number): string => `${host}:${port}`;
 
 export const createKnownHostsStore = (dir: string): HostKeyStore => {

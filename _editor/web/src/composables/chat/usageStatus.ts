@@ -11,10 +11,10 @@ import { formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { ref } from "vue";
 import { providerAccounts, translatorAccounts } from "./providerAccounts";
 
-// Every plan-limit window a turn ENDING IN THIS TAB reported, keyed by the account the daemon says served it —
+// Every plan-limit window a turn ENDING IN THIS TAB reported, keyed by the account the daemon says served it,
 // the `account_usage` frame, read from the provider's usage endpoint at turn end. Account-wide within an
 // account, not per-conversation: the last turn on any tab updates its account's entry. Only half of what is
-// known about an account, and the half that only exists while this window stays open — the durable half rides
+// known about an account, and the half that only exists while this window stays open, the durable half rides
 // the account lists (see usageStatusFor). A module singleton so the composer chip, the rate-limit notice and
 // the account picker can read it without threading it through each conversation.
 export const usageStatusByAccount = ref<Record<string, AccountUsage>>({});
@@ -56,7 +56,7 @@ export const orderedWindows = (usage: AccountUsage): UsageWindow[] =>
         return rank(left) - rank(right) || usageWindowLabel(left).localeCompare(usageWindowLabel(right));
     });
 
-// The pool that will gate the next turn: the fullest one. A single headroom number can only ever be this one —
+// The pool that will gate the next turn: the fullest one. A single headroom number can only ever be this one,
 // the account is as constrained as its tightest allowance, whichever that happens to be today.
 export const bindingWindow = (usage: AccountUsage | undefined): UsageWindow | undefined =>
     usage?.windows.reduce<UsageWindow | undefined>(
@@ -64,8 +64,8 @@ export const bindingWindow = (usage: AccountUsage | undefined): UsageWindow | un
         undefined,
     );
 
-// The one-number summary a chip or a picker row shows. Undefined when the account has no usable reading — never
-// measured, or every window it had has since reset — so the row shows nothing rather than a confident 0%.
+// The one-number summary a chip or a picker row shows. Undefined when the account has no usable reading, never
+// measured, or every window it had has since reset, so the row shows nothing rather than a confident 0%.
 export const usagePercent = (usage: AccountUsage | undefined): number | undefined => {
     const window = bindingWindow(usage);
     return window === undefined ? undefined : Math.round(window.utilization);
@@ -77,7 +77,7 @@ export const usageTone = (percent: number): string =>
     percent >= SPENT_PERCENT ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-link`;
 
 /* Where "effectively spent" is defined, once. The account list dims a spent row and sinks it below the ones
- * with headroom, and the ring above it turns red — three decisions that have to agree, and did not while each
+ * with headroom, and the ring above it turns red, three decisions that have to agree, and did not while each
  * surface carried its own 90. TIGHT is the same idea one step earlier: the point at which an account stops
  * being one you'd start a long turn on. Named rather than left as the bare 75 this tone scale used to carry,
  * because the capacity counts below have to draw their bands on the SAME two thresholds. */
@@ -89,7 +89,7 @@ export const isSpent = (usage: AccountUsage | undefined): boolean => {
 };
 
 /* The freshest reading for an account, given what the server attached to its row. Both sources are the same
- * AccountUsage; they differ only in how they arrive. The daemon's rides the accounts list (any provider — a
+ * AccountUsage; they differ only in how they arrive. The daemon's rides the accounts list (any provider, a
  * Claude snapshot it persisted, a routed subscription's quota it pulled), while the streamed one is pushed by a
  * turn ending in THIS tab, which no list fetched a moment earlier can know about. Newer `measuredAt` wins,
  * which for every provider but Claude simply means the daemon's. */
@@ -101,17 +101,17 @@ export const liveUsage = (account: string, attached: AccountUsage | undefined): 
     return streamed.measuredAt >= attached.measuredAt ? streamed : attached;
 };
 
-/* The same merge for a caller that holds an account ID AND NOTHING ELSE — the composer chip, the picker's rows,
+/* The same merge for a caller that holds an account ID AND NOTHING ELSE, the composer chip, the picker's rows,
  * the sentence a refused turn prints. They are handed an account by the conversation, never the row it came
  * from, so the attached half has to be looked up rather than passed in.
  *
  * That lookup is the whole point. This used to answer from the streamed map alone, which meant the chat
  * surfaces reported whatever the last turn IN THIS BROWSER TAB happened to see: a tab left open showed an
- * hours-old floor ("≥87%") while the account rows two routes away — same store, same account — drew the
+ * hours-old floor ("≥87%") while the account rows two routes away, same store, same account, drew the
  * current number. A reading nobody can reconcile is worse than no reading, because it is the one the user
  * checks before deciding whether to send. */
 const attachedUsage = (account: string): AccountUsage | undefined =>
-    // A provider's own account is keyed by id and a translator subscription by its auth-file name — the same
+    // A provider's own account is keyed by id and a translator subscription by its auth-file name, the same
     // two keys planLimitRows files them under, because it is the same shared store on the daemon's side.
     Object.values(providerAccounts.value)
         .flat()
@@ -131,7 +131,7 @@ export interface PlanLimitPool {
     readonly resetsAt: number | undefined;
 }
 
-/* ONE READING, AS THE POOLS IT IS MADE OF — named, ordered worst-first, rounded once. Everything that draws
+/* ONE READING, AS THE POOLS IT IS MADE OF, named, ordered worst-first, rounded once. Everything that draws
  * plan limits starts here: the Usage tab's meters (planLimitRow), the ring's hover card, the sentence a screen
  * reader hears. A pool that reads "Weekly · Opus 91% (resets Sun 5:00 AM)" in one of them therefore reads the
  * same in the others, which is the whole reason this is a projection rather than three formatters. */
@@ -143,36 +143,36 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         resetsAt: window.resetsAt,
     }));
 
-// The fullest of them — the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
+// The fullest of them, the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
 // headline number and the pool it names can never come from different arithmetic.
 const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>
     pools.reduce<PlanLimitPool | undefined>((worst, pool) => (worst === undefined || pool.percent > worst.percent ? pool : worst), undefined);
 
 export interface PlanHeadroom {
-    // The binding pool's figure — what the ring draws, and what its tone is taken from.
+    // The binding pool's figure, what the ring draws, and what its tone is taken from.
     readonly percent: number;
     readonly tone: string;
     readonly stale: boolean;
     readonly measuredAt: number;
     readonly pools: readonly PlanLimitPool[];
-    // The pool `percent` came from. Undefined when every pool has reset — the one state where the account has
+    // The pool `percent` came from. Undefined when every pool has reset, the one state where the account has
     // been measured and there is nothing left to name.
     readonly binding: PlanLimitPool | undefined;
 }
 
-/* AN ACCOUNT'S HEADROOM, PROJECTED ONCE — the one number a ring draws, its severity, and the per-pool
+/* AN ACCOUNT'S HEADROOM, PROJECTED ONCE, the one number a ring draws, its severity, and the per-pool
  * breakdown the card behind it lists. Undefined only when there is NO reading: that is the state the connection
  * row answers with a plain dot, and it must stay distinguishable from a measured 0%.
  *
  * Structured, not a sentence. This used to hand every surface a pre-joined tooltip string, which is how the
- * rings ended up wearing a four-line slab of prose — "5-hour session 56% (resets Mon 12:30 AM) · Weekly · all
- * models 15% (resets Sun 5:00 AM) · …" — over the very rows the reader was comparing. Pools, figures and
+ * rings ended up wearing a four-line slab of prose, "5-hour session 56% (resets Mon 12:30 AM) · Weekly · all
+ * models 15% (resets Sun 5:00 AM) · …", over the very rows the reader was comparing. Pools, figures and
  * resets travel as data so the card can draw them as a list of meters and the sentence survives only where a
  * sentence is the right medium (usageDetail, spoken to a screen reader).
  *
  * The `?? 0` is the one deliberate difference from the composer chip. `usagePercent` returns undefined when
  * every window has reset (an empty array), which is right for a chip that should not be pinned by a stale
- * reading — but wrong for an account row, where a reset account IS at 0%: it was measured, its pools reopened,
+ * reading, but wrong for an account row, where a reset account IS at 0%: it was measured, its pools reopened,
  * and "you have room" beats "we don't know". */
 export const planHeadroom = (usage: AccountUsage | undefined): PlanHeadroom | undefined => {
     if (usage === undefined) {
@@ -184,11 +184,11 @@ export const planHeadroom = (usage: AccountUsage | undefined): PlanHeadroom | un
     return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, pools, binding };
 };
 
-// Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 15:20") — unambiguous for
+// Format an epoch-seconds reset instant as a short local weekday + time (e.g. "Mon 15:20"), unambiguous for
 // both the 5-hour and weekly windows without a ticking relative clock.
 export const formatReset = (epochSeconds: number): string => formatWeekdayTime(epochSeconds * 1000);
 
-/* The same instant as a RELATIVE wait, for the outage retry — where a wall-clock time would be the wrong answer
+/* The same instant as a RELATIVE wait, for the outage retry, where a wall-clock time would be the wrong answer
  * to the right question. A limit reset is hours out, so naming the hour lets someone decide whether to wait; an
  * outage retry is thirty seconds to twenty minutes out, and "Tue 9:41 PM" makes the reader do arithmetic to learn
  * something they'd have understood instantly as "about 30s".
@@ -204,18 +204,18 @@ export const formatWait = (epochSeconds: number, now: number = Date.now()): stri
     return `about ${Math.round(seconds / 60)} min`;
 };
 
-/* How old a reading is — the KIT'S age words (timeAgo), asked to keep counting in days rather than handing over
+/* How old a reading is, the KIT'S age words (timeAgo), asked to keep counting in days rather than handing over
  * to an absolute date the way a log row does: how stale a snapshot is stays the question at any distance, and a
  * date would make the reader do the subtraction. This is a name, not a second implementation; it used to be the
- * latter, and the copy had drifted on every tier below the day — rounding down where the kit rounded up, calling
- * two minutes "just now" — so one gap read differently on two screens a click apart.
+ * latter, and the copy had drifted on every tier below the day, rounding down where the kit rounded up, calling
+ * two minutes "just now", so one gap read differently on two screens a click apart.
  *
- * A reading is taken at the end of a turn, so an idle sandbox's is as old as its last turn — and utilization
+ * A reading is taken at the end of a turn, so an idle sandbox's is as old as its last turn, and utilization
  * only ever climbs within a window, so the number it dates is a floor, not a live figure. */
 export const formatAge = (measuredAt: number, now: number = Date.now()): string => timeAgo(measuredAt, { now, days: true });
 
 /* Past this, a reading stops being a figure and becomes a FLOOR. Two reasons it can only ever climb away from
- * us: utilization never falls inside a window, and these pools are ACCOUNT-wide — another Claude Code, the
+ * us: utilization never falls inside a window, and these pools are ACCOUNT-wide, another Claude Code, the
  * desktop app, claude.ai itself all spend the same allowance without this sandbox hearing about it. Ten minutes
  * is roughly "since the last turn": inside that, the reading is what the provider just told us. */
 const STALE_AFTER_MS = 10 * 60_000;
@@ -224,7 +224,7 @@ export const isStale = (usage: AccountUsage, now: number = Date.now()): boolean 
 // A percentage, marked as a floor when the reading is old enough to have been overtaken elsewhere.
 export const formatUtilization = (percent: number, stale: boolean): string => `${stale ? `≥` : ``}${percent}%`;
 
-/* THE SAME BREAKDOWN AS ONE SENTENCE — the ring's accessible name, and nothing else. A screen reader gets no
+/* THE SAME BREAKDOWN AS ONE SENTENCE, the ring's accessible name, and nothing else. A screen reader gets no
  * hover, so the card that lists these pools as meters (UsageRing.vue) never reaches it; this line is how the
  * same facts arrive there, and it is the reason the string form still exists after the card replaced it on
  * screen. Every pool, because "which one is binding" is what the single number can't answer, and the reset
@@ -241,19 +241,19 @@ export const usageDetail = (headroom: PlanHeadroom): string =>
     ].join(` · `);
 
 /* ---- plan limits, as rows ---------------------------------------------------------------------------------
- * EVERY connection this sandbox holds, drawn from the same snapshot type — the projection behind the Usage
+ * EVERY connection this sandbox holds, drawn from the same snapshot type, the projection behind the Usage
  * tab's meters, and the counterpart to the Agent tab's rings (AiAccountSection's rowsOf, which decorates the
  * same two lists with the same liveUsage merge).
  *
  * Both lists, because a sandbox's connections come two ways and the reader has one question: a provider's own
  * account (Claude) and a subscription the translator holds (ChatGPT, Google, Kimi, SuperGrok). The Usage tab
- * read only the first, and only through the STREAMED map at that — so Google's headroom, which the daemon
+ * read only the first, and only through the STREAMED map at that, so Google's headroom, which the daemon
  * pulls and hands over on the account row, could not appear there however well it was read. One list, one
  * merge, one shape.
  *
  * An account with NO reading is a row too. Absence rendered as absence is indistinguishable from an account
- * with room to spare, and those mean opposite things — so the row is listed and says which of the two states
- * it is in: a plan that publishes no limits at all (`readable: false` — SuperGrok alone, now that Kimi's own
+ * with room to spare, and those mean opposite things, so the row is listed and says which of the two states
+ * it is in: a plan that publishes no limits at all (`readable: false`. SuperGrok alone, now that Kimi's own
  * endpoint is read), or one that simply
  * has not been measured yet. */
 
@@ -262,7 +262,7 @@ export interface PlanLimitRow {
     // within its own provider.
     readonly id: string;
     readonly provider: AgentProvider;
-    // The key the DAEMON knows this account by — the account id or the auth-file name — which is what `id` is
+    // The key the DAEMON knows this account by, the account id or the auth-file name, which is what `id` is
     // made unique from, and the key a refusal names the account it was serving with (see refusalNote).
     readonly account: string;
     readonly label: string;
@@ -273,18 +273,18 @@ export interface PlanLimitRow {
     // Undefined ⇒ no reading at all; `readable` then says whether one is even obtainable.
     readonly percent: number | undefined;
     readonly pools: readonly PlanLimitPool[];
-    // The pool the percentage came from — the one that will gate this account's next turn. Carried rather than
+    // The pool the percentage came from, the one that will gate this account's next turn. Carried rather than
     // re-derived, so a summary line naming a pool and the meter under it can't pick different ones.
     readonly binding: PlanLimitPool | undefined;
     readonly measuredAt: number | undefined;
     readonly stale: boolean;
     readonly readable: boolean;
     // A credential that can no longer be refreshed. Nothing to do with headroom, everything to do with whether
-    // this account can serve a turn — so it rides the same row and surfaces in the same attention list.
+    // this account can serve a turn, so it rides the same row and surfaces in the same attention list.
     readonly needsReauth: boolean;
 }
 
-// What a row is built from, in the two lists' common terms — the daemon's key for the account, who it says it
+// What a row is built from, in the two lists' common terms, the daemon's key for the account, who it says it
 // is, and the reading it arrived with. Named rather than passed as five positionals, because `label` and
 // `identity` are both strings and swapping them silently produces a plausible-looking wrong screen.
 interface PlanLimitSource {
@@ -315,7 +315,7 @@ const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLim
     };
 };
 
-// Measured rows first, tightest of those at the top — the account about to gate a turn is the one worth seeing
+// Measured rows first, tightest of those at the top, the account about to gate a turn is the one worth seeing
 // without scrolling. Unmeasured rows sink rather than sort as 0%: unknown is not headroom.
 export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, routed: TranslatorAccounts): PlanLimitRow[] =>
     [
@@ -333,7 +333,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
             ),
         ),
         // A routed subscription has no reauth flag of its own: CLIProxyAPI drops an auth file it can no longer
-        // refresh, so a broken one leaves the list rather than sitting in it. Nor a separate identity — the
+        // refresh, so a broken one leaves the list rather than sitting in it. Nor a separate identity, the
         // translator reports one name per auth file, and that name IS the label.
         ...Object.entries(routed).flatMap(([provider, accounts]) =>
             accounts.map((account) =>
@@ -368,7 +368,7 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
 export const PLAN_LIMIT_BANDS = [`spent`, `tight`, `room`, `unread`, `none`] as const;
 export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
-/* `none` is not a degree of fullness — it is a plan that publishes no limits at all (SuperGrok), and it
+/* `none` is not a degree of fullness, it is a plan that publishes no limits at all (SuperGrok), and it
  * stays out of the capacity bar for that reason: an account whose headroom is unknowable is not headroom.
  *
  * Asked for the two fields it actually reads rather than a whole row, so the model picker's footer can band the
@@ -389,7 +389,7 @@ export const PLAN_LIMIT_BAND_LABEL: Record<PlanLimitBand, string> = {
     none: `no published limits`,
 };
 
-/* Severity for a band, on the same three tones a percentage wears everywhere else — so the capacity bar and the
+/* Severity for a band, on the same three tones a percentage wears everywhere else, so the capacity bar and the
  * meters under it mean the same thing by the same colour. `unread` and `none` take the achromatic slot on
  * purpose: they are the absence of a reading, and giving them a hue would seat them on the severity scale. */
 export const planLimitBandTone = (band: PlanLimitBand): string =>
@@ -405,7 +405,7 @@ const countBands = (rows: readonly PlanLimitRow[]): PlanLimitCounts => {
     return counts;
 };
 
-// The soonest pool to reopen, in epoch seconds — the one number that answers "when does capacity come back".
+// The soonest pool to reopen, in epoch seconds, the one number that answers "when does capacity come back".
 // Past resets are ignored rather than reported: a window whose instant has passed describes a pool that has
 // already reopened, and naming it would send a reader to wait for something that already happened.
 const nextReset = (rows: readonly PlanLimitRow[], now: number): number | undefined => {
@@ -419,10 +419,10 @@ export interface PlanLimitGroup {
     readonly provider: AgentProvider;
     readonly rows: readonly PlanLimitRow[];
     readonly counts: PlanLimitCounts;
-    // The account that gates this provider first — what the group row states instead of a percentage of its own.
+    // The account that gates this provider first, what the group row states instead of a percentage of its own.
     readonly tightest: PlanLimitRow | undefined;
     readonly nextResetAt: number | undefined;
-    // The last turn this provider actually refused, already read against what has happened since — see
+    // The last turn this provider actually refused, already read against what has happened since, see
     // refusalNote.
     readonly refusal: RefusalNote | undefined;
     // The account it happened on, when the daemon named one and that account is still connected. Placement,
@@ -432,7 +432,7 @@ export interface PlanLimitGroup {
 }
 
 // One group per provider, each group's most-constrained account first, and the groups themselves ordered by how
-// close they are to gating a turn. A provider with no reading at all sinks below every provider that has one —
+// close they are to gating a turn. A provider with no reading at all sinks below every provider that has one,
 // the same rule the rows follow, one level up.
 export const planLimitGroups = (
     rows: readonly PlanLimitRow[],
@@ -462,17 +462,17 @@ export const planLimitGroups = (
         .toSorted((left, right) => (right.tightest?.percent ?? -1) - (left.tightest?.percent ?? -1) || left.provider.localeCompare(right.provider));
 };
 
-/* WHAT A REFUSAL READS AS, once — because both surfaces that show one (the Agent tab's connection list, the
+/* WHAT A REFUSAL READS AS, once, because both surfaces that show one (the Agent tab's connection list, the
  * Usage tab's provider groups) have to say the same thing about the same event.
  *
  * Two states, and the difference between them is the whole design. While a refusal is CURRENT it is quoted: the
  * provider's own words are the only part that names which pool ran out or which credential was rejected, and
  * paraphrasing them would throw away the single most useful thing here. Once it has been answered by what
  * happened afterwards it becomes a footnote about a thing that is over, and quoting a 401 at someone whose
- * account has been serving turns all afternoon is how a surface teaches its reader to distrust it — the words
+ * account has been serving turns all afternoon is how a surface teaches its reader to distrust it, the words
  * move to `detail`, where a hover still reaches them.
  *
- * The condition comes from the record's `kind` — read off what the provider SAID, not off the frame code,
+ * The condition comes from the record's `kind`, read off what the provider SAID, not off the frame code,
  * precisely so a spent Kimi plan stops reading as a broken sign-in. The AGE, not the clock time, and no reset
  * instant: a reset belongs to a POOL, and this event knows only that one of them refused. */
 const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], string> = {
@@ -486,14 +486,14 @@ const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], string> = {
     limit: `has had room since`,
     auth: `has authenticated fine since`,
     // Only ever printed for a refusal the daemon settled by watching a turn run on this account (the store's
-    // own clear) — nothing this side can observe answers one.
+    // own clear), nothing this side can observe answers one.
     entitlement: `has run a turn since`,
 };
 
 export interface RefusalNote {
     // The line to draw: the provider's sentence while this is current, what has happened since once it is not.
     readonly line: string;
-    // The provider's own words, in both states — the hover behind a line that no longer prints them.
+    // The provider's own words, in both states, the hover behind a line that no longer prints them.
     readonly detail: string;
     // Alarm or footnote. Never hidden either way: "this refused a turn on Tuesday" is context worth having,
     // just not context worth alarming over.
@@ -511,7 +511,7 @@ export interface RefusalReading {
 }
 
 /* What it takes to say a refusal is OVER, which differs by kind because the two facts differ. A spent pool is
- * answered by HEADROOM — a reading taken since with room in it. A rejected credential is not: a percentage says
+ * answered by HEADROOM, a reading taken since with room in it. A rejected credential is not: a percentage says
  * nothing about whether a token works, so what answers it is the account having been read at all since (every
  * reading is taken through that same credential) while the store still holds it as usable. That distinction is
  * what lets the daemon's own recovery show: a refused Claude token is re-minted and the turn re-run within
@@ -525,7 +525,7 @@ const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): bool
      * organization that has switched Claude Code off for a seat changes nothing else about the account: the
      * token still authenticates, so `needsReauth` stays false, and the plan's usage endpoint still publishes
      * pools, so a fresh reading lands within the minute with room to spare. That is the exact combination the
-     * `auth` rule reads as "authenticated fine since" — which is how a live refusal was dismissed by the very
+     * `auth` rule reads as "authenticated fine since", which is how a live refusal was dismissed by the very
      * next quota sweep, leaving a full green ring on the one account in the list that could not run. */
     if (refusal.kind === `entitlement`) {
         return false;
@@ -536,20 +536,20 @@ const answersRefusal = (refusal: ProviderRefusal, reading: RefusalReading): bool
     return refusal.kind === `auth` ? !reading.needsReauth : reading.percent !== undefined && reading.percent < SPENT_PERCENT;
 };
 
-/* WHAT HAS ANSWERED THIS REFUSAL, if anything — the clause the line ends with, and undefined while it still
+/* WHAT HAS ANSWERED THIS REFUSAL, if anything, the clause the line ends with, and undefined while it still
  * stands. Everything hangs off WHO may answer: a native turn names the account it was serving, and only that
  * credential's later readings say anything about it. A second Claude account polling fine proves nothing about
  * the one whose token was rejected, and letting the provider's whole list answer is what put a three-hour-old
- * 401 over three accounts that were all working — dismissed by one of them, kept standing by another sitting at
+ * 401 over three accounts that were all working, dismissed by one of them, kept standing by another sitting at
  * 95%, describing neither.
  *
  * Two cases where the named account cannot answer at all. It is GONE (disconnected since, so nothing on screen
- * is what refused) — which settles the refusal rather than leaving it shouting about an account the reader no
+ * is what refused), which settles the refusal rather than leaving it shouting about an account the reader no
  * longer has. Or there is no list yet, mid-load, where absence means nothing has been read: that one keeps the
  * refusal standing, because "we know nothing" must not render as "it's fine now" for a frame.
  *
- * A routed turn names nobody — CLIProxyAPI picks the auth file itself and only refuses once every credential it
- * holds is cooling down — so there the provider's whole list is the honest resolution rather than a guess. */
+ * A routed turn names nobody. CLIProxyAPI picks the auth file itself and only refuses once every credential it
+ * holds is cooling down, so there the provider's whole list is the honest resolution rather than a guess. */
 const refusalAnswer = (refusal: ProviderRefusal, readings: readonly RefusalReading[]): string | undefined => {
     const named = readings.filter((reading) => reading.account === refusal.account);
     if (refusal.account !== undefined && named.length === 0) {
@@ -580,22 +580,22 @@ export interface PlanLimitSummary {
     readonly accounts: number;
     readonly counts: PlanLimitCounts;
     readonly nextResetAt: number | undefined;
-    /* Only what STAYS BROKEN until a person does something — a credential that can no longer be refreshed.
+    /* Only what STAYS BROKEN until a person does something, a credential that can no longer be refreshed.
      *
      * A SPENT POOL IS NOT ON THIS LIST, and used to be. It is the plan working exactly as sold: the pool refills
      * on a schedule the account already knows, nobody can hurry it, and the one useful thing to do about it is
-     * wait or route elsewhere — which the translator does by itself. Calling that "needs attention" spends the
+     * wait or route elsewhere, which the translator does by itself. Calling that "needs attention" spends the
      * loudest section of the screen on the most ordinary event on it.
      *
      * The cost was structural, not just tonal. Spend is the STEADY STATE of a fleet: this sandbox holds 36
-     * connections, 31 of them one provider's, and at the end of a week nearly all of them are spent at once — so
+     * connections, 31 of them one provider's, and at the end of a week nearly all of them are spent at once, so
      * the section grew to 32 near-identical lines that said, one account at a time, precisely what the capacity
      * bar three inches above says in one: how many have room, and when the next pool reopens. A section that is
      * longest when everything is most normal has inverted its own meaning, and a reader who scrolls past it every
      * day is a reader who will scroll past the dead credential in it too.
      *
      * So spend is counted (the `spent` band), summarised (`nextResetAt`) and reconcilable per account (the
-     * roster) — and this list holds the one state none of those can resolve on its own. */
+     * roster), and this list holds the one state none of those can resolve on its own. */
     readonly attention: readonly PlanLimitRow[];
 }
 

@@ -5,7 +5,7 @@ import type { Input, Readiness, SecretRef } from "@intentic/graph";
 
 // How image-pin bumps roll out on this host. "pinned" (default): recreate the service on the new pin and
 // health-gate (Phase-1 behavior); rollback is `git revert` + re-apply. "guarded": wrap each stateful
-// service's bump in a transaction — pre-update restic snapshot, recreate, health-gate, and auto-rollback
+// service's bump in a transaction, pre-update restic snapshot, recreate, health-gate, and auto-rollback
 // (old image + restored data) on failure. "guarded" requires i.have.backup (it reuses its restic repo).
 export type UpdatePolicy = "pinned" | "guarded";
 
@@ -18,7 +18,7 @@ export interface HostInput {
     port?: number;
     updatePolicy?: UpdatePolicy;
     // How the sandbox reaches this host's SSH: "direct" (default) dials address:port; "cloudflared" tunnels
-    // through the host's own Cloudflare SSH tunnel — for a NAT'd self-host the sandbox can't reach by IP.
+    // through the host's own Cloudflare SSH tunnel, for a NAT'd self-host the sandbox can't reach by IP.
     via?: "direct" | "cloudflared";
 }
 

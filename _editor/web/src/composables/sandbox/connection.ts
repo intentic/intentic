@@ -1,15 +1,15 @@
-/* The active sandbox connection, as a state machine — pure, so the whole reconnect policy is testable without
+/* The active sandbox connection, as a state machine, pure, so the whole reconnect policy is testable without
  * a network, a timer, or a Vue instance.
  *
  * The thing this replaces was a boolean triple (`reachable` / `denied` / `probeError`) written from inside the
  * stream loop, which forced every question about the connection to be answered by sniffing: a watchdog trip
  * was told from a real network failure by `error.name === "AbortError"`, and a 403 got its own sticky boolean
  * because the triple had no room for "the daemon answered, and said no". A failure is a VALUE here, tagged by
- * what actually happened, and the phase is derived from it — so a gate renders off `failure.kind` instead of
+ * what actually happened, and the phase is derived from it, so a gate renders off `failure.kind` instead of
  * re-deriving the cause from a message string.
  *
- * The transient/blocked split is the load-bearing one. A TRANSIENT failure means "the daemon we expected did
- * not answer" and is worth retrying fast — that is the restart-a-container case, and the first retry lands in
+ * The transient/blocked split is the one that matters. A TRANSIENT failure means "the daemon we expected did
+ * not answer" and is worth retrying fast, that is the restart-a-container case, and the first retry lands in
  * a second. A BLOCKED failure means the daemon answered and refused (403), or there is nothing to dial at all;
  * retrying changes nothing until the user does something, so it backs off to the ceiling immediately rather
  * than hammering a tunnel that is working exactly as configured. */
@@ -22,26 +22,26 @@ const RETRY_DELAYS_MS = [1000, 2000, 4000, 5000] as const;
 export type ConnectionFailure =
     // No response at all: DNS, TLS, a dead tunnel, a refused connect. The daemon may simply be starting.
     | { readonly kind: "network"; readonly message: string }
-    // The stream went silent — no heartbeat within the watchdog window. A half-open connection (the origin
+    // The stream went silent, no heartbeat within the watchdog window. A half-open connection (the origin
     // died without a TCP FIN) looks healthy at the socket layer, so this is the only thing that catches it.
     | { readonly kind: "timeout"; readonly message: string }
     // The daemon answered and then closed the stream without erroring. Not a failure of ours, but a healthy
     // stream never ends, so reconnecting immediately would hot-loop against a 200-then-close daemon.
     | { readonly kind: "closed"; readonly message: string }
-    // 401 — no usable identity. The browser's Google token is missing or rejected; a fresh token may fix it,
+    // 401, no usable identity. The browser's Google token is missing or rejected; a fresh token may fix it,
     // so this stays transient rather than parking the UI on a screen the user cannot act on.
     | { readonly kind: "unauthenticated"; readonly message: string }
-    // 403 — a VERIFIED identity that is neither the owner nor a member. Retrying is pointless.
+    // 403, a VERIFIED identity that is neither the owner nor a member. Retrying is pointless.
     | { readonly kind: "forbidden"; readonly message: string }
     // No daemon URL to dial: setup is unfinished, or the daemon has never announced itself.
     | { readonly kind: "unaddressed"; readonly message: string };
 
-// Retrying will not change the outcome — only the user (or the platform) can. Drives both the gate the shell
+// Retrying will not change the outcome, only the user (or the platform) can. Drives both the gate the shell
 // renders and the backoff the driver waits.
 export const isBlocked = (failure: ConnectionFailure): boolean => failure.kind === `forbidden` || failure.kind === `unaddressed`;
 
 export type ConnectionPhase =
-    // Nothing is being attempted — before the shell starts the loop, and after it stops.
+    // Nothing is being attempted, before the shell starts the loop, and after it stops.
     | "idle"
     // An attempt is in flight, and no attempt has failed since the last success.
     | "connecting"
@@ -56,7 +56,7 @@ export interface ConnectionState {
     readonly phase: ConnectionPhase;
     // Why the last attempt failed; undefined while online, idle, or on a first attempt that hasn't failed yet.
     readonly failure: ConnectionFailure | undefined;
-    // Consecutive failures since the last open stream — the backoff index.
+    // Consecutive failures since the last open stream, the backoff index.
     readonly attempt: number;
     // How long the driver should wait before the next attempt. 0 whenever no retry is pending.
     readonly retryDelayMs: number;
@@ -86,7 +86,7 @@ export const initialConnection: ConnectionState = {
 export type ConnectionSignal =
     // The driver is starting an attempt.
     | { readonly kind: "connect" }
-    // The stream answered — headers in, body open.
+    // The stream answered, headers in, body open.
     | { readonly kind: "opened" }
     // A frame arrived (heartbeat or payload). Proves the connection is alive right now.
     | { readonly kind: "frame" }
@@ -94,7 +94,7 @@ export type ConnectionSignal =
     // The user switched sandboxes. `lastKnownOnline` is what this browser last observed for the INCOMING
     // sandbox, which the shell paints optimistically (stale-while-revalidate) while the stream re-establishes.
     | { readonly kind: "switched"; readonly lastKnownOnline: boolean }
-    // The ADDRESS changed under an in-flight attempt — the loopback shortcut qualified and was promoted to,
+    // The ADDRESS changed under an in-flight attempt, the loopback shortcut qualified and was promoted to,
     // or it stopped answering and was demoted back to the tunnel (see useEndpoint). Not a failure of the
     // sandbox in either direction: another address is there to be tried and the very next attempt uses it, so
     // this clears the cause and the backoff instead of climbing the retry ladder against an address we have
@@ -113,7 +113,7 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
             //
             // An OPTIMISTIC `online` survives: the only way to be online here is the paint a switch to a
             // recently-healthy sandbox put up (a genuinely live stream is still inside its own attempt), and
-            // demoting it for the duration of the connect is exactly the flicker that paint exists to prevent —
+            // demoting it for the duration of the connect is exactly the flicker that paint exists to prevent,
             // the rail would go inert and every daemon query would disable itself for a round trip. The first
             // failed attempt corrects a wrong guess.
             return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
@@ -124,7 +124,7 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
             return { ...state, phase: state.phase === `online` ? `online` : `connecting`, retryDelayMs: 0 };
         case `frame`: {
             if (state.phase === `online` && state.failure === undefined) {
-                // Steady state — every heartbeat would otherwise mint an identical object and wake every watcher.
+                // Steady state, every heartbeat would otherwise mint an identical object and wake every watcher.
                 return state;
             }
             return {
@@ -181,7 +181,7 @@ const WATCHDOG_SCHEDULER_LATE_MS = 1_000;
 export const watchdogRecoveryDelay = (latenessMs: number): number => (latenessMs >= WATCHDOG_SCHEDULER_LATE_MS ? 1_000 : 0);
 
 // What the driver observed, mapped onto a failure. Kept here (not in the driver) so the mapping is covered by
-// the same tests as the transitions it feeds — this is exactly the step that used to be a message sniff.
+// the same tests as the transitions it feeds, this is exactly the step that used to be a message sniff.
 export const classifyFailure = (observation: {
     // The HTTP status the daemon answered with, when it answered at all.
     readonly status?: number;

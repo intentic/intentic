@@ -70,19 +70,19 @@ const discordFetch = async (url: string, init: RequestInit, label: string): Prom
 
 // The Discord API surface intentic uses, injectable for testing (same pattern as KomodoApi).
 export interface DiscordApi {
-    // GET /users/@me/guilds — list guilds the bot is a member of.
+    // GET /users/@me/guilds, list guilds the bot is a member of.
     readonly listGuilds: (botToken: string) => Promise<readonly DiscordGuild[]>;
-    // POST /guilds — create a new guild (bot limit: 10 guilds).
+    // POST /guilds, create a new guild (bot limit: 10 guilds).
     readonly createGuild: (botToken: string, name: string) => Promise<DiscordGuild>;
-    // GET /guilds/{id}/channels — list all channels in a guild.
+    // GET /guilds/{id}/channels, list all channels in a guild.
     readonly getGuildChannels: (botToken: string, guildId: string) => Promise<readonly DiscordChannel[]>;
-    // POST /guilds/{id}/channels — create a channel (text or category).
+    // POST /guilds/{id}/channels, create a channel (text or category).
     readonly createChannel: (botToken: string, guildId: string, name: string, type: number, parentId?: string) => Promise<DiscordChannel>;
-    // GET /channels/{id}/webhooks — list webhooks on a channel.
+    // GET /channels/{id}/webhooks, list webhooks on a channel.
     readonly getChannelWebhooks: (botToken: string, channelId: string) => Promise<readonly DiscordWebhook[]>;
-    // POST /channels/{id}/webhooks — create a webhook on a channel.
+    // POST /channels/{id}/webhooks, create a webhook on a channel.
     readonly createWebhook: (botToken: string, channelId: string, name: string) => Promise<DiscordWebhook>;
-    // POST /webhooks/{id}/{token} — execute a webhook (no auth header needed). Used for posting
+    // POST /webhooks/{id}/{token}, execute a webhook (no auth header needed). Used for posting
     // reconcile summaries.
     readonly executeWebhook: (webhookId: string, webhookToken: string, content: string) => Promise<void>;
 }

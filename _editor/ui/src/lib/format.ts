@@ -19,13 +19,13 @@ export const formatBytes = (bytes: number | undefined): string => {
 // Token counts, at the width a chip or a summary line can spare: "1.4M" past a million, "142k" once thousands
 // are reached, the exact number below that. The same rounding wherever tokens are quoted (context meter,
 // per-account usage, cleaner savings, the fleet board's per-agent counts), so two surfaces quoting the same
-// number never disagree about it — which is what a second copy in agentStatus.ts had quietly stopped being
+// number never disagree about it, which is what a second copy in agentStatus.ts had quietly stopped being
 // true: it carried the megabyte tier this one lacked, so a 1.5M-token agent read "1500k" on one screen and
 // "1.5M" on the next.
 export const formatTokens = (tokens: number): string =>
     tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : String(tokens);
 
-/* A NAME, at the width of a small square — the monogram under every avatar and every brand mark, and the last
+/* A NAME, at the width of a small square, the monogram under every avatar and every brand mark, and the last
  * tier of both ladders: what is drawn for something that has no picture, no logo and no glyph.
  *
  * Splits on every separator a person's name, an email address, a repository and a `publisher.name` all use, so
@@ -46,13 +46,13 @@ export const initialsOf = (name: string): string | undefined => {
     return (second === undefined ? first.slice(0, 2) : `${first[0]}${second[0]}`).toUpperCase();
 };
 
-/* Every absolute date the app shows, in one shape: "Jul 28, 2026" — a spelled-out month, because the browser
+/* Every absolute date the app shows, in one shape: "Jul 28, 2026", a spelled-out month, because the browser
  * default is numeric and order-ambiguous ("7/28/2026" to one reader, the 7th of August to the next), and no
  * row anywhere carries enough context to disambiguate it.
  *
  * The locale is pinned rather than followed for the same reason the clock is fixed at 24-hour: a screenshot, a
  * bug report, a test fixture and the person reading them should all quote the same string. The *timezone*
- * still isn't pinned — these render the viewer's own wall clock, which is the one thing they do want local.
+ * still isn't pinned, these render the viewer's own wall clock, which is the one thing they do want local.
  * `hour12: false` is the h23 cycle per ECMA-402, so midnight reads 00:05 and never 24:05.
  *
  * Formatters are built once here: constructing an Intl.DateTimeFormat is the expensive half of formatting, and
@@ -96,7 +96,7 @@ export const formatTimestamp = (at: number): string => TIMESTAMP.format(at);
 export const formatTime = (at: number): string => TIME.format(at);
 
 /* The wall-clock MINUTE alone: "15:45". The narrowest a "when" label gets, for a surface that has room for five
- * characters beside a row and states the day somewhere else — the chat transcript's per-prompt stamp, which
+ * characters beside a row and states the day somewhere else, the chat transcript's per-prompt stamp, which
  * sits in the margin beside the bubble under a marker naming the day (see formatDate). Seconds are left to
  * formatTime: a message was sent at a minute, and the second it landed on is noise at four characters' cost. */
 export const formatClock = (at: number): string => CLOCK.format(at);
@@ -105,18 +105,18 @@ export const formatClock = (at: number): string => CLOCK.format(at);
 export const formatWeekdayTime = (at: number): string => WEEKDAY_TIME.format(at);
 
 /* Coarse "time since": "just now" under a minute, then "Nm ago" and "Nh ago". PAST A DAY THE TWO CALLERS WANT
- * DIFFERENT THINGS, which is the whole of `days` — a log or history row wants the absolute local timestamp
+ * DIFFERENT THINGS, which is the whole of `days`, a log or history row wants the absolute local timestamp
  * (three days out, "Jul 28, 2026, 15:45" is the useful answer and "3d ago" is not), while a reading whose age is
  * the point ("measured 3d ago") wants to keep counting. One function with a switch rather than two functions:
- * the second one drifted on every tier BELOW the day — it rounded down where this rounded up and called two
- * minutes "just now" — so the same gap read differently on two screens that sit one click apart.
+ * the second one drifted on every tier BELOW the day, it rounded down where this rounded up and called two
+ * minutes "just now", so the same gap read differently on two screens that sit one click apart.
  *
- * IT ROUNDS DOWN, everywhere. An age is a floor — "1h ago" for something 119 minutes old is true and "2h ago"
+ * IT ROUNDS DOWN, everywhere. An age is a floor, "1h ago" for something 119 minutes old is true and "2h ago"
  * is not, and for the usage readings this labels it is doubly so: utilization only climbs inside a window, so
  * the figure is already a lower bound and its age must not overstate how fresh it is.
  *
  * `now` is injectable for the callers that format a list against one clock (and for tests). Distinct on purpose
- * from chat's compact `relativeTime`, which drops the "ago" — different surfaces want different formats. */
+ * from chat's compact `relativeTime`, which drops the "ago", different surfaces want different formats. */
 export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: number; days?: boolean } = {}): string => {
     const minutes = Math.floor((now - at) / 60_000);
     if (minutes < 1) {
@@ -135,9 +135,9 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
 /* Freshness at the width a ROW has for it: `timeAgo`'s phrasing while it stays relative, a bare calendar day
  * once it would not.
  *
- * `timeAgo` past a day falls back to the absolute local timestamp ("Jul 27, 2026, 21:06:40") — three times the
+ * `timeAgo` past a day falls back to the absolute local timestamp ("Jul 27, 2026, 21:06:40"), three times the
  * width of a list row's whole meta line, and two wrapped lines on a phone. For anything MEASURED IN DAYS AND
- * WEEKS rather than in minutes — a knowledge note, a memory note — that fallback is the common case here and
+ * WEEKS rather than in minutes, a knowledge note, a memory note, that fallback is the common case here and
  * not the rare one, so it would set the width of every row it appeared in.
  *
  * Every caller pairs this with the exact moment in a `title`, so nothing is lost; the age simply stops setting

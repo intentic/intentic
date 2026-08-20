@@ -9,10 +9,10 @@ interface WorldEntry {
 }
 
 // An in-memory stand-in for real infrastructure: id -> what was "created". Sharing one world across a
-// run (and across runs) is what proves idempotency — a 2nd apply finds everything and reports noop.
+// run (and across runs) is what proves idempotency, a 2nd apply finds everything and reports noop.
 export type FakeWorld = Map<string, WorldEntry>;
 
-// Every kind the resolver stack declares — OUTPUTS is the single authority, so the fake map cannot drift
+// Every kind the resolver stack declares. OUTPUTS is the single authority, so the fake map cannot drift
 // from the ResourceType union when a kind is added.
 const RESOURCE_TYPES = Object.keys(OUTPUTS) as ResourceType[];
 

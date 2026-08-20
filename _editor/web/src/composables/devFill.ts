@@ -2,7 +2,7 @@ import { environment } from "../environments/environment";
 
 /* Dev-only autofill for pasted secrets: remembers the last saved value per key in localStorage and offers it
  * back after a sandbox/db reset, so local development never re-pastes the same token twice. Inert in
- * production — get returns undefined, set is a no-op. Keys are namespaced: `secret.<ENV_KEY>` for sandbox .env
+ * production, get returns undefined, set is a no-op. Keys are namespaced: `secret.<ENV_KEY>` for sandbox .env
  * secrets, `capability.<entryId>.<fieldKey>` for capability form fields (entry-scoped because field keys like
  * `token` repeat across cards). */
 

@@ -7,23 +7,23 @@ import type { Log } from "./home.js";
 
 /* LOGIN AUTOSTART, so the machine is doing its job again after a reboot without anyone remembering to start
  * anything. Best-effort throughout: whoever calls this has already started the current session itself, so a
- * failed registration costs reboot-resume and nothing else — and it says so rather than failing the install.
+ * failed registration costs reboot-resume and nothing else, and it says so rather than failing the install.
  *
  * The mechanisms are the user's OWN, per platform, and all three are chosen for the same reason: no elevation,
  * no password prompt, no machine-wide change.
  *
- *   Windows — the per-user Run key. Task Scheduler was the wrong tool twice over and failed on every
+ *   Windows, the per-user Run key. Task Scheduler was the wrong tool twice over and failed on every
  *             non-elevated shell: `/SC ONLOGON` registers a trigger for "whenever a user (ANY user) logs on",
  *             which is a machine-wide change, and schtasks "always prompts for a password ... even when you
  *             schedule a task on the local computer using the current user account", which against a spawn's
  *             empty stdin can only fail. Mutagen writes to this exact key, and its registration kept succeeding
  *             in the same runs where the schtasks one died.
- *   macOS   — a launchd LaunchAgent. Optional: an agent that has not been exercised there declares no
+ *   macOS  , a launchd LaunchAgent. Optional: an agent that has not been exercised there declares no
  *             `launchAgent` and gets a note instead of a file, rather than an XDG entry macOS never reads.
- *   Linux   — a systemd USER UNIT where there is a user manager to run it, and an XDG autostart entry only where
+ *   Linux  , a systemd USER UNIT where there is a user manager to run it, and an XDG autostart entry only where
  *             there isn't. The XDG entry alone was wrong for the machines that need autostart MOST: it is started
- *             by the desktop session at graphical login, so on a headless box — a server, a container, every WSL
- *             distro — it can never fire at all. Registration used to write it anyway and print a note naming
+ *             by the desktop session at graphical login, so on a headless box, a server, a container, every WSL
+ *             distro, it can never fire at all. Registration used to write it anyway and print a note naming
  *             `systemd-run --user` as the answer, which put the one machine class that cannot autostart in charge
  *             of fixing it by hand, with a command that is TRANSIENT: it runs the agent in the current session and
  *             is gone at the next boot, which is the whole thing autostart is for. A user unit is the same
@@ -33,17 +33,17 @@ import type { Log } from "./home.js";
  * Everything below is a pure function of the spec plus the launcher, except the ones that spawn an OS tool. */
 
 export interface LaunchAgentSpec {
-    // Reverse-DNS, launchd's convention — the id `launchctl bootout` and `bootstrap` address it by.
+    // Reverse-DNS, launchd's convention, the id `launchctl bootout` and `bootstrap` address it by.
     readonly label: string;
 }
 
 export interface AutostartSpec {
     /* The agent's slug: the XDG autostart file's base name, and the systemd unit named in the headless note.
-     * Not the launchd label — that one is reverse-DNS and does not derive from this. */
+     * Not the launchd label, that one is reverse-DNS and does not derive from this. */
     readonly id: string;
     /* WHERE THE LOOP'S OUTPUT GOES, under every mechanism that supervises it. Not a macOS detail, though it lived
      * inside the LaunchAgent spec as one: systemd supervises the foreground loop exactly as launchd does, and a
-     * unit that does not say this sends the output to the journal instead — while the agent's own notes, its
+     * unit that does not say this sends the output to the journal instead, while the agent's own notes, its
      * status command and its docs all name this file. The result was a log that stopped growing on precisely the
      * machines whose autostart worked, with the live failure sitting in a journal nobody had been told about. One
      * sink, named by the agent, honoured by every mechanism that has somewhere to put it. */
@@ -58,7 +58,7 @@ export interface AutostartSpec {
     readonly launchAgent?: LaunchAgentSpec;
     /* The CLI arguments each kind of mechanism runs, after the launcher.
      *
-     * `detached` is for Windows, whose Run entry Explorer starts in the INTERACTIVE session — where a console
+     * `detached` is for Windows, whose Run entry Explorer starts in the INTERACTIVE session, where a console
      * program owns a console window for as long as it lives. Registering the foreground loop there would park a
      * black window on the desktop from login until shutdown, so the Run value runs the short command that
      * spawns the hidden loop and exits.
@@ -117,7 +117,7 @@ export const windowsRunAddArgs = (spec: AutostartSpec, launcher: CliLauncher): s
 export const windowsRunDeleteArgs = (spec: AutostartSpec): string[] => ["delete", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue, "/f"];
 
 /* The states `systemctl --user is-system-running` reports when there IS a user manager to talk to. "degraded"
- * counts — it means some unrelated unit of the user's failed, not that ours can't run — and so does a startup
+ * counts, it means some unrelated unit of the user's failed, not that ours can't run, and so does a startup
  * still in progress. Anything else (no systemctl at all, no D-Bus session, `offline`) means there is nothing to
  * register with, and the XDG entry is the only mechanism left.
  *
@@ -139,11 +139,11 @@ const systemdUserAvailable = (): boolean => {
  *
  * `Restart=on-failure` and not `always`: a deliberate `systemctl --user stop` must stay stopped, which is the same
  * call the macOS LaunchAgent makes by omitting KeepAlive. And PATH is set explicitly because a user unit does NOT
- * inherit a login shell's environment — it starts from a minimal PATH, while these agents shell out to `git` and
+ * inherit a login shell's environment, it starts from a minimal PATH, while these agents shell out to `git` and
  * `ssh` on every tick (the git bridge) and to Mutagen's own ssh transport.
  *
  * THE OUTPUT GOES WHERE THE AGENT SAYS IT GOES. A unit with no StandardOutput sends the loop's stdout to the
- * journal, while the agent's own commands, its notes and its docs all name its log file — so on exactly the
+ * journal, while the agent's own commands, its notes and its docs all name its log file, so on exactly the
  * machines that autostart properly (a systemd box, which is most Linux desktops and every WSL distro with systemd
  * on), the log a user is told to read froze at whatever the last hand-started run wrote, and the live failure was
  * in a journal nobody was pointed at. `append:` rather than `file:` for the same reason the file is append-only
@@ -169,12 +169,12 @@ WantedBy=default.target
 `;
 };
 
-/* Register (and start) the unit. `enable --now` is one call for both halves — resume at boot, plus running right
- * now — which is why this branch can report that the current session is covered.
+/* Register (and start) the unit. `enable --now` is one call for both halves, resume at boot, plus running right
+ * now, which is why this branch can report that the current session is covered.
  *
  * Lingering is the piece a hand-rolled `systemd-run --user` misses. Without it a user manager exists only while
  * the user has a session, so on a headless box the unit stops the moment the last shell exits and never returns
- * at boot: `enable` would have been a promise the machine could not keep. Best-effort — polkit grants
+ * at boot: `enable` would have been a promise the machine could not keep. Best-effort, polkit grants
  * set-self-linger by default, and where it doesn't the unit still covers every session the user opens. */
 const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
     const unit = systemdUnitPath(spec);
@@ -200,7 +200,7 @@ Exec=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 X-GNOME-Autostart-enabled=true
 `;
 
-// RunAtLoad starts it at login (and at bootstrap time). No KeepAlive — a deliberate stop should stay stopped,
+// RunAtLoad starts it at login (and at bootstrap time). No KeepAlive, a deliberate stop should stay stopped,
 // and the current session is separately covered by whoever called register.
 export const macLaunchAgentXml = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher): string =>
     `<?xml version="1.0" encoding="UTF-8"?>
@@ -226,7 +226,7 @@ const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher
     const uid = process.getuid?.() ?? 0;
     // Reload cleanly: bootout any prior instance, then bootstrap (modern launchctl). Bootstrap loads + starts it
     // now (RunAtLoad), so the caller skips its own spawn. Fall back to legacy `load -w` on older macOS, which
-    // RunAtLoad starts too — and which reports why if IT fails, since nothing else is left to try.
+    // RunAtLoad starts too, and which reports why if IT fails, since nothing else is left to try.
     spawnSync("launchctl", ["bootout", `gui/${uid}/${agent.label}`], { stdio: "ignore" });
     if (spawnSync("launchctl", ["bootstrap", `gui/${uid}`, plist], { stdio: "ignore" }).status === 0) {
         return true;
@@ -236,7 +236,7 @@ const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher
 };
 
 /* A user unit where one can run, an XDG entry only where one can't. Exactly ONE of the two is ever written: both
- * would start the agent twice on a desktop machine — once by systemd at boot, once by the session at login — and
+ * would start the agent twice on a desktop machine, once by systemd at boot, once by the session at login, and
  * two copies of a resident agent is precisely what the pidfile dance downstream exists to avoid. */
 const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
     if (systemdUserAvailable()) {
@@ -263,7 +263,7 @@ const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Lo
 export const registerAutostart = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
     try {
         if (process.platform === "darwin") {
-            // An agent with no LaunchAgent spec says so, rather than writing an XDG entry macOS never reads —
+            // An agent with no LaunchAgent spec says so, rather than writing an XDG entry macOS never reads,
             // which is what a shared linux/else branch would silently do.
             if (spec.launchAgent === undefined) {
                 log(`note: ${spec.id} has no macOS login autostart yet; it runs until this machine restarts.`);
@@ -301,12 +301,12 @@ export const unregisterAutostart = async (spec: AutostartSpec, log: Log): Promis
         }
         if (process.platform === "win32") {
             // `reg delete` exits non-zero when the value is already gone, which is the normal case for a second
-            // uninstall — ignoring that is this branch's `rm --force`.
+            // uninstall, ignoring that is this branch's `rm --force`.
             spawnSync(regExe(), windowsRunDeleteArgs(spec), { stdio: "ignore" });
             return;
         }
         /* Both Linux mechanisms, unconditionally. Which one is registered depends on what the machine could run at
-         * the time, and an uninstall must not leave the other behind — a `disable` skipped because systemd looks
+         * the time, and an uninstall must not leave the other behind, a `disable` skipped because systemd looks
          * unavailable right now would resurrect the agent at the next boot, which is the one thing uninstall has to
          * prevent. `disable --now` stops it as well, so nothing is left resident. */
         spawnSync("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], { stdio: "ignore" });

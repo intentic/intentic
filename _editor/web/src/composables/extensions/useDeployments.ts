@@ -12,7 +12,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 // Run `intentic deploy deployments` in the sandbox and validate the terminal result line. `komodoReachable` is the
 // CLI's own verdict on the deployment engine, TRI-STATE: undefined = no komodo declared (services-only
-// intents have no deployment engine — nothing to be "down"); false = declared but didn't answer (the list is
+// intents have no deployment engine, nothing to be "down"); false = declared but didn't answer (the list is
 // desired config only, nothing is `live`); true = answered. Surfaced so the UI can say "your deploy engine is
 // down" without crying wolf on setups that never had one.
 const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoReachable: boolean | undefined }> => {

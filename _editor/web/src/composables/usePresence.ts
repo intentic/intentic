@@ -5,9 +5,9 @@ import { useAuth } from "./useAuth";
 
 /* Live presence: who else is connected to the active sandbox and what they're looking at. Module-level
  * singleton with two halves. The ROSTER is fed by useSandboxLiveness from the daemon's /events presence
- * frames (full snapshots — last frame wins, nothing to reconcile). The REPORTER pushes this tab's own
+ * frames (full snapshots, last frame wins, nothing to reconcile). The REPORTER pushes this tab's own
  * activity (view / chat session / open file / idle) to the daemon, debounced and fire-and-forget; the
- * triggers live in WorkspaceShell (route, chat, visibility) and Workspace (open file) — presence only exists
+ * triggers live in WorkspaceShell (route, chat, visibility) and Workspace (open file), presence only exists
  * while the shell holds the liveness stream open, so shell-scoped watches match its lifetime exactly. */
 
 const { user } = useAuth();
@@ -21,10 +21,10 @@ export interface PresenceMember {
     readonly email: string;
     readonly name?: string;
     readonly picture?: string;
-    // The member's trust tier, resolved by the daemon at connection time — every tab of a member carries the
+    // The member's trust tier, resolved by the daemon at connection time, every tab of a member carries the
     // same one, so the first tab's answer is the member's.
     readonly role: MemberRole;
-    // Idle only when EVERY tab is hidden — one visible tab means they're here.
+    // Idle only when EVERY tab is hidden, one visible tab means they're here.
     readonly idle: boolean;
     readonly tabs: readonly PresenceUser[];
 }
@@ -66,7 +66,7 @@ export const viewersOfPath = (path: string): readonly PresenceMember[] =>
 export const viewersOfSession = (sessionId: string): readonly PresenceMember[] =>
     presenceOthers.value.filter((member) => member.tabs.some((tab) => tab.sessionId === sessionId));
 
-// What a member is doing, for tooltips — from their most specific tab, visible tabs first.
+// What a member is doing, for tooltips, from their most specific tab, visible tabs first.
 export const presenceActivity = (member: PresenceMember): string => {
     const tabs = member.tabs.toSorted((a, b) => Number(a.idle) - Number(b.idle));
     const tab = tabs.find((t) => t.path !== undefined) ?? tabs.find((t) => t.sessionId !== undefined) ?? tabs.find((t) => t.view !== undefined);
@@ -97,7 +97,7 @@ let lastSent: string | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 // One send fires DEBOUNCE_MS after the FIRST change of a window (not reset per change), reading the state at
-// fire time — a navigation that flips view + file + session coalesces into one report with bounded latency.
+// fire time, a navigation that flips view + file + session coalesces into one report with bounded latency.
 // Fire-and-forget: a lost/rejected report self-heals on the next change or the reconnect's re-send.
 const send = (): void => {
     timer ??= setTimeout(() => {
@@ -143,7 +143,7 @@ export const presenceStreamOpened = (id: string): void => {
 };
 
 // Roster frames land here (from useSandboxLiveness). Self-heal: our own entry arriving blank while we have
-// activity means the initial report raced the registration (POST landed first, was dropped) — re-send.
+// activity means the initial report raced the registration (POST landed first, was dropped), re-send.
 export const setPresenceUsers = (next: readonly PresenceUser[]): void => {
     users.value = next;
     const own = clientId !== undefined ? next.find((entry) => entry.clientId === clientId) : undefined;

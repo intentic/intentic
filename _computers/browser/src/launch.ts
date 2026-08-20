@@ -14,7 +14,7 @@ import { BrowserError } from "./types.js";
  * SEPARATE instance with its own profile directory.
  *
  * THE SEPARATE PROFILE IS A FEATURE, not a compromise. It is empty the first time, so the user signs into
- * whatever the agent needs to reach — once, in a window they can watch — and that profile persists under
+ * whatever the agent needs to reach, once, in a window they can watch, and that profile persists under
  * ~/.intentic/host/browser afterwards. Their own browser, with their own cookies and their own session, is never
  * opened, never automated, and never at risk from a misfired click. */
 
@@ -25,7 +25,7 @@ export const DEFAULT_PORT = 9222;
 export const profileDir = (): string => join(homedir(), ".intentic", "host", "browser");
 
 /* Where a Chromium-family browser lives, per platform, most-preferred first. Chrome, Edge and Chromium all speak
- * the same protocol, so any of them will do — and on a machine with none of them the message says exactly that
+ * the same protocol, so any of them will do, and on a machine with none of them the message says exactly that
  * rather than failing at a spawn. */
 export const browserCandidates = (platform: NodeJS.Platform): string[] => {
     if (platform === "win32") {
@@ -53,7 +53,7 @@ export const browserCandidates = (platform: NodeJS.Platform): string[] => {
 const findBrowser = (): string | undefined => browserCandidates(process.platform).find((path) => existsSync(path));
 
 /* The flags. `--remote-debugging-port` is the point; the rest keep a browser started by an agent from behaving
- * like one started by a person — no "restore your tabs?" prompt after a crash, no first-run tour standing
+ * like one started by a person, no "restore your tabs?" prompt after a crash, no first-run tour standing
  * between the agent and the page, and no attempt to become the default browser on somebody's machine. */
 const flags = (port: number, url: string | undefined): string[] => [
     `--remote-debugging-port=${port}`,

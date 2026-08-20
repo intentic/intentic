@@ -1,4 +1,4 @@
-/* WHAT ONE COMPUTER IS DOING FOR A SANDBOX, arranged the way it is read — the derivations behind
+/* WHAT ONE COMPUTER IS DOING FOR A SANDBOX, arranged the way it is read, the derivations behind
  * MachineDetail.vue.
  *
  * The report arrives as two flat lists, folders and ports, each row tagged with the sandbox it belongs to. That
@@ -7,7 +7,7 @@
  * for, and the eye had to do the grouping the data already carried. So the lists are folded into one block per
  * sandbox here, where the rule can be read in one place rather than inferred from a template.
  *
- * Shapes are STRUCTURAL rather than the sandbox contract's own types — `@intentic/ui` carries no domain
+ * Shapes are STRUCTURAL rather than the sandbox contract's own types, `@intentic/ui` carries no domain
  * dependency, and a MachineReport satisfies these by shape. */
 
 export interface MachinePortRow {
@@ -16,7 +16,7 @@ export interface MachinePortRow {
     state: `mirrored` | `held-by-sandbox` | `busy`;
     heldBy?: string | undefined;
     command?: string | undefined;
-    // Which stack the sandbox's listener answered on. Never rendered — see the twin rule in `sandboxGroups` —
+    // Which stack the sandbox's listener answered on. Never rendered, see the twin rule in `sandboxGroups`,
     // but taken so the two rows a dual-stack server produces can be recognised as one port.
     host?: string | undefined;
 }
@@ -28,7 +28,7 @@ export interface MachineFolderRow {
     mutagenStatus?: string | undefined;
     conflicts?: number | undefined;
     paused?: boolean | undefined;
-    // The second session's word — the one-way mirror carrying the sandbox's own state down. See backupState.
+    // The second session's word, the one-way mirror carrying the sandbox's own state down. See backupState.
     backupStatus?: string | undefined;
 }
 
@@ -44,7 +44,7 @@ export interface MachineWatcherState {
     pid?: number | undefined;
 }
 
-/* One sandbox CONTAINER on the machine — the docker half of the same sandbox the two lists above describe. */
+/* One sandbox CONTAINER on the machine, the docker half of the same sandbox the two lists above describe. */
 export interface MachineSandboxRow {
     slug: string;
     name?: string | undefined;
@@ -53,10 +53,10 @@ export interface MachineSandboxRow {
     tunnelRunning?: boolean | undefined;
 }
 
-/* ONE SANDBOX'S SHARE OF THE MACHINE — its container, its folder if it syncs one, and every port it asked for. */
+/* ONE SANDBOX'S SHARE OF THE MACHINE, its container, its folder if it syncs one, and every port it asked for. */
 export interface MachineSandboxGroup {
     sandboxId: string;
-    /** What to call it — see `titled`: the most human of the names this sandbox goes by. */
+    /** What to call it, see `titled`: the most human of the names this sandbox goes by. */
     title: string;
     /** The exact id, when the title is NOT it. Rendered small beside the title, so the row is scannable and
      *  the string you would actually type is still on screen. */
@@ -67,12 +67,12 @@ export interface MachineSandboxGroup {
 }
 
 /* A port that did not reach localhost is the row this view exists for, so the losers sort to the bottom rather
- * than being dropped — and inside each group the number orders them, which is how people look a port up. */
+ * than being dropped, and inside each group the number orders them, which is how people look a port up. */
 const byOutcomeThenNumber = (a: MachinePortRow, b: MachinePortRow): number =>
     a.state === b.state ? a.port - b.port : a.state === `mirrored` ? -1 : 1;
 
-/* IPv4 AND IPv6 ARE ONE PORT TO THE READER. A dev server that binds both stacks is two rows in the report —
- * 127.0.0.1 and ::1, same number, same outcome — and the view has never shown which is which, so they rendered
+/* IPv4 AND IPv6 ARE ONE PORT TO THE READER. A dev server that binds both stacks is two rows in the report,
+ * 127.0.0.1 and ::1, same number, same outcome, and the view has never shown which is which, so they rendered
  * as the same line twice with nothing to tell them apart (and, keyed by sandbox and number, as a duplicate Vue
  * key). Folded here rather than filtered in the template: the fact that survives is the outcome, which both
  * rows agree on, and `localhost` is the name the reader types either way. */
@@ -84,7 +84,7 @@ const twinKey = (port: MachinePortRow): string => `${port.port}:${port.state}:${
  * alone (`sandbox-0738cd6b5027`). So one is the other with a suffix, which is exactly the correspondence the
  * Computers view already trusts when it decides which row is the sandbox you are reading this in.
  *
- * Matched conservatively — equal, or the id continues past the slug at a separator — because the cost of a
+ * Matched conservatively, equal, or the id continues past the slug at a separator, because the cost of a
  * wrong match is a folder shown against the wrong container, and the cost of a missed one is the pair rendering
  * as two rows, which is what every surface did before this. */
 const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
@@ -92,12 +92,12 @@ const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId ==
 /* WHAT TO CALL A SANDBOX, when every name it has is a machine's.
  *
  * A row used to be titled `sandbox-bce57bb9fe3b`, and a machine running four of them drew four titles that
- * differed only in a blob of hex — so the list could not be scanned at all, and the reader fell through to the
+ * differed only in a blob of hex, so the list could not be scanned at all, and the reader fell through to the
  * folder path underneath to work out which was which. That path is where the readable name was the whole time:
  * its last segment is what the user called the project (`radarsu-web-platform-bce57bb9fe3b`).
  *
  * So the order is most-human-first: the display name a machine recorded, then the folder's own leaf, then the
- * ids. The exact id survives as `subtitle` rather than being replaced — it is the string somebody types into a
+ * ids. The exact id survives as `subtitle` rather than being replaced, it is the string somebody types into a
  * terminal, and a view that shows only a friendly name makes that string unfindable. */
 const leafOf = (dir: string | undefined): string | undefined => {
     const trimmed = (dir ?? ``).replace(/[/\\]+$/, ``);
@@ -119,7 +119,7 @@ const titled = (
  *
  * Driven by the PAIRINGS, in their own order: a pairing is what the user set up, and it stays on screen through
  * a restart that has not re-mirrored a single port yet. A sandbox that appears only in the port list still gets
- * a block — a report that lists a port for a pairing it did not send is a report worth showing as it is, not
+ * a block, a report that lists a port for a pairing it did not send is a report worth showing as it is, not
  * one worth silently dropping half of. Containers come last, and only the ones nothing was paired with: a
  * machine runs sandboxes this one has never heard of, and they are still sandboxes on that computer. */
 export const sandboxGroups = (
@@ -164,8 +164,8 @@ export const sandboxGroups = (
  * their own cause ("halted-on-root-emptied"), and flattening them to "problem" sends the reader back to the
  * terminal this view replaces. Paused wins, because it is the one state the user chose. */
 export const folderState = (folder: MachineFolderRow): string | undefined => {
-    // A mirror enrollment has no session to be in a state, and the row already says so in words — a "ports only"
-    // chip beside "no folder — this computer only mirrors ports" is the same fact twice.
+    // A mirror enrollment has no session to be in a state, and the row already says so in words, a "ports only"
+    // chip beside "no folder, this computer only mirrors ports" is the same fact twice.
     if (folder.mode === `mirror`) {
         return undefined;
     }
@@ -180,7 +180,7 @@ export const folderState = (folder: MachineFolderRow): string | undefined => {
  *
  * The folder state above answers "are my edits moving", which a person notices within minutes of it going wrong.
  * This answers "does a copy of my personas, skills, automations, drafts and transcripts exist off this sandbox",
- * which costs nothing at all until the day the sandbox is gone — and then costs everything. So a missing session
+ * which costs nothing at all until the day the sandbox is gone, and then costs everything. So a missing session
  * is a sentence rather than a blank, on the same reasoning the terminal's pairingLine shouts about it.
  *
  * Undefined for a mirror enrollment and for a paused pairing: neither is a backup that FAILED. Pause is the one
@@ -193,11 +193,11 @@ export const backupState = (folder: MachineFolderRow): string | undefined => {
 };
 
 // Only two answers here, unlike folderTone's three: a backup is either running or it is a gap the reader should
-// act on. A halted replica is the same gap as a missing one — nothing is being copied either way.
+// act on. A halted replica is the same gap as a missing one, nothing is being copied either way.
 export const backupTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === undefined ? `neutral` : state === `watching` ? `success` : `warning`;
 
-/* The TINT on that word — which is not the same as translating it. Mutagen's vocabulary stays verbatim; all
+/* The TINT on that word, which is not the same as translating it. Mutagen's vocabulary stays verbatim; all
  * this decides is whether the word reads as settled, as busy, or as something to look at. Only two of them are
  * knowable from outside its state machine: `watching` is the resting state of a healthy session, and anything
  * `halted-…` is a session that has stopped. Everything in between (scanning, transitioning, paused, and any
@@ -205,7 +205,7 @@ export const backupTone = (state: string | undefined): `success` | `warning` | `
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
 
-/* WHAT A FOLDED ROW SAYS ABOUT ITSELF — the whole reason folding is safe at all.
+/* WHAT A FOLDED ROW SAYS ABOUT ITSELF, the whole reason folding is safe at all.
  *
  * A list that hides four sandboxes behind four chevrons only beats the wall it replaced if the CLOSED line still
  * answers "is this one fine". So each row carries two kinds of thing, kept apart because they are read
@@ -216,7 +216,7 @@ export const folderTone = (state: string | undefined): `success` | `warning` | `
  * than in a template: "what is wrong with this sandbox" and "which rows start open" have to be ONE answer, or a
  * row warns in its summary and stays shut. */
 export interface GroupSummary {
-    /** Counted, uncoloured — "3 ports", "ports only". */
+    /** Counted, uncoloured, "3 ports", "ports only". */
     readonly facts: readonly string[];
     /** The reasons to open this row, in the ink of a warning. */
     readonly warnings: readonly string[];
@@ -232,7 +232,7 @@ export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
     if (reached > 0) {
         facts.push(plural(reached, `port`, `ports`));
     }
-    // A pairing that syncs nothing is a fact about how it was SET UP, not a fault — one word on the closed line
+    // A pairing that syncs nothing is a fact about how it was SET UP, not a fault, one word on the closed line
     // rather than an opened row whose Folder line says the same thing in eight.
     if (group.folder?.mode === `mirror`) {
         facts.push(`ports only`);
@@ -244,7 +244,7 @@ export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
         warnings.push(plural(group.folder.conflicts, `conflict`, `conflicts`));
     }
     // A sandbox reached over the user's own proxy has no sidecar AT ALL, which is not the same fact as one that
-    // is down — see the field's own note. Only the second is worth a word.
+    // is down, see the field's own note. Only the second is worth a word.
     if (group.sandbox?.tunnelRunning === false) {
         warnings.push(`tunnel off`);
     }
@@ -257,13 +257,13 @@ export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
 
 /* WHICH ROWS OPEN THEMSELVES. Deliberately NOT "stopped": plenty of sandboxes are stopped on purpose, and a rule
  * that unfolds every one of them hands back the wall this view exists to fold away. What opens is what somebody
- * has to go and DO something about — and it is the same list the closed line just showed, so a row can never
+ * has to go and DO something about, and it is the same list the closed line just showed, so a row can never
  * warn and stay shut. */
 export const groupNeedsAttention = (group: MachineSandboxGroup): boolean => groupSummary(group).warnings.length > 0;
 
 /* WHO TOOK THE PORT, as a row on this same card.
  *
- * `heldBy` is the winning pairing's sandbox id — the same key every group here is built on — so the sandbox that
+ * `heldBy` is the winning pairing's sandbox id, the same key every group here is built on, so the sandbox that
  * beat this one is, almost always, a block the reader can already see. Resolving it turns the note from a fact
  * into a destination: the holder's row is where its container's Stop button lives, which is the one gesture that
  * actually frees the number. Undefined when the winner is not on this machine's report (a stale reading, a
@@ -274,14 +274,14 @@ export const portHolder = (groups: readonly MachineSandboxGroup[], port: Machine
 /* WHY A PORT IS NOT ON LOCALHOST. Each state names a DIFFERENT remedy, which is the whole reason they are not
  * one "unavailable": a contested port is freed by stopping or unpairing the sandbox that holds it, a busy one by
  * quitting whatever local process does. Said as a sentence about localhost because the chip beside it no longer
- * claims one — a port that never made it is shown as a bare number, not as an address nobody can open.
+ * claims one, a port that never made it is shown as a bare number, not as an address nobody can open.
  *
  * NAMED THE WAY THE READER NAMES IT. `heldBy` is an id (`sandbox-0738cd6b5027-intentic-dev`), and printing it
  * raw asked someone to recognise a string they have never typed; where the holder is a block on this card, its
- * own title is the name on that block and on the switcher. The id survives as the fallback — a wrong-looking
+ * own title is the name on that block and on the switcher. The id survives as the fallback, a wrong-looking
  * name is worse than an unfamiliar one. */
 /* ONE SENTENCE, AND THE PROGRAM IS IN IT. The note used to end at "another program on this computer already has
- * it" and the program's own name was appended AFTER it in a second font — eleven words of prose plus a mono
+ * it" and the program's own name was appended AFTER it in a second font, eleven words of prose plus a mono
  * suffix, on a line whose neighbours are addresses. The name is the useful half, so it goes where the sentence
  * says "who", and the rest gets out of the way. */
 export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | undefined, program?: string | undefined): string | undefined => {
@@ -289,7 +289,7 @@ export const portNote = (port: MachinePortRow, holder?: MachineSandboxGroup | un
         return undefined;
     }
     // The command on a contended port belongs to the SANDBOX's own listener, not to whoever won the number, so
-    // it is never the answer to "who has it" — only a busy port's command is the program holding it.
+    // it is never the answer to "who has it", only a busy port's command is the program holding it.
     if (port.heldBy === undefined) {
         return `not on localhost — ${program ?? `another program here`} has it`;
     }
@@ -308,8 +308,8 @@ const leaf = (token: string): string => token.slice(Math.max(token.lastIndexOf(`
  * The report carries the whole command line, and a whole command line is where this view's width went: the
  * process behind a mirrored port arrives as `/usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 5440
  * -container-ip 172.18.0.2 …`, which pushed the port number it belongs to onto a line of its own and then got
- * cut off mid-flag anyway. What a reader wants from it is recognition — "that's my dev server", "that's the
- * database" — so the row shows the program, and the full line stays one hover away. */
+ * cut off mid-flag anyway. What a reader wants from it is recognition, "that's my dev server", "that's the
+ * database", so the row shows the program, and the full line stays one hover away. */
 export const shortCommand = (command: string | undefined): string | undefined => {
     const tokens = (command ?? ``).trim().split(/\s+/).filter(Boolean);
     const binary = leaf(tokens[0] ?? ``);

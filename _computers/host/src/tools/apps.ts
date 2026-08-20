@@ -34,7 +34,7 @@ export const listWindows = async (screen: Desktop, scopes: HostScopes): Promise<
     return describeWindows(await screen.windows());
 };
 
-/* Focus is the precondition for typing, so this reports what it left focused rather than answering "ok" — the
+/* Focus is the precondition for typing, so this reports what it left focused rather than answering "ok", the
  * agent's next action depends on it, and a focus that silently did not take is the single most confusing way for
  * a GUI sequence to go wrong. */
 export const focusWindow = async (screen: Desktop, id: string, scopes: HostScopes): Promise<string> => {

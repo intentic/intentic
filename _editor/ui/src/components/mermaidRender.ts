@@ -1,6 +1,6 @@
 import { mermaidTheme } from "./mermaidTheme.js";
 
-/* THE ONE MERMAID — the whole of what is global about drawing a diagram, kept in one module because every part
+/* THE ONE MERMAID, the whole of what is global about drawing a diagram, kept in one module because every part
  * of it is a singleton and a component instance is not.
  *
  * Mermaid is a library with one configuration, one measuring area under <body> and one diagram registry. A
@@ -9,11 +9,11 @@ import { mermaidTheme } from "./mermaidTheme.js";
  *
  * THE ID. Mermaid scopes the <style> it emits to the id it was handed and looks its own scaffolding up by that
  * id while laying out. A counter inside the component is per INSTANCE, so every diagram on the page asked for
- * `md-mermaid-1` — and the renders then read each other's elements: two of four came back as an svg with a
+ * `md-mermaid-1`, and the renders then read each other's elements: two of four came back as an svg with a
  * stylesheet and no nodes in it, drawn as a blank gap in the middle of the prose. The counter belongs here,
  * where there is exactly one of it.
  *
- * THE ORDER. `initialize` writes the shared config and `render` reads it, so the pair has to be atomic — a
+ * THE ORDER. `initialize` writes the shared config and `render` reads it, so the pair has to be atomic, a
  * theme flip landing between them draws the new diagram in the old palette. Mermaid queues renders internally;
  * this queue is what puts the configuration inside the same slot as the render it configures.
  *
@@ -23,7 +23,7 @@ import { mermaidTheme } from "./mermaidTheme.js";
 let ids = 0;
 let queue: Promise<unknown> = Promise.resolve();
 
-/* THE DEADLINE — the one failure a diagram cannot show on its own.
+/* THE DEADLINE, the one failure a diagram cannot show on its own.
  *
  * MermaidDiagram has three states: drawn, refused, and not yet. A refusal puts the fenced source on screen, so
  * every way this function can FAIL is already visible to the reader. What it cannot survive is a promise that
@@ -31,13 +31,13 @@ let queue: Promise<unknown> = Promise.resolve();
  * and a reader looking at that grey box has no way to tell it from a diagram the app has quietly given up on.
  *
  * Two things in here can hang rather than fail. The import is a megabyte fetched over whatever link the app is
- * running on, and a stalled response never rejects — it simply never arrives. Mermaid's own layout measures
+ * running on, and a stalled response never rejects, it simply never arrives. Mermaid's own layout measures
  * text in a scratch DOM, which a pathological diagram can sit in. So a render that misses this budget is
  * treated exactly like a refusal, and the reader gets the source: what this surface showed before it drew
  * diagrams at all, which makes a timeout no worse than not having the feature.
  *
  * It is also what stops ONE diagram from taking the page. The queue below only advances when this promise
- * settles, so without a deadline a single hung render leaves every later diagram waiting behind it — a whole
+ * settles, so without a deadline a single hung render leaves every later diagram waiting behind it, a whole
  * conversation of grey boxes from one bad draw. Generous on purpose: a slow first load should finish, not be
  * cut off a second before it arrives. */
 const DRAW_BUDGET_MS = 15_000;
@@ -60,7 +60,7 @@ const bounded = async (work: Promise<string>): Promise<string> => {
 };
 
 /* One diagram's SVG markup, or a rejection when mermaid will not draw it (invalid syntax, a diagram type this
- * build does not know, or the deadline above) — the caller shows the source instead.
+ * build does not know, or the deadline above), the caller shows the source instead.
  *
  * `securityLevel: strict` is mermaid's own DOMPurify pass over every label plus no `click` bindings, which is
  * the defence markdown/render.ts already applies to the prose around the diagram; documents here are as

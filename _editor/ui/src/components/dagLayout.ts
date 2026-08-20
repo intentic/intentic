@@ -2,7 +2,7 @@ import { graphlib, layout } from "@dagrejs/dagre";
 
 /* The DagGraph component's data model + its dagre layout step. Nodes carry an opaque `data` payload rendered
  * by the caller's #node slot; edges reference node ids. Layout is dagre's layered algorithm (LR by default),
- * which replaced the hand-rolled longest-chain layering this lib's consumers used before — dagre also breaks
+ * which replaced the hand-rolled longest-chain layering this lib's consumers used before, dagre also breaks
  * cycles instead of needing a visiting guard. */
 
 export interface DagNode<T = unknown> {
@@ -20,12 +20,12 @@ export interface DagEdge {
     // Rendered source → target: `from` sits left of `to` in LR layout, with the curve flowing forward.
     readonly from: string;
     readonly to: string;
-    // Discriminator when two edges share endpoints (e.g. a prod and a dev dep) — part of the render key.
+    // Discriminator when two edges share endpoints (e.g. a prod and a dev dep), part of the render key.
     readonly kind?: string;
     // e.g. dev deps.
     readonly dashed?: boolean;
     readonly dimmed?: boolean;
-    // A text color class (e.g. `text-warning`) — the edge path strokes with currentColor at full opacity,
+    // A text color class (e.g. `text-warning`), the edge path strokes with currentColor at full opacity,
     // used to tint a selection's closure by direction.
     readonly accent?: string;
 }
@@ -36,17 +36,17 @@ export interface DagLayoutOptions {
     readonly nodeHeight: number;
 }
 
-/* WHICH GRAPH IS ON SCREEN — everything that decides where the nodes end up, as one comparable string.
+/* WHICH GRAPH IS ON SCREEN, everything that decides where the nodes end up, as one comparable string.
  *
  * DagGraph refits its viewport when this changes. It used to watch the node COUNT instead, which is not an
  * identity: two different six-node graphs share a count, so navigating between them left the previous graph's
- * pan and zoom applied to the new one. Where that bit hardest was a small graph followed by a large one — the
+ * pan and zoom applied to the new one. Where that bit hardest was a small graph followed by a large one, the
  * small one's fit had clamped to maxZoom, and the large one then rendered at 2×, which reads as "zoomed in way
  * too much" rather than as a stale transform.
  *
  * It stays a string rather than a structural compare because a watcher needs a cheap, stable value, and it
  * covers exactly the layout inputs: ids and their order, the edges between them, the direction, and the fixed
- * node box. Node LABELS are deliberately absent — re-rendering the same shape with new text must not throw
+ * node box. Node LABELS are deliberately absent, re-rendering the same shape with new text must not throw
  * away a pan the user chose. */
 export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): string =>
     [
@@ -58,7 +58,7 @@ export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonl
     ].join(`|`);
 
 // Position every node with dagre (fixed sizes; edges to unknown ids are dropped so a dangling ref can't skew
-// ranks). Returns top-left coordinates per node id — dagre yields centers.
+// ranks). Returns top-left coordinates per node id, dagre yields centers.
 export const layoutDag = (
     nodes: readonly DagNode<never>[],
     edges: readonly DagEdge[],

@@ -17,21 +17,21 @@ import { unwatchOnScreen, watchOnScreen } from "./onScreen";
 /* Pop-out window core, shared by the chat panel and the terminal panel. createPopout builds one independent
  * pop-out store: the panel's DOM is teleported into a REAL browser window (window.open) while the JS stays in
  * this realm, so the owning singletons (the useChat stream, the terminal session cache) keep working untouched
- * — no state duplication, live streams never drop.
+ *, no state duplication, live streams never drop.
  *
  * A real window, not Document Picture-in-Picture: the pip window was a fixed always-on-top strip with no
- * chrome — it could not be maximized, full-screened, tiled by the window manager, or even opened twice (the
+ * chrome, it could not be maximized, full-screened, tiled by the window manager, or even opened twice (the
  * browser allows ONE pip window per page, so popping the terminal out docked the chat). An ordinary popup is a
- * first-class OS window: maximize, full-screen, snap, and one per panel at the same time. It is also portable —
+ * first-class OS window: maximize, full-screen, snap, and one per panel at the same time. It is also portable,
  * every browser opens windows, where document PiP was Chromium-only, so there is no `supported` gate left to
  * ask about.
  *
- * The window opens on a real page of this app — popout.html, a near-empty document whose whole job is to hold
- * a panel and report in (src/popout/keeper.ts) — rather than the about:blank it used to be. Same origin either
+ * The window opens on a real page of this app, popout.html, a near-empty document whose whole job is to hold
+ * a panel and report in (src/popout/keeper.ts), rather than the about:blank it used to be. Same origin either
  * way, so this realm owns that document outright: styles are cloned in, the theme root is mirrored, and the
  * panel is Teleported into its body. Closing it (its own ×) docks the panel back. What the address buys is what
  * the WINDOW is: one of the app's own, with the app's URL in the bar and its icon in the taskbar, painting the
- * canvas from the first frame — where about:blank read to the user (and to the browser's own chrome) as a
+ * canvas from the first frame, where about:blank read to the user (and to the browser's own chrome) as a
  * window that came from nowhere.
  *
  * It also means the keeper is the window's OWN code rather than a script injected from here, so the window can
@@ -40,18 +40,18 @@ import { unwatchOnScreen, watchOnScreen } from "./onScreen";
  * re-adopting one that outlived a reload are the same path, held to the same tests.
  *
  * A page reload does NOT dock it. The window outlives the realm that opened it and is re-adopted by the fresh
- * page (src/popout/keeper.ts), because a reload is not a decision to dock — dev-server HMR, an update reload
+ * page (src/popout/keeper.ts), because a reload is not a decision to dock, dev-server HMR, an update reload
  * or an F5 would otherwise yank a full-screened chat back into its column every time.
  *
  * WHICH MAKES LIVENESS THE ONE INVARIANT THIS MODULE OWES THE REST OF THE APP: everything a pop-out window
  * shows is rendered by a realm in ANOTHER window, so the moment that realm goes away the panel out there stops
- * being a view of the app and becomes a photograph of it — same pixels, no state behind them. Selecting a chat
+ * being a view of the app and becomes a photograph of it, same pixels, no state behind them. Selecting a chat
  * on the board leaves it unmoved; the tabs it lists are the ones that were open when the realm died; a draft
  * that has since been swept sits there focused. A DEAD "the popped-out window is out of sync" report is this,
  * because two windows CANNOT hold divergent state while one realm drives both.
  *
  * The LIVE version of that report is the app's other windows: every browser window runs a full copy of the
- * app, and this window obeys only the copy that opened it — a click on some other copy's board used to be
+ * app, and this window obeys only the copy that opened it, a click on some other copy's board used to be
  * invisible out here, with both windows perfectly healthy. That is not a liveness problem and no handshake
  * can catch it; it is why every chat-summoning gesture is broadcast to all windows instead of applied to one
  * store (chat/summon.ts).
@@ -59,35 +59,35 @@ import { unwatchOnScreen, watchOnScreen } from "./onScreen";
  * So the keeper's tick is a question, not an announcement, and the answer below is the whole contract. It has
  * three values because the window needs two facts and a boolean carries one: whether a live page is behind it
  * at all, and whether that page is actually DRAWING in it.
- *   · `live`    — a panel is being rendered into this window right now. Nothing to do.
- *   · `waiting` — this page owns the window and means to draw in it, but has not yet: the app is still booting,
- *                 or the host that renders the panel is between mounts. Proof of life, so the window stays —
+ *   · `live`   , a panel is being rendered into this window right now. Nothing to do.
+ *   · `waiting`, this page owns the window and means to draw in it, but has not yet: the app is still booting,
+ *                 or the host that renders the panel is between mounts. Proof of life, so the window stays,
  *                 veiled, because a window with nothing in it must never read as the app.
- *   · `none`    — nobody here drives this window.
+ *   · `none`   , nobody here drives this window.
  *
  * `live` IS THE PANEL, NOT THE CLAIM, and that distinction is the whole reason this contract has three values.
- * It used to be answered from bookkeeping — "I attached to this window once" — which is a fact about this store
+ * It used to be answered from bookkeeping, "I attached to this window once", which is a fact about this store
  * and not about the screen. Anything that left a store attached to a window it had stopped drawing into (a page
  * that adopted the window before its panel host had mounted; a dev hot update leaving a second copy of this
  * store behind to claim the same window) produced a window told it was alive forever: never veiled, never
  * closed, frozen on the last frame it was handed, while the panel itself sat docked in the app. The answer now
  * comes from whatever renders the panel (holdWhile), which is the only party that can tell the two apart. */
 
-/** What a pop-out window is told when its keeper asks whether anyone is driving it — see the contract above. */
+/** What a pop-out window is told when its keeper asks whether anyone is driving it, see the contract above. */
 export type PopoutAnswer = `live` | `waiting` | `none`;
 
 declare global {
     interface Window {
         /* The question a pop-out window's keeper puts to its opener on every tick: "is a live page drawing in
          * me?" Installed by this module on every load, so a window opened by the PREVIOUS page finds it on the
-         * next one — and answered by running this page's own code, which is the only proof of life that cannot
+         * next one, and answered by running this page's own code, which is the only proof of life that cannot
          * be faked by a document still sitting on screen. */
         __intentic?: { readonly adoptPopout: (name: string, win: Window) => PopoutAnswer };
     }
 
     /* The one fact the Window Management API gives a page without asking permission: whether the desktop spans
      * more than one screen. Chromium answers, the DOM lib TypeScript builds against doesn't know it yet, and
-     * everyone else stays silent — so it is declared OPTIONAL, because "the browser didn't say" is a third
+     * everyone else stays silent, so it is declared OPTIONAL, because "the browser didn't say" is a third
      * answer this module acts on (see onSomeScreen). */
     interface Screen {
         readonly isExtended?: boolean;
@@ -99,19 +99,19 @@ declare global {
  * the browser's window list, and the session it restores from.
  *
  * Resolved against the app's BASE rather than the origin root, which is the same thing the router does with its
- * history (router/index.ts): this build is also served under a prefix — the recorded demo lives at `/demo/` on
- * the marketing site — and there a root-absolute `/popout.html` opens that site's 404 page. Nothing in it
+ * history (router/index.ts): this build is also served under a prefix, the recorded demo lives at `/demo/` on
+ * the marketing site, and there a root-absolute `/popout.html` opens that site's 404 page. Nothing in it
  * answers the keeper's handshake, so the window sits on a dead end and the panel it was opened for never
  * leaves its column. Read per call so a test can say that in one line. */
 const popoutPage = (): string => `${import.meta.env.BASE_URL}popout.html`;
 
 // Marks the stylesheets THIS realm clones into a pop-out document, so re-dressing one replaces its clones and
-// leaves the page's own head — its icon, its keeper — untouched.
+// leaves the page's own head, its icon, its keeper, untouched.
 const CLONE_ATTR = `data-intentic-clone`;
 
 // How long a remembered window gets to come back before the panel stops holding its docked slot shut. One
 // keeper tick plus the app's own boot. Both ways of being wrong are now cheap: overshooting means an emptier
-// column for a moment, and undershooting only means the panel shows docked until the window reports in — it is
+// column for a moment, and undershooting only means the panel shows docked until the window reports in, it is
 // no longer a deadline the window has to beat to survive (see stopWaiting).
 const RECLAIM_GRACE_MS = 2500;
 
@@ -128,12 +128,12 @@ const HANDBACK_GRACE_MS = 2500;
 //
 // The size has to be on THIS list rather than left to the pop-out page's own restore script: that script runs
 // once, at load, so a window opened before the reader changed the setting would sit at the old size for as long
-// as it stayed open — the whole panel, a size out of step with the app it was torn off.
+// as it stayed open, the whole panel, a size out of step with the app it was torn off.
 const ROOT_ATTRIBUTES = [`data-mode`, `data-text-size`];
 
 const mirrorRoot = (doc: Document): void => {
     doc.documentElement.className = document.documentElement.className;
-    /* The COLOUR is not an attribute — the accent's ramps (and an imported VSCode theme's tokens layered over
+    /* The COLOUR is not an attribute, the accent's ramps (and an imported VSCode theme's tokens layered over
      * them) are inline custom properties on the root element, so the window takes that declaration block
      * wholesale. Copied as text rather than property by property, which means a window keeps up with anything
      * written there later without this file having to keep a list of what that might be. */
@@ -179,7 +179,7 @@ const dressWindow = (win: Window, title: string): void => {
     doc.body.style.cssText = `margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--color-canvas);color:var(--color-content)`;
 };
 
-/* WHERE THE WINDOW OPENS — the four numbers window.open takes, which are exactly the four a window hands back
+/* WHERE THE WINDOW OPENS, the four numbers window.open takes, which are exactly the four a window hands back
  * (screenX / screenY / outerWidth / outerHeight). Being the same four is what lets the frame the user left the
  * window in be asked for again: popping out is a many-times-a-day gesture, and a window that always opens
  * centred on the app is one the user drags back to the same corner of the same screen every single time.
@@ -203,14 +203,14 @@ const centred = (size: { width: number; height: number }): Frame => ({
 });
 
 // Nobody deliberately leaves a window this small, so a frame under it is a bad reading (a window mid-close, a
-// minimized one reporting zeros) rather than a preference — reopening into it would hand back an unusable sliver.
+// minimized one reporting zeros) rather than a preference, reopening into it would hand back an unusable sliver.
 const MIN_FRAME = 240;
 
-/* A remembered frame is honored verbatim, INCLUDING a position on a screen this page cannot measure — that is
+/* A remembered frame is honored verbatim, INCLUDING a position on a screen this page cannot measure, that is
  * the whole point, since the second monitor is where a popped-out panel tends to live. The one case worth
  * second-guessing is the monitor that has since been unplugged, whose coordinates now name nothing: a window
  * opened out there is one the user can neither find nor close. `screen.isExtended` is all a page is told about
- * the desktop's shape without asking permission, and only its FALSE is actionable — one screen attached, so a
+ * the desktop's shape without asking permission, and only its FALSE is actionable, one screen attached, so a
  * frame that doesn't overlap it is stranded and the panel opens centred instead. Undefined (a browser that
  * doesn't answer) or true leaves the frame alone; guessing there would strand the multi-monitor user this
  * remembers the frame for. */
@@ -218,31 +218,31 @@ const onSomeScreen = (frame: Frame): boolean =>
     window.screen.isExtended !== false ||
     (frame.left < window.screen.availWidth && frame.top < window.screen.availHeight && frame.left + frame.width > 0 && frame.top + frame.height > 0);
 
-// Every pop-out store on the page, by window name — a keeper knows only its own name, and the page it calls
+// Every pop-out store on the page, by window name, a keeper knows only its own name, and the page it calls
 // back may be a completely fresh load, so the hook resolves the store at call time. An unknown name answers
 // `none` rather than nothing: this page drives no window by that name, which is exactly what the asker needs
 // to hear.
 const adopters = new Map<string, (win: Window) => PopoutAnswer>();
 window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) ?? `none` };
 
-/* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN — FOR THE OVERLAYS WE DON'T OWN.
+/* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN. FOR THE OVERLAYS WE DON'T OWN.
  *
  * A PrimeVue overlay arms itself the same way while it is open: ONE listener on `document`, watching for the
  * click that landed outside it (Escape is the same trick with a keydown). `document` in this realm is the MAIN
- * window's — and a popped-out panel's overlays are open in ANOTHER document, where a click on empty space
+ * window's, and a popped-out panel's overlays are open in ANOTHER document, where a click on empty space
  * dispatches and dies without ever reaching that listener. So out there nothing dismissed: the tab context menu
  * and the terminal's dialogs stayed up until something else closed them. One line inside PrimeVue, multiplied by
  * every overlay type the panels use.
  *
  * Mirroring the LISTENER, not forwarding the event, is what makes this safe. Each overlay receives the real
- * click, with its real target, so its own guards still decide the outcome — PrimeVue reads that target to tell
+ * click, with its real target, so its own guards still decide the outcome. PrimeVue reads that target to tell
  * "truly outside" from "the trigger I was just opened by" and from "my own content". A synthetic click
  * re-dispatched into the main document would carry the main document as its target, and every overlay would
  * close on the very click that opened it.
  *
  * WHAT THIS IS NOT. It is not the answer for an overlay we write, and it was never the whole answer for one we
  * don't: dismissal is only one of the four things a library overlay does against the module-scope realm, and
- * PrimeVue also MEASURES its room and re-aligns on resize against the opener's viewport — which is how the
+ * PrimeVue also MEASURES its room and re-aligns on resize against the opener's viewport, which is how the
  * model picker came to open off the bottom of a short pop-out window, on top of the pill that owns it, where no
  * click could reach it. The dismissal it swallowed there was its own. So the composer's pickers and the
  * past-chats panel are AnchoredOverlay now (`@intentic/ui`), which derives document, viewport and listeners
@@ -251,7 +251,7 @@ window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) ?? `
  * only seam short of reimplementing them. */
 
 // What an overlay dismisses on: a press, a click, a context menu, a key. Deliberately not every document event
-// — the rest (`visibilitychange`, `DOMContentLoaded`, …) describe the document that owns the listener rather
+//, the rest (`visibilitychange`, `DOMContentLoaded`, …) describe the document that owns the listener rather
 // than where the user is pointing, and sharing those would report a pop-out's lifecycle as the app's.
 const SHARED_EVENTS = new Set([`pointerdown`, `pointerup`, `mousedown`, `mouseup`, `click`, `dblclick`, `contextmenu`, `keydown`, `keyup`]);
 
@@ -281,7 +281,7 @@ document.addEventListener = ((
         return; // a null callback registers nothing, here or anywhere else
     }
     nativeAdd(type, listener, options);
-    // `once` is a single shot, and it belongs to whichever document fires first — there is no way to spend it
+    // `once` is a single shot, and it belongs to whichever document fires first, there is no way to spend it
     // out in the pop-out without risking spending it twice, so a once-listener stays where it was armed.
     if (!SHARED_EVENTS.has(type) || (typeof options === `object` && options.once === true)) {
         return;
@@ -347,7 +347,7 @@ const stopHeadObserver = (): void => {
 };
 
 // A pop-out document joins the set of documents the app renders into: everything armed so far is armed on it,
-// so an overlay that was ALREADY open when the panel popped out dismisses out there too — and it starts
+// so an overlay that was ALREADY open when the panel popped out dismisses out there too, and it starts
 // answering for whether the user has the app on screen (onScreen.ts), since from here on it is one of the
 // windows they can be reading it in.
 const shareListeners = (doc: Document): void => {
@@ -377,18 +377,18 @@ export interface Popout {
     // while it is true, so the panel materialises straight into the returning window instead of flashing
     // docked for a few frames on every refresh.
     readonly restoring: Ref<boolean>;
-    // The pop-out document's body — the Teleport target while popped out, undefined while docked.
+    // The pop-out document's body, the Teleport target while popped out, undefined while docked.
     readonly body: ShallowRef<HTMLElement | undefined>;
-    // Where the panel's PrimeVue overlays (Selects, Popovers, menus, dialogs) render — the pop-out body while
+    // Where the panel's PrimeVue overlays (Selects, Popovers, menus, dialogs) render, the pop-out body while
     // popped out so they open in the floating window, otherwise the default document body.
     readonly overlayTarget: ComputedRef<HTMLElement | "body">;
     readonly popOut: () => void;
     readonly dock: () => void;
     readonly toggle: () => void;
-    // Ask the window for at least this much width — what the chat panel does when it has just added a pane the
+    // Ask the window for at least this much width, what the chat panel does when it has just added a pane the
     // current frame has no room for. Never shrinks, never leaves the screen, and does nothing while docked.
     readonly fit: (width: number) => void;
-    /* Held by whatever RENDERS the panel, for exactly as long as it is rendering it — the fact the window's
+    /* Held by whatever RENDERS the panel, for exactly as long as it is rendering it, the fact the window's
      * liveness answer is derived from (see the contract at the top of this file). Called once from the host's
      * setup with a getter for "am I drawing the panel right now"; the hold is released with the host's own
      * scope, so an unmount needs no bookkeeping of its own. */
@@ -409,8 +409,8 @@ export const createPopout = (name: string, title: string, size: () => { width: n
      * this store cannot work it out for itself: `body` says where the panel WOULD go, never that anything went
      * there. Everything the window is told about its own liveness comes from here.
      *
-     * A COUNT rather than a flag, because a host can be replaced by its successor before it is torn down — a
-     * hot update re-creating the component, a shell swapping — and a window that dipped to `waiting` in the
+     * A COUNT rather than a flag, because a host can be replaced by its successor before it is torn down, a
+     * hot update re-creating the component, a shell swapping, and a window that dipped to `waiting` in the
      * overlap would veil itself mid-swap for no reason the reader can see. */
     const holders = ref(0);
 
@@ -431,15 +431,15 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         }
     };
 
-    /* "This TAB had the panel floating when it went away" — the note the fresh page reads to know a window is
+    /* "This TAB had the panel floating when it went away", the note the fresh page reads to know a window is
      * on its way back, so it can hold the panel's docked slot shut instead of flashing it open. sessionStorage
      * because that is exactly the scope of the claim: it survives reloads and dies with the tab, where
      * localStorage would have a SECOND app tab waiting on a window that only ever belonged to the first.
-     * Written when the window opens, cleared when the panel docks — so the only stale note is one left by a
+     * Written when the window opens, cleared when the panel docks, so the only stale note is one left by a
      * window dying without its unload handlers (a crash), which the grace timer below writes off.
      *
      * The note is an optimization, not the mechanism: adoption is driven by the returning window's own
-     * handshake, so a panel comes back even when the note is missing — just a few frames later. */
+     * handshake, so a panel comes back even when the note is missing, just a few frames later. */
     const storageKey = `ui-popout-${name}`;
     const remember = (open: boolean): void => {
         if (open) {
@@ -454,7 +454,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     /* THE FRAME THE WINDOW COMES BACK IN. localStorage, not the sessionStorage note above, because the two are
      * different claims: that note says "THIS tab had the panel floating a moment ago" and dies with the tab,
      * while where the user keeps this window is a habit that outlives tabs, sessions and browser restarts.
-     * Written when the panel LEAVES the window — its ×, a dock, a reload out there — which is the last moment
+     * Written when the panel LEAVES the window, its ×, a dock, a reload out there, which is the last moment
      * the geometry is still readable, and the moment a user who has just finished moving the window has
      * finished moving it. */
     const frameKey = `ui-popout-frame-${name}`;
@@ -484,14 +484,14 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         return onSomeScreen(frame) ? frame : undefined;
     };
 
-    /* Two ways the wait for a returning window can end, and they are NOT the same decision — running them
+    /* Two ways the wait for a returning window can end, and they are NOT the same decision, running them
      * through one flag is what let a window that reported in a beat late get closed under the user, panel and
      * all, for the crime of a slow reload:
-     *   · THE GRACE RUNS OUT — stop holding the docked slot shut, and nothing more. The window may well still
+     *   · THE GRACE RUNS OUT, stop holding the docked slot shut, and nothing more. The window may well still
      *     be alive out there (a reload behind a tunnel, a cold dev server, a throttled background tab), and its
      *     keeper is still asking every 200ms; taking it over late is exactly what the user wants, so the store
      *     stays adoptable and the panel simply pops back out when it arrives.
-     *   · THE PANEL IS DOCKED DELIBERATELY — refuse it. A window reporting in after that is a leftover with
+     *   · THE PANEL IS DOCKED DELIBERATELY, refuse it. A window reporting in after that is a leftover with
      *     nothing to show, and closing it is the only way it stops floating.
      */
     let dismissed = false;
@@ -507,7 +507,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         }, RECLAIM_GRACE_MS);
     }
 
-    /* The panel's live DOM is IN the closing document, and Vue only moves it back on the next flush — by which
+    /* The panel's live DOM is IN the closing document, and Vue only moves it back on the next flush, by which
      * time the window is gone. So rescue the nodes synchronously into a detached holder in this document
      * first: they are the same elements either way (a live xterm, a streaming transcript), and the Teleport
      * lifts them out of the holder into the docked slot a tick later. */
@@ -526,7 +526,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     };
 
     const attach = (win: Window): void => {
-        // Every time the panel is teleported into a window — the pop-out half of the focus trace
+        // Every time the panel is teleported into a window, the pop-out half of the focus trace
         // (chat/focusTrace.ts), so a panel painting into a document the app has since replaced is visible.
         traceFocus(`popout-attach`, { panel: name, readopting: poppedOut.value });
         dressWindow(win, title);
@@ -546,24 +546,24 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: [...ROOT_ATTRIBUTES, `class`, `style`] });
     };
 
-    /* What this store tells a window it owns. `live` is the panel being DRAWN out there and nothing else — a
+    /* What this store tells a window it owns. `live` is the panel being DRAWN out there and nothing else, a
      * store that has claimed the window but has nothing to put in it says `waiting` instead, and the window
      * veils rather than presenting an empty canvas as the app. Between the two, every state this store can be
      * left in by a hiccup is one the window can act on by itself. */
     const answer = (): PopoutAnswer => (holders.value > 0 ? `live` : `waiting`);
 
     /* The keeper's question, answered for this store's window. It arrives from the moment the window's page
-     * loads and every 200ms after, so the common case by far is "still mine, still drawing" — and answering it
+     * loads and every 200ms after, so the common case by far is "still mine, still drawing", and answering it
      * at all is the proof of life, since a torn-down realm never gets here. The ways to say `none` each mean
      * something different to the asker: a window this page no longer holds (docked deliberately, or replaced by
-     * another) is told to close, while a page that simply isn't driving it — because it never adopted it — lets
+     * another) is told to close, while a page that simply isn't driving it, because it never adopted it, lets
      * the keeper veil the panel and keep asking. */
     adopters.set(name, (win) => {
         if (win.closed) {
             return `none`;
         }
         if (popoutWindow === win) {
-            // Ours — unless the document beneath it has been swapped for a new one, which is a reload out there
+            // Ours, unless the document beneath it has been swapped for a new one, which is a reload out there
             // whose unload never reached us. The panel is in the old document, so this is a window to take over
             // again rather than one to reassure: answering for it would leave it holding an empty page.
             if (body.value !== win.document.body) {
@@ -582,13 +582,13 @@ export const createPopout = (name: string, title: string, size: () => { width: n
 
     /* The three ways a panel leaves a window, which differ in what happens to the window and in what is decided
      * about the next one:
-     *   · released() — the window is going away on its own, so there is nothing to close. It is also the path a
+     *   · released(), the window is going away on its own, so there is nothing to close. It is also the path a
      *     RELOAD out there takes, and closing the window on that would abort the navigation and take the panel
      *     with it; left alone, the reloading window comes back, reports in and is re-adopted, so the panel spends
      *     a beat in its column and pops straight back out.
-     *   · dock() — the user asked for the panel in its column, so the window has no reason to exist: close it,
+     *   · dock(), the user asked for the panel in its column, so the window has no reason to exist: close it,
      *     and refuse the leftovers that report in afterwards.
-     *   · relinquish() — the app stopped drawing the panel. Close it, but rule on nothing: see below. */
+     *   · relinquish(), the app stopped drawing the panel. Close it, but rule on nothing: see below. */
     const released = (): void => {
         if (!poppedOut.value) {
             return;
@@ -606,7 +606,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
             win.removeEventListener(`pagehide`, released);
         }
         // The document the panel is IN, which is not always `win.document`: a window whose page has already been
-        // replaced hands back the new one, and the listeners — like the panel below — belong to the old.
+        // replaced hands back the new one, and the listeners, like the panel below, belong to the old.
         const shared = body.value?.ownerDocument;
         if (shared !== undefined) {
             unshareListeners(shared);
@@ -631,7 +631,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         win?.close();
     };
 
-    /* Give the window back, having decided nothing about the panel's future — which is the whole difference
+    /* Give the window back, having decided nothing about the panel's future, which is the whole difference
      * from dock(). A store that has merely lost the host drawing for it must stay adoptable: latch a refusal
      * there and a remount (a hot update, a sign-in blip, a shell swap) leaves the panel unable to float again
      * for the rest of the page's life, and the window it was in closed under the user. */
@@ -641,13 +641,13 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         win?.close();
     };
 
-    /* THE WINDOW OUTLIVING ITS PANEL. A host going away is not a decision about the window — from here it is
-     * indistinguishable from the first half of a remount — so it starts a clock instead of closing anything:
+    /* THE WINDOW OUTLIVING ITS PANEL. A host going away is not a decision about the window, from here it is
+     * indistinguishable from the first half of a remount, so it starts a clock instead of closing anything:
      * a host back within the grace picks the window up again and the reader sees at most a blink of the veil,
      * and only a window still empty when it expires is handed back and closed.
      *
      * It arms on the panel LEAVING, never on its not having arrived yet (`held === 0`): before the first hold
-     * this is a page still booting, and a boot slower than this grace is ordinary — a cold dev server, a
+     * this is a page still booting, and a boot slower than this grace is ordinary, a cold dev server, a
      * session fetched over a tunnel. Bounding THAT case is the keeper's job, because only the window knows how
      * long it has actually sat empty. */
     let handBack: number | undefined;
@@ -677,8 +677,8 @@ export const createPopout = (name: string, title: string, size: () => { width: n
 
     /* Opening the window is the whole of popping out: the page it loads asks to be adopted (src/popout/keeper.ts)
      * and the hook above teleports the panel into it, so there is no second path for pushing a panel out and no
-     * way for this one to skip the liveness handshake. The panel stays docked and LIVE for the load in between —
-     * a local page, so a frame or two — rather than being unmounted while the window boots. */
+     * way for this one to skip the liveness handshake. The panel stays docked and LIVE for the load in between,
+     * a local page, so a frame or two, rather than being unmounted while the window boots. */
     const popOut = (): void => {
         if (poppedOut.value) {
             return;
@@ -701,8 +701,8 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         popOut();
     };
 
-    /* Grow the window to fit what the panel has just put in it. Only ever outward — a panel that asks for less
-     * than the user has already dragged out is describing its minimum, not their preference — and never past
+    /* Grow the window to fit what the panel has just put in it. Only ever outward, a panel that asks for less
+     * than the user has already dragged out is describing its minimum, not their preference, and never past
      * the room left on the screen the window starts on, so a window that was already at the right edge widens
      * as far as it can rather than hanging off it. A browser that refuses resizeTo (a window it did not open,
      * a maximized one) simply leaves the frame alone, and the panes scroll instead. */

@@ -10,15 +10,15 @@ import { usePublicOutbox } from "../workspace/usePublicOutbox";
 import { addressTarget, appTargets, mergeTargets, portTargets, type PreviewTarget, publicTarget, repoTargets } from "./previewModel";
 import { previewAddress } from "./previewSurface";
 
-/* The live list. `active` gates the per-monorepo apps fan-out to while the preview panel is actually mounted —
- * the same economy useWorkspaceApps applies — while panels and the outbox ride reads the shell already holds.
+/* The live list. `active` gates the per-monorepo apps fan-out to while the preview panel is actually mounted,
+ * the same economy useWorkspaceApps applies, while panels and the outbox ride reads the shell already holds.
  * No clock anywhere: the daemon's runtime push invalidates `panels` and `apps` together on every dev-server
  * change (contract runtime-state.ts), and the outbox rides the file watcher's `public` push. */
 export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();
     const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo } = usePanels();
     const { files: publicFiles, settled: publicSettled } = usePublicOutbox();
-    // The forwarded ports the shell already reads for its exposure indicator — this adds no request.
+    // The forwarded ports the shell already reads for its exposure indicator, this adds no request.
     const { forwarded } = usePorts();
 
     const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
@@ -66,7 +66,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
 
     return {
         targets,
-        // Both always-on reads have answered (or definitively failed) — what the empty state waits on before
+        // Both always-on reads have answered (or definitively failed), what the empty state waits on before
         // claiming there is nothing to preview. The apps fan-out is additive and never gates it.
         settled: computed(() => panelsSettled.value && publicSettled.value),
         start,

@@ -5,7 +5,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope } from "../policy.js";
 
 /* Files on somebody's computer. Reads are bounded by the roots; writes are bounded by the roots AND the write
- * switch, which is off by default — "connect my computer" does not imply "edit my documents".
+ * switch, which is off by default, "connect my computer" does not imply "edit my documents".
  *
  * THERE IS NO DELETE TOOL. Deleting is the one operation with no undo and no partial recovery, and an agent
  * that can delete is one bad inference away from a support ticket nobody can fix. `trash_file` moves the file
@@ -13,7 +13,7 @@ import { assertPath, assertScope } from "../policy.js";
  * apology. Emptying that folder is the user's business, on their own schedule.
  *
  * A rename, not a copy: within a filesystem it is atomic and instant even for a large file, and the fallback
- * (copy + unlink) is deliberately absent — a trash that spans filesystems would silently turn "moved" into
+ * (copy + unlink) is deliberately absent, a trash that spans filesystems would silently turn "moved" into
  * "duplicated and then really deleted", which is exactly the operation this tool exists to avoid. */
 
 // Anything larger is almost certainly not something a model should be reading whole (a database file, a video),

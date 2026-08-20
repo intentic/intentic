@@ -1,10 +1,10 @@
 import type { DesiredStateGraph } from "@intentic/graph";
 
-// Golden expected output for ../deploy.config.ts — regenerated from the compiled graph. Captures the
+// Golden expected output for ../deploy.config.ts, regenerated from the compiled graph. Captures the
 // users/teams identity nodes (Forgejo accounts + org/team, Komodo users + per-deployment grants) and the
 // CI/CD wiring: per-environment `ci` nodes + Komodo `deployment` nodes pointed at the registry image under
 // the owning team org. The engine-side control-plane API nodes (repo/ci/deployment/identities/notify) carry
-// the CP host's ssh block — they reach Forgejo/Komodo over an SSH port-forward, never the public routes.
+// the CP host's ssh block, they reach Forgejo/Komodo over an SSH port-forward, never the public routes.
 // Guarded by the topo-order, ref-edge, and secret tests.
 export const expectedGraph: DesiredStateGraph = {
     version: 1,

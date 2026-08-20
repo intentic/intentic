@@ -5,17 +5,17 @@ import { onScopeDispose, ref, watch, type Ref } from "vue";
  *
  * The sibling of loadingReveal.ts ("when a wait is allowed to be SEEN"), and the same observation from the
  * other side: a poll that fails once and succeeds on the retry, and a poll that has stopped working, are not
- * the same event — but they look identical for the first second, and the app used to shout at both. A red box
+ * the same event, but they look identical for the first second, and the app used to shout at both. A red box
  * that appears and vanishes teaches the user to distrust the quiet ones, which is the opposite of what an
  * error is for.
  *
- * So an ambient failure — one nobody clicked, that the app is already retrying — waits. If it heals inside the
+ * So an ambient failure, one nobody clicked, that the app is already retrying, waits. If it heals inside the
  * grace it is never said at all; if it survives, it is said once and stays until it heals. The dwell is
  * deliberately longer than loadingReveal's: a spinner appearing early costs a flicker, an alarm appearing
  * early costs trust.
  *
  * NOT for the failure of something the user just pressed. A click is a question, and an answer that arrives a
- * second late has already been waited for — those report immediately, through useAsyncAction. The whole
+ * second late has already been waited for, those report immediately, through useAsyncAction. The whole
  * distinction this module exists to draw is ambient vs asked-for.
  *
  * The notice keeps its IDENTITY across the wait: a source that changes what it is saying mid-grace (a

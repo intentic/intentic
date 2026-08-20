@@ -2,12 +2,12 @@ import type { ChatTool } from "../composables/chat/transcript";
 import { diffStat } from "./chatToolDiff";
 
 /* Consecutive tool calls that do exactly the same thing — 30 edits to the same file, a batch of reads against
- * one directory — are noise when each gets its own card. This module groups them into a single collapsed row
+ * one directory, are noise when each gets its own card. This module groups them into a single collapsed row
  * that shows the count and aggregated stats, expandable to the individual cards. The grouping is RENDERING
  * only: the transcript model stays flat, and a group unfolds to the same cards it would have shown ungrouped.
  *
  * A run of ≥3 consecutive calls with the same display name AND same target (the file / command the card's
- * header shows) collapses. Two is too few to justify the extra affordance — it saves one line at the cost of
+ * header shows) collapses. Two is too few to justify the extra affordance, it saves one line at the cost of
  * a fold the user must open to see anything. */
 
 // The threshold below which consecutive same-type calls stay individual cards.
@@ -63,7 +63,7 @@ export const groupConsecutiveTools = (tools: readonly ChatTool[]): readonly Tool
 };
 
 // Aggregated +/− across every tool in a group, for the collapsed header. Returns undefined when no tool
-// carries structured diffs (bash calls, reads — anything that isn't an edit).
+// carries structured diffs (bash calls, reads, anything that isn't an edit).
 export const groupDiffSummary = (tools: readonly ChatTool[]): string | undefined => {
     let additions = 0;
     let deletions = 0;

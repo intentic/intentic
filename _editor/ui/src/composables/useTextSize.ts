@@ -7,7 +7,7 @@ const ATTRIBUTE = `data-text-size`;
 
 const sizes = new Set<string>([`compact`, `default`, `large`]);
 
-/* THE APP'S BASE TEXT SIZE — the one knob every rem in the design system hangs off, so moving it grows type,
+/* THE APP'S BASE TEXT SIZE, the one knob every rem in the design system hangs off, so moving it grows type,
  * padding, control heights, radii and column gutters together instead of only the words. The interface was drawn
  * at what a browser calls 110%, and everyone was reaching for the browser's own zoom to get there; `default` IS
  * that size, so a fresh window already looks the way it is supposed to. `compact` is the old 100% for anyone who
@@ -38,7 +38,7 @@ const read = (): TextSize => {
 };
 
 const apply = (value: TextSize): void => {
-    // `default` is the stylesheet's own value, so it is the ABSENCE of the attribute — which keeps the markup
+    // `default` is the stylesheet's own value, so it is the ABSENCE of the attribute, which keeps the markup
     // quiet for the size almost everyone runs.
     if (value === `default`) {
         document.documentElement.removeAttribute(ATTRIBUTE);

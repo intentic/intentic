@@ -1,4 +1,4 @@
-/* Line-level diff rows for the chat's inline tool cards — a lightweight render of a tool_call's structured
+/* Line-level diff rows for the chat's inline tool cards, a lightweight render of a tool_call's structured
  * diff content. Monaco stays the full-screen reviewer; mounting a diff editor per transcript card is far too
  * heavy. Common prefix/suffix trim + an LCS walk over the middle keeps the usual Edit snippet cheap. */
 
@@ -87,7 +87,7 @@ const collapse = (rows: DiffRow[]): DiffRow[] => {
 
 const cap = (rows: DiffRow[]): DiffRow[] => (rows.length <= MAX_ROWS ? rows : [...rows.slice(0, MAX_ROWS), skip(rows.length - MAX_ROWS)]);
 
-// The full add/del/context rows before display collapse + cap — every changed line is present, so the line
+// The full add/del/context rows before display collapse + cap, every changed line is present, so the line
 // counts are exact even for a whole-file Write or a diff the render caps. collapse() only folds context runs,
 // never add/del, so applying it for display never drops a counted line.
 const rawRows = (oldText: string | undefined, newText: string): DiffRow[] => {

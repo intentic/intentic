@@ -7,7 +7,7 @@ const APP_GITIGNORE = "node_modules/\n";
 
 // A minimal, runnable starter app: it serves on the PORT the sandbox's app process manager injects (its
 // apps.json entry fronts it at its own preview hostname), and the Dockerfile is the deploy build CI runs. Zero dependencies,
-// so there is no install step — the agent fills it in. Importing an existing repo (appRepo) skips all of this.
+// so there is no install step, the agent fills it in. Importing an existing repo (appRepo) skips all of this.
 const STARTER_APP_PACKAGE = `${JSON.stringify(
     {
         name: "app",

@@ -6,7 +6,7 @@ import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./
 
 const paperlessSchema = serviceSchema.extend({
     // Paperless seeds its first superuser from env on first boot (idempotent: skipped when the user exists),
-    // so the intentic-generated admin identity rides the write-once .env — no register call needed.
+    // so the intentic-generated admin identity rides the write-once .env, no register call needed.
     adminUser: z.string(),
     adminPassword: z.string(),
     paperlessImage: z.string(),
@@ -16,7 +16,7 @@ type PaperlessInputs = z.infer<typeof paperlessSchema>;
 
 const PORT = 8000;
 
-// Paperless-ngx on SQLite (its default when PAPERLESS_DBHOST is unset — one fewer container) with the
+// Paperless-ngx on SQLite (its default when PAPERLESS_DBHOST is unset, one fewer container) with the
 // valkey broker it needs for its task queue. PAPERLESS_URL makes CSRF trust the tunnel-routed https origin.
 const composeYaml = (parsed: PaperlessInputs, id: string, hash: string): string =>
     [
@@ -50,7 +50,7 @@ const composeYaml = (parsed: PaperlessInputs, id: string, hash: string): string 
     ].join("\n");
 
 // Paperless-ngx (documents): scan, index and archive. The root URL redirects to the login page, which
-// answers 200 once the app is migrated and up — that redirect chain is the readiness probe.
+// answers 200 once the app is migrated and up, that redirect chain is the readiness probe.
 export const createPaperlessProvider = (executor: SshExecutor = sshExecutor): Provider =>
     createComposeServiceProvider(
         {

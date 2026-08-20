@@ -3,7 +3,7 @@ import { BrowserError } from "./types.js";
 /* The Chrome DevTools Protocol, as much of it as driving a page needs: an HTTP handshake to find the tabs, then
  * one WebSocket per tab carrying JSON-RPC.
  *
- * Hand-rolled rather than puppeteer/playwright, for a reason that was measured rather than assumed — and NOT the
+ * Hand-rolled rather than puppeteer/playwright, for a reason that was measured rather than assumed, and NOT the
  * one you would guess. Bundling is not the obstacle: Playwright packs into the `bun build --compile` binary this
  * ships inside for about 6 MB. What it cannot do is reach a browser from Bun. `connectOverCDP` fetches the
  * debugger's WebSocket URL over HTTP and then stalls on the upgrade until it times out, compiled and uncompiled
@@ -11,7 +11,7 @@ import { BrowserError } from "./types.js";
  * what the rest of this file is built on. The README carries the versions and says when to re-test.
  *
  * Correlation is the only real machinery: every request gets an id and the matching response resolves it. Events
- * (a message with a `method` and no `id`) are dropped — this package asks questions and does not subscribe. */
+ * (a message with a `method` and no `id`) are dropped, this package asks questions and does not subscribe. */
 
 // A page that stops answering would otherwise hold a tool call until something far upstream gave up. Generous
 // enough for a slow navigation, short enough to be a legible failure.

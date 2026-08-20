@@ -12,14 +12,14 @@ import { KOMODO_CORE_PORT } from "./komodo.js";
 // komodo.ts). Worker-host deployments use the host id as server name, registered by komodo-server.
 const LOCAL_SERVER = "Local";
 
-// The ssh block is the CONTROL-PLANE host's (where Komodo Core runs) — the engine registers the deployment
+// The ssh block is the CONTROL-PLANE host's (where Komodo Core runs), the engine registers the deployment
 // against Core over an SSH port-forward, even when the deployment itself targets a worker host's Server.
 const deploymentSchema = sshSchema.extend({
     // The Komodo Server the deployment targets: "Local" for the CP host, the host id for workers.
     server: z.string().default(LOCAL_SERVER),
     adminUser: z.string(),
     adminPassword: z.string(),
-    // The repo + registry namespace (a team's org, or the admin user when team-less) — matches CI's owner.
+    // The repo + registry namespace (a team's org, or the admin user when team-less), matches CI's owner.
     owner: z.string(),
     repoName: z.string(),
     // The registry authority (Forgejo's built-in registry, ghcr.io, or the GitLab Container Registry) + the
@@ -46,7 +46,7 @@ const outputsFor = (parsed: DeploymentInputs): Record<string, unknown> => ({
 
 const deploymentConfig = (parsed: DeploymentInputs): Record<string, unknown> => ({
     server_id: parsed.server,
-    // A registry Image (NOT a Komodo Build) — CI builds + pushes it; Komodo only pulls + runs it. The image
+    // A registry Image (NOT a Komodo Build). CI builds + pushes it; Komodo only pulls + runs it. The image
     // path is namespaced under the repo owner (the team's org), matching exactly what CI pushes.
     image: {
         type: "Image",
@@ -84,16 +84,16 @@ const normalizeEnv = (env: string | readonly { readonly variable: string; readon
 
 // A stable key over the one authored MUTABLE field the provisioner converges: env. server_id, the build
 // image, the deterministic ports, and branch (a Build concept Komodo does not store on a Deployment) are all
-// fixed/absent at the Deployment level, so they are excluded — keeping diff pure and free of ctx.id.
+// fixed/absent at the Deployment level, so they are excluded, keeping diff pure and free of ctx.id.
 const desiredKey = (parsed: DeploymentInputs): string =>
     JSON.stringify(normalizeEnv(Object.entries(parsed.env).map(([variable, value]) => ({ variable, value: String(value) }))));
 const observedKey = (config: DeploymentConfig): string => JSON.stringify(normalizeEnv(config.environment));
 
 // One Komodo Deployment per environment (named <app>.<env> = ctx.id), pulled from the registry image CI
 // pushes and exposed on a deterministic host port. All Komodo API calls go over an SSH port-forward to Core
-// on the CP host — never the public route. read returns undefined until the host's internalIp resolves or
+// on the CP host, never the public route. read returns undefined until the host's internalIp resolves or
 // while Komodo is unreachable, otherwise it surfaces the deployment's current config. diff converges on that
-// config alone. apply ONLY registers the desired Komodo deployment (create-or-update) — it does NOT build or
+// config alone. apply ONLY registers the desired Komodo deployment (create-or-update), it does NOT build or
 // deploy: the image is produced by CI and rolled out by Komodo's poll/auto_update + the workflow's notify.
 export const createDeploymentProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {

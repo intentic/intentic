@@ -85,7 +85,7 @@ export interface ForgejoApi {
         readonly org: string;
     }) => Promise<boolean>;
     // Create an organization owned by the admin `user` (so the admin stays in its Owners team and its tokens
-    // retain full access to the org's private repos — what Komodo clones and pulls with).
+    // retain full access to the org's private repos, what Komodo clones and pulls with).
     readonly createOrg: (args: { readonly baseUrl: string; readonly user: string; readonly password: string; readonly org: string }) => Promise<void>;
     // A team in an org (by name); undefined if absent. Returns the numeric id member/repo grants need.
     readonly findTeam: (args: {

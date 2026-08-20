@@ -1,7 +1,7 @@
 import { OPTIONAL_DIRECTIVES, runtimeDirectivesOf } from "@intentic/sandbox-run";
 import { buildCommand, type CommandContext } from "@stricli/core";
 
-/* WHICH OF AN OVERLAY'S ASKS THE HOST HAS TO BE QUIZZED ABOUT — `intentic sandbox host-probes`.
+/* WHICH OF AN OVERLAY'S ASKS THE HOST HAS TO BE QUIZZED ABOUT, `intentic sandbox host-probes`.
  *
  * The second half of the "ask the image" road (see sandbox-run.command.ts). A creation flow runs on a host and
  * therefore CAN interrogate that host's docker; what it cannot do is know which directives are worth
@@ -11,7 +11,7 @@ import { buildCommand, type CommandContext } from "@stricli/core";
  *     --gpus=all<TAB>runtime<TAB>nvidia
  *
  * The flow interprets the two probe kinds (~10 lines of sh, ~3 of TS), runs them, and passes the failures back
- * as `run-command --unsupported`. Adding a directive to the table therefore changes NO flow — which is the
+ * as `run-command --unsupported`. Adding a directive to the table therefore changes NO flow, which is the
  * whole point, and the property the first cut of this lacked: it hard-coded one token across five files.
  *
  * A probe is a KIND plus a name, never a shell string. The consumer is a script people pipe from curl into sh,

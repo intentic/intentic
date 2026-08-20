@@ -18,7 +18,7 @@ export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFr
  *
  * The pointer backends take the frame's `origin` because screenshot pixels and OS coordinates are not the same
  * space on Windows. Reading the frame per action costs a PowerShell round trip, so it is read once per call
- * here — a monitor rearranged mid-action is not a case worth paying for on every click. */
+ * here, a monitor rearranged mid-action is not a case worth paying for on every click. */
 
 // macOS and the rest: capture would work, but input would not, and a Desktop that silently cannot click is worse
 // than one that says so.

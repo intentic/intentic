@@ -10,15 +10,15 @@ import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
  * with the Google ID token demoted to the sign-in proof that establishes it.
  *
  * The raw Google ID token used to BE the steady-state credential, and its ~1h lifetime meant every renewal
- * went back through Google Identity Services — whose FedCM prompt shows browser UI even for a silent re-auth,
+ * went back through Google Identity Services, whose FedCM prompt shows browser UI even for a silent re-auth,
  * so "Sign in with Google" popped over a perfectly healthy workspace, roughly hourly, at whatever moment a
  * call crossed the expiry guard. Exchanging the first verified Google token for a weeks-long session the
  * daemon signs itself (system.session) makes Google UI a sign-in moment again: first visit in a browser,
- * account switch, a long-idle return — never mid-session. The daemon stays the only verifier and enforcer
+ * account switch, a long-idle return, never mid-session. The daemon stays the only verifier and enforcer
  * (owner/membership are re-checked per request), and the platform still never sees either credential.
  *
  * Sessions are per sandbox (each daemon signs with its own secret), persisted in localStorage like the Google
- * credential, and renewed IN THE BACKGROUND with the session itself once within a week of expiry — an active
+ * credential, and renewed IN THE BACKGROUND with the session itself once within a week of expiry, an active
  * user re-proves to Google only after a month away. Old daemons keep working: one that positively advertises
  * no `system.session` route (or 404s the exchange) simply gets the raw Google ID token per call, exactly the
  * pre-session behavior. */
@@ -27,7 +27,7 @@ interface StoredSession {
     readonly token: string;
     // Epoch ms, echoed by the daemon at mint.
     readonly expiresAt: number;
-    // Who the daemon verified — the identity the gates name when access is denied.
+    // Who the daemon verified, the identity the gates name when access is denied.
     readonly email: string;
 }
 
@@ -36,7 +36,7 @@ const storageKey = (sandboxId: string): string => `${SESSION_KEY_PREFIX}${sandbo
 
 // Never serve a token about to die mid-flight (the same guard the Google layer uses on its own tokens).
 const EXPIRY_MARGIN_MS = 60_000;
-// Renew — with the session itself, no Google involved — once this close to expiry, so an ACTIVE user's
+// Renew, with the session itself, no Google involved, once this close to expiry, so an ACTIVE user's
 // session slides forever and only a return from a long absence re-proves identity.
 const RENEW_UNDER_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -46,7 +46,7 @@ const { activeSandboxId } = useSandbox();
 // In-memory mirror of the persisted sessions (hydrated lazily per sandbox), so presentedEmail is reactive to
 // mints and invalidations without re-reading storage.
 const sessions = ref<Record<string, StoredSession>>({});
-// Sandboxes whose daemon 404'd the exchange without advertising any route surface (a build predating both) —
+// Sandboxes whose daemon 404'd the exchange without advertising any route surface (a build predating both),
 // stops re-probing on every call. Cleared per sandbox the moment a hello positively advertises the route.
 const unsupported = new Set<string>();
 // One in-flight establish per sandbox, so concurrent calls share a single Google mint + exchange.
@@ -102,7 +102,7 @@ const write = (sandboxId: string, session: StoredSession, broadcast = true): voi
 
 // Exchange a verified bearer (Google ID token, or a still-valid session when renewing) for a fresh session.
 // A raw fetch on purpose: sandboxRpc's own headers hook calls back into this module, so routing the exchange
-// through it would recurse. `unsupported` is a 404 — the daemon predates the route.
+// through it would recurse. `unsupported` is a 404, the daemon predates the route.
 const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unsupported` | `unauthorized`> => {
     try {
         const response = await fetch(`${target.base}/system/session`, {
@@ -199,14 +199,14 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
             write(target.sandboxId, minted);
         }
         // A failed renewal changes nothing: the current session keeps working until expiry, and a daemon that
-        // rotated its secret answers 401 on the next real call — which invalidates and re-establishes.
+        // rotated its secret answers 401 on the next real call, which invalidates and re-establishes.
     } finally {
         renewing.delete(target.sandboxId);
     }
 };
 
 // The bearer for the active sandbox: a valid session (renewed in the background when due), or the freshly
-// established one, or — only for pre-session daemons — the raw Google ID token. Undefined
+// established one, or, only for pre-session daemons, the raw Google ID token. Undefined
 // only when the user dismisses the sign-in gate.
 const getSessionToken = async (target = currentSandboxTarget()): Promise<string | undefined> => {
     if (target === undefined || target.sandboxId === undefined) {
@@ -236,7 +236,7 @@ const getSessionToken = async (target = currentSandboxTarget()): Promise<string 
     return inflight.get(sandboxId) ?? establish({ ...target, sandboxId });
 };
 
-// Drop the ACTIVE sandbox's session: the daemon rejected it (401 — secret rotated, expiry raced) or the user
+// Drop the ACTIVE sandbox's session: the daemon rejected it (401, secret rotated, expiry raced) or the user
 // is switching Google accounts. The next call re-establishes from a fresh Google proof.
 const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true): void => {
     if (sandboxId === undefined) {
@@ -339,7 +339,7 @@ const retireAccountAccess = async (sandboxes: readonly SandboxSummary[]): Promis
     }
 };
 
-// The identity this browser presents to the ACTIVE daemon — the session's email when one exists, else the
+// The identity this browser presents to the ACTIVE daemon, the session's email when one exists, else the
 // Google credential's. The gates name it: the pre-bind mismatch bar, the "no access" screen.
 const presentedEmail = computed<string | undefined>(() => {
     const sandboxId = activeSandboxId.value;

@@ -5,11 +5,11 @@ import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";
 
 /* The managed background processes, as rows any surface can render: the installed extensions' DECLARED
- * processes (listed even while stopped — a gated-off gateway shows as a startable row, pm2-style) merged with
+ * processes (listed even while stopped, a gated-off gateway shows as a startable row, pm2-style) merged with
  * the live "process" sessions the daemon's terminal list reports (running state + the tmux session for log
  * views; whatever maps to no declared process is dockerd or an orphaned session of an uninstalled extension).
  * Extension rows start/stop through their /extensions process routes; session-only rows can only be stopped
- * (dockerd is daemon-owned — part of the base sandbox — so its converge path is the daemon's boot).
+ * (dockerd is daemon-owned, part of the base sandbox, so its converge path is the daemon's boot).
  *
  * State comes from the shared terminals query, NOT from a mounted terminal panel: a process's health is a
  * sandbox fact, and the surface that should answer "is my Discord bot alive?" is the Discord capability card,
@@ -20,7 +20,7 @@ export interface BackgroundProcessRow {
     readonly id: string;
     // Primary display: the declared process name ("gateway"), or the session's panel key ("docker").
     readonly name: string;
-    // The owning extension — present iff the row is start/stoppable through the extensions routes.
+    // The owning extension, present iff the row is start/stoppable through the extensions routes.
     readonly extensionId?: string;
     readonly processName?: string;
     // The live tmux session (log view target); absent while the process isn't started.
@@ -29,12 +29,12 @@ export interface BackgroundProcessRow {
 }
 
 // The daemon reports a just-started process as stopped until its shell consumes the buffered command
-// (pane_current_command is still the shell) — one delayed relist settles the row.
+// (pane_current_command is still the shell), one delayed relist settles the row.
 const SETTLE_MS = 1500;
 const processRoute = (row: BackgroundProcessRow, action: string): string =>
     `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
 
-// Open a row's read-only logs. Plain action, not composable state — and routed through the GLOBAL panel channel
+// Open a row's read-only logs. Plain action, not composable state, and routed through the GLOBAL panel channel
 // rather than a local tab call so it works from a page with no panel mounted: focus() recognises a process
 // session and opens its read-only log view rather than tabbing it directly.
 export const viewProcessLogs = (row: BackgroundProcessRow): void => {
@@ -45,7 +45,7 @@ export const viewProcessLogs = (row: BackgroundProcessRow): void => {
 
 export function useBackgroundProcesses(): {
     rows: ComputedRef<BackgroundProcessRow[]>;
-    // The row an action is in flight for — its buttons disable so a double-click can't double-restart.
+    // The row an action is in flight for, its buttons disable so a double-click can't double-restart.
     busy: Ref<string | undefined>;
     start: (row: BackgroundProcessRow) => Promise<void>;
     stop: (row: BackgroundProcessRow) => Promise<void>;
@@ -94,7 +94,7 @@ export function useBackgroundProcesses(): {
     };
 
     // Always stop→start (both idempotent): a crashed process leaves its session alive at a shell prompt, which
-    // the panel manager still tracks — a bare start would no-op against it. Stop first covers fresh, crashed,
+    // the panel manager still tracks, a bare start would no-op against it. Stop first covers fresh, crashed,
     // and running alike, so Start and Restart are the same call.
     const start = (row: BackgroundProcessRow): Promise<void> =>
         act(row, async () => {

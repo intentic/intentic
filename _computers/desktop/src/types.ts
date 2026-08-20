@@ -2,8 +2,8 @@
  * sandboxes: it takes coordinates and text and makes a computer do something. Whether an action is ALLOWED is
  * somebody else's question, asked before these are ever called.
  *
- * That separation is what makes this testable at all. The mechanics are unmockable by nature — they end in a
- * real pointer moving on a real screen — so the only way to test the layer above is for the layer above to
+ * That separation is what makes this testable at all. The mechanics are unmockable by nature, they end in a
+ * real pointer moving on a real screen, so the only way to test the layer above is for the layer above to
  * depend on this interface rather than on `xdotool`. */
 
 export interface Point {
@@ -26,7 +26,7 @@ export interface ScreenFrame {
 }
 
 /* One open window. The bounds are in the same screenshot-pixel space as everything else, so "click the middle of
- * the Slack window" is arithmetic rather than a guess — which is most of why listing windows is worth having at
+ * the Slack window" is arithmetic rather than a guess, which is most of why listing windows is worth having at
  * all, beyond knowing what is open.
  *
  * `id` is opaque and platform-shaped (an HWND on Windows, an X11 window id, a sway node id). It is handed back
@@ -34,7 +34,7 @@ export interface ScreenFrame {
 export interface WindowInfo {
     readonly id: string;
     readonly title: string;
-    // The program, as the OS names it — "chrome", "Code", "slack". What a person means by "the browser".
+    // The program, as the OS names it, "chrome", "Code", "slack". What a person means by "the browser".
     readonly app: string;
     readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
     readonly focused: boolean;
@@ -51,7 +51,7 @@ export interface Desktop {
     readonly click: (at: Point, button: MouseButton) => Promise<void>;
     readonly doubleClick: (at: Point) => Promise<void>;
     readonly drag: (from: Point, to: Point) => Promise<void>;
-    // Types literal text — no key names, no escapes the caller has to know. Newlines are Enter.
+    // Types literal text, no key names, no escapes the caller has to know. Newlines are Enter.
     readonly type: (text: string) => Promise<void>;
     // One chord in this package's vocabulary (see keys.ts): "Return", "ctrl+c", "alt+Tab", "F5".
     readonly key: (combo: string) => Promise<void>;
@@ -64,14 +64,14 @@ export interface Desktop {
     readonly focusWindow: (id: string) => Promise<void>;
     /* Start an application, or open a URL or file with whatever the machine has registered for it. Separate from
      * running a command because "open this in the browser" should not require the caller to know that it is
-     * `xdg-open` here and `Start-Process` there — and because it is the first step of most tasks. */
+     * `xdg-open` here and `Start-Process` there, and because it is the first step of most tasks. */
     readonly launch: (target: string) => Promise<void>;
     readonly readClipboard: () => Promise<string>;
     readonly writeClipboard: (text: string) => Promise<void>;
 }
 
 /* A desktop that cannot do the thing, with a sentence naming what would fix it. Thrown rather than returned
- * because every call site treats it the same way — surface the message — and because the alternative is a
+ * because every call site treats it the same way, surface the message, and because the alternative is a
  * result type threaded through nine methods that succeed in the ordinary case.
  *
  * `install` carries the one-line remedy when the cause is a missing program, which on Linux it usually is. It is

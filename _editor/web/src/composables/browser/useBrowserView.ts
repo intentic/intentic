@@ -7,33 +7,33 @@ import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
  * WebSocket as image frames, with the owner's clicks and keystrokes going back the other way.
  *
  * This is NOT built like terminalSession.ts, and the difference is deliberate. A terminal's xterm is a
- * persistent host element shuffled between containers so a tab switch doesn't drop its scrollback — a browser
+ * persistent host element shuffled between containers so a tab switch doesn't drop its scrollback, a browser
  * view has no scrollback to drop. Its content is the live page: unmount it, reconnect, and the very next frame
  * is the truth again. So the pane is an ordinary <img> in an ordinary component and this composable is plain
  * reactive state, which is what lets the Browsers view be a route rather than a pane in a tab machine.
  *
  * WATCHING IS THE DEFAULT; DRIVING IS A DECISION. The socket accepts input from the first frame, but nothing is
- * sent until the user presses Take control — because this view exists to answer "what is it doing?", and a stray
+ * sent until the user presses Take control, because this view exists to answer "what is it doing?", and a stray
  * click landing in a form the agent is halfway through filling is the one way watching can do harm. */
 
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
 const MAX_RETRY_MS = 30_000;
-// A connection that lived this long was healthy — its drop resets the backoff (terminalSession's rule).
+// A connection that lived this long was healthy, its drop resets the backoff (terminalSession's rule).
 const STABLE_MS = 5000;
-// The daemon answers every ping with a pong, and a STILL page sends no frames at all — so silence this long is
+// The daemon answers every ping with a pong, and a STILL page sends no frames at all, so silence this long is
 // a half-open socket, not a quiet browser.
 const STALE_MS = 90_000;
 // The remote viewport (the daemon's screencast.ts VIEW_WIDTH/VIEW_HEIGHT) pointer coordinates map back onto.
 export const VIEW_WIDTH = 1280;
 export const VIEW_HEIGHT = 800;
-// Pointer moves are throttled to roughly a frame — CDP dispatches each one synchronously in the page.
+// Pointer moves are throttled to roughly a frame. CDP dispatches each one synchronously in the page.
 const MOVE_THROTTLE_MS = 40;
 // How long a Ctrl+C waits for the remote page to answer with its selection before the keystroke goes on
 // without it. Long enough for a round trip through the tunnel, short enough not to strand the keyboard.
 const SELECTION_TIMEOUT_MS = 1500;
 
-// Mirrors the daemon's SelectMenu (screencast.ts) — the browser can't import that contract package, the same
+// Mirrors the daemon's SelectMenu (screencast.ts), the browser can't import that contract package, the same
 // reason the input frames are re-declared there rather than shared.
 export interface SelectMenu {
     readonly options: readonly { readonly label: string; readonly disabled: boolean }[];
@@ -42,13 +42,13 @@ export interface SelectMenu {
 }
 
 export interface BrowserView {
-    // The current frame as a data URL. Undefined until the first one lands — the view shows `status` instead.
+    // The current frame as a data URL. Undefined until the first one lands, the view shows `status` instead.
     // Its encoding changes under it: a low-cost jpeg while the page moves, then one sharp webp once it settles
     // (see screencast.ts), which is why the frame carries its own format rather than the client assuming one.
     readonly frame: Ref<string | undefined>;
     // What to say while there is no picture: connecting, reconnecting, or why there never will be one.
     readonly status: Ref<string | undefined>;
-    // True while the user's input is being forwarded. Off by default — see the note above.
+    // True while the user's input is being forwarded. Off by default, see the note above.
     readonly driving: Ref<boolean>;
     // Stream a specific page instead of following the agent. Pins daemon-side until the page closes.
     readonly bindPage: (pageId: string) => void;
@@ -59,7 +59,7 @@ export interface BrowserView {
     readonly chooseOption: (index: number) => void;
     readonly closeSelect: () => void;
     // The pointer/keyboard handlers the pane binds. All no-op unless `driving`, so taking control (and giving
-    // it back) is a state flip rather than a listener rebuild — no window in which a half-attached pane
+    // it back) is a state flip rather than a listener rebuild, no window in which a half-attached pane
     // swallows or duplicates events.
     readonly onMouseMove: (event: MouseEvent, frame: HTMLElement) => void;
     readonly onMouseDown: (event: MouseEvent, frame: HTMLElement) => void;
@@ -67,7 +67,7 @@ export interface BrowserView {
     readonly onWheel: (event: WheelEvent, frame: HTMLElement) => void;
     readonly onKeyDown: (event: KeyboardEvent) => void;
     // THE ONE THING TYPING CANNOT DO. The remote Chromium has a clipboard of its own, inside the sandbox, that
-    // nothing on the user's machine can write to — so Ctrl/Cmd+V arriving at the page would paste whatever that
+    // nothing on the user's machine can write to, so Ctrl/Cmd+V arriving at the page would paste whatever that
     // browser last copied, not what the user meant. keyIntent deliberately lets the chord through to the host
     // browser instead, which turns it into a `paste` event carrying the real clipboard, and the text travels
     // down the same insertText path a keystroke does.
@@ -79,7 +79,7 @@ export interface BrowserView {
 const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
 
 /* Watch one session, following `name` as the view switches between browsers. A change tears the old socket
- * down and opens a new one — there is nothing to preserve across the switch, which is the whole reason this can
+ * down and opens a new one, there is nothing to preserve across the switch, which is the whole reason this can
  * be so much simpler than the terminal's session cache. */
 export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const frame = ref<string | undefined>();
@@ -119,20 +119,20 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         });
 
     /* COPY AND CUT, ACROSS THE GAP. Copying inside the agent's Chromium puts text on the SANDBOX's clipboard,
-     * which the user's machine can't read — so the selection is fetched and written to their own clipboard here.
+     * which the user's machine can't read, so the selection is fetched and written to their own clipboard here.
      * The chord still goes to the page afterwards (its own handlers may care), and only afterwards: a cut that
      * ran first would have deleted the very text being read. */
     const copyOut = async (chord: KeyFrame): Promise<void> => {
         const text = await askSelection();
         if (text !== ``) {
-            // Unavailable outside a secure context, and refusable — a failed write must not eat the keystroke.
+            // Unavailable outside a secure context, and refusable, a failed write must not eat the keystroke.
             await navigator.clipboard?.writeText(text).catch(() => undefined);
         }
         send(chord);
     };
 
     /* NOBODY LOOKING, NOTHING SENT. A browsing agent paints constantly, and a view left open on a background tab
-     * (or behind another route — this composable's scope outlives a nav) would keep pulling every one of those
+     * (or behind another route, this composable's scope outlives a nav) would keep pulling every one of those
      * frames down the tunnel to an <img> nobody can see. The daemon holds the binding and the pin across a
      * pause, so coming back is one frame away rather than a reconnect. */
     const syncVisibility = (): void => send({ type: document.hidden ? `pause` : `resume` });
@@ -172,8 +172,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             if (pinned !== undefined) {
                 ws.send(JSON.stringify({ type: `bind`, pageId: pinned }));
             }
-            // A socket that opened (or reconnected) while the tab was in the background starts out streaming —
-            // the daemon has no way to know otherwise — so the first thing it hears is where we actually are.
+            // A socket that opened (or reconnected) while the tab was in the background starts out streaming,
+            // the daemon has no way to know otherwise, so the first thing it hears is where we actually are.
             syncVisibility();
             ping = window.setInterval(() => {
                 if (Date.now() - lastFrameAt > STALE_MS) {
@@ -221,12 +221,12 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             }
             if (message.type === `gone`) {
                 // The tab closed between the relist and the click. Drop the pin and let the stream follow the
-                // agent again — the strip's next poll drops the tab itself.
+                // agent again, the strip's next poll drops the tab itself.
                 pinned = undefined;
                 return;
             }
             if (message.type === `error`) {
-                // The daemon knows this session for good — a reconnect would only ask the same dead question.
+                // The daemon knows this session for good, a reconnect would only ask the same dead question.
                 closing = true;
                 status.value = message.message ?? `That browser session is gone.`;
                 frame.value = undefined;
@@ -329,7 +329,7 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
                 deltaY: event.deltaY,
             });
         },
-        // Which half of the keyboard a keystroke belongs to is keyIntent's decision — see that module for why a
+        // Which half of the keyboard a keystroke belongs to is keyIntent's decision, see that module for why a
         // paste is left to the host and a select-all is not. Nothing at all happens unless the user took the
         // wheel: watching must not put keys into the page the agent is working in.
         onKeyDown: (event) => {

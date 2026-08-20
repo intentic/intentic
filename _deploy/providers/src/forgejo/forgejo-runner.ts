@@ -10,8 +10,8 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // image: the pinned act_runner image; jobImage: the pinned image act_runner runs each `runs-on: docker` job
 // in (carries node for the JS actions; the docker CLI + buildx are bind-mounted from the host below). Both
-// are recorded in the desired-state graph — the runner image on the container, the job image inside
-// config.yaml — and read/diff converge on both.
+// are recorded in the desired-state graph, the runner image on the container, the job image inside
+// config.yaml, and read/diff converge on both.
 const runnerSchema = sshSchema.extend({ instanceUrl: z.string(), token: z.string(), image: z.string(), jobImage: z.string() });
 type RunnerInputs = z.infer<typeof runnerSchema>;
 const parse = (inputs: ResolvedInputs): RunnerInputs => parseInputs(runnerSchema, inputs, "forgejo-runner");
@@ -65,11 +65,11 @@ const configuredJobImage = async (session: SshSession): Promise<string> => {
 
 // The Forgejo Actions runner (act_runner) for a host, registered against the host's Forgejo with the
 // platform's runner token. No outputs (it is a worker). read returns the resource only when the container
-// is up and registered to the desired instance; apply is idempotent — the persistent token lets the same
+// is up and registered to the desired instance; apply is idempotent, the persistent token lets the same
 // registration repeat safely.
 export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "instanceUrl", "token")) {
             return undefined;
@@ -118,7 +118,7 @@ export const createForgejoRunnerProvider = (executor: SshExecutor = sshExecutor)
         const session = await executor.connect(sshTarget(parsed));
         try {
             // CI builds the app image with the HOST docker daemon, so each job container needs the docker CLI +
-            // buildx plugin. Both are static binaries — discover them on the host and bind-mount them into jobs
+            // buildx plugin. Both are static binaries, discover them on the host and bind-mount them into jobs
             // (via the runner config) instead of pulling a multi-GB docker-in-node image.
             const dockerBin = (await session.exec("command -v docker")).stdout.trim();
             if (dockerBin === "") {

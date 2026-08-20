@@ -29,7 +29,7 @@ const resticRun = (opts: GuardedUpdateOpts, volume: string, mode: ":ro" | "", ar
 // Wrap a stateful service's image bump in a transaction: snapshot the volumes, try the new image, and on a
 // health failure roll the image AND the data back to the pre-update state, then rethrow. The snapshot taken
 // moments before is a known-good recovery point, so restoring it undoes even an irreversible on-start schema
-// migration the new version may have run — which image-only rollback could not. If the snapshot cannot be
+// migration the new version may have run, which image-only rollback could not. If the snapshot cannot be
 // taken (e.g. backup not applied yet, so restic.env is missing), the update aborts BEFORE touching the
 // running service, so a guarded service is never updated without a recovery point.
 export const guardedUpdate = async (opts: GuardedUpdateOpts): Promise<void> => {

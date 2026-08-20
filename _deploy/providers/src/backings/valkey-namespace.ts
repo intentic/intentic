@@ -25,7 +25,7 @@ const url = (parsed: NamespaceInputs): string => `redis://${parsed.username}:${p
 // Run valkey-cli in the instance container authenticated as admin, returning trimmed stdout. Throws on a
 // non-zero exit so a real error propagates rather than reading as "absent".
 const cli = async (session: SshSession, cid: string, parsed: NamespaceInputs, args: string): Promise<string> => {
-    // NOTE: correct quoting keeps the password out of the SHELL's hands, not out of the host's process table —
+    // NOTE: correct quoting keeps the password out of the SHELL's hands, not out of the host's process table,
     // `-a` puts it on the remote argv where `ps` still reads it. That exposure is tracked separately; this call
     // no longer lets an apostrophe in the password run the rest of the line as a command.
     const result = await session.exec(`docker exec ${cid} valkey-cli -a ${shellQuote(parsed.adminPassword)} --no-auth-warning ${args}`);
@@ -37,11 +37,11 @@ const cli = async (session: SshSession, cid: string, parsed: NamespaceInputs, ar
 
 // A per-app Valkey ACL user scoped to its key prefix (the binding for an app that uses a cache capability).
 // read reports it present once ACL GETUSER returns the user; apply create-or-updates it (idempotent ACL
-// SETUSER); delete drops it. NOTE: ACL users live in memory — if the instance restarts without an aclfile, a
+// SETUSER); delete drops it. NOTE: ACL users live in memory, if the instance restarts without an aclfile, a
 // reconcile re-creates the user (read sees it absent, apply re-runs SETUSER), which is the self-healing path.
 export const createValkeyNamespaceProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "instanceHost", "instancePort")) {
             return undefined;

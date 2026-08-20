@@ -5,12 +5,12 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 
 /* One shared per-extension settings store (keyed by the capability entry id), so the Sandbox hub's Extensions
- * tab and a running extension's api.settings read and write THE SAME reactive record — an edit in either place
+ * tab and a running extension's api.settings read and write THE SAME reactive record, an edit in either place
  * notifies the other. Values persist daemon-side (.intentic/config/extension-settings.json); saves overwrite the whole
  * record, mirroring the sandbox-settings pattern. */
 
 export interface ExtensionSettingsStore {
-    // The non-secret values — undefined until the first load resolves. Secret values are NEVER held client-side
+    // The non-secret values, undefined until the first load resolves. Secret values are NEVER held client-side
     // (the daemon strips them from reads); `secretsSet` names the secret keys that currently hold a value.
     readonly values: ShallowRef<Record<string, SettingValue> | undefined>;
     readonly secretsSet: ShallowRef<readonly string[]>;

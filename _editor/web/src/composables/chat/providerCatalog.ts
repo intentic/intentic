@@ -11,19 +11,19 @@ import {
 } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 
-/* WHAT EACH PROVIDER CAN RUN, AS THIS WINDOW LAST HEARD IT — the live per-provider catalogs (models, defaults,
+/* WHAT EACH PROVIDER CAN RUN, AS THIS WINDOW LAST HEARD IT, the live per-provider catalogs (models, defaults,
  * slash commands, installed ACP agents) and the label rules every picker reads them through.
  *
  * Module state rather than per-conversation state, because a catalog is a property of the SANDBOX: every tab,
  * the suggested-session box and the settings pages show the same models, and a second conversation must not
  * re-fetch them. useChat fills these on the reachable seam (loadProviderModels / loadAcpProviders) and clears
- * them in resetChat; nothing here fetches, so this module stays free of the daemon client — which is what lets a
+ * them in resetChat; nothing here fetches, so this module stays free of the daemon client, which is what lets a
  * Conversation read it without importing useChat (a cycle).
  *
  * Nothing is ever synthesized locally: a model's label, description and badges are the provider's own words, so
  * a new release carries its own presentation with no code change here. */
 
-// A live-catalog model option: the picker entry plus whatever the provider published about the model — the
+// A live-catalog model option: the picker entry plus whatever the provider published about the model, the
 // reasoning-effort tiers it accepts, its capability description, and capability badges. All optional because
 // provider catalogs differ in how much they report; rows with ids alone render label-only.
 export interface ModelOption extends CatalogOption {
@@ -33,14 +33,14 @@ export interface ModelOption extends CatalogOption {
 }
 
 // Seed one slot per native provider. AgentProvider is a bare string on the wire, so `Record<AgentProvider, T>`
-// is `Record<string, T>` and a missing provider key is NOT a type error — it reads back as `undefined` and the
+// is `Record<string, T>` and a missing provider key is NOT a type error, it reads back as `undefined` and the
 // provider silently loses its models, accounts or load state. Deriving every one of these records from the
 // contract's own vocabulary is what makes adding a provider a single edit in NATIVE_PROVIDERS instead of a hunt
 // through the literals below. `seed` runs per provider so no two share a mutable value.
 export const perProvider = <T>(seed: (provider: NativeProvider) => T): Record<AgentProvider, T> =>
     Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, seed(provider)] as const));
 
-// Every provider's model catalog is daemon-owned (one route, /providers/{provider}/models — live discovery
+// Every provider's model catalog is daemon-owned (one route, /providers/{provider}/models, live discovery
 // with a persisted/seed floor, never empty) and loaded into these records, so
 // the pickers track provider renames and new releases without a static list. useChat.loadProviderModels fills
 // them when a daemon is reachable; resetChat clears. Empty only until the first load.
@@ -59,7 +59,7 @@ export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(
 // daemon resolves its own default). Reading the floor rather than naming an id here is what keeps the seeded
 // model a row the picker actually offers.
 export const defaultModelFor = (provider: AgentProvider): string => {
-    // An unseeded provider key (an ACP agent) has no catalog — the agent owns its own model, so empty rides.
+    // An unseeded provider key (an ACP agent) has no catalog, the agent owns its own model, so empty rides.
     const live = providerDefaultModel.value[provider] ?? ``;
     if (live !== ``) {
         return live;
@@ -76,8 +76,8 @@ export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
 };
 
 // The slash commands each provider last published daemon-side (GET /agent/commands), loaded on the same
-// reachable seam as accounts/models. A conversation's OWN list — replaced by every `commands` frame its turns
-// emit — stays authoritative once it has run one; this is the seed that makes the composer's `/` popover work
+// reachable seam as accounts/models. A conversation's OWN list, replaced by every `commands` frame its turns
+// emit, stays authoritative once it has run one; this is the seed that makes the composer's `/` popover work
 // BEFORE that, since a provider's commands are a property of the workspace, not of one conversation. Empty
 // until the first load, and until that provider has run a turn in the daemon's lifetime.
 export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[]>>(perProvider<readonly AgentCommand[]>(() => []));
@@ -90,7 +90,7 @@ export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
  * reason they are: the allowance belongs to the ACCOUNT, not to a conversation, so every tab and every picker
  * must show the same number and a second conversation must not re-fetch it.
  *
- * `available` false is the ordinary answer — most sandboxes run against a platform that serves no trial — and
+ * `available` false is the ordinary answer, most sandboxes run against a platform that serves no trial, and
  * it is also the pre-load state, which is the safe way round: a picker that has not heard yet offers no trial
  * rather than promising an allowance that may not exist. */
 export const trialStatus = ref<{
@@ -112,20 +112,20 @@ export const trialStatus = ref<{
     health: "unknown",
 });
 
-// Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids — loaded on the
+// Installed model endpoints (endpoint-kind capabilities), as their `endpoint/<id>` provider ids, loaded on the
 // same seam and from the same /capabilities read. Unlike an ACP agent, each of these HAS a catalog: the models
 // come from the endpoint's own server, so they land in providerModels like every other provider's.
 export const endpointProviders = ref<readonly { id: string; label: string }[]>([]);
 
 // The display label for any provider: a capability-derived provider's own name when known (an ACP agent's
-// configured display name, an endpoint's capability id), else the shared static label — which itself falls back
+// configured display name, an endpoint's capability id), else the shared static label, which itself falls back
 // to the raw id.
 export const providerDisplayLabel = (provider: AgentProvider): string =>
     acpProviders.value.find((agent) => agent.id === provider)?.label ??
     endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
     providerLabel(provider);
 
-// The display label for a selected model id — the option's label, else the raw id, else the provider name. The
+// The display label for a selected model id, the option's label, else the raw id, else the provider name. The
 // raw-id rung is what a custom model rides on: it belongs to no catalog by definition, and naming the provider
 // there would hide WHICH model the turn actually runs. The provider name remains the floor for an EMPTY id, so
 // the chip is never blank (Grok's catalog can be briefly empty on first load; an ACP agent owns its own model

@@ -4,23 +4,23 @@ import { codeLineStat, type LineStat } from "./codeStat";
 /* THE CODE-ONLY +/− A REVIEW SHOWS, per file, filled in as the diffs arrive.
  *
  * A row cannot work its own out: the count needs both sides of the file, and both sides are a daemon read. So the
- * count is a by-product instead — every path that reads a diff (the background reader walking a review's rows, the
+ * count is a by-product instead, every path that reads a diff (the background reader walking a review's rows, the
  * file a reader just opened) hands what it read to `record`, and the rows read the answer back out of here.
  *
  * THREE STATES, NOT TWO, and that distinction is the whole point of this file. "I have not counted this yet" and
  * "this file has no comments to take out" are opposite answers that used to leave here as the same `undefined`,
- * so a surface could not tell them apart. Both print git's numbers — there is no other number to print — but only
+ * so a surface could not tell them apart. Both print git's numbers, there is no other number to print, but only
  * one of them is FINISHED: the file with nothing to strip shows every line it has, so git's count is its reading
  * for good, while the uncounted one may be replaced the moment something reads the file. Which of the two a badge
  * is looking at decides whether it draws the count as settled or as provisional (ReviewStat), and a reader who is
  * told which is a reader nothing changes under.
  *
- * Keys are the caller's and must carry their scope (which agent, which repo, which side) — this is one store for
+ * Keys are the caller's and must carry their scope (which agent, which repo, which side), this is one store for
  * every review surface in the app, so a file read in two of them is tokenized once. */
 
 /** What a file's +/− reads as with the comments out, for the badge that has to print one of them. */
 export interface CodeCount {
-    // The stripped counts. Absent means git's own are the honest reading — a file with no grammar to strip, bytes,
+    // The stripped counts. Absent means git's own are the honest reading, a file with no grammar to strip, bytes,
     // or a diff too big for the daemon to send: all three render whole, comments included.
     readonly code?: LineStat;
     // Still being worked out: git's numbers are the only reading available, and the badge marks them as standing
@@ -29,7 +29,7 @@ export interface CodeCount {
 }
 
 /* A file's content, small enough to keep. Kept so a file the agent has since written again is recounted rather
- * than answered with a number about the version before it — which is all the stored copy was ever for. It used to
+ * than answered with a number about the version before it, which is all the stored copy was ever for. It used to
  * be the two texts themselves, and this store outlives every panel: a session that reviewed a few agents held
  * every side of every file it had counted, in full, until the tab closed. Length and a rolling hash answer the
  * only question asked of them. */
@@ -43,8 +43,8 @@ const fingerprint = (text: string): string => {
 };
 
 interface Entry {
-    // What the reading was taken from. Absent for a file there was nothing to read — bytes, or a diff the daemon
-    // refused to send — where no later content can make the answer stale.
+    // What the reading was taken from. Absent for a file there was nothing to read, bytes, or a diff the daemon
+    // refused to send, where no later content can make the answer stale.
     readonly of?: string;
     // The stripped counts, or absent when this file has nothing to strip (see CodeCount.code).
     readonly code?: LineStat;
@@ -76,7 +76,7 @@ const record = async (key: string, path: string, before: string, after: string):
     running.add(key);
     try {
         // A failure lands as "nothing to strip" rather than staying absent: the grammar is not going to load on
-        // the second ask either, so the honest answer is git's count — and a row left counting forever would keep
+        // the second ask either, so the honest answer is git's count, and a row left counting forever would keep
         // the review's totals pending on a file that is never going to answer.
         const code = await codeLineStat(before, after, path).catch(() => undefined);
         settle(key, code === undefined ? { of } : { of, code });
@@ -90,7 +90,7 @@ const record = async (key: string, path: string, before: string, after: string):
     }
 };
 
-/** Settle `key` as a file with nothing to strip — bytes, or a diff too large to send. Git's counts are its reading. */
+/** Settle `key` as a file with nothing to strip, bytes, or a diff too large to send. Git's counts are its reading. */
 const noCode = (key: string): void => {
     const entry = stats.value.get(key);
     // Already written off. Re-settling would repaint every badge in every review for no change at all.
@@ -104,7 +104,7 @@ const noCode = (key: string): void => {
  * resetWorkspaceScopedState.
  *
  * Milder than the other resets and included for a different reason. The keys carry a content fingerprint, so a
- * kept entry is not WRONG — the same bytes count the same in any workspace. What it is, is unbounded: a cache
+ * kept entry is not WRONG, the same bytes count the same in any workspace. What it is, is unbounded: a cache
  * that only ever grows, keyed by every change the browser has looked at in every sandbox it has visited this
  * session. A switch is the natural moment to let it go, and the cost of doing so is one re-count of whatever
  * the reader opens next. */
@@ -129,7 +129,7 @@ export function useCodeStats() {
     };
 }
 
-/* A SPAN OF ROWS AS ONE READING — a package's heading, a repo's, the panel's total.
+/* A SPAN OF ROWS AS ONE READING, a package's heading, a repo's, the panel's total.
  *
  * Summed here rather than in each panel because the rule is subtle in one specific way: a file with nothing to
  * strip contributes GIT'S numbers, which for it are the code-only reading (its pane shows every line it has),

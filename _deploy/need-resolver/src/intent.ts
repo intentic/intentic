@@ -14,7 +14,7 @@ import type {
     UserInput,
 } from "./inputs.js";
 
-// The intent the builder records and the resolver consumes — "what you have" + "what you want" as pure
+// The intent the builder records and the resolver consumes, "what you have" + "what you want" as pure
 // data. App `on`/`expose` are resource-id strings (not handles), so the intent stays serializable and
 // depends on nothing from the authoring layer. Multiple hosts are supported; the control plane is derived
 // (one Forgejo + Komodo shared across all hosts). There is a single Cloudflare account.
@@ -29,7 +29,7 @@ export interface CloudflareIntent {
     readonly input: CloudflareInput;
 }
 
-// The backup destination the operator declared (i.have.backup). A singleton — one restic repository
+// The backup destination the operator declared (i.have.backup). A singleton, one restic repository
 // protects the control-plane host's state.
 export interface BackupIntent {
     readonly id: string;
@@ -67,7 +67,7 @@ export interface TeamIntent {
     readonly input: TeamInput;
 }
 
-// A backing capability an app consumes — the abstract name, mapped to its concrete provider by the catalog
+// A backing capability an app consumes, the abstract name, mapped to its concrete provider by the catalog
 // in @intentic/state-resolver (database -> Postgres, cache -> Valkey, auth -> Authentik, object-storage ->
 // Garage). Declared with i.want.database / i.want.cache / i.want.auth / i.want.objectStorage.
 export type BackingCapability = "database" | "cache" | "auth" | "object-storage";

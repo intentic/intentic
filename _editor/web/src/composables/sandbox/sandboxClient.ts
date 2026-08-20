@@ -6,14 +6,14 @@ import { useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget } from "./sandboxTarget";
 
 // Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>, or its loopback shortcut
-// when the sandbox turns out to be on this machine — see useEndpoint), authenticated by a daemon-session
-// bearer (no cookies; see sandboxSession) — the platform is out of this path. The base comes from the resolved
+// when the sandbox turns out to be on this machine, see useEndpoint), authenticated by a daemon-session
+// bearer (no cookies; see sandboxSession), the platform is out of this path. The base comes from the resolved
 // endpoint and the connection token from the active sandbox (useSandbox, populated by sandbox.list).
 // Returns the raw Response so callers read `.json()` or stream `.body` themselves.
 
 const { getSessionToken, rejectSessionToken } = useSandboxSession();
 
-/* Timed from the caller's first instruction to the response headers — which deliberately INCLUDES
+/* Timed from the caller's first instruction to the response headers, which deliberately INCLUDES
  * `getSessionToken`, because a session renewal round-trip is time the caller waited and every previous account
  * of a slow read left it out. The daemon's own `http.request` line covers the same call from its side, so the
  * two together locate the cost: agree ⇒ the daemon; browser much larger ⇒ the tunnel, the token, or a queue in
@@ -46,14 +46,14 @@ export class SandboxHttpError extends Error {
 // Two statuses get an extra check first, for the two ways a browser newer than its daemon fails (see
 // useDaemonRoutes).
 //
-// A 404 is a route this app knows and the daemon never advertised — identical on the wire to "that file isn't
+// A 404 is a route this app knows and the daemon never advertised, identical on the wire to "that file isn't
 // there", and the single most expensive ambiguity in the product: it reads as a broken feature, and the only
 // way to tell used to be rebuilding the image to see if it changed. When the daemon has positively told us it
 // lacks the route, say so instead of passing the daemon's generic text through.
 //
 // A 400 on a route both sides HAVE but shape differently is the same ambiguity one step in: the daemon's own
 // validation rejected a field this app sent, and its message describes the field rather than the reason the
-// field is unexpected. Only claimed when the fingerprints positively disagree — an ordinary bad request on an
+// field is unexpected. Only claimed when the fingerprints positively disagree, an ordinary bad request on an
 // agreed route keeps the daemon's text, which is the more useful of the two.
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
     if (request !== undefined) {
@@ -93,22 +93,22 @@ export async function sandboxBlob(path: string, init?: RequestInit): Promise<Blo
 // If an upload makes no progress for this long, treat the request as hung: abort it and fail. Real uploads emit
 // `progress` continuously, so idle = stuck. This is the floor that stops one non-settling request (e.g. a daemon
 // that never answers under a concurrent delete) from wedging the upload pool forever.
-// ponytail: idle-timeout heuristic — raise it if a huge single file legitimately pauses between progress ticks.
+// ponytail: idle-timeout heuristic, raise it if a huge single file legitimately pauses between progress ticks.
 const UPLOAD_STALL_MS = 60_000;
 
-// Upload a file body to the daemon via XMLHttpRequest — deliberately NOT fetch. A fetch streaming body
+// Upload a file body to the daemon via XMLHttpRequest, deliberately NOT fetch. A fetch streaming body
 // (ReadableStream + duplex:"half") only works over HTTP/2, so it sends NOTHING when the daemon is reached over
-// HTTP/1.1 (the loopback shortcut, or any direct base with no Cloudflare tunnel in front — and the shortcut
+// HTTP/1.1 (the loopback shortcut, or any direct base with no Cloudflare tunnel in front, and the shortcut
 // makes that the COMMON case, not the exotic one). A plain File/Blob body still streams from
 // disk (never buffered into JS memory) and works on any HTTP version; xhr.upload's progress gives real byte
 // feedback. Same auth as sandboxRequest. `onProgress` receives the CUMULATIVE uploaded byte count for this body.
-// The promise ALWAYS settles — abort (via opts.signal), stall watchdog, error, and load are all handled — so a
+// The promise ALWAYS settles, abort (via opts.signal), stall watchdog, error, and load are all handled, so a
 // caller awaiting it can never hang. `opts.signal` aborting rejects with an AbortError.
 //
 // Cloudflare's edge caps a request body at ~100 MB (a bigger POST is refused mid-send, which the browser can only
 // see as a silent stall), so the body goes up as sequential ≤CHUNK_BYTES slices, each its own request carrying
 // `&offset=` that the daemon writes in place. slice() stays lazy (still streams from disk), each part gets a
-// fresh stall watchdog, and a failed part rejects the whole call — the caller's retry re-sends from part 0,
+// fresh stall watchdog, and a failed part rejects the whole call, the caller's retry re-sends from part 0,
 // which is idempotent because offset writes just overwrite.
 export async function sandboxUpload(path: string, body: Blob, opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal }): Promise<void> {
     const target = currentSandboxTarget();

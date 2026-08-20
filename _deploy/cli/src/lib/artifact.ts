@@ -51,7 +51,7 @@ export const writeArtifact = async (path: string, graph: DesiredStateGraph): Pro
 export const writeStatus = async (path: string, status: unknown): Promise<void> => writeFile(path, `${JSON.stringify(status, undefined, 4)}\n`);
 
 // `apply`/`plan` resolve secrets from process.env; load them from the `.env` beside the artifact being
-// executed. Optional: a missing file is fine — CI or the shell may set the vars directly. A var that is
+// executed. Optional: a missing file is fine. CI or the shell may set the vars directly. A var that is
 // already set but EMPTY is filled from the file: launchers pass secrets as `-e KEY="$MAYBE_EMPTY"`, and an
 // empty inherited var must not shadow the real value written to .env later.
 export const loadEnvFile = (dir: string): void => {

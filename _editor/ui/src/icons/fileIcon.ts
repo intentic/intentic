@@ -1,4 +1,4 @@
-// How a tree row is drawn: which glyph, and — for the colourful/vivid explorer setups — which hue.
+// How a tree row is drawn: which glyph, and, for the colourful/vivid explorer setups, which hue.
 // A file's CATEGORY is the source of truth: it drives the colour (text-file-* tokens) and the default
 // glyph. A few extensions/names override the glyph where the category's default loses useful signal
 // (a PDF still reads as a PDF). The tree colours uniformly in the "minimal" setup; category colour only
@@ -121,7 +121,7 @@ const CATEGORY_ICON: Record<FileCategory, IconName> = {
     generic: "file",
 };
 
-// The category hue (colourful/vivid). Quiet categories keep the muted role — no dedicated token.
+// The category hue (colourful/vivid). Quiet categories keep the muted role, no dedicated token.
 const CATEGORY_COLOR: Record<FileCategory, string> = {
     code: "text-file-code",
     style: "text-file-style",
@@ -150,7 +150,7 @@ const extOf = (lower: string): string => {
     return dot > 0 ? lower.slice(dot + 1) : ``;
 };
 
-// The category of a file entry — drives its colour, and its default glyph.
+// The category of a file entry, drives its colour, and its default glyph.
 export const categoryForEntry = (name: string): FileCategory => {
     const lower = name.toLowerCase();
     return EXT_CATEGORY[extOf(lower)] ?? BY_NAME_CATEGORY[lower] ?? `generic`;

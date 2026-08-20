@@ -6,7 +6,7 @@ import { RULE_FIRINGS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 import { useSandboxSettings } from "./useSandboxSettings";
 
-/* THE RULE TABLE, from the screen's side — one place that knows how a row becomes a rule, so no surface has to
+/* THE RULE TABLE, from the screen's side, one place that knows how a row becomes a rule, so no surface has to
  * hand-assemble one.
  *
  * The three rows with their own place on the Agent tab ("Verify before finishing", "Check before you push",
@@ -22,7 +22,7 @@ const FIRINGS_KEY = RULE_FIRINGS.of();
 export function useRules() {
     const { settings, patch } = useSandboxSettings();
 
-    // When each rule last did something. Its own read because a firing is not an edit — folding it into the
+    // When each rule last did something. Its own read because a firing is not an edit, folding it into the
     // settings object would make every push a settings write, with a background job racing the owner's own
     // config.
     const { query: firingsQuery } = useSandboxQuery({
@@ -35,8 +35,8 @@ export function useRules() {
 
     const byId = (id: string): Rule | undefined => rules.value.find((rule) => rule.id === id);
 
-    /* Write one rule, creating it if this is the first time. Position matters — the list order IS the priority
-     * at a deciding moment — so an existing rule is replaced IN PLACE and a new one goes on the end.
+    /* Write one rule, creating it if this is the first time. Position matters, the list order IS the priority
+     * at a deciding moment, so an existing rule is replaced IN PLACE and a new one goes on the end.
      *
      * The three named rows all come through here, which is why turning "Verify before finishing" off and on
      * again cannot silently move it below a rule the user put above it. */
@@ -54,7 +54,7 @@ export function useRules() {
         }
     };
 
-    // Move a rule one place up or down. Only meaningful at a deciding moment, where first-match wins — but the
+    // Move a rule one place up or down. Only meaningful at a deciding moment, where first-match wins, but the
     // list is one list, and a control that appeared and vanished depending on a rule's moment would read as a
     // bug rather than as a distinction.
     const move = (id: string, by: -1 | 1): void => {

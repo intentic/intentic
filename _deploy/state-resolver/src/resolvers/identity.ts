@@ -17,7 +17,7 @@ import type { PlatformRefs } from "./platform.js";
 
 // The people + teams resolver: a Forgejo git account and a Komodo UI user per declared user, and a Forgejo
 // organization + team per declared team. It also wires the cross-cutting grant graph that only exists once all
-// apps are known — which repos a team is attached to (and at what role), and which deployments a user can act
+// apps are known, which repos a team is attached to (and at what role), and which deployments a user can act
 // on in Komodo (and at what level). Authenticates every call as the single admin (it owns the orgs, so its
 // git + packages tokens retain full access); each user's login password is one intentic-generated secret,
 // reused for both the Forgejo and Komodo account.
@@ -42,7 +42,7 @@ interface RepoGrant {
 }
 
 export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hostId: string, host: HostInput): ResolvedNode[] => {
-    // The identity nodes drive the Forgejo/Komodo admin APIs over an SSH port-forward to the CP host — the
+    // The identity nodes drive the Forgejo/Komodo admin APIs over an SSH port-forward to the CP host, the
     // public routes stay out of the engine's control path.
     const ssh = sshOf(host);
     const forgejoAdmin = { adminUser: adminUsername, adminPassword: generated("FORGEJO_ADMIN_PASSWORD") };

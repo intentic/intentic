@@ -1,8 +1,8 @@
 /* The plumbing every intentic CLI that lives on a USER'S OWN COMPUTER needs, and none of what any of them does.
  *
- * Three agents ship to a user's machine — `@intentic/host` (the sandbox's agent works on this computer),
+ * Three agents ship to a user's machine, `@intentic/host` (the sandbox's agent works on this computer),
  * `@intentic/sync` (files and ports mirrored between the two), `@intentic/acp-bridge` (an editor talks to the
- * sandbox) — and they have nothing in common except how they are INSTALLED and how they STAY alive: state under
+ * sandbox), and they have nothing in common except how they are INSTALLED and how they STAY alive: state under
  * `~/.intentic/<name>` with a credential in it, an autostart entry per OS, a way to re-invoke a compiled binary,
  * and a detached loop found again by pidfile.
  *

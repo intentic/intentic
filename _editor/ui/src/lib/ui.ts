@@ -1,22 +1,22 @@
 import { twMerge } from "tailwind-merge";
 
-/* Centralized class-string builders — the single source of truth for repeated visual recipes.
+/* Centralized class-string builders, the single source of truth for repeated visual recipes.
  * Each function returns a merged Tailwind class string; callers pass overrides that twMerge
  * resolves (e.g. `ui.input('text-2xs px-2 py-1')` shrinks the base input). No @apply, no
- * specificity issues, no !important — the caller always wins. */
+ * specificity issues, no !important, the caller always wins. */
 
 /* THE ACTION BUTTON IS `<Button>`, IN FOUR TIERS AND TWO SIZES. Nothing else. The tiers are RANKS, so a screen
  * reads top-to-bottom by weight, and the whole set is spelled in primeng.css:
  *
- *   • LOUD — `class="ui-button-loud"`, the accent as a solid fill. The one place a screen asks for money, and
+ *   • LOUD, `class="ui-button-loud"`, the accent as a solid fill. The one place a screen asks for money, and
  *     the only button in the app that shouts. At most one per page, or it is not loud, it is just orange.
- *   • ACCENT — plain `<Button>`, the accent tinted. The action that COMMITS: New agent, Land now, Create.
- *   • BORING — `severity="secondary"`, a neutral fill of the same shape. Everything standing beside an accent.
+ *   • ACCENT, plain `<Button>`, the accent tinted. The action that COMMITS: New agent, Land now, Create.
+ *   • BORING, `severity="secondary"`, a neutral fill of the same shape. Everything standing beside an accent.
  *     Same silhouette, different tone, which is the difference a reader can take in without stopping.
- *   • QUIET — `:text="true"`, no chrome at all. Cancel, Dismiss, an inline escape hatch.
+ *   • QUIET, `:text="true"`, no chrome at all. Cancel, Dismiss, an inline escape hatch.
  *
  * `danger` / `warn` / `success` are TONES, not tiers: they say what kind of thing a press does and can wear any
- * of the ranks above. `severity="warning"` is not one of them — PrimeVue 4 emits `warn`, and the one call site
+ * of the ranks above. `severity="warning"` is not one of them. PrimeVue 4 emits `warn`, and the one call site
  * that spelled it the old way was painted in the brand colour for exactly as long as nobody measured it.
  *
  * TWO THINGS ARE RETIRED, and both grew back once already:
@@ -26,20 +26,20 @@ import { twMerge } from "tailwind-merge";
  *     settings pages were outlined throughout and the sandbox pages filled throughout, and the two tone-less
  *     ones ("New extension", "See what changed…") came out wearing a full-strength accent border, so the same
  *     "make me one of these" button shouted on one tab and murmured on the next.
- *   • HAND-WRITTEN GEOMETRY — `px-2.5 py-1 text-2xs` and its five near-variants, at 23 call sites plus two more
+ *   • HAND-WRITTEN GEOMETRY, `px-2.5 py-1 text-2xs` and its five near-variants, at 23 call sites plus two more
  *     hidden in local `const INLINE` / `const ACTION` strings. They existed because `small` used to be Aura's
  *     own 14px/30px control and every dense surface in the app wanted something tighter; `size="small"` IS that
- *     tighter button now (theme.ts), so a call site has nothing left to shrink. Layout is still the caller's —
- *     `shrink-0`, `w-full`, `self-start` — and the one real exception is the mobile upload FAB, a 56px circle.
+ *     tighter button now (theme.ts), so a call site has nothing left to shrink. Layout is still the caller's,
+ *     `shrink-0`, `w-full`, `self-start`, and the one real exception is the mobile upload FAB, a 56px circle.
  *
  * An icon goes in the DEFAULT slot beside the label (`<Icon name="plus" />New agent`), not in `#icon`, whenever
  * the label is slotted too: PrimeVue's default slot replaces the button's entire body, so an `#icon` alongside
- * it renders nothing. `#icon` is right only with the `label` prop. And it needs no size or margin of its own —
+ * it renders nothing. `#icon` is right only with the `label` prop. And it needs no size or margin of its own,
  * Iconify draws at 1em and the size carries the gap.
  *
  * THERE IS NO `button*` RECIPE HERE, and its absence is the point.
  *
- * There used to be four — buttonPrimary/Success/Warning/Danger — painting a tinted fill on a bare <button>.
+ * There used to be four, buttonPrimary/Success/Warning/Danger, painting a tinted fill on a bare <button>.
  * They existed because `@layer components` in primeng.css translated only ONE of PrimeVue's severities into
  * this app's tinted language, leaving success/warn/danger as Aura's solid fills; with no way to write a tinted
  * destructive button as a <Button>, the recipes were written here instead. The result was two action buttons
@@ -50,10 +50,10 @@ import { twMerge } from "tailwind-merge";
  * action button: <Button>, with `severity` for tone and `class` for geometry.
  *
  * The two recipes below STAY. They are not tones of the action button, they are different tiers with their own
- * behaviour — no chrome until hover, a 36px thumb target on an inline text action — and both are used
+ * behaviour, no chrome until hover, a 36px thumb target on an inline text action, and both are used
  * consistently wherever they appear, which is what a working distinction looks like. */
 
-/* Bare 24px icon button — the toolbar affordance that shows no chrome until the pointer is on it. Nine of
+/* Bare 24px icon button, the toolbar affordance that shows no chrome until the pointer is on it. Nine of
  * these had been spelled out by hand across the terminal panel, the workspace toolbar, the history panel and
  * the two popover triggers; they agreed exactly, which is what made a tenth so easy to get slightly wrong.
  * Callers size and re-tint through twMerge (`ui.iconButton('h-7 w-7 hover:text-danger')`).
@@ -69,13 +69,13 @@ const iconButton = (...twClasses: string[]) =>
         ...twClasses,
     );
 
-/* Inline text button that reads as a link — a lane switch, an escape hatch, "use my own X instead". Sized
+/* Inline text button that reads as a link, a lane switch, an escape hatch, "use my own X instead". Sized
  * so a thumb can hit it (36px) while the negative margin keeps that height from showing up as a gap in the
  * card it sits in, so the same recipe is right on a phone and on a desktop. Callers restyle the text
  * (`ui.linkButton('text-muted underline hover:text-content')` for the quieter, secondary ones).
  *
  * `w-fit` AND NOT `self-start`, which is what it used to be. Both stop the link stretching across the COLUMN
- * it usually sits in — that is the only job either of them had — but `self-start` does it by overriding the
+ * it usually sits in, that is the only job either of them had, but `self-start` does it by overriding the
  * parent's cross-axis alignment, which in a ROW is not stretching that it prevents, it is centring. Every
  * toolbar and dialog footer that puts a Cancel beside a real Button was drawing it a few pixels high (36px of
  * tap target, aligned to the top of a shorter row), and no call site could see why: the cause was a class none
@@ -93,7 +93,7 @@ const input = (...twClasses: string[]) =>
 
 /* THE ALERT RECIPES USED TO LIVE HERE, and that is why the app had two red boxes. <Notice> was built out of
  * them, so a notice and a hand-rolled `ui.alertDanger()` div were the same tint, the same border and the same
- * padding — differing only in the warning icon, the ARIA role and the dismiss affordance, none of which the
+ * padding, differing only in the warning icon, the ARIA role and the dismiss affordance, none of which the
  * hand-rolled one had. Thirty-two views kept reaching for the recipe because their message was MARKUP and the
  * notice model only held strings; <Notice> takes a slot now, so there is nothing left the recipe could say that
  * the component cannot. They moved into notice.ts, which is the only thing that still needs them. */
@@ -102,14 +102,14 @@ const input = (...twClasses: string[]) =>
 const emptyState = (...twClasses: string[]) =>
     twMerge(`rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted`, ...twClasses);
 
-/* The CLICKABLE dashed affordance — "add one", "show the rest", "back to the default". `emptyState` above is
+/* The CLICKABLE dashed affordance, "add one", "show the rest", "back to the default". `emptyState` above is
  * the passive half of the same visual idea (a dashed outline says "a thing could be here"), and having only
  * that half is why this one got spelled out by hand six times, at three different radii and two text sizes,
  * in the fleet board, the chat rail, the icon rail, the terminal panel twice and the automations view.
  *
  * IT CARRIES THE HOVER, which is the part that makes it read as a control rather than as a placeholder: the
- * dash firms up and the text comes forward together. Geometry is the caller's — a rail tile is a square, a
- * lane's tail is a full-width row, a colour swatch is a circle — so only the radius has a default here, and
+ * dash firms up and the text comes forward together. Geometry is the caller's, a rail tile is a square, a
+ * lane's tail is a full-width row, a colour swatch is a circle, so only the radius has a default here, and
  * twMerge lets `ui.addTile('h-7 w-7 rounded-full')` replace it. */
 const addTile = (...twClasses: string[]) =>
     twMerge(

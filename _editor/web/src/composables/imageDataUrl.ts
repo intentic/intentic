@@ -1,15 +1,15 @@
 // The square every inline picture in the app is stored as: 128px, WebP where the browser encodes it (others
 // fall back to PNG), far under the API's 150 kB data-URL cap either way. Avatars and sandbox logos have no
-// upload path — they are strings on a row — so the downscale happens here, in the browser, on the picked file.
+// upload path, they are strings on a row, so the downscale happens here, in the browser, on the picked file.
 //
 // The square itself is not negotiable: every surface that draws one of these is a square or circular tile. So
-// the only real question is what a NON-square source loses, and the honest answer differs by subject — which is
+// the only real question is what a NON-square source loses, and the honest answer differs by subject, which is
 // why `fit` is required rather than defaulted. A caller has to know which kind of picture it is asking for.
 //
 //   cover     fill the square, centre-crop the overflow. Right for a FACE: the subject is in the middle and
 //             the edges are background.
 //   contain   fit the whole source inside the square, transparent padding around it. Right for a LOGO, where a
-//             crop is destructive rather than tidy — a wide wordmark cropped to a square keeps its middle few
+//             crop is destructive rather than tidy, a wide wordmark cropped to a square keeps its middle few
 //             letters and loses the name, which is the one thing the mark exists to say.
 //
 // Transparency is why contain needs no fill colour: WebP and PNG both carry alpha, so the padding is whatever

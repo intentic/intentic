@@ -4,15 +4,15 @@ import type { WindowInfo } from "./types.js";
  *
  * Pure functions, apart from the rest of this package, because they are the only part of window enumeration that
  * can be tested without a desktop: the IO is `wmctrl` or PowerShell producing text, and the bugs live in reading
- * that text — a title containing spaces, a single window arriving as an object rather than an array, a hex id
+ * that text, a title containing spaces, a single window arriving as an object rather than an array, a hex id
  * where a decimal one is expected. Each of those has cost somebody an afternoon somewhere. */
 
 /* `wmctrl -lGpx` prints fixed columns and then the title, which is everything left on the line:
  *
- *   0x03400007  0 4242   0    0    1920 1080 code.Code            hostname Some — Title — With Spaces
+ *   0x03400007  0 4242   0    0    1920 1080 code.Code            hostname Some. Title. With Spaces
  *   ^id         ^d ^pid  ^x   ^y   ^w   ^h   ^class               ^host    ^title
  *
- * So the split is "nine fields, then the remainder" — never a plain whitespace split, which would truncate every
+ * So the split is "nine fields, then the remainder", never a plain whitespace split, which would truncate every
  * title at its first space. The class is `instance.Class`; the part after the dot is the one a person recognises
  * ("Code", "Google-chrome"), so that is what becomes `app`. */
 export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
@@ -21,7 +21,7 @@ export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
         .map((line) => line.trim())
         .filter((line) => line !== "")
         .flatMap((line) => {
-            // Nine whitespace-delimited fields, then the title as EVERYTHING left — matched in one pattern rather
+            // Nine whitespace-delimited fields, then the title as EVERYTHING left, matched in one pattern rather
             // than split-and-rejoin, because the columns are padded with runs of spaces that a rejoin cannot
             // reproduce, and a title is far more likely to contain spaces than not.
             const fields = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/.exec(line);
@@ -40,7 +40,7 @@ export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
                     title,
                     app,
                     bounds: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) },
-                    // X11 ids come out of wmctrl as 0x0340_0007 and out of xdotool as decimal — compared as
+                    // X11 ids come out of wmctrl as 0x0340_0007 and out of xdotool as decimal, compared as
                     // numbers so the two spellings of the same window are recognised as the same window.
                     focused: focusedId !== undefined && Number(id) === Number(focusedId),
                 },

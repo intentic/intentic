@@ -27,7 +27,7 @@ const url = (parsed: DatabaseInputs): string =>
 // stdout. Throws on a non-zero exit so a real psql/connection error propagates rather than reads as "absent".
 const psql = async (session: SshSession, cid: string, sql: string): Promise<string> => {
     // The statement rides as ONE argv word. It used to be spliced into a shell double-quoted string, which is
-    // why every caller below had to spell its identifiers `\\"name\\"` — interleaving the shell's escaping with
+    // why every caller below had to spell its identifiers `\\"name\\"`, interleaving the shell's escaping with
     // SQL's by hand, in a template, at each site. shellQuote owns the outer layer now; callers write SQL.
     const result = await session.exec(`docker exec ${cid} psql -U postgres -tAc ${shellQuote(sql)}`);
     if (result.code !== 0) {
@@ -42,7 +42,7 @@ const psql = async (session: SshSession, cid: string, sql: string): Promise<stri
 // CREATEs the database if absent; delete drops both. All identifiers are resolver-sanitized to [a-z0-9_].
 export const createPostgresDatabaseProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "instanceHost", "instancePort")) {
             return undefined;

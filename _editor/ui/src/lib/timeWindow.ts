@@ -1,4 +1,4 @@
-/* THE APP'S ONE "HOW FAR BACK" VOCABULARY — the 1h / 24h / 7d / All control, the cutoff it means, and the words
+/* THE APP'S ONE "HOW FAR BACK" VOCABULARY, the 1h / 24h / 7d / All control, the cutoff it means, and the words
  * a caller says about it in prose.
  *
  * Activity and Logs had each written all three: the same four presets, the same three millisecond constants, and
@@ -32,5 +32,5 @@ export const sinceOf = (window: TimeWindow, now: number): number => (window === 
 export const timeWindowWords = (window: TimeWindow): string =>
     ({ "1h": `in the last hour`, "24h": `in the last 24 hours`, "7d": `in the last 7 days`, all: `on record` })[window];
 
-/** True when the entry is inside the window — the filter every feed applies, spelled once. */
+/** True when the entry is inside the window, the filter every feed applies, spelled once. */
 export const withinWindow = (at: number, window: TimeWindow, now: number): boolean => at >= sinceOf(window, now);

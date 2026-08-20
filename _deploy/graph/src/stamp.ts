@@ -22,7 +22,7 @@ export const parseStamp = (encoded: string): string | undefined => {
 // The drift-stamp: a provider stamps each resource with the hash of its node's SERIALIZED inputs (the
 // artifact form — $secret/$ref placeholders, never values, so the stamp is safe in world-readable
 // metadata) and reports it back on read; the engine flags a mismatch as an update without any provider
-// diff code. Value drift behind a ref/secret is invisible by design — providers' own diffs cover the
+// diff code. Value drift behind a ref/secret is invisible by design, providers' own diffs cover the
 // fields that legitimately drift live (image pins).
 export const HASH_KEY = "intentic.hash";
 

@@ -4,7 +4,7 @@ import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { setStreamCapacity, streamCapacity } from "./streamBudget";
 import { useSandbox } from "./useSandbox";
 
-/* THE TRANSPORT half of "where is the sandbox", as a module-level singleton — the counterpart to
+/* THE TRANSPORT half of "where is the sandbox", as a module-level singleton, the counterpart to
  * `useSandbox().daemonUrl`, which stays the sandbox's public IDENTITY.
  *
  * That split is the whole point. `daemonUrl` was doing two jobs: it is what every daemon call is appended to,
@@ -15,15 +15,15 @@ import { useSandbox } from "./useSandbox";
  *
  * Resolution is deliberately NOT on the critical path. The tunnel is known-good and serves from the first
  * paint; the local probe runs in the background and, when it qualifies, the base changes under callers that
- * read it per request (which is all of them — see sandboxRpc's url()/headers() hooks). The stream is the one
+ * read it per request (which is all of them, see sandboxRpc's url()/headers() hooks). The stream is the one
  * caller holding a base for a long time, so useSandboxLiveness watches for the change and reconnects. */
 
 // The resolved endpoint per sandbox id. In memory only: a stale choice must not outlive the session that
 // observed it (the laptop that moves from the desk to a train is the case), and a reload's re-probe costs one
-// loopback request — Chrome remembers its Local Network Access grant per origin, so it is not a fresh prompt.
+// loopback request. Chrome remembers its Local Network Access grant per origin, so it is not a fresh prompt.
 const endpoints = ref<Record<string, Endpoint>>({});
 // Sandboxes whose local shortcut was tried and demoted this session. A demotion means "this stopped working
-// while we were on it" — re-probing on the next tick would flap between two addresses, so it stands until the
+// while we were on it", re-probing on the next tick would flap between two addresses, so it stands until the
 // user switches away and back, or reloads.
 const demoted = new Set<string>();
 // One in-flight resolve per sandbox, so a switch that wakes several consumers still probes once.
@@ -33,7 +33,7 @@ const { active, activeSandboxId, daemonUrl } = useSandbox();
 const { ask } = useLocalShortcut();
 
 /* The base every daemon call is appended to: the resolved endpoint when there is one, else the public URL.
- * Falling back to the tunnel rather than to `undefined` is what keeps resolution off the critical path — a
+ * Falling back to the tunnel rather than to `undefined` is what keeps resolution off the critical path, a
  * call made before the probe lands is not delayed or dropped, just not accelerated. */
 const daemonBase = computed<string | undefined>(() => {
     const id = activeSandboxId.value;
@@ -46,12 +46,12 @@ const daemonBase = computed<string | undefined>(() => {
 const usingLocal = computed(() => {
     const id = activeSandboxId.value;
     const kind = id === undefined ? undefined : endpoints.value[id]?.kind;
-    // Either loopback form — what makes a failure worth demoting is that a known-good address remains, and
+    // Either loopback form, what makes a failure worth demoting is that a known-good address remains, and
     // that is equally true whichever of the two we happened to qualify.
     return kind === `local` || kind === `local-insecure`;
 });
 
-/* How many long-lived streams this tab may hold at once, which only the TRANSPORT can answer — h2 multiplexes
+/* How many long-lived streams this tab may hold at once, which only the TRANSPORT can answer, h2 multiplexes
  * them onto one connection, plain http/1.1 spends a whole connection each and a browser has six per origin.
  * Read live (not snapshotted) because the endpoint resolves in the background and can change under a stream
  * that is already open, which is this module's whole design. See streamBudget.ts for what happens without it. */
@@ -71,7 +71,7 @@ const resolve = async (): Promise<void> => {
     }
     /* Nothing to qualify: the platform put this sandbox's machine somewhere this browser demonstrably is not
      * (endpoint.ts), so the probe could only spend a Local Network Access prompt on an address that will never
-     * answer. Checked HERE as well as inside `candidatesFor` — that call would correctly return the tunnel
+     * answer. Checked HERE as well as inside `candidatesFor`, that call would correctly return the tunnel
      * alone, but only after this module had already decided to ask the user about a shortcut that does not
      * exist for them. */
     if (!couldBeOnThisMachine(sandbox)) {
@@ -79,7 +79,7 @@ const resolve = async (): Promise<void> => {
     }
     /* The probe is the app's only reach for the machine this browser runs on, and the browser interrupts with a
      * permission dialog the first time it happens. So the app asks first, in its own words, and this returns
-     * without probing until the answer is yes — the notice calls back in (localShortcut.ts). */
+     * without probing until the answer is yes, the notice calls back in (localShortcut.ts). */
     const answer = shortcutAnswer(id);
     if (answer !== `allowed`) {
         if (answer === `unasked`) {
@@ -94,7 +94,7 @@ const resolve = async (): Promise<void> => {
     const attempt = (async (): Promise<void> => {
         const endpoint = await selectEndpoint({ daemonUrl: url, token: sandbox.token, cloud: sandbox.cloud, hosted: sandbox.hosted });
         // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
-        // we probed FOR — never under whatever is active now — is what keeps it off the wrong sandbox.
+        // we probed FOR, never under whatever is active now, is what keeps it off the wrong sandbox.
         if (!demoted.has(id)) {
             endpoints.value = { ...endpoints.value, [id]: endpoint };
         }
@@ -104,7 +104,7 @@ const resolve = async (): Promise<void> => {
 };
 
 /* Give up on the shortcut for this session and fall back to the tunnel. Called when a call fails while the
- * local endpoint is in use — docker restarted, the machine slept, the user is now on a different network than
+ * local endpoint is in use, docker restarted, the machine slept, the user is now on a different network than
  * the container. The tunnel is known-good, so this is a repair, not an outage. */
 const demote = (sandboxId: string): void => {
     demoted.add(sandboxId);
@@ -115,7 +115,7 @@ const demote = (sandboxId: string): void => {
 
 // Re-open the question of the shortcut for a sandbox: a switch away and back is the user's own "try again"
 // for one demoted earlier in the session, and the machine they are on may have changed since. Only the
-// demotion is cleared — an endpoint already resolved and working is left exactly as it is, so a switch costs
+// demotion is cleared, an endpoint already resolved and working is left exactly as it is, so a switch costs
 // no probe and no reconnect in the ordinary case.
 const reset = (sandboxId: string): void => {
     demoted.delete(sandboxId);

@@ -4,7 +4,7 @@ import type { ChatTool } from "../composables/chat/transcript";
 import { codeLangForPath } from "../pages/workspace/fileType";
 import { diffStat } from "./chatToolDiff";
 
-/* How one tool call renders — the single table the chat's tool cards consult, so per-tool knowledge lives in
+/* How one tool call renders, the single table the chat's tool cards consult, so per-tool knowledge lives in
  * data rather than in branches scattered through ChatToolCard.vue. A presenter is looked up by the tool's
  * DISPLAY NAME (case-insensitive, the name the daemon already normalized across backends in
  * agent/tool-calls.ts); anything unknown falls back to its ACP category, so an MCP tool or a brand-new
@@ -20,7 +20,7 @@ export type ToolBody =
     // A file's contents to syntax-highlight, as a Read card shows. `code` has the SDK's line-number gutter
     // stripped (see numberedFileBody); `firstLine` is the original number of its first line (Read honors an
     // offset), which the card restores as a real gutter. `lang` is the Shiki id from the path, or undefined
-    // (unknown extension / no grammar) — then it renders as plain, still-numbered monospace.
+    // (unknown extension / no grammar), then it renders as plain, still-numbered monospace.
     | { readonly kind: "code"; readonly code: string; readonly lang: string | undefined; readonly firstLine: number }
     | { readonly kind: "files"; readonly entries: readonly ToolFileEntry[]; readonly hidden: number }
     | { readonly kind: "command"; readonly command: string; readonly output: string };
@@ -35,14 +35,14 @@ export interface ToolPresentation {
     readonly icon: IconName;
     // The structured diffs to render above the body (Edit/Write and any ACP agent that sends them ready-made).
     readonly diffs: readonly Extract<ToolCallContent, { type: "diff" }>[];
-    // Pictures the call produced — today a browser screenshot, carried as a workspace path the card fetches.
+    // Pictures the call produced, today a browser screenshot, carried as a workspace path the card fetches.
     readonly images: readonly Extract<ToolCallContent, { type: "image" }>[];
-    // Undefined when the call produced no text at all — the card then shows a header with no fold affordance.
+    // Undefined when the call produced no text at all, the card then shows a header with no fold affordance.
     readonly body: ToolBody | undefined;
-    // A short result phrase for the header ("43 matches", "+12 −3", "failed") — visible while collapsed, which
+    // A short result phrase for the header ("43 matches", "+12 −3", "failed"), visible while collapsed, which
     // is the whole point: a folded card should still say what happened.
     readonly summary: string | undefined;
-    // Whether the card starts expanded. A manual toggle overrides it (and sticks) — see ChatToolCard.
+    // Whether the card starts expanded. A manual toggle overrides it (and sticks), see ChatToolCard.
     readonly defaultOpen: boolean;
 }
 
@@ -62,7 +62,7 @@ const CATEGORY_ICONS: Record<ChatTool["category"], IconName> = {
 
 // Cap on rendered text so a large file read or a chatty command can't bloat the DOM (the box scrolls anyway).
 export const TEXT_CAP = 4000;
-// Cap on rendered file rows, for the same reason — the count still reports the true total.
+// Cap on rendered file rows, for the same reason, the count still reports the true total.
 const FILE_ROW_CAP = 50;
 
 const countLines = (text: string): number => (text === `` ? 0 : text.split(`\n`).filter((line) => line !== ``).length);
@@ -87,7 +87,7 @@ const parseFileLine = (raw: string): ToolFileEntry | undefined => {
     return lineNumber === undefined ? { path } : { path, line: Number(lineNumber) };
 };
 
-// Shape a path listing into clickable rows — but only when it really is one. A search tool's output mode is
+// Shape a path listing into clickable rows, but only when it really is one. A search tool's output mode is
 // the agent's choice (ripgrep can return counts, or prose "No matches found"), so anything under a clear
 // majority of parseable lines degrades to plain text rather than rendering a half-empty, half-wrong list.
 const filesBody = (text: string): ToolBody => {
@@ -99,7 +99,7 @@ const filesBody = (text: string): ToolBody => {
     return { kind: `files`, entries: entries.slice(0, FILE_ROW_CAP), hidden: Math.max(0, entries.length - FILE_ROW_CAP) };
 };
 
-// What a presenter may override. Everything is optional — a presenter exists to say the one or two things
+// What a presenter may override. Everything is optional, a presenter exists to say the one or two things
 // that differ from the category default, never to restate it.
 interface Presenter {
     readonly icon?: IconName;
@@ -110,7 +110,7 @@ interface Presenter {
     readonly summary?: (text: string, tool: ChatTool) => string | undefined;
 }
 
-// A Bash call's `target` IS the command, so the output box shouldn't repeat it — split them into a `$ cmd`
+// A Bash call's `target` IS the command, so the output box shouldn't repeat it, split them into a `$ cmd`
 // line plus the output beneath, the shape a terminal-shaped result actually wants.
 const commandBody = (text: string, tool: ChatTool): ToolBody => ({ kind: `command`, command: tool.target ?? ``, output: text });
 
@@ -135,8 +135,8 @@ const diffSummary = (_text: string, tool: ChatTool): string | undefined => {
 // A `Read` result is the SDK's numbered file view: every line is `<spaces><line no><sep><content>`, the
 // separator an arrow (→) or a tab. Strip that gutter so the content can be highlighted (and the numbers shown
 // in a real gutter instead), returning the bare code and the first line's number (Read honors an offset, so it
-// isn't always 1). Returns undefined unless the body really is that shape — a strictly +1 run over the bulk of
-// the lines — so an image/PDF read (`[image]`) or any other non-numbered output falls through to the plain text
+// isn't always 1). Returns undefined unless the body really is that shape, a strictly +1 run over the bulk of
+// the lines, so an image/PDF read (`[image]`) or any other non-numbered output falls through to the plain text
 // box rather than being mangled. A trailing note (the `… (truncated)` marker present() appends past TEXT_CAP, or
 // a final blank line) rides along as content once the run has started.
 const NUMBERED_LINE = /^ *(\d+)(?:→|\t)(.*)$/;
@@ -181,7 +181,7 @@ const PRESENTERS: Record<string, Presenter> = {
     read: {
         // A Read shows a file: color it from the path's extension (the workspace viewer's own resolution) with
         // the SDK's line-number gutter stripped for clean highlighting. A non-file read (image/PDF ⇒ `[image]`)
-        // or an unknown extension degrades to plain — see numberedFileBody / the code body's fallback.
+        // or an unknown extension degrades to plain, see numberedFileBody / the code body's fallback.
         body: (text, tool) => {
             if (text === ``) {
                 return undefined;
@@ -201,16 +201,16 @@ const PRESENTERS: Record<string, Presenter> = {
     write: { summary: diffSummary },
     multiedit: { summary: diffSummary },
     notebookedit: { summary: diffSummary },
-    // A subagent's own transcript nests under this card (its child tool calls + streamed thinking — the client
+    // A subagent's own transcript nests under this card (its child tool calls + streamed thinking, the client
     // groups them by parentToolUseId; see conversation.ts appendTool), so it gets a distinct icon and no output
     // shaping of its own; its result rides the default text body. The Claude SDK names the tool `Agent` (its
-    // input is AgentInput/subagent_type) while native backends emit lowercase `task` — both are current, so both
+    // input is AgentInput/subagent_type) while native backends emit lowercase `task`, both are current, so both
     // resolve here.
     agent: { icon: `users` },
     task: { icon: `users` },
     websearch: { icon: `search` },
     webfetch: { icon: `globe` },
-    // Asking the user is its own act, not an "other" — and the category default (`angle-right`) read as a second
+    // Asking the user is its own act, not an "other", and the category default (`angle-right`) read as a second
     // fold chevron sitting right next to the real one.
     askuserquestion: { icon: `question-circle` },
 };
@@ -218,12 +218,12 @@ const PRESENTERS: Record<string, Presenter> = {
 /* THE BROWSER FAMILY, PRESENTED AS ONE.
  *
  * Every @playwright/mcp tool arrives named "Browser <verb>" (agent/tool-calls.ts), and there are twenty-odd of
- * them — a table entry each would be twenty rows saying the same thing. They share a face on purpose: the
+ * them, a table entry each would be twenty rows saying the same thing. They share a face on purpose: the
  * globe marks browser work wherever it appears in a turn, matching the pill the panel gives the session those
  * calls are running in, so "this card" and "that tab" read as the same browser.
  *
  * A snapshot is the one body worth shaping. It is a YAML accessibility tree, sometimes hundreds of lines, and
- * it is written for the model rather than for a person — so the header says how big it was and the box stays
+ * it is written for the model rather than for a person, so the header says how big it was and the box stays
  * folded, instead of burying the turn in it. */
 const BROWSER_PRESENTER: Presenter = {
     icon: `globe`,
@@ -248,7 +248,7 @@ export const present = (tool: ChatTool): ToolPresentation => {
     const running = tool.status === `pending` || tool.status === `in_progress`;
     const failed = tool.status === `failed`;
 
-    // A Bash card keeps its body even with no output — the `$ command` line is itself worth showing. Every
+    // A Bash card keeps its body even with no output, the `$ command` line is itself worth showing. Every
     // other tool with nothing to say renders as a bare header.
     const body = presenter.body !== undefined ? presenter.body(capped, tool) : capped === `` ? undefined : { kind: `text` as const, text: capped };
     const shown = body !== undefined && (body.kind !== `command` || body.command !== `` || body.output !== ``) ? body : undefined;
@@ -261,7 +261,7 @@ export const present = (tool: ChatTool): ToolPresentation => {
         // A failed call's own message is the summary the header wants; a successful one asks its presenter.
         summary: failed ? `failed` : presenter.summary?.(text, tool),
         // Expanded while it runs (live output is the point) and when it failed (the error is the point);
-        // collapsed once a call settles cleanly, so a long turn stays skimmable — EXCEPT when the call came
+        // collapsed once a call settles cleanly, so a long turn stays skimmable. EXCEPT when the call came
         // back with a picture, which is the whole reason it was made and worth nothing folded away.
         defaultOpen: running || failed || images.length > 0,
     };

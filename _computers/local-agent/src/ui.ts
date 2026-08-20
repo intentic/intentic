@@ -1,6 +1,6 @@
-/* EVERY BYTE A LOCAL AGENT SHOWS A PERSON, IN ONE PLACE — and the reason it can be pretty at all.
+/* EVERY BYTE A LOCAL AGENT SHOWS A PERSON, IN ONE PLACE, and the reason it can be pretty at all.
  *
- * The shapes below are a CONTRACT, not house style — docs/cli-output-protocol.md writes down the line format,
+ * The shapes below are a CONTRACT, not house style, docs/cli-output-protocol.md writes down the line format,
  * the three modes and the row vocabulary, and both implementations answer to it.
  *
  * This is the TypeScript twin of `ic`'s `_sandbox/ic/src/ui.rs`, and it exists for the same reason `text.ts`
@@ -11,15 +11,15 @@
  *
  * THE SPLIT IS THE WHOLE DESIGN. Output here is read by two audiences that want opposite things:
  *
- *   • a PIPE — the desktop app spawns the install with redirected stdio and turns `intentic: [phase] message`
+ *   • a PIPE, the desktop app spawns the install with redirected stdio and turns `intentic: [phase] message`
  *     markers into a progress bar; CI redirects it into a log. These need output that never changes shape.
- *   • a TERMINAL — a person, who needs hierarchy, colour, and a sense of how much is left.
+ *   • a TERMINAL, a person, who needs hierarchy, colour, and a sense of how much is left.
  *
  * So `plain` emits the marker stream and nothing else, and `rich` is free to redraw. A third mode, `nested`,
  * is what makes the install read as ONE program: these agents are also spawned BY `ic` in the middle of its
  * own checklist, and a second banner with a second plan inside somebody else's install is exactly the "these
  * are different programs" seam this was written to remove. Nested renders as indented detail under whichever
- * step the parent is running — no banner, no live line, no spinner.
+ * step the parent is running, no banner, no live line, no spinner.
  *
  * THE LIVE REGION IS EXACTLY ONE LINE, for the reason ui.rs gives at length: redrawing a checklist in place
  * needs the cursor moved up N lines, which needs to know when a line wrapped, and these run under `curl | sh`
@@ -28,11 +28,11 @@
  * Consequence, and the one rule callers follow: anything that writes to the same stdout WITHOUT going through
  * this (a spawned child, a downloader's own output) is bracketed by `suspend()` / `resume()`.
  *
- * No dependencies, like everything else in this package — these agents ship as single-file compiled binaries
+ * No dependencies, like everything else in this package, these agents ship as single-file compiled binaries
  * and a rendering library is not worth bytes in one.
  */
 
-/** How a run renders. Chosen once, from the environment — see [`createUi`]. */
+/** How a run renders. Chosen once, from the environment, see [`createUi`]. */
 export type UiMode = "rich" | "plain" | "nested";
 
 /**
@@ -40,7 +40,7 @@ export type UiMode = "rich" | "plain" | "nested";
  * roughly how long it takes.
  *
  * Weights are seconds and they are guesses. They exist so the estimate is about TIME left rather than STEPS
- * left — "4 of 5" on the near side of a ninety-second download is a lie a step counter tells and a weighted
+ * left, "4 of 5" on the near side of a ninety-second download is a lie a step counter tells and a weighted
  * estimate does not. They are only ever compared, never shown.
  */
 export interface PlanStep {
@@ -59,7 +59,7 @@ export interface Ui {
     readonly mode: UiMode;
     /** Banner plus the promise about scope and time. No-op outside `rich`. */
     begin: (title: string, plan?: readonly PlanStep[]) => void;
-    /** A phase of the flow, announced once — the marker on the wire, a checklist row on a screen. */
+    /** A phase of the flow, announced once, the marker on the wire, a checklist row on a screen. */
     step: (phase: string, message: string) => void;
     /** Replace the running step's sub-detail. Rich only: in `plain` this is narration nobody asked for. */
     detail: (text: string) => void;
@@ -68,7 +68,7 @@ export interface Ui {
     row: (outcome: RowOutcome, name: string, note?: string) => void;
     /** Narration under the running step. The `intentic: ` prefix is part of the plain contract and added here. */
     note: (text: string) => void;
-    /** A caution — degraded, not broken. Goes to stderr in `plain`, as these agents' notes always have. */
+    /** A caution, degraded, not broken. Goes to stderr in `plain`, as these agents' notes always have. */
     warn: (text: string) => void;
     /** The end of a successful run: one address, one instruction, then footnotes. */
     finished: (verdict: string, address: string | undefined, instruction: string, footnotes?: readonly Footnote[]) => void;
@@ -85,7 +85,7 @@ export interface Ui {
 
 /**
  * The process seams this reads. Matches the shape stricli injects as `this.process`, so a command passes its
- * own context straight in and a test passes a fake — nothing here reaches for the global `process`.
+ * own context straight in and a test passes a fake, nothing here reaches for the global `process`.
  */
 export interface UiProcess {
     readonly stdout: { write: (chunk: string) => unknown; isTTY?: boolean | undefined; columns?: number | undefined };
@@ -123,8 +123,8 @@ const ESTIMATE_FLOOR_SECONDS = 20;
 // ── pure helpers, exported for their tests ──────────────────────────────────
 
 /**
- * Fold `text` onto lines of at most `width`. Everything that SETTLES on the screen wraps — a caution, a
- * check's note, a diagnosis — because truncating those loses the words that make them worth printing. Only
+ * Fold `text` onto lines of at most `width`. Everything that SETTLES on the screen wraps, a caution, a
+ * check's note, a diagnosis, because truncating those loses the words that make them worth printing. Only
  * the live line truncates, and only because it is repainted and must never wrap.
  *
  * A single word longer than the width is left to overflow: it is a URL or a container name, and breaking one
@@ -180,7 +180,7 @@ export const humanDuration = (milliseconds: number): string => {
  * Time left, from the plan's remaining weight and the pace this run has actually kept.
  *
  * Clamped, because one slow step on a fast machine (or the reverse) should nudge the estimate rather than
- * replace it — an estimate that swings is worse than a rough one that holds still. `undefined` while there is
+ * replace it, an estimate that swings is worse than a rough one that holds still. `undefined` while there is
  * not yet enough evidence to say anything, and below the floor where a countdown stops helping.
  */
 export const estimate = (totalWeight: number, consumed: number, elapsedSeconds: number): string | undefined => {
@@ -204,7 +204,7 @@ export const asLabel = (message: string): string => {
  * Decide how this run renders, once.
  *
  * `INTENTIC_UI` forces a mode outright, which is what `ic` sets to `nested` when it spawns one of these
- * agents mid-install. Otherwise a terminal is `rich` and anything else is `plain` — the same single question
+ * agents mid-install. Otherwise a terminal is `rich` and anything else is `plain`, the same single question
  * (`isTTY`) that `ic` asks, and the reason a pipe can never reach the redrawing path.
  */
 const detectMode = (process: UiProcess): UiMode => {
@@ -246,7 +246,7 @@ export const createUi = (process: UiProcess): Ui => {
 
     const totalWeight = (): number => plan.reduce((sum, step) => sum + step.weight, 0);
 
-    /** How far into the running step we are, 0..1 — the clock against this step's own weight, capped short of
+    /** How far into the running step we are, 0..1, the clock against this step's own weight, capped short of
      * the end, because a timer that reaches 100% claims a step is finished when only the flow knows that. */
     const stepFraction = (): number => {
         if (index === undefined) {
@@ -329,7 +329,7 @@ export const createUi = (process: UiProcess): Ui => {
             behind += plan[index]?.weight ?? 0;
         }
         const took = humanDuration(Date.now() - stepStarted);
-        // Padding is measured on the UNPAINTED line — colour escapes are zero-width on screen and would
+        // Padding is measured on the UNPAINTED line, colour escapes are zero-width on screen and would
         // otherwise push the duration off the right edge by however many bytes they happen to be.
         const bare = `  x  ${String(ordinal).padStart(2)}  ${label}`;
         const pad = " ".repeat(Math.max(0, width - 1 - [...bare].length - [...took].length));
@@ -338,7 +338,7 @@ export const createUi = (process: UiProcess): Ui => {
         detailText = "";
     };
 
-    /** Indented dim narration — how everything reads in `nested`, and how detail reads in `rich`. */
+    /** Indented dim narration, how everything reads in `nested`, and how detail reads in `rich`. */
     const nestedLine = (text: string, marker?: string): void => {
         for (const [at, part] of wrap(text, width - 10).entries()) {
             const lead = at === 0 && marker !== undefined ? `     ${marker}  ` : "        ";
@@ -372,7 +372,7 @@ export const createUi = (process: UiProcess): Ui => {
                 return;
             }
             if (mode === "nested") {
-                // Inside somebody else's checklist a step is not a step — it is detail under theirs.
+                // Inside somebody else's checklist a step is not a step, it is detail under theirs.
                 nestedLine(asLabel(message));
                 return;
             }

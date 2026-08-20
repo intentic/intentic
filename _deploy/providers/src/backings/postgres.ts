@@ -52,7 +52,7 @@ const composeYaml = (id: string, hash: string, parsed: PostgresInputs): string =
         "",
     ].join("\n");
 
-// Write compose (always) + .env (once — the superuser password is baked into the data dir on first init and
+// Write compose (always) + .env (once, the superuser password is baked into the data dir on first init and
 // Postgres ignores it thereafter, so re-keying would lock us out).
 const ensureFiles = async (session: SshSession, id: string, hash: string, parsed: PostgresInputs): Promise<void> => {
     const dir = stateDir(KIND, id);
@@ -60,7 +60,7 @@ const ensureFiles = async (session: SshSession, id: string, hash: string, parsed
     await session.exec(`cat > ${dir}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(id, hash, parsed)}COMPOSE_EOF`);
     // compose interpolates this file into `POSTGRES_PASSWORD: $POSTGRES_PASSWORD` above, so the value passes a
     // .env parser AND a host shell. The old form quoted neither: an apostrophe ended the shell word, and a `$`
-    // would have been eaten by compose's interpolation had it survived — a superuser password silently not the
+    // would have been eaten by compose's interpolation had it survived, a superuser password silently not the
     // one that got baked into the data directory on first init.
     const line = shellQuote(envLine("POSTGRES_PASSWORD", parsed.adminPassword));
     await session.exec(`test -f ${dir}/.env || { printf '%s' ${line} > ${dir}/.env && chmod 600 ${dir}/.env; }`);
@@ -75,7 +75,7 @@ const readyProbe = (id: string): string =>
 // provider's job, not this one's.
 export const createPostgresProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

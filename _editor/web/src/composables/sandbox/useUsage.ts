@@ -4,16 +4,16 @@ import { sandboxJson } from "./sandboxClient";
 import { USAGE_ROLLUP } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* The active sandbox's spend ledger, rolled up by the daemon (usage/usage-store.ts) — the one read behind the
+/* The active sandbox's spend ledger, rolled up by the daemon (usage/usage-store.ts), the one read behind the
  * Usage tab. Read-only; rows are appended daemon-side at turn end.
  *
  * The WHOLE ledger comes down in one query, unbounded, and the browser windows it. The route takes from/to
  * bounds and this deliberately doesn't use them: every date preset would otherwise be a round trip, and the
  * "vs previous period" delta on each stat tile needs the window BEFORE the selected one, so a bounded fetch
- * would need two. Rolled rows are a handful per active day, so a year of hard use is well under a MB — cheaper
+ * would need two. Rolled rows are a handful per active day, so a year of hard use is well under a MB, cheaper
  * to hold than to re-fetch on every filter click.
  * ponytail: if a multi-year sandbox ever makes that payload matter, fetch `from` = the previous window's start
- * and drop All-time to a separate query — the bounds are already on the contract. */
+ * and drop All-time to a separate query, the bounds are already on the contract. */
 
 const QUERY_KEY = USAGE_ROLLUP.of();
 

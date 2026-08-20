@@ -1,8 +1,8 @@
-/* OKLCH ⇄ sRGB — the colour-space floor everything that COMPUTES a colour in this kit stands on.
+/* OKLCH ⇄ sRGB, the colour-space floor everything that COMPUTES a colour in this kit stands on.
  *
  * Two callers with the same need: brandColor.ts places a brand's mark against its own plate, and themeColor.ts
- * builds the whole app's ramps out of one picked colour. Both need the same three things — read a hex, move a
- * colour along one axis without disturbing the others, write a hex back — and both need them in OKLab rather
+ * builds the whole app's ramps out of one picked colour. Both need the same three things, read a hex, move a
+ * colour along one axis without disturbing the others, write a hex back, and both need them in OKLab rather
  * than HSL, because only there is lightness perceptual: raising HSL's `l` on a saturated blue swings the hue
  * visibly toward cyan, and a distance in it means one thing on a pale colour and another on a deep one.
  *
@@ -73,7 +73,7 @@ const inGamut = (rgb: readonly [number, number, number]): boolean => rgb.every((
 // Twenty halvings of the chroma range resolve far finer than the 8-bit channel this lands in.
 const GAMUT_STEPS = 20;
 
-/** The most chroma sRGB holds at a given lightness and hue — the ceiling a saturation control has to stop at. */
+/** The most chroma sRGB holds at a given lightness and hue, the ceiling a saturation control has to stop at. */
 export const maxChroma = (L: number, h: number): number => {
     let fits = 0;
     let over = 0.4;
@@ -88,11 +88,11 @@ export const maxChroma = (L: number, h: number): number => {
     return fits;
 };
 
-/* Out of gamut, CHROMA is what gives way — never lightness, never hue. Clipping each channel at 0 and 1 (the
+/* Out of gamut, CHROMA is what gives way, never lightness, never hue. Clipping each channel at 0 and 1 (the
  * obvious move) yields LIGHTNESS quietly: the colour lands near the requested one, a little off the requested
  * hue, and short of whatever separation the caller was placing it for. Holding L and h and searching for the
  * chroma that fits is CSS Color 4's gamut mapping, and the same trade every browser makes for an
- * out-of-gamut oklch() — so a colour computed here and a colour written as CSS agree. */
+ * out-of-gamut oklch(), so a colour computed here and a colour written as CSS agree. */
 export const oklchToHex = (colour: Oklch): string => {
     if (inGamut(oklchToRgb(colour))) {
         return rgbToHex(oklchToRgb(colour));
@@ -107,7 +107,7 @@ export const hexToOklch = (hex: string): Oklch | undefined => {
 };
 
 /**
- * The one spelling of a colour — `#rrggbb`, lowercase — so that two of them can be compared as strings.
+ * The one spelling of a colour, `#rrggbb`, lowercase, so that two of them can be compared as strings.
  * Byte-exact: this expands and lowercases, it does not go near a colour space, so nothing rounds.
  */
 export const canonicalHex = (hex: string): string | undefined => {

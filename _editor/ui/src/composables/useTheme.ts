@@ -7,7 +7,7 @@ const STORAGE_KEY = `ui-color-scheme`;
 const DARK_ATTRIBUTE = `data-mode`;
 const ACCENT_STORAGE_KEY = `ui-accent`;
 /* The accent's ramps, pre-serialized. Written here purely so index.html's anti-flash script can restore them
- * before the first paint without shipping the colour maths twice — see themeCss. This file stays the source of
+ * before the first paint without shipping the colour maths twice, see themeCss. This file stays the source of
  * truth; the string is a cache of what the hex above implies, rewritten on every change. */
 const ACCENT_VARS_KEY = `ui-accent-vars`;
 
@@ -61,8 +61,8 @@ const toggle = (): void => {
 const readAccentSetting = (): string => {
     try {
         const stored = localStorage.getItem(ACCENT_STORAGE_KEY);
-        // Through the same door a fresh pick goes through: anything that isn't a colour — a hand-edited value, a
-        // leftover from another app — comes back as the default, and anything off the ladder is snapped onto it.
+        // Through the same door a fresh pick goes through: anything that isn't a colour, a hand-edited value, a
+        // leftover from another app, comes back as the default, and anything off the ladder is snapped onto it.
         // So `accent` holds one canonical spelling of a legal accent, whatever is in storage, and the picker can
         // tell which of its swatches is the live one by comparing strings.
         if (stored !== null) {

@@ -1,6 +1,6 @@
 // The desired-state intermediate representation for intentic-deploy. This layer is product-agnostic:
 // it defines refs, secrets, readiness, and the serializable graph, but knows nothing about which kinds
-// of resource exist. A resource node's `type` is an opaque `string` here — the resolver layer owns the
+// of resource exist. A resource node's `type` is an opaque `string` here, the resolver layer owns the
 // closed vocabulary of kinds and guarantees only valid ones are emitted.
 
 export interface Ref<T> {
@@ -10,7 +10,7 @@ export interface Ref<T> {
     readonly __type?: T;
 }
 
-// Where a secret's value comes from: "env" — supplied by the user in the environment; "generated" —
+// Where a secret's value comes from: "env", supplied by the user in the environment; "generated",
 // intentic creates and persists it (admin credentials for services intentic itself provisions).
 export type SecretSource = "env" | "generated";
 

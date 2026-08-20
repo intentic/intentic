@@ -7,10 +7,10 @@ import type { EngineConfig, OrphanEntry } from "../types.js";
 import { makeContext } from "./reconcile.js";
 
 // Enumerate live stamped resources (via each provider's `list`) whose id is absent from the desired graph.
-// Providers without `list` are skipped. Runs once per command, not per reconcile iteration — a scan opens
+// Providers without `list` are skipped. Runs once per command, not per reconcile iteration, a scan opens
 // real connections. Scan sources are the graph's nodes with leniently-resolved inputs over an EMPTY store:
 // refs resolve to PENDING, which is fine because `list` implementations only parse the ref-free inventory
-// sources (host, cloudflare). Each entry carries the inputs its provider's `delete` needs — they hold
+// sources (host, cloudflare). Each entry carries the inputs its provider's `delete` needs, they hold
 // connection secrets, so entries are for engine/CLI plumbing, never serialization.
 export const collectOrphans = async (graph: DesiredStateGraph, config: EngineConfig): Promise<OrphanEntry[]> => {
     const env = config.env ?? process.env;
@@ -29,7 +29,7 @@ export const collectOrphans = async (graph: DesiredStateGraph, config: EngineCon
         if (provider?.list === undefined) {
             continue;
         }
-        // The scan is the longest silent stretch of a plan (one live connection per list-bearing provider) —
+        // The scan is the longest silent stretch of a plan (one live connection per list-bearing provider),
         // narrate it so a consumer can show which provider is being scanned instead of a blank spinner.
         log(`orphan scan: ${type}`);
         for (const listed of await provider.list(sources, ctx)) {

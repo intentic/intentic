@@ -8,11 +8,11 @@ import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 
 /* Directory-defined UI: a workspace directory ships its own interaction surface as a single self-contained
  * `<dir>/.intentic/ui/index.html` (inline JS/CSS). The parent reads that file through the SAME authed daemon
- * file route the tree uses, then renders it into a `<iframe sandbox="allow-scripts" srcdoc>` — an opaque origin
+ * file route the tree uses, then renders it into a `<iframe sandbox="allow-scripts" srcdoc>`, an opaque origin
  * that can't read the parent DOM, cookies, or the Google/TOFU tokens sandboxClient holds.
  *
  * The UI talks to its sandbox ONLY through this postMessage bridge, which proxies the narrow allowlist in
- * directoryUiVerbs.ts. The parent runs the real call via sandboxClient — injecting auth on its side — so raw
+ * directoryUiVerbs.ts. The parent runs the real call via sandboxClient, injecting auth on its side, so raw
  * tokens never cross the frame boundary, and anything off the allowlist is rejected.
  *
  * Wire protocol (iframe → parent):  { __intentic: true, id, verb, args }
@@ -23,7 +23,7 @@ import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 
 // Read a directory's UI document, or undefined when it declares none. dir is root-relative ("" = /work root);
 // the escape hatch when there's no UI is the normal file tree. Almost every directory a reader opens declares
-// none, which is exactly why the read answers absence instead of failing (see readFileWindow) — this is the
+// none, which is exactly why the read answers absence instead of failing (see readFileWindow), this is the
 // most-asked "is it there?" question in the app.
 export const loadDirectoryUi = async (dir: string): Promise<string | undefined> => {
     const path = dir === `` ? `${STATE_DIR}/ui/index.html` : `${dir}/.intentic/ui/index.html`;
@@ -41,9 +41,9 @@ const init = (call: BridgeCall): RequestInit => ({
 });
 
 // Attach the bridge to a rendered iframe; returns a teardown. Messages are validated by SOURCE (event.source ===
-// the frame's window), not origin — a srcdoc/sandbox frame is an opaque "null" origin, so the origin string is
+// the frame's window), not origin, a srcdoc/sandbox frame is an opaque "null" origin, so the origin string is
 // untrustworthy. Replies go straight to that frame's window, so targetOrigin "*" reaches only it (and carries no
-// secrets — just app/script output).
+// secrets, just app/script output).
 export const createDirectoryUiBridge = (iframe: HTMLIFrameElement): (() => void) => {
     const onMessage = async (event: MessageEvent): Promise<void> => {
         const frame = iframe.contentWindow;

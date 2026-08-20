@@ -8,11 +8,11 @@ import { vLongpress } from "./lib/longPress.js";
 import { vTooltip } from "./lib/tooltip.js";
 
 /* Single entry point for the design system: wires the bridged PrimeVue preset, the dark-mode selector
- * (kept in sync by useTheme), and — crucially — the cssLayer order so the cascade is deterministic:
+ * (kept in sync by useTheme), and the cssLayer order so the cascade is deterministic:
  * `utilities` is last, so Tailwind utility classes always beat PrimeVue's component styles. Call it once
  * from the app's main.ts as `installUi(app)`. */
 export function installUi(app: App): void {
-    // Register the bundled icon sets so every <Icon> resolves locally — no runtime Iconify API fetch.
+    // Register the bundled icon sets so every <Icon> resolves locally, no runtime Iconify API fetch.
     BUNDLED_ICONS.forEach((collection) => addCollection(collection));
     app.use(PrimeVue, {
         ripple: true,
@@ -28,7 +28,7 @@ export function installUi(app: App): void {
         },
     });
     // Register the tooltip directive globally so `v-tooltip` works in any component (the rail, composer, …).
-    // Ours, not PrimeVue's — see lib/tooltip.ts for why a popped-out panel forces the issue.
+    // Ours, not PrimeVue's, see lib/tooltip.ts for why a popped-out panel forces the issue.
     app.directive(`tooltip`, vTooltip);
     // Touch counterpart of the context menu: `v-longpress` opens bottom sheets on coarse-pointer devices.
     app.directive(`longpress`, vLongpress);

@@ -58,7 +58,7 @@ export interface ChatSession {
     readonly title: string;
     readonly updatedAt: number;
     // Why a searched row matched: the line the query hit, and which side of the chat said it. Absent on an
-    // unfiltered list, and on a title match — the row already shows the title, so repeating it is noise.
+    // unfiltered list, and on a title match, the row already shows the title, so repeating it is noise.
     readonly snippet?: MatchSnippet;
 }
 
@@ -70,14 +70,14 @@ export interface ChatSession {
  *
  * A singleton PER WINDOW: every browser window runs a full copy of the app with its own tab set (windowStore
  * has why), and only daemon-backed state converges between them on its own. What does cross windows is the
- * SUMMONS — a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
- * in every window — so the popped-out chat (drawn by whichever window opened it) follows a click made in any
+ * SUMMONS, a surface outside the panel showing a chat goes through summon.ts, which applies the same reveal
+ * in every window, so the popped-out chat (drawn by whichever window opened it) follows a click made in any
  * of them. */
 
 const { activeSandboxId, reachable } = useSandbox();
 
 // Open conversations (tabs) and which one is focused; always at least one. A tab IS its conversation, so the
-// focus is a conversationId — the one identity the daemon, the fleet registry, the transcript mirror and the
+// focus is a conversationId, the one identity the daemon, the fleet registry, the transcript mirror and the
 // agent fleet registry and transcript mirror all already key on. There is deliberately no second, tab-local
 // id: the previous one was minted from a counter that resetChat rewound, so a reused value silently aliased two
 // different chats in anything that outlived the reset.
@@ -87,9 +87,9 @@ const conversations = shallowRef<Conversation[]>([]);
 const activeId = ref<string>(``);
 
 /* An untouched "New agent" tab exists only while the focus is ON it. The tab and the fleet board's draft card
- * are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip — it squats in
+ * are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip, it squats in
  * the board's Active lane looking like work in flight. Anything at all in it makes it real and it stays:
- * anything unsent (Conversation.unsent — composer text, a staged attachment, a queued message), a transcript,
+ * anything unsent (Conversation.unsent, composer text, a staged attachment, a queued message), a transcript,
  * a session, a running turn, a rename, an unread error, or a fleet registration. */
 const untouchedDraft = (conversation: Conversation): boolean =>
     !conversation.registered.value &&
@@ -104,19 +104,19 @@ const untouchedDraft = (conversation: Conversation): boolean =>
  * strip's invariants in the same write:
  *   · the focus lands on a tab that is actually in the list, and on the LAST one when the tab that had it is
  *     gone (VSCode behaviour, the rule the workspace's tabs follow too). A focus naming nothing is invisible
- *     rather than loud — the strip highlights no tab while the panel quietly shows the first one, so every
+ *     rather than loud, the strip highlights no tab while the panel quietly shows the first one, so every
  *     click afterwards looks like it did nothing.
  *   · at most ONE untouched draft is open, and only as the focused tab.
  *
  * The draft rule is enforced HERE rather than by a watcher reacting to the focus afterwards, which is what it
  * used to be. Reaping after the fact meant the outcome of an explicit action was decided by an implicit reaper
  * racing it: "New agent" pressed while sitting on an empty draft appended one and the reaper closed the other,
- * so the press was a visual no-op — and every intermediate state (a focus already moved, the doomed draft still
+ * so the press was a visual no-op, and every intermediate state (a focus already moved, the doomed draft still
  * listed) was live long enough to render and to be persisted by the snapshot watch. It also only ever looked at
  * the tab that LOST the focus, so a draft that lost it to a list rewrite instead (a close reseating the focus on
  * the last tab) survived as a permanent, unsweepable "New agent" tab. One synchronous write, no ordering. */
 const setConversations = (next: readonly Conversation[], focus: string, reason: string): void => {
-    /* Where the focus lands when the id asked for names no tab in the list being written — a close taking the
+    /* Where the focus lands when the id asked for names no tab in the list being written, a close taking the
      * tab that had it. A chat still ON SCREEN wins over the strip's last tab: with several panes open, closing
      * the focused one should hand the keyboard to a column the user is already looking at and let that column
      * go, rather than pull an unrelated chat into the vacated slot to hold a focus that had nowhere else to be
@@ -128,10 +128,10 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
     // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
     // untouched means no turn to detach from and no transcript to evict.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
-    /* Every movement of the focus, with what asked for it and what it resolved to — see focusTrace.ts. The
+    /* Every movement of the focus, with what asked for it and what it resolved to, see focusTrace.ts. The
      * FALLBACK is the line worth having: an id that names no tab in the list being written is not an error
      * here, it silently seats the focus on the last one instead, which on screen is indistinguishable from
-     * "the chat ignored my click and went somewhere else" — the report this trace exists to settle. Only
+     * "the chat ignored my click and went somewhere else", the report this trace exists to settle. Only
      * actual movements are traced; a write that leaves the focus where it was says nothing. */
     if (focused !== activeId.value || focus !== focused) {
         traceFocus(`focus`, {
@@ -155,14 +155,14 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
     activeId.value = focused;
 };
 
-/* WHICH CHATS ARE ON SCREEN AT ONCE — the panes, in the order they were opened.
+/* WHICH CHATS ARE ON SCREEN AT ONCE, the panes, in the order they were opened.
  *
  * One id is the ordinary case (the docked column has room for nothing else); several is the popped-out window
  * showing a fleet side by side. The focused pane is `activeId`, always a member, so every surface outside this
  * panel goes on reading `active` and means "the chat the user is looking at".
  *
  * ORDER IS INSERTION ORDER, never the rail's. The rail sorts by lane (attention / active / finished), so a
- * chat changes rows the moment its turn ends — and panes laid out in rail order would swap columns under the
+ * chat changes rows the moment its turn ends, and panes laid out in rail order would swap columns under the
  * reader's eyes mid-answer. A pane holds its column from the moment it opens until it closes. */
 const panes = ref<string[]>([]);
 
@@ -170,10 +170,10 @@ const panes = ref<string[]>([]);
  * focused chat is always in one, and the set is never empty.
  *
  * The slot rule below is what keeps every existing caller working: a plain tab click, a card on the board, a
- * deep link and a history row all land on setActive, and none of them means "open another pane" — they mean
+ * deep link and a history row all land on setActive, and none of them means "open another pane", they mean
  * "show me this chat", so the incoming chat takes the column the focus was already in and the other panes are
  * left alone. Opening a pane is a separate verb (openBeside / setPanes), and so is closing the rest
- * (collapsePanes) — which is why a CLICK on a row or a card collapses while an arriving deep link does not:
+ * (collapsePanes), which is why a CLICK on a row or a card collapses while an arriving deep link does not:
  * one is a gesture on a selection, the other is an arrival. */
 const reconcilePanes = (kept: readonly Conversation[], focused: string): void => {
     const open = new Set(kept.map((conversation) => conversation.conversationId));
@@ -191,8 +191,8 @@ const reconcilePanes = (kept: readonly Conversation[], focused: string): void =>
     }
 };
 
-// The focused conversation. The find always hits — setConversations reconciles the focus with every list it
-// writes — and list[0] is the floor that keeps a slip a wrong tab rather than a crashed panel.
+// The focused conversation. The find always hits, setConversations reconciles the focus with every list it
+// writes, and list[0] is the floor that keeps a slip a wrong tab rather than a crashed panel.
 const active = computed<Conversation>(() => {
     const list = conversations.value;
     return list.find((conversation) => conversation.conversationId === activeId.value) ?? list[0]!;
@@ -202,17 +202,17 @@ const active = computed<Conversation>(() => {
 // The snapshot's shape, storage and validation live in tabSnapshot.ts; what stays here is when it is read and
 // written. Which SANDBOX the open tabs belong to is recorded at restore rather than read live at write time:
 // activeSandboxId flips one flush before sandboxScope's watch re-scopes the list, so a snapshot that lands in
-// the incoming sandbox's key during that window is the OUTGOING sandbox's tabs — restored, on the very next
+// the incoming sandbox's key during that window is the OUTGOING sandbox's tabs, restored, on the very next
 // line, as if they were the new sandbox's own.
 let scopedSandboxId: string | undefined;
 
 // One persisted tab, back as a live conversation. Restored attachments carry upload metadata only (no
-// previewUrl/controller — those are client-session objects); the chip falls back to the file icon.
+// previewUrl/controller, those are client-session objects); the chip falls back to the file icon.
 const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
     conversation.isolated.value = tab.isolated;
     conversation.registered.value = tab.registered;
-    // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
+    // The posture isn't part of the snapshot (it is a per-task choice, not a preference), a restored tab
     // starts from the mode its tree calls for, same as a fresh one.
     conversation.modePick.value = startingMode(conversation.isolated.value);
     conversation.draft.value = tab.draft;
@@ -225,14 +225,14 @@ const restoreTab = (tab: StoredTab): Conversation => {
     }));
     conversation.queued.value = tab.queued.map((message) => ({ id: crypto.randomUUID(), text: message.text, attachments: message.attachments }));
     conversation.title.value = tab.title ?? null;
-    // Restore the harness before the model — the native/claude-code model lists diverge for codex/grok.
+    // Restore the harness before the model, the native/claude-code model lists diverge for codex/grok.
     if (tab.harness !== undefined) {
         conversation.harness.value = tab.harness;
     }
     if (tab.provider !== undefined) {
         conversation.provider.value = tab.provider;
         // An OPEN chat comes back on the account it was running on, not on whatever the remembered pick has since
-        // become — switching one tab's account is not an instruction about the others. Only a tab that carries no
+        // become, switching one tab's account is not an instruction about the others. Only a tab that carries no
         // pin of its own (one persisted before this was stored) falls back to the provider's remembered one.
         conversation.account.value = tab.account ?? rememberedAccountFor(tab.provider);
         conversation.model.value = tab.model ?? rememberedModelFor(tab.provider);
@@ -271,36 +271,36 @@ const restoreTab = (tab: StoredTab): Conversation => {
     }
     if (tab.forkOf !== undefined) {
         // The fork linkage, back where send() looks for it. Until the fork's first turn is accepted this is the
-        // only record of the cut anywhere, and a tab rebuilt without it sends an ordinary first turn — the
+        // only record of the cut anywhere, and a tab rebuilt without it sends an ordinary first turn, the
         // daemon then opens an empty record and the "continued" chat answers from nothing (see StoredTab.forkOf).
         conversation.pendingForkOf.value = tab.forkOf;
     }
     return conversation;
 };
 
-// Rebuild this window's tab set for the active sandbox — its own snapshot, the last window's as a seed, or a
-// single fresh tab when neither exists — and focus the stored active tab.
+// Rebuild this window's tab set for the active sandbox, its own snapshot, the last window's as a seed, or a
+// single fresh tab when neither exists, and focus the stored active tab.
 const restoreTabs = (): void => {
     scopedSandboxId = activeSandboxId.value;
     // Read BEFORE the tabs are built, because building one resolves an account: a fresh conversation seeds from
-    // this pick (Conversation's constructor), and a restored one falls back to it. Scoped with the tabs — the
+    // this pick (Conversation's constructor), and a restored one falls back to it. Scoped with the tabs, the
     // ids name credentials in THIS sandbox's store, so the incoming sandbox's picks replace the outgoing one's
     // rather than being cleared to nothing.
     selectedAccountId.value = readAccountPreference(scopedSandboxId);
     const stored = readTabSnapshot(scopedSandboxId);
     // The list is about to be REPLACED wholesale, focus included: the snapshot's active tab wins over whatever
-    // is on screen. Rare (a sandbox switch, a boot) and invisible when it isn't — hence the line.
+    // is on screen. Rare (a sandbox switch, a boot) and invisible when it isn't, hence the line.
     traceFocus(`restore-tabs`, { sandbox: scopedSandboxId ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
     if (stored === undefined) {
         const conversation = new Conversation();
         setConversations([conversation], conversation.conversationId, `first-tab`);
         return;
     }
-    // `stored.active` names one of the tabs — the reader guarantees it.
+    // `stored.active` names one of the tabs, the reader guarantees it.
     setConversations(stored.tabs.map(restoreTab), stored.active, `restore-snapshot`);
     /* The pane set comes back with the tabs: how this window is laid out is a decision the user made, and a
      * reload is not a decision to collapse it back to one chat. Assigned rather than run through setPanes,
-     * which is the only caller with an authoritative ORDER — the columns come back where they were left.
+     * which is the only caller with an authoritative ORDER, the columns come back where they were left.
      * Filtered against what actually restored, since the write above sweeps an untouched draft and a pane
      * naming one would be a column with nothing in it. */
     const restored = new Set(conversations.value.map((conversation) => conversation.conversationId));
@@ -312,7 +312,7 @@ restoreTabs();
 
 // Persist the tab snapshot on any change: the stringified getter touches every persisted field, so tab
 // open/close/switch, keystrokes, uploads finishing, and session commits all write through automatically.
-// ponytail: writes per keystroke; the blob is tiny — throttle if profiling shows jank.
+// ponytail: writes per keystroke; the blob is tiny, throttle if profiling shows jank.
 watch(
     () =>
         JSON.stringify({
@@ -327,7 +327,7 @@ watch(
     },
 );
 
-// Persist the account pick per provider — the seed a NEW conversation (and a fresh window) starts from. A watch
+// Persist the account pick per provider, the seed a NEW conversation (and a fresh window) starts from. A watch
 // rather than a write inside selectAccount, because the pick also moves on its own: a connect makes the new
 // account current, a disconnect hands the selection to whatever is left, and a landing account list corrects a
 // pick that is no longer valid. All of those are the user's "last preference" just as much as a click is.
@@ -338,8 +338,8 @@ watch(selectedAccountId, (picks) => {
 });
 
 /* A READ whose failure is not news: apply what the daemon sent, and on any failure leave the ref holding
- * whatever it had. Four surfaces here work this way — slash commands, per-account usage, the routed-provider
- * listing, the refusal history — and every one of them is an ANNOTATION on a panel that has its own reason to
+ * whatever it had. Four surfaces here work this way, slash commands, per-account usage, the routed-provider
+ * listing, the refusal history, and every one of them is an ANNOTATION on a panel that has its own reason to
  * render. A daemon blip must leave them showing their last reading, never blank them or surface an error the
  * user cannot act on; the connection state itself is reported by the surfaces that own it.
  *
@@ -349,7 +349,7 @@ const readOrKeep = async <T>(path: string, apply: (body: T) => void): Promise<vo
     try {
         apply(await sandboxJson<T>(path));
     } catch {
-        // Left as it was — see above.
+        // Left as it was, see above.
     }
 };
 
@@ -363,13 +363,13 @@ const loadProviderCommands = (target: AgentProvider): Promise<void> =>
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
 
-/* ONE CONVERSATION, AS A PANEL BINDS IT — the facade every chat surface renders through, over whichever
+/* ONE CONVERSATION, AS A PANEL BINDS IT, the facade every chat surface renders through, over whichever
  * conversation it was built for rather than over the focused one.
  *
  * It exists as a FACTORY because the chat panel shows several conversations at once (the pop-out's panes): a
  * transcript, its composer, its pickers and its tool cards all have to answer for the chat they are IN, and a
  * module-level facade over `active` can only ever answer for the focused one. The singleton below builds its
- * own from `active`, so the store's exported surface — and every consumer outside the panel — is unchanged;
+ * own from `active`, so the store's exported surface, and every consumer outside the panel, is unchanged;
  * a pane builds one over its own conversation and is right by construction.
  *
  * Everything here is a computed or a function, so the factory can be called before the module bindings it
@@ -379,7 +379,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     conversation,
     messages: computed(() => conversation.value.messages.value),
     streaming: computed(() => conversation.value.streaming.value),
-    // This conversation's slash commands: the list its own turns published (authoritative — it reflects the
+    // This conversation's slash commands: the list its own turns published (authoritative, it reflects the
     // session's live config), falling back to the provider's last daemon-published list so a conversation that
     // hasn't run a turn yet still has a populated `/` popover.
     availableCommands: computed<readonly AgentCommand[]>(() => {
@@ -393,28 +393,28 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * flag arms the offer and the Enter shortcut, and the sentence is only read at the press.
      *
      * The offer stands down while a turn is live. A resumable flag outlives the failure it describes until the
-     * next turn STARTS, and the gap between a send leaving the composer and that turn beginning is real — long
+     * next turn STARTS, and the gap between a send leaving the composer and that turn beginning is real, long
      * enough, on a slow round-trip, for the strip to sit there under a message the user has already sent,
      * inviting them to send another. */
     resumable: computed(() => conversation.value.resumable.value && !conversation.value.streaming.value),
     continuation: computed(() => continuationFor(conversation.value.messages.value)),
     /* ...and the standing version of that press: whether this chat continues itself, and when the one it has
-     * scheduled goes (Conversation.autoContinue). The instant is what the strip counts down to — the wait has to
+     * scheduled goes (Conversation.autoContinue). The instant is what the strip counts down to, the wait has to
      * be visible, or a chat quietly sitting on a timer is indistinguishable from one nothing is happening to. */
     autoContinue: computed(() => conversation.value.autoContinue.value),
     autoContinueAt: computed(() => conversation.value.autoContinueAt.value),
     setAutoContinue: (on: boolean): void => conversation.value.setAutoContinue(on),
     // This conversation's undelivered messages (submitted while its turn was running) and whether its running
-    // turn can take one mid-flight — the composer renders the first and words its hints from the second.
+    // turn can take one mid-flight, the composer renders the first and words its hints from the second.
     queued: computed(() => conversation.value.queued.value),
     removeQueued: (id: string): void => conversation.value.removeQueued(id),
     steerable: computed(() => conversation.value.steerable.value),
-    // What this conversation's runtime can do (the contract's declared record) — the composer reads it to
+    // What this conversation's runtime can do (the contract's declared record), the composer reads it to
     // offer only the controls something applies, and to say what this provider can't do at all.
     capabilities: computed(() => conversation.value.capabilities.value),
     activeModel: computed(() => conversation.value.activeModel.value),
     contextUsage: computed(() => conversation.value.contextUsage.value),
-    // This conversation's permission mode (read + write) — the composer's mode pill drives it. Reads the
+    // This conversation's permission mode (read + write), the composer's mode pill drives it. Reads the
     // RUNNING turn's posture while one is live (the agent can enter plan mode on its own, and the pill must not
     // claim otherwise); a pick replaces it, because from that click on the user's choice is the truth. Not
     // written through to the persisted defaults: the posture belongs to the conversation, not to the next one.
@@ -425,21 +425,21 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.liveMode.value = undefined;
         },
     }),
-    // Turn settings (read+write) — the composer binds these, so switching tabs shows that chat's
+    // Turn settings (read+write), the composer binds these, so switching tabs shows that chat's
     // provider/model/effort/thinking. All of it is switchable mid-chat: a provider/account switch takes effect
     // at the next send (see Conversation.send's segment cut).
     provider: computed<AgentProvider>(() => conversation.value.provider.value),
     selectProvider: (p: AgentProvider): void => {
         conversation.value.selectProvider(p);
         // The catalog is daemon-owned and can be stale (loaded before the account connected, or an empty
-        // transient) — refetch on landing so the model picker is populated on arrival (the daemon caches, so
+        // transient), refetch on landing so the model picker is populated on arrival (the daemon caches, so
         // this is cheap).
         void loadProviderModels(p);
     },
     // The harness (Default = the provider's native runtime, vs the Claude Code loop). Only meaningful for
     // codex/grok; picked through the model picker's footer chips. A switch retires the session at the next send.
     harness: computed<AgentHarness>(() => conversation.value.harness.value),
-    // Switch the harness — an axis orthogonal to the model now (the catalog is shared, so the chosen model
+    // Switch the harness, an axis orthogonal to the model now (the catalog is shared, so the chosen model
     // rides across). No-ops on claude (always its own loop) and mid-stream (selectHarness guards both).
     selectHarness: (next: AgentHarness): void => conversation.value.selectHarness(next),
     model: computed<string>({
@@ -447,7 +447,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         set: (value) => conversation.value.selectModel({ provider: conversation.value.provider.value, value }),
     }),
     // Conversation.selectModel is the whole rule (provider re-point, per-provider memory, the mid-stream
-    // guard); what this adds is the catalog refetch, which only a surface that did not open the picker needs —
+    // guard); what this adds is the catalog refetch, which only a surface that did not open the picker needs,
     // the picker warms every catalog on mount and so drives the conversation directly.
     selectModel: (pick: { provider: AgentProvider; value: string }): void => {
         conversation.value.selectModel(pick);
@@ -464,7 +464,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         set: (value) => conversation.value.setThinking(value),
     }),
     // Fast speed: the pick, whether the control is offered at all for the current provider/model, and what the
-    // last turn actually ran at. Three values rather than one because they answer different questions — what
+    // last turn actually ran at. Three values rather than one because they answer different questions, what
     // the user asked for, whether asking is even possible here, and what came back.
     fast: computed<boolean>({
         get: () => conversation.value.fast.value,
@@ -477,7 +477,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     account: computed<string | undefined>(() => conversation.value.account.value),
     selectAccount: (id: string): void => conversation.value.selectAccount(id),
     accounts: computed<readonly OauthAccount[]>(() => accountsOf(conversation.value.provider.value)),
-    /* The persona this chat acts as (read + write) — the composer's persona pill drives it, and it is the one
+    /* The persona this chat acts as (read + write), the composer's persona pill drives it, and it is the one
      * control on this list that is about the outside world rather than about the model. Undefined is "anyone":
      * every connected account stays reachable, which is what an attended chat gets when it names nobody.
      *
@@ -489,7 +489,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.actsAs.value = value;
         },
     }),
-    /* Whether this conversation's selection can actually send — the composer gate, which is `providerReadyOn`
+    /* Whether this conversation's selection can actually send, the composer gate, which is `providerReadyOn`
      * (access.ts) and nothing else.
      *
      * It used to be a second copy of that rule living in this file, and the copy is what let the free trial
@@ -498,7 +498,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * moment anybody chose it. One rule, read by the picker and the composer alike, is the only arrangement in
      * which those two cannot drift apart again. */
     connected: computed(() => providerReadyOn(conversation.value.provider.value, conversation.value.harness.value)),
-    // This conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the
+    // This conversation's composer draft (text + staged attachments), per-tab, so switching tabs swaps the
     // composer back to whatever was typed and attached there.
     draft: computed<string>({
         get: () => conversation.value.draft.value,
@@ -512,12 +512,12 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
             conversation.value.attachments.value = value;
         },
     }),
-    /* ASK THIS TURN AGAIN, DIFFERENTLY — the composer aimed at a message already in the transcript.
+    /* ASK THIS TURN AGAIN, DIFFERENTLY, the composer aimed at a message already in the transcript.
      *
      * The third way back, beside the two the cut already offered, and the one the other two were standing in
      * for: a fork answers "keep both paths" and a rewind answers "drop what followed", and neither is what a
      * user means when they simply mistyped a filename. Forking for that costs a tab per typo; rewinding first
-     * and retyping from memory costs the words themselves. So this is the light path — and it is only light
+     * and retyping from memory costs the words themselves. So this is the light path, and it is only light
      * because it commits nothing until the send (see Conversation.editing).
      *
      * `editing` is read by the transcript (to strike the rows the send would drop) and by the composer (to say
@@ -542,18 +542,18 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     stop: (): void => {
         conversation.value.stop();
     },
-    /* FORK THE CONVERSATION AT A CUT — everything above the cut is copied into a fresh tab, and the source is
+    /* FORK THE CONVERSATION AT A CUT, everything above the cut is copied into a fresh tab, and the source is
      * left completely alone, so the answer being replaced is still there to compare against and nothing is
      * destroyed by an experiment.
      *
      * `cut` is the index of the first message BELOW the line, which is the one number the whole affordance turns
      * on: it is how many bubbles the fork inherits, and it is also what decides what the composer opens with.
      * A cut above a user message means "redo this turn differently", so that prompt (and its attachments) is
-     * loaded into the composer ready to be edited — the fork of the whole conversation, cut past the last
+     * loaded into the composer ready to be edited, the fork of the whole conversation, cut past the last
      * message, opens with an empty one instead.
      *
      * NOTHING IS SENT. The fork opens with the prompt sitting in the composer where the user can read it, change
-     * it, or replace it entirely — which is what makes forking without editing possible at all, and what stops a
+     * it, or replace it entirely, which is what makes forking without editing possible at all, and what stops a
      * half-considered prompt from running the moment the tab appears. The old edit-then-auto-send did the
      * opposite on both counts. */
     forkAt: (cut: number, files: "then" | "now"): Conversation | undefined => {
@@ -563,7 +563,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         }
         /* A RUNNING TURN DOES NOT BLOCK THE CHAT HALF OF THIS. Copying the turns above the cut into a new tab
          * takes nothing away from the run still writing below it, and a turn that has been going twenty
-         * minutes is exactly when a second line of attack is worth opening — refusing then made the control
+         * minutes is exactly when a second line of attack is worth opening, refusing then made the control
          * useless at the one moment it was wanted. What a running turn does block is the FILES: putting a
          * checkpoint back underneath an agent writing to those same files is a different act, so that half
          * waits for the turn to end. */
@@ -586,7 +586,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
          * first time a fork lands anywhere but the end of the list. */
         return fork;
     },
-    // Approving runs the plan (under bypassPermissions — the daemon's call, not the card's); a rejection leaves
+    // Approving runs the plan (under bypassPermissions, the daemon's call, not the card's); a rejection leaves
     // the agent in plan mode to revise, with the composer's text and staged files as the feedback.
     decidePlan: (message: ChatMessage, approve: boolean, feedback?: string, staged?: readonly ChatAttachment[]): Promise<void> =>
         conversation.value.decidePlan(message, approve, feedback, staged),
@@ -594,11 +594,11 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     cancelQuestion: (message: ChatMessage): Promise<void> => conversation.value.cancelQuestion(message),
     decidePermission: (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
         conversation.value.decidePermission(message, decision, feedback),
-    // The spend click for a priced service run — the only thing that releases it (or skips it, free).
+    // The spend click for a priced service run, the only thing that releases it (or skips it, free).
     decideServiceOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decideServiceOffer(message, approve),
-    // The setup click for a missing-capability ask — connect (and go set it up) or continue without it.
+    // The setup click for a missing-capability ask, connect (and go set it up) or continue without it.
     decideCapabilityOffer: (message: ChatMessage, connect: boolean): Promise<void> => conversation.value.decideCapabilityOffer(message, connect),
-    // The pay click for a USDC payment — the only thing that releases it (or skips it, spending nothing).
+    // The pay click for a USDC payment, the only thing that releases it (or skips it, spending nothing).
     decidePaymentOffer: (message: ChatMessage, approve: boolean): Promise<void> => conversation.value.decidePaymentOffer(message, approve),
     // "Can't help now" for a browser-help card; "hand back" lives on /browsers, beside the live stage.
     declineBrowserHelp: (message: ChatMessage): Promise<void> => conversation.value.declineBrowserHelp(message),
@@ -608,11 +608,11 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
 
 export type ConversationView = ReturnType<typeof conversationView>;
 
-/* THE PANE'S VIEW, for the surfaces under it — the transcript rows, their tool cards, the mode menu, the
+/* THE PANE'S VIEW, for the surfaces under it, the transcript rows, their tool cards, the mode menu, the
  * account panel. Injected rather than threaded through four levels of props, and it is the pane's OWN view:
  * a tool card in the right-hand pane must answer for the chat it is in, not for whichever one has the focus.
  * Absent means the component was mounted outside a pane, which is a wiring mistake rather than a state to
- * render — so it is discovered at mount instead of silently rendering the focused chat's content. */
+ * render, so it is discovered at mount instead of silently rendering the focused chat's content. */
 export const PANE_VIEW: InjectionKey<ConversationView> = Symbol(`chat-pane-view`);
 export const usePaneView = (): ConversationView => {
     const view = inject(PANE_VIEW);
@@ -622,7 +622,7 @@ export const usePaneView = (): ConversationView => {
     return view;
 };
 
-// The focused conversation's view — what the store itself binds, and what every surface outside the chat panel
+// The focused conversation's view, what the store itself binds, and what every surface outside the chat panel
 // reads through `useChat()`.
 const activeView = conversationView(active);
 const {
@@ -664,13 +664,13 @@ const {
     decidePermission,
 } = activeView;
 
-// Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
+// Providers are an open string vocabulary, an unseeded key (an ACP agent, which owns its own credentials)
 // simply has no daemon account list.
 export const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
 // The manage card's accounts, which follow the card's own provider rather than any conversation's.
 const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
-// The route prefix a provider's ACCOUNT routes live under — and only Claude and Grok have any. Every other
+// The route prefix a provider's ACCOUNT routes live under, and only Claude and Grok have any. Every other
 // provider authenticates through the subscription the translator holds, which is why refreshConnections filters
 // them out (subscriptionOnly) before anything here is reached.
 // Catalogs are deliberately NOT here: they are the one question every provider answers identically, so they
@@ -685,14 +685,14 @@ const modelsPath = (p: AgentProvider): string => {
     return endpointId !== undefined ? `/endpoints/${encodeURIComponent(endpointId)}/models` : `/providers/${encodeURIComponent(p)}/models`;
 };
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
-// card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —
+// card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent,
 // it has both a native xAI account and a routed subscription, and which one gates depends on the harness.
 // The providers with no account of their own: their turns authenticate through a subscription the bundled
-// translator holds, which is why they have no row in an account picker — CLIProxyAPI balances across every
+// translator holds, which is why they have no row in an account picker. CLIProxyAPI balances across every
 // auth file it has, so WHICH one serves a turn is not a choice anyone makes.
 export const subscriptionOnly = (p: AgentProvider): p is "codex" | "kimi" | "gemini" => p === `codex` || p === `kimi` || p === `gemini`;
 
-// Which account the manage/connect card acts on — decoupled from the chat-turn provider so connecting or
+// Which account the manage/connect card acts on, decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
 const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 
@@ -700,7 +700,7 @@ const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 // account id. Loaded when the manage card opens; empty until then.
 const accountUsage = ref<Record<string, UsageAccount>>({});
 /* Whether the usage read has come back at all. It is a SEPARATE read from the connections one and lands after
- * it, so a row knows its account's name a round trip before it knows its turns — and a line that appears under
+ * it, so a row knows its account's name a round trip before it knows its turns, and a line that appears under
  * a name already on screen shoves every row below it down. Surfaces hold a placeholder in that line's place
  * until this flips, which is the difference between a list settling and a list twitching. Set even when the
  * read fails: an outline that never resolves is worse than a row with no usage line. */
@@ -718,11 +718,11 @@ const loadUsage = async (): Promise<void> => {
  * which is what made the switcher flicker: the row painted its "Connect" button, the /oauth/start round-trip
  * landed a moment later, and the button was yanked out from under the pointer and replaced by a device code
  * nobody had asked for. It also meant merely LOOKING at a provider minted a one-time code and started a
- * 15-minute poll, and it did so for three of the five tabs — the two that authenticate through the translator
+ * 15-minute poll, and it did so for three of the five tabs, the two that authenticate through the translator
  * never armed anything, so the same click did two different things depending on which chip it hit.
  *
  * Browsing is browsing: every provider now shows its state and waits to be asked (startConnect /
- * connectTranslator, from the row's own button). A live handshake is deliberately NOT cancelled here either —
+ * connectTranslator, from the row's own button). A live handshake is deliberately NOT cancelled here either,
  * both flows carry the provider they belong to, so a sign-in the user is completing at x.ai survives a look at
  * another tab instead of being silently killed by it. */
 const setManagedProvider = (target: AgentProvider): void => {
@@ -731,15 +731,15 @@ const setManagedProvider = (target: AgentProvider): void => {
 
 // --- Routed-provider subscriptions --------------------------------------------------------------
 // The sandbox's translator (CLIProxyAPI) serves Codex/Grok/Kimi/Google models to the Claude Code harness on the
-// user's subscription OAuth — a credential of its own, separate from a provider's native-harness
+// user's subscription OAuth, a credential of its own, separate from a provider's native-harness
 // account (each program owns and refreshes its own grant; a shared refresh token would rotate out from under
 // one of them). The connection state itself lives in conversation.ts beside providerAccounts (so access.ts can
-// derive from both without a cycle); what stays here is the login flow it is driven by — held outside
+// derive from both without a cycle); what stays here is the login flow it is driven by, held outside
 // SandboxAgent so a device-login poll survives that tab unmounting.
 // The in-flight subscription login the Agent tab's routed row shows. Device flows may carry a one-time `code`;
 // redirect flows ask the user to paste the URL they landed on and `completeTranslator` finishes it against
 // `state`. `baseline` is how many accounts
-// the provider held when the login started — a provider can hold several, so "connected" is the count GROWING
+// the provider held when the login started, a provider can hold several, so "connected" is the count GROWING
 // past it, not the provider being truthy (which an "add another account" login already is from the start).
 const translatorConnectFlow = ref<
     { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; baseline: number } | undefined
@@ -749,7 +749,7 @@ const translatorConnectFlow = ref<
  * mechanisms (native handshake and translator subscription alike), because it exists to answer one question the
  * card asks in one place: does THIS row's button spin?
  *
- * Keyed rather than boolean so the answer is that row's and not the whole card's — a click is acknowledged in
+ * Keyed rather than boolean so the answer is that row's and not the whole card's, a click is acknowledged in
  * the button the user pressed, at the moment they press it, instead of by something appearing elsewhere a
  * round-trip later. Its other half is serialization: one account write at a time, which is the honest reading
  * of a card that shows one provider at a time. */
@@ -769,15 +769,15 @@ const refreshTranslatorAccounts = (): Promise<void> =>
         translatorAccounts.value = listing;
     });
 
-// When each provider last refused a turn — the observed counterpart to the polled snapshots that ride the two
+// When each provider last refused a turn, the observed counterpart to the polled snapshots that ride the two
 // account listings (see providerRefusals).
 const refreshProviderRefusals = (): Promise<void> =>
     readOrKeep<ProviderRefusals>(`/agent/refusals`, (body) => {
         providerRefusals.value = body.refusals;
     });
 
-// CLIProxyAPI finishes every routed login in the background — the device flows poll upstream on their own, and
-// a redirect flow resumes the moment `completeTranslator` hands it the pasted URL — so in both cases the UI just
+// CLIProxyAPI finishes every routed login in the background, the device flows poll upstream on their own, and
+// a redirect flow resumes the moment `completeTranslator` hands it the pasted URL, so in both cases the UI just
 // polls the connection state until the provider flips connected, bounded by the device flows' deadline.
 const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Promise<void> => {
     if (translatorConnectFlow.value?.provider !== target) {
@@ -803,7 +803,7 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
 
 // Start a subscription login for a routed provider: the daemon returns the sign-in URL and, for the providers
 // that mint one, a one-time code. The user approves upstream and the poll flips the row to connected. One flow
-// at a time — a new connect supersedes a prior one (mirroring the daemon, which kills a superseded subprocess).
+// at a time, a new connect supersedes a prior one (mirroring the daemon, which kills a superseded subprocess).
 const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     if (accountBusy.value !== undefined) {
         return;
@@ -828,7 +828,7 @@ const connectTranslator = async (target: KeyedProvider): Promise<void> => {
 };
 
 // Finish a redirect login by handing the daemon the URL the provider sent the browser to. Google's sign-in ends
-// on a loopback address only the sandbox container binds, so the page never loads for the user — but the address
+// on a loopback address only the sandbox container binds, so the page never loads for the user, but the address
 // bar still carries the grant, which is what they paste here. The translator then resumes the exchange on its
 // own, so success just means "keep polling"; the row flips connected on the next poll.
 const completeTranslator = async (redirectUrl: string): Promise<void> => {
@@ -875,7 +875,7 @@ const cancelTranslatorConnect = (): void => {
 };
 
 // Account / connection (global; the sandbox or translator owns each provider's credentials). Several accounts per provider
-// live in `providerAccounts` (conversation.ts module state). `error` carries connection / account errors —
+// live in `providerAccounts` (conversation.ts module state). `error` carries connection / account errors,
 // per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's selection can send;
 // `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
@@ -884,24 +884,24 @@ const claudeConnected = computed(() => hasAccount(`claude`));
 
 /* Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
  * load, a connect/disconnect, a sandbox reset), point each untouched fresh conversation whose selection can't
- * send at a connected provider. Started conversations (a session or visible messages) are never auto-repointed —
+ * send at a connected provider. Started conversations (a session or visible messages) are never auto-repointed,
  * that would retire their session and insert a switch notice the user didn't ask for.
  *
  * IT WAITS FOR THE WHOLE CONNECTION PICTURE (accountsLoaded), and that guard is the point of this watch, not a
- * detail of it. The two halves land INDEPENDENTLY — the translator's subscriptions come back off a local read
- * while a provider's own accounts take a round-trip — so every load passes through a moment that reads as
+ * detail of it. The two halves land INDEPENDENTLY, the translator's subscriptions come back off a local read
+ * while a provider's own accounts take a round-trip, so every load passes through a moment that reads as
  * "ChatGPT connected, Claude not", which is not a fact about the user, it is a fact about which read finished
  * first. Acting on it moved a Claude user's chat to Codex a beat before their Claude account arrived, and
  * nothing moved it back: by then the chat sat on a provider that could send, so this watch had no reason to
  * touch it again. `accountsLoaded` flips only once every read has settled, which is exactly the first moment an
- * empty list means "you have nothing connected" rather than "we haven't heard yet" — the same distinction
+ * empty list means "you have nothing connected" rather than "we haven't heard yet", the same distinction
  * rememberedAccountFor draws for the account pick, for the same reason. It is a SOURCE as well as a guard so
  * the pass runs again on the completed picture rather than being lost with the partial one.
  *
  * THE TRIAL IS PART OF THAT PICTURE and lands on its own seam (loadCapabilityProviders, which discovers the
  * endpoint and then reads the allowance), so both are sources too. Without them a sandbox whose accounts
  * settled before the trial arrived would sit on the connect offer with a perfectly good free channel one
- * column over — which is the first screen this whole pass exists to get right. */
+ * column over, which is the first screen this whole pass exists to get right. */
 watch([providerAccounts, translatorAccounts, accountsLoaded, endpointProviders, trialStatus], () => {
     if (!accountsLoaded.value) {
         return;
@@ -925,7 +925,7 @@ watch([providerAccounts, translatorAccounts, accountsLoaded, endpointProviders, 
         if (providerReadyOn(conversation.provider.value, conversation.harness.value)) {
             continue;
         }
-        /* A connected account first, the free trial only when there is none — the trial is a metered courtesy
+        /* A connected account first, the free trial only when there is none, the trial is a metered courtesy
          * that runs through intentic's servers, so it is the floor under a sandbox with nothing connected and
          * never a thing to move somebody onto who already owns a subscription. */
         const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
@@ -967,7 +967,7 @@ const addAccount = (target: AgentProvider, added: OauthAccount): void => {
 };
 
 /* A reconnect mints a NEW account id, which leaves every chat still pinned to the old one sending against a
- * credential that no longer exists — measured in the incident this all comes from: a session kept failing for
+ * credential that no longer exists, measured in the incident this all comes from: a session kept failing for
  * a full minute AFTER the account was reconnected, purely because its tab held the dead id. Reconnecting means
  * "carry on", so the stranded chats move across and anything held for the outage goes now.
  *
@@ -988,20 +988,20 @@ const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
 };
 
 /* adoptStranded's mirror image: conversations pinned to an account the provider's list no longer HAS, moved onto
- * the live pick. Two ways to get there — the account was disconnected in this window, or it was disconnected
- * while this window was away and the pin came back from the tab snapshot — and the same outcome either way: an
+ * the live pick. Two ways to get there, the account was disconnected in this window, or it was disconnected
+ * while this window was away and the pin came back from the tab snapshot, and the same outcome either way: an
  * invisible dead pin, every turn on that chat failing with "No Claude account connected", naming a fix the user
  * has already done for an account that IS connected, because the dead id is the one thing the message can't
  * mention. `live` is the provider's current list; the pick it belongs with must already be reconciled against it.
  *
- * Rebound, not selected: the user didn't switch, their choice went away — so the session moves across with the
+ * Rebound, not selected: the user didn't switch, their choice went away, so the session moves across with the
  * conversation and no "switched to…" divider is raised. Nothing to move to (the provider has no accounts left)
  * leaves the pin alone: the composer's connect gate is what has something to say then, not the account axis. */
 const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): void => {
     const picked = selectedAccountId.value[target];
     // Where a stranded chat lands: the remembered pick when the list that just arrived still holds it, else the
     // provider's first account. Resolved against THAT list rather than through rememberedAccountFor, which
-    // deliberately returns the pick unvalidated until every provider's first read has landed — moving a chat
+    // deliberately returns the pick unvalidated until every provider's first read has landed, moving a chat
     // onto an id this very list says is gone is the failure this function exists to prevent.
     const next = live.some((entry) => entry.id === picked) ? picked : live[0]?.id;
     if (next === undefined) {
@@ -1022,7 +1022,7 @@ const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): 
 const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<OauthAccount[]> => {
     /* `force` re-measures the plan limits before the list answers, and reaches CLAUDE ALONE because it is the
      * only list that waits on a quota sweep at all. The routed subscriptions' rings come off the daemon's own
-     * background sweep and that read deliberately never blocks on upstream — it is the routed turn's credential
+     * background sweep and that read deliberately never blocks on upstream, it is the routed turn's credential
      * gate as much as it is a settings list, so a round-trip there would land on every routed turn's startup. */
     const forced = force && target === `claude` ? `?force=1` : ``;
     const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}/accounts${forced}`)).accounts ?? [];
@@ -1039,11 +1039,11 @@ const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<O
         }
     }
     usageStatusByAccount.value = seeded;
-    /* THE REMEMBERED PICK IS NOT REWRITTEN FROM A LIST. It used to be — a pick this answer didn't contain was
+    /* THE REMEMBERED PICK IS NOT REWRITTEN FROM A LIST. It used to be, a pick this answer didn't contain was
      * replaced by `list[0]`, and the watch above then PERSISTED that. Which made every list a verdict on the
      * user's choice, including the ones that are not: a 200 carrying an empty array is what a daemon serves
      * while its credential store is still coming up (the dir read fails soft, by design), and one of those was
-     * enough to forget a deliberate choice for good — from then on every new session opened on the first
+     * enough to forget a deliberate choice for good, from then on every new session opened on the first
      * account, with nothing left anywhere to say otherwise. That is the "the account randomly switches back"
      * report.
      *
@@ -1051,7 +1051,7 @@ const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<O
      * resolves it against the live list (rememberedAccountFor for a new conversation, repointStranded for the
      * open ones), so an id that is genuinely gone is stepped over on the way to the first account and a pick
      * that is merely unreadable this second survives to be honoured when the real list lands. It is dropped
-     * only where the user actually said so — a disconnect of that exact account (disconnectAccount), or a new
+     * only where the user actually said so, a disconnect of that exact account (disconnectAccount), or a new
      * pick (selectAccount / a connect). */
     repointStranded(target, list);
     return list;
@@ -1059,7 +1059,7 @@ const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<O
 
 // Load a provider's live model catalog from the daemon into the shared records (providerModels/
 // providerDefaultModel), then keep selections valid: point any native conversation on that provider whose
-// model is no longer offered — and the persisted per-provider default — back to the live default (the same
+// model is no longer offered, and the persisted per-provider default, back to the live default (the same
 // selection-fix refreshAccounts does for accounts). Claude-Code-harness selections are translator-mapped ids,
 // not catalog ids, so they're left alone (claude itself is its own loop on either harness).
 const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
@@ -1100,7 +1100,7 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
     // Every selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered (a
     // since-renamed/retired id like `grok-code-fast-1`, or a tier alias once the real ids load) to the default,
     // so the picker highlights a selection and the chip always shows a name, never the bare icon. Harness-agnostic
-    // now — the catalog is shared, so a claude-code codex/grok selection is validated the same as a native one.
+    // now, the catalog is shared, so a claude-code codex/grok selection is validated the same as a native one.
     const valid = new Set(body.models.map((entry) => entry.id));
     for (const conversation of conversations.value) {
         if (conversation.provider.value === target && !valid.has(conversation.model.value)) {
@@ -1112,14 +1112,14 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
     }
 };
 
-// One catalog load per provider at a time — the picker's on-open refresh, the reachable seam, and a manual
+// One catalog load per provider at a time, the picker's on-open refresh, the reachable seam, and a manual
 // retry all reach for the same list, and a second fetch would answer identically. Deduped by POLICY rather
 // than by reading `providerModelsState` back as a mutex: that ref is what the picker RENDERS (spinner, error
 // row), and using presentation state to decide whether a request may start meant a direct call while one was
 // in flight duplicated the fetch, while `loaded` vs `loading` drifting for any other reason broke the dedup.
 export const loadProviderModels = withConcurrency(loadProviderModelsOnce, { mode: `singleFlight`, key: (target) => target });
 
-// Refresh every NATIVE provider's catalog — the reachable seam and the picker's on-open refresh both use this,
+// Refresh every NATIVE provider's catalog, the reachable seam and the picker's on-open refresh both use this,
 // so searching across providers always has all lists warm. ACP providers have no daemon catalog (the agent
 // owns its own model). In-flight providers collapse into their running load, so this is safe to spam.
 export const loadAllProviderModels = async (): Promise<void> => {
@@ -1162,7 +1162,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
         if (grokAccounts.length > 0) {
             cancelConnect();
             error.value = null;
-            // The account just connected — load its model catalog now so the picker is populated immediately,
+            // The account just connected, load its model catalog now so the picker is populated immediately,
             // not only after the next reselect or reload.
             void loadProviderModels(`grok`);
             return;
@@ -1177,7 +1177,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
 };
 
 // Reset the whole chat singleton when the active sandbox changes (see sandboxScope). Conversations, history,
-// and the account-connection state all belong to the sandbox they were loaded from — carrying them onto a
+// and the account-connection state all belong to the sandbox they were loaded from, carrying them onto a
 // different sandbox would stream against the wrong daemon and show its "connected" status falsely.
 export const resetChat = (): void => {
     for (const conversation of conversations.value) {
@@ -1185,7 +1185,7 @@ export const resetChat = (): void => {
     }
     /* Dropped BEFORE the tabs are rebuilt, not with the rest of the sandbox-scoped state below: restoring a tab
      * resolves its account against these, and the outgoing sandbox's list is not an answer about the incoming
-     * one — it would validate the new sandbox's remembered pick against credentials from the old, and hand every
+     * one, it would validate the new sandbox's remembered pick against credentials from the old, and hand every
      * restored tab a foreign account id as the "first" one.
      *
      * Cleared rather than emptied-and-declared: the incoming sandbox's connections are unknown until ITS daemon
@@ -1219,32 +1219,32 @@ export const resetChat = (): void => {
 /* --- Reveal: what every summons of the chat applies -----------------------------------------------------
  *
  * ONE verb set, applied identically wherever the summons was pressed AND in whichever window it lands. The
- * surfaces outside the panel — the fleet board, New agent, a suggestion box, an extension — never touch the
+ * surfaces outside the panel, the fleet board, New agent, a suggestion box, an extension, never touch the
  * tab list directly: they describe what the chat should show and hand it to the summons channel (summon.ts),
  * which runs this same function in this window and broadcasts it to the app's other windows. That is the whole
  * cure for "I clicked New agent and the popped-out chat kept showing an old conversation": the popped-out
  * window is drawn by whichever window opened it, so a summons that only mutated the clicking window's own
  * store was invisible out there. The panel's OWN controls (its rail, its tabs, its panes) keep calling the
- * plain store verbs — a gesture inside the panel acts on the panel it was made in.
+ * plain store verbs, a gesture inside the panel acts on the panel it was made in.
  *
- *   · show   — this one chat as the whole panel (the panes collapse to it): a card click, New agent, an
+ *   · show  , this one chat as the whole panel (the panes collapse to it): a card click, New agent, an
  *              accepted suggestion, a history row. A fresh start and an arrival land the same way on purpose:
  *              the other chats keep their tabs, they give their columns back.
- *   · focus  — this one chat in the focused column, the split left standing. What `show` is minus the
+ *   · focus , this one chat in the focused column, the split left standing. What `show` is minus the
  *              collapse: the collapse belongs to a plain click on a SELECTION surface (the ringed cards are
- *              the pane set, so pointing elsewhere replaces it), and a link inside the panel — a fork's
- *              source, a history row under a split being compared — is no such click.
- *   · beside — this chat in a column of its own, right of the focused pane (Alt/Ctrl on a board card).
- *   · panes  — exactly this set, side by side, in this order (a Shift-run on the board).
- *   · unpane — take the chat's column back (Ctrl on an already-ringed card).
+ *              the pane set, so pointing elsewhere replaces it), and a link inside the panel, a fork's
+ *              source, a history row under a split being compared, is no such click.
+ *   · beside, this chat in a column of its own, right of the focused pane (Alt/Ctrl on a board card).
+ *   · panes , exactly this set, side by side, in this order (a Shift-run on the board).
+ *   · unpane, take the chat's column back (Ctrl on an already-ringed card).
  */
 export type RevealVerb = `show` | `focus` | `beside` | `panes` | `unpane`;
 
 /* A chat, in whatever form the summoning surface holds it:
- *   · a live Conversation — the surface just built and configured it (New agent, an accepted suggestion);
- *   · a StoredTab — the portable description of a tab (tabSnapshot), which is also what every live entry
+ *   · a live Conversation, the surface just built and configured it (New agent, an accepted suggestion);
+ *   · a StoredTab, the portable description of a tab (tabSnapshot), which is also what every live entry
  *     becomes on the wire between windows;
- *   · a session reference — a history row: nothing exists but the daemon-side session and a title, and the
+ *   · a session reference, a history row: nothing exists but the daemon-side session and a title, and the
  *     summoner mints the conversationId so every window agrees on the tab's identity.
  * All three carry `conversationId`, which is the identity a reveal's `focus` names. */
 export type RevealEntry = Conversation | StoredTab | { readonly conversationId: string; readonly sessionRef: string; readonly title?: string };
@@ -1252,7 +1252,7 @@ export type RevealEntry = Conversation | StoredTab | { readonly conversationId: 
 export interface Reveal {
     readonly verb: RevealVerb;
     readonly entries: readonly RevealEntry[];
-    // Which entry holds the focus, by the conversationId the SUMMONER knows — a session already open in this
+    // Which entry holds the focus, by the conversationId the SUMMONER knows, a session already open in this
     // window under another id resolves to that tab instead.
     readonly focus: string;
     // Put the caret in the composer: what the press is FOR when it starts something to type into.
@@ -1271,7 +1271,7 @@ const loadSession = async (conversation: Conversation, sessionRef: string, title
     }
 };
 
-/* One entry, resolved to the open Conversation it means in THIS window — matching an open tab by id and a
+/* One entry, resolved to the open Conversation it means in THIS window, matching an open tab by id and a
  * session by the session it shows, so a summons broadcast twice (or a chat this window already opened by hand)
  * focuses the tab it already has rather than minting a twin. What has to join the strip goes into `additions`,
  * so the reveal lands as ONE list write however many chats it carries. */
@@ -1302,13 +1302,13 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     const session = entry.session;
     const existing = byId ?? (session === undefined ? undefined : opened.find((conversation) => conversation.session.value?.id === session.id));
     if (existing !== undefined) {
-        // The summoner says the fleet knows this agent, however the tab came to be open — the latch that keeps
+        // The summoner says the fleet knows this agent, however the tab came to be open, the latch that keeps
         // an opened card from re-appearing on the board as a phantom draft (see the registered flag's note).
         if (entry.registered) {
             existing.registered.value = true;
             existing.isolated.value = entry.isolated;
         }
-        /* Opening is an explicit request to look again, however much the tab already shows — it may be a STUB
+        /* Opening is an explicit request to look again, however much the tab already shows, it may be a STUB
          * from an attach that died mid-turn, which is the one state that never heals on its own. Skipped while
          * streaming: this tab IS the stream, and rewriting under it is the one thing a summons must not do. */
         if (!existing.streaming.value) {
@@ -1317,7 +1317,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
         return existing;
     }
     // Never open in this window: built from the snapshot exactly as a reload restores it. Hydrated OUTRIGHT
-    // rather than left to the reachability watch — a turn running daemon-side attaches and renders live, a
+    // rather than left to the reachability watch, a turn running daemon-side attaches and renders live, a
     // settled one replays its record, and an unreachable daemon leaves the tab as it stands for that watch to
     // retry (hydrateOnce clears its mark on failure).
     const conversation = restoreTab(entry);
@@ -1326,7 +1326,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversati
     return conversation;
 };
 
-// Reveal returns the conversation the focus resolved to — the summoning surface may still need the live
+// Reveal returns the conversation the focus resolved to, the summoning surface may still need the live
 // instance (a fork link, a test fixture). `unpane` shows nothing, so it returns nothing.
 export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | undefined => {
     if (verb === `unpane`) {
@@ -1354,7 +1354,7 @@ export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | 
         setPanes(resolved.map((conversation) => conversation.conversationId));
     } else if (verb === `show`) {
         // After the write, so the column kept is the one the summoned chat has just been seated in. The other
-        // chats stay OPEN — this gives their columns back, it does not close them.
+        // chats stay OPEN, this gives their columns back, it does not close them.
         collapsePanes();
     }
     if (caret) {
@@ -1363,7 +1363,7 @@ export const reveal = ({ verb, entries, focus, caret }: Reveal): Conversation | 
     return resolved.find((conversation) => conversation.conversationId === focusId);
 };
 
-/* An agent's registry summary, folded into the portable tab shape — what a fleet surface holds when it opens a
+/* An agent's registry summary, folded into the portable tab shape, what a fleet surface holds when it opens a
  * chat that may not have a tab anywhere yet. The daemon's provider-neutral transcript record hydrates workspace
  * and isolated conversations alike, so no provider store or placement gets a separate open path. */
 export interface AgentTabSeed {
@@ -1377,13 +1377,13 @@ export interface AgentTabSeed {
     branch?: string;
     account?: string;
     // What the agent's turns actually ran with, as the registry recorded them. Absent only for an agent that
-    // has never run one (the board's draft card) — a real agent's settings are facts about it, and seeding the
+    // has never run one (the board's draft card), a real agent's settings are facts about it, and seeding the
     // tab from the remembered picks instead is what made the composer claim a model the session never used.
     model?: string;
     effort?: string;
     thinking?: boolean;
     fast?: boolean;
-    // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
+    // Whether the fleet actually knows this agent, true unless the caller knows better. The board's
     // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
     // the focus-leave sweep when abandoned) until a first turn registers it.
     registered?: boolean;
@@ -1412,27 +1412,27 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
     };
 };
 
-// Open (or focus) the tab bound to a fleet agent's conversationId in THIS window — reveal's `focus`, seeded
+// Open (or focus) the tab bound to a fleet agent's conversationId in THIS window, reveal's `focus`, seeded
 // through agentTabOf. The panel's own surfaces use it directly (a fork's source link, a claimed column being
 // filled); the surfaces outside the panel summon instead (summon.ts), which applies the very same fold in
 // every window.
 export const openAgentConversation = (agent: AgentTabSeed): Conversation =>
     reveal({ verb: `focus`, entries: [agentTabOf(agent)], focus: agent.id, caret: false }) ?? active.value;
 
-/* The conversation "New agent" summons: the untouched draft already open (there is at most one — the one-draft
+/* The conversation "New agent" summons: the untouched draft already open (there is at most one, the one-draft
  * invariant setConversations holds), else a fresh one. Handing the existing draft back rather than minting a
  * twin is what keeps a second press from reading as a press that did nothing: an empty draft has nothing in it
- * to tell two apart, so the press is about the caret — and about the FOCUS landing on the draft, which is a
+ * to tell two apart, so the press is about the caret, and about the FOCUS landing on the draft, which is a
  * visible tab switch when it was pressed from another tab. */
 export const draftConversation = (): Conversation => conversations.value.find(untouchedDraft) ?? new Conversation();
 
-/* The conversation a SUGGESTION is written into — the empty board's starters, which fill a composer rather than
+/* The conversation a SUGGESTION is written into, the empty board's starters, which fill a composer rather than
  * sending anything (agentActions.composeAgent).
  *
  * Deliberately looser than `untouchedDraft`: text in the box makes a draft touched, so asking for one twice
  * would mint a second tab, and a user trying three starters in a row would end up with three chats they never
- * sent. What matters here is only that nothing has been SENT on the focused chat — no transcript, no session,
- * not on the fleet — because then rewriting its composer replaces a suggestion the user has not acted on. Once
+ * sent. What matters here is only that nothing has been SENT on the focused chat, no transcript, no session,
+ * not on the fleet, because then rewriting its composer replaces a suggestion the user has not acted on. Once
  * anything has been sent it is somebody's conversation, and a suggestion opens its own draft instead. */
 export const composingConversation = (): Conversation => {
     const focused = active.value;
@@ -1441,7 +1441,7 @@ export const composingConversation = (): Conversation => {
 
 // "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
 // the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a popped-out
-// window), and only that component holds the textarea. A counter, not a flag — two "New agent" presses in a
+// window), and only that component holds the textarea. A counter, not a flag, two "New agent" presses in a
 // row must each land, and a re-focus of the same conversation is still a distinct request.
 const composerFocus = ref(0);
 export const focusComposer = (): void => {
@@ -1450,11 +1450,11 @@ export const focusComposer = (): void => {
 
 // "Put the focused tab on screen", the counterpart of composerFocus and a counter for the same reason: the tab
 // list is store state, but the SCROLL belongs to whichever strip is mounted, and asking again for the tab that
-// is already focused — clicking its card on the fleet board while the strip is scrolled elsewhere — is still a
+// is already focused, clicking its card on the fleet board while the strip is scrolled elsewhere, is still a
 // distinct request. A plain activeId watch cannot see that one, since the id doesn't move.
 const tabReveal = ref(0);
 
-// Focus a tab, through the one writer — so leaving an untouched draft takes it with the same write that moves
+// Focus a tab, through the one writer, so leaving an untouched draft takes it with the same write that moves
 // the focus. An id that names no open conversation is ignored rather than written: setConversations would seat
 // the focus on the last tab instead, and a stale click would silently surface a chat the user didn't ask for.
 const setActive = (conversationId: string): void => {
@@ -1467,7 +1467,7 @@ const setActive = (conversationId: string): void => {
 const isOpen = (conversationId: string): boolean => conversations.value.some((conversation) => conversation.conversationId === conversationId);
 
 /* --- The panes ---------------------------------------------------------------------------------
- * Three verbs over the pane set, and the only ways to change how many chats are on screen — everything else
+ * Three verbs over the pane set, and the only ways to change how many chats are on screen, everything else
  * that touches the focus goes through setActive and swaps a column rather than adding one.
  *
  * Give a chat a column of its OWN, immediately right of the focused pane (VSCode's Open to the Side), and put
@@ -1475,10 +1475,10 @@ const isOpen = (conversationId: string): boolean => conversations.value.some((co
  * chat they can already see.
  *
  * The column is claimed for an id that need not name an open tab YET, so a surface handing over a conversation
- * it is about to open — the fleet board's cards — calls this FIRST and opens second. That order is what stops
+ * it is about to open, the fleet board's cards, calls this FIRST and opens second. That order is what stops
  * the opening from eating the focused pane's column on its way in: by the time the pane set is reconciled the
  * id names a real tab, the focus is already inside the set, and the chat that was there keeps its place. A
- * claim nobody follows through on costs nothing — the next reconcile drops an id that names no tab. */
+ * claim nobody follows through on costs nothing, the next reconcile drops an id that names no tab. */
 const openBeside = (conversationId: string): void => {
     if (!panes.value.includes(conversationId)) {
         const beside = panes.value.indexOf(activeId.value);
@@ -1487,8 +1487,8 @@ const openBeside = (conversationId: string): void => {
     setActive(conversationId);
 };
 
-// Take a chat's column back. The chat itself stays open — it is still in the rail, one click from a column
-// again — and the last pane is never closed, since that one IS the panel.
+// Take a chat's column back. The chat itself stays open, it is still in the rail, one click from a column
+// again, and the last pane is never closed, since that one IS the panel.
 const closePane = (conversationId: string): void => {
     if (panes.value.length < 2 || !panes.value.includes(conversationId)) {
         return;
@@ -1501,27 +1501,27 @@ const closePane = (conversationId: string): void => {
     }
 };
 
-/* BACK TO ONE COLUMN — the reset half of the gesture set, and the counterpart of setPanes.
+/* BACK TO ONE COLUMN, the reset half of the gesture set, and the counterpart of setPanes.
  *
  * Every list that lets Shift and Ctrl build a selection also lets a PLAIN click replace it, and the surfaces
  * that put chats in columns (the rail's rows, the board's cards) are such lists: the ringed cards ARE the pane
  * set, so a click carrying no modifier means "just this one" there exactly as it does in a file list. Without
- * it a split could only be left one × at a time, which made arriving cheaper than leaving — and left actions
+ * it a split could only be left one × at a time, which made arriving cheaper than leaving, and left actions
  * scoped to "what is on screen" (Synthesize) acting on a column the user thought they had walked away from.
  *
  * It names no id on purpose: the click has already moved the focus, so the chat to keep IS the focused one.
  * That also keeps it out of setActive, where it would wrongly collapse a deep link's or a history row's
- * arrival — those are not gestures on a selection.
+ * arrival, those are not gestures on a selection.
  *
  * Its other caller is reveal's `show` verb, which is the same shape of act wherever the summons came from: a
- * card click, New agent, an accepted suggestion — one chat asked for, one chat on screen. */
+ * card click, New agent, an accepted suggestion, one chat asked for, one chat on screen. */
 const collapsePanes = (): void => {
     if (panes.value.length > 1) {
         panes.value = [activeId.value];
     }
 };
 
-/* The pane set as a whole — what a multi-selection on the rail or the board lands as. Chats already on screen
+/* The pane set as a whole, what a multi-selection on the rail or the board lands as. Chats already on screen
  * KEEP their columns and the newcomers are appended in the order given, so adding a third chat never reshuffles
  * the two the user is reading. An empty selection is not a request for an empty panel and is ignored; the way
  * to have fewer panes is to close one. */
@@ -1538,8 +1538,8 @@ const setPanes = (ids: readonly string[]): void => {
 };
 
 // Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
-// detach from each in-flight turn (Conversation.abort is soft — the daemon-side run keeps working and reopening
-// reattaches to it), drop each cached transcript, and keep at least one conversation — a fresh chat when
+// detach from each in-flight turn (Conversation.abort is soft, the daemon-side run keeps working and reopening
+// reattaches to it), drop each cached transcript, and keep at least one conversation, a fresh chat when
 // the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
 // same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
 const closeTabs = (ids: ReadonlySet<string>): void => {
@@ -1555,34 +1555,34 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
     setConversations(next, activeId.value, `close`);
 };
 
-/* THE SAME CLOSE, ASKED FOR BY THE DAEMON RATHER THAN BY THE USER — the tabs of agents that left the roster
+/* THE SAME CLOSE, ASKED FOR BY THE DAEMON RATHER THAN BY THE USER, the tabs of agents that left the roster
  * without this browser doing it: the retention sweep filing a finished agent away (the daemon's
  * agents/archive.ts), or an archive or discard performed on another device.
  *
  * It exists because the two halves of "an agent is a card and a tab" only ever moved together when the press
  * happened HERE: archiving from this board closes the chat with the card (useAgents.archive), while the sweep
  * that does the same thing on its own left the tab behind. That is the whole of why the chat list's Finished
- * lane grew without bound while /agents stayed clean — the sweep is the board's cleaner and was the chat
+ * lane grew without bound while /agents stayed clean, the sweep is the board's cleaner and was the chat
  * list's litter. Nothing is lost either way (see closeTabs): the transcript is in History, and reopening the
  * agent from there brings the tab straight back.
  *
  * TWO TABS ARE SPARED, and both are about not taking something out from under the user:
- *   · the FOCUSED chat — the sweep runs on a clock the user cannot see, and a panel that empties itself
+ *   · the FOCUSED chat, the sweep runs on a clock the user cannot see, and a panel that empties itself
  *     mid-read is the worst thing an unattended cleaner can do. It reads as archived (ChatTabList's box mark)
  *     and closes like any other tab when the user is done with it.
- *   · one holding UNSENT INPUT (Conversation.unsent) — every other thing a chat holds survives a close; those
+ *   · one holding UNSENT INPUT (Conversation.unsent), every other thing a chat holds survives a close; those
  *     words do not. The board makes the same promise from the other side: a session holding them keeps its
  *     card, so a sweep that spares the tab can't leave the fleet reporting the work as gone. */
-/* A TURN THIS BROWSER DID NOT START, on a tab that is already open — attach to it.
+/* A TURN THIS BROWSER DID NOT START, on a tab that is already open, attach to it.
  *
  * A tab hydrates when it opens, and that is the only moment it ever asked the daemon what was going on. Fine
  * for a chat you type into, and wrong for every session started somewhere else: a workflow's steps are opened
  * the instant the run exists, a beat BEFORE the scheduler starts their turns, so the attach probe finds
  * nothing and the pane sits on "start a conversation" while the agent behind it works. Nothing re-asked, so
- * the only cure was clicking the card again — which is what "one window left with no content" was.
+ * the only cure was clicking the card again, which is what "one window left with no content" was.
  *
  * The roster is the signal, and it arrives on the events stream rather than on a timer (useAgents.setAgents):
- * the daemon publishes a card the moment a turn opens. Only a tab with NOTHING in it is touched — a transcript
+ * the daemon publishes a card the moment a turn opens. Only a tab with NOTHING in it is touched, a transcript
  * already painted has its own reconciliation, and a streaming one IS the stream.
  */
 const attachStarted = (ids: ReadonlySet<string>): void => {
@@ -1615,7 +1615,7 @@ const closeRetired = (ids: ReadonlySet<string>): void => {
 // Refresh the history list from the sandbox's session store (call when opening the history menu). A query
 // filters the list by chat title or content, server-side.
 // Each call ABORTS the one before it: a search is fired per settled keystroke, and without the abort a burst
-// of queries piles up on the daemon and lands out of order — the slowest, stalest response overwriting the
+// of queries piles up on the daemon and lands out of order, the slowest, stalest response overwriting the
 // list the newest query already painted.
 let sessionsLoad: AbortController | undefined;
 const loadSessions = async (query?: string): Promise<void> => {
@@ -1651,14 +1651,14 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
     }
 };
 
-/* A registered agent's transcript, through the shared cached read (agentTranscript.ts) — so a card the
+/* A registered agent's transcript, through the shared cached read (agentTranscript.ts), so a card the
  * background loader already warmed opens without a round trip, and a card clicked WHILE it is being warmed
- * waits for that read instead of starting a second one. Archiving keeps the entry — the registry holds archived
- * agents and `entry(id)` finds them — so an archived agent answers 200 and its tab is never touched by this.
+ * waits for that read instead of starting a second one. Archiving keeps the entry, the registry holds archived
+ * agents and `entry(id)` finds them, so an archived agent answers 200 and its tab is never touched by this.
  *
  * What this adds over the cached read is the TAB's half: a failure is reported on the conversation, where the
  * user can see it, and folded to `undefined` so the caller retries rather than settling for an empty pane. The
- * "gone" verdict passes straight through — it is the one answer that says something about this conversation
+ * "gone" verdict passes straight through, it is the one answer that says something about this conversation
  * rather than about the network. */
 const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTranscript | undefined> => {
     try {
@@ -1670,7 +1670,7 @@ const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTr
 };
 
 // Bring a tab with no visible transcript up to date with the daemon: attach to the turn running for its
-// conversation right now, or — when nothing is running — replay its stored session. Shared by the restore
+// conversation right now, or, when nothing is running, replay its stored session. Shared by the restore
 // watch above and by opening a fleet agent, which is what lets an agent an AUTOMATION opened for an outside
 // message read as an ordinary chat: its whole transcript (the configured prompt, the message that woke it,
 // the reply) exists only daemon-side until this runs.
@@ -1679,14 +1679,14 @@ const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTr
 // reachability flip tries again instead of leaving a restored tab visibly empty until the window is reloaded.
 const hydrate = async (conversation: Conversation): Promise<boolean> => {
     /* The transcript has to be in place BEFORE attaching to anything live. reattach appends the running turn's
-     * prompt bubble to whatever the transcript currently holds, and marks the conversation streaming — which
-     * makes the cache paint stand down — so attaching first renders the live turn onto an EMPTY transcript and
+     * prompt bubble to whatever the transcript currently holds, and marks the conversation streaming, which
+     * makes the cache paint stand down, so attaching first renders the live turn onto an EMPTY transcript and
      * then persists that stub over a perfectly good local mirror when the run settles. That is how a chat comes
      * back from a reload showing nothing but the message you just sent, with its whole history still sitting
      * intact in the daemon's session store.
      *
-     * The mirror read is local and cheap, so it always goes first. Only when it comes up empty — a conversation
-     * this device has never painted, e.g. a fleet agent opened for the first time — is the daemon's session
+     * The mirror read is local and cheap, so it always goes first. Only when it comes up empty, a conversation
+     * this device has never painted, e.g. a fleet agent opened for the first time, is the daemon's session
      * store worth waiting on before attaching; that is also the only case where there is nothing to show
      * meanwhile, so the round-trip costs nothing the user can see. */
     await conversation.paintCached();
@@ -1694,17 +1694,17 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
     // mirror on its own, so a paint that declines because the transcript is already populated must not be read
     // as "empty" and pay a session fetch the user would wait through on every restored tab.
     const seeded = conversation.messages.value.length === 0;
-    // The one case with nothing to show while the daemon answers — say the transcript is on its way rather
+    // The one case with nothing to show while the daemon answers, say the transcript is on its way rather
     // than inviting the user to start over a conversation that merely hasn't arrived yet.
     conversation.loading.value = seeded;
     try {
-        // A failed seed still lets the attach below run — a live turn is worth rendering either way — but it rides
+        // A failed seed still lets the attach below run, a live turn is worth rendering either way, but it rides
         // out as the return value so the caller re-tries the read rather than settling for a tab that looks empty.
         const seededOk = seeded ? await replayStoredSession(conversation) : true;
         if (await conversation.reattach()) {
             return seededOk;
         }
-        // With nothing running, what the mirror painted still has to be reconciled against the daemon — unless the
+        // With nothing running, what the mirror painted still has to be reconciled against the daemon, unless the
         // seeding above already read the very same store a moment ago.
         return seeded ? seededOk : await replayStoredSession(conversation);
     } finally {
@@ -1712,12 +1712,12 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
     }
 };
 
-/* Redraw a conversation from the daemon's own record — the authoritative transcript, and the only copy that
+/* Redraw a conversation from the daemon's own record, the authoritative transcript, and the only copy that
  * survives a device with no local mirror. False when the READ failed, as opposed to finding nothing to show, so
  * a transient round-trip failure is retried instead of leaving a restored tab visibly empty.
  *
  * Asked for EVERY provider. This used to return here unless the tab ran the Claude Code loop, on the reasoning
- * that /agents/:id/transcript could only answer for a harness with a readable session store — so a native
+ * that /agents/:id/transcript could only answer for a harness with a readable session store, so a native
  * codex/grok or ACP tab never even asked, and opening one showed "Start a conversation with …" over a
  * conversation that had run for an hour. The daemon records what it streams now, whoever served it. */
 const replayStoredSession = async (conversation: Conversation): Promise<boolean> => {
@@ -1731,13 +1731,13 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             return false;
         }
         if (transcript === `gone`) {
-            /* THE ONE THING THAT UNLATCHES `registered`. The latch exists to outlive the roster — an archive
+            /* THE ONE THING THAT UNLATCHES `registered`. The latch exists to outlive the roster, an archive
              * takes the entry off the board, a dropped stream takes the whole roster away, and neither means a
              * tab has stopped being an agent. But a NAMED 404 for this exact id is the daemon answering about
              * this conversation, and a tab that goes on claiming a fleet identity nobody has is unreachable
              * from the board while it sits in the strip: the registry half of the fleet has no entry for it and
              * the DRAFT half skips it for being registered, so it shows up nowhere on /agents and the
-             * focus-leave sweep — which only ever takes unregistered drafts — can never take it either. That is
+             * focus-leave sweep, which only ever takes unregistered drafts, can never take it either. That is
              * how an empty, untitled, permanent "New agent" tab is born, in a strip that is supposed to be the
              * board under another skin.
              *
@@ -1760,7 +1760,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
         }
     }
     // Not an else: a tab that just lost its agent still has whatever SDK session it recorded, and that store is
-    // a different one — the transcript may well be readable there after the registry entry is gone.
+    // a different one, the transcript may well be readable there after the registry entry is gone.
     if (restored === undefined) {
         const session = conversation.session.value;
         if (session === undefined) {
@@ -1772,18 +1772,18 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
         }
     }
     /* A RUNNING TURN IS NOT IN THE RECORD, so a redraw from the record can only ever delete it. The daemon
-     * writes a turn as it SETTLES, which means the answer in hand describes every turn but the live one — and
+     * writes a turn as it SETTLES, which means the answer in hand describes every turn but the live one, and
      * restoreMessages rebuilds the whole transcript. The live turn went with it: its prompt bubble, its tool
      * cards, and the card it was parked on. Nothing brought them back either, because a turn parked on a card
-     * emits no further frames — leaving a spinner over a transcript that ends one turn early, with no card to
+     * emits no further frames, leaving a spinner over a transcript that ends one turn early, with no card to
      * answer and a reload that reproduced it rather than fixing it.
      *
      * Asked AFTER the awaits, because that is where a stream gets in: this read and the attach that renders the
      * live turn are started by the same hydrate pass (and routinely by two of them at once), so the attach
-     * lands first as often as not. Standing down costs nothing — whatever is streaming attached to a transcript
+     * lands first as often as not. Standing down costs nothing, whatever is streaming attached to a transcript
      * that was already painted, and the frames it is applying are the newer half of this same conversation.
      *
-     * An empty replay is not a transcript either, it is the absence of one — the same distinction the mirror
+     * An empty replay is not a transcript either, it is the absence of one, the same distinction the mirror
      * makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
      * daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty. */
     if (restored.length > 0 && !conversation.streaming.value) {
@@ -1795,7 +1795,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
 /* One hydrate at a time per conversation, and two of them at once is the ORDINARY case rather than a corner:
  * opening a fleet agent starts one, and the pane's fleet watcher starts another the moment the roster names the
  * conversation. Each holds its own daemon round-trip, so the slower one answers about a tab the faster one has
- * already moved on — which is how a redraw lands on top of a turn attached in between.
+ * already moved on, which is how a redraw lands on top of a turn attached in between.
  *
  * A second WeakSet, because `hydrating` cannot answer this: it marks a tab as hydrated FOR GOOD (the reachability
  * sweep reads it as "already done"), while the fleet watcher's whole job is to hydrate the same tab AGAIN when the
@@ -1826,7 +1826,7 @@ export const hydrateOnce = (conversation: Conversation): void => {
 
 // Open a past conversation from the panel's own history rows: focus its tab when one already shows that
 // session, else load its transcript into a new tab (reveal's session entry). Panel-internal, so it reveals in
-// THIS window only — the surfaces outside the panel go through the summons channel (summon.ts) instead.
+// THIS window only, the surfaces outside the panel go through the summons channel (summon.ts) instead.
 const openConversation = (id: string): void => {
     const conversationId = crypto.randomUUID();
     reveal({
@@ -1837,7 +1837,7 @@ const openConversation = (id: string): void => {
     });
 };
 
-// Restored tabs persist as session + title only — once their daemon is reachable, first try to ATTACH: a
+// Restored tabs persist as session + title only, once their daemon is reachable, first try to ATTACH: a
 // turn may be running for the conversation daemon-side (started before the reload, or by another window or
 // device), and attaching renders it live mid-stream. Only when nothing is running does the flat transcript
 // hydrate from the session store. `conversations` is in the source so tabs restored by a sandbox switch
@@ -1846,8 +1846,8 @@ const openConversation = (id: string): void => {
 // answers for every provider (the daemon records what it streams); an unregistered one still means one exact
 // runtime session and reads /sessions/:id, which is the Claude Code SDK's store alone.
 const hydrating = new WeakSet<Conversation>();
-// Conversations showing a locally cached transcript rather than a daemon-confirmed one. They still hydrate —
-// the cache decides what the user looks at during the round-trip, not whether the round-trip happens — so the
+// Conversations showing a locally cached transcript rather than a daemon-confirmed one. They still hydrate,
+// the cache decides what the user looks at during the round-trip, not whether the round-trip happens, so the
 // "already has messages, leave it alone" guard below must not mistake a painted mirror for live content.
 const painted = new WeakSet<Conversation>();
 
@@ -1881,7 +1881,7 @@ watch([reachable, conversations], ([isReachable]) => {
 // Step 1 of a NATIVE connect. Claude mints an authorize URL + PKCE challenge; Grok mints a one-time device code
 // and starts its poll loop. Routed subscription connects, including Kimi Code, use connectTranslator above.
 
-// Started by the row's own Connect button (never by a provider switch — see setManagedProvider), so the whole
+// Started by the row's own Connect button (never by a provider switch, see setManagedProvider), so the whole
 // handshake is a thing the user asked for. `accountBusy` holds the provider for the length of the round-trip:
 // that is the click's acknowledgement, and it is why the sign-in can only ever REPLACE the button that started
 // it rather than appear next to a button still inviting the same click.
@@ -1893,7 +1893,7 @@ const startConnect = async (): Promise<void> => {
     cancelConnect();
     error.value = null;
     // Busy for the WHOLE start, not just the fetch: clearing it a parse earlier would drop the button back to
-    // "Connect" for a tick before the flow lands under it — the very blink this is here to remove.
+    // "Connect" for a tick before the flow lands under it, the very blink this is here to remove.
     accountBusy.value = target;
     try {
         let response: Response;
@@ -1911,7 +1911,7 @@ const startConnect = async (): Promise<void> => {
         if (target === `grok`) {
             // xAI's headless device-code flow: the URL is x.ai's verification page with the code pre-filled, so
             // the user just opens it and approves (no paste-back). `code` is that same pre-filled code, shown
-            // for reassurance. OpenCode polls to completion — we poll /grok/accounts until connected.
+            // for reassurance. OpenCode polls to completion, we poll /grok/accounts until connected.
             const body = (await response.json()) as { url: string; code: string };
             nativeConnectFlow.value = { provider: `grok`, url: body.url, code: body.code };
             grokPollTimer = setTimeout(() => void pollGrokOnce(Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
@@ -1924,12 +1924,12 @@ const startConnect = async (): Promise<void> => {
     }
 };
 
-/* Point the account card at the provider the active conversation would send to — what it shows when it opens.
+/* Point the account card at the provider the active conversation would send to, what it shows when it opens.
  * Skipped while a sign-in is in flight: that handshake (a device poll can outlive the card being closed and the
  * reachable-flash remounting it) owns what the card is looking at, and moving to another provider's rows would
  * hide the code the user is in the middle of approving.
  *
- * Nothing here tears a handshake down, and nothing does on the way out either — there is no "close" hook at all.
+ * Nothing here tears a handshake down, and nothing does on the way out either, there is no "close" hook at all.
  * The Grok device flow completes out-of-band (the user approves at x.ai and the daemon exchanges tokens
  * server-side later), so cancelConnect stays the sole teardown, driven only by genuine invalidation:
  * completion (pollGrokOnce), the 15-minute deadline, a fresh startConnect, the user's own Cancel, or resetChat. */
@@ -1939,14 +1939,14 @@ const showActiveProvider = (): void => {
     }
 };
 
-/* Read every connection this sandbox holds — the providers' own accounts AND the translator's subscriptions.
+/* Read every connection this sandbox holds, the providers' own accounts AND the translator's subscriptions.
  * One call, because to a user they are one question ("what is my agent signed in with?"), and because the
  * answer has to arrive as one state: two independently-landing halves is a card that rearranges itself twice.
  *
  * Landing the reads is also what earns the right to say "not connected": `accountsLoaded` flips only if a read
  * actually came back, so a daemon that is unreachable or mid-restart leaves the surfaces waiting (the reachable
  * seam retries) instead of asserting an empty state it cannot back up. The translator read is excluded from
- * that vote deliberately — it swallows its own failure, so it always "succeeds". */
+ * that vote deliberately, it swallows its own failure, so it always "succeeds". */
 export const refreshConnections = async (force = false): Promise<void> => {
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
     const [reads] = await Promise.all([
@@ -1960,15 +1960,15 @@ export const refreshConnections = async (force = false): Promise<void> => {
 };
 
 // Everything daemon-owned the chat needs, on the seam where it can first be read. Module-exported (like
-// resetChat) for sandboxScope, which re-runs it whenever the active daemon becomes reachable — connections and
+// resetChat) for sandboxScope, which re-runs it whenever the active daemon becomes reachable, connections and
 // catalogs live on the daemon, so reachability is the moment either can actually be asked for.
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
-        // Which accounts and subscriptions this sandbox is signed in with — the gate every provider surface reads.
+        // Which accounts and subscriptions this sandbox is signed in with, the gate every provider surface reads.
         refreshConnections(),
-        // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
+        // Model lists are daemon-owned too, load them on the same reachable seam so the pickers are ready.
         loadAllProviderModels(),
-        // Installed ACP agents and model endpoints are providers too — surface them on the same seam.
+        // Installed ACP agents and model endpoints are providers too, surface them on the same seam.
         loadCapabilityProviders(),
         // Each provider's last-published slash commands, so a fresh conversation's `/` popover is populated
         // before its first turn. Claude only: the ACP list arrives per session on the wire anyway, and an ACP
@@ -1981,10 +1981,10 @@ export const loadAccountStatus = async (): Promise<void> => {
  * capabilities are ACP agents (which own their model, so the row IS the provider) and `endpoint` capabilities
  * are model APIs (which have a catalog of their own, loaded straight after).
  *
- * An endpoint's provider id carries the `endpoint/` prefix — that is what tells every surface it runs the full
+ * An endpoint's provider id carries the `endpoint/` prefix, that is what tells every surface it runs the full
  * Claude Code loop rather than the ACP floor (capabilitiesOf), and it is what the turn is sent as. */
 /* Read the free trial's remaining allowance. Separate from the capability read that discovers the trial exists,
- * because the two answer to different clocks — which endpoints exist changes when someone adds one, while this
+ * because the two answer to different clocks, which endpoints exist changes when someone adds one, while this
  * changes with every message anyone on this account sends, from any tab.
  *
  * A failure leaves the previous figures rather than zeroing them: the count is a courtesy, and a picker that
@@ -2019,7 +2019,7 @@ const loadCapabilityProviders = async (): Promise<void> => {
     acpProviders.value = entries
         .filter((entry) => entry.kind === `agent`)
         .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
-    // Labelled by the name the user gave the capability — there is no vendor to name here, and the id is the
+    // Labelled by the name the user gave the capability, there is no vendor to name here, and the id is the
     // word they will recognise ("ollama", "gpu-box"). The one exception is the trial, which the user did not
     // name because they did not add it: the daemon provisioned it, so it carries the product's own words.
     endpointProviders.value = entries
@@ -2033,7 +2033,7 @@ const loadCapabilityProviders = async (): Promise<void> => {
     // only just learned.
     await Promise.all(endpointProviders.value.map((endpoint) => loadProviderModels(endpoint.id)));
     /* The trial's allowance moves with every message, so it is read on the same seam that discovered the trial
-     * exists. Failure leaves the last figures — a picker that briefly shows a stale count is better than one
+     * exists. Failure leaves the last figures, a picker that briefly shows a stale count is better than one
      * that drops the row a user is mid-conversation on.
      *
      * LAST, and after the catalogs above, because this read is what tips the repoint pass onto the trial: a
@@ -2069,7 +2069,7 @@ const completeConnect = async (code: string): Promise<boolean> => {
         addAccount(`claude`, (await response.json()) as OauthAccount);
         cancelConnect();
         error.value = null;
-        // The account just connected — supportedModels() needs a Claude credential, so the catalog may only now
+        // The account just connected, supportedModels() needs a Claude credential, so the catalog may only now
         // be discoverable.
         void loadProviderModels(`claude`);
         return true;
@@ -2078,7 +2078,7 @@ const completeConnect = async (code: string): Promise<boolean> => {
     }
 };
 
-// Swap one account of a provider in place, leaving order and selection alone — the difference between a WRITE
+// Swap one account of a provider in place, leaving order and selection alone, the difference between a WRITE
 // to an existing account and a new one arriving (see addAccount, which moves it to the end and selects it).
 const replaceAccount = (target: AgentProvider, next: OauthAccount): void => {
     providerAccounts.value = {
@@ -2087,7 +2087,7 @@ const replaceAccount = (target: AgentProvider, next: OauthAccount): void => {
     };
 };
 
-/* Rename one account of the managed provider. The credential is untouched — this writes the DISPLAY NAME, the
+/* Rename one account of the managed provider. The credential is untouched, this writes the DISPLAY NAME, the
  * one thing that lets a second connection of the same provider tell itself apart when the provider hands back
  * no identity to derive one from (a pasted API key), or when the derived one isn't what the user calls it.
  *
@@ -2129,7 +2129,7 @@ const renameAccount = async (id: string, label: string): Promise<void> => {
 };
 
 // Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for
-// the round-trip, like every other account write — the row's own button says so.
+// the round-trip, like every other account write, the row's own button says so.
 const disconnect = async (id: string): Promise<void> => {
     const target = managedProvider.value;
     accountBusy.value = target;

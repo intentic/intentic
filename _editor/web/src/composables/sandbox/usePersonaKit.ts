@@ -7,11 +7,11 @@ import { PERSONAS } from "../queryKeys";
 import { queryClient } from "../queryPersistence";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* ONE PERSONA'S KIT — the prompt it runs on and the skills only its turns reach (`.intentic/config/personas/<id>/`).
+/* ONE PERSONA'S KIT, the prompt it runs on and the skills only its turns reach (`.intentic/config/personas/<id>/`).
  *
  * Separate from usePersonas, which reads the CARDS: a kit is files, it is only ever wanted for the one card
  * somebody has open, and reading every persona's prompt to draw a list of names would fetch text nothing on
- * screen shows. Keyed under the personas family so the two caches stay related — a card removed takes its kit
+ * screen shows. Keyed under the personas family so the two caches stay related, a card removed takes its kit
  * with it daemon-side, and invalidating the family after that is what stops a stale kit being drawn for a
  * persona that no longer exists.
  *
@@ -21,7 +21,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * ceremony to fail.
  *
  * The id is reactive because this hangs off an accordion: opening a different card must refetch rather than keep
- * showing the last one's prompt. It is never absent — a persona is created before it is edited, and the routes
+ * showing the last one's prompt. It is never absent, a persona is created before it is edited, and the routes
  * answer a missing card with a 404 deliberately, so that nothing can mint a kit for a persona nobody named. */
 
 const kitKey = (id: string): readonly unknown[] => PERSONAS.of(id, `kit`);
@@ -39,7 +39,7 @@ export function usePersonaKit(personaId: MaybeRefOrGetter<string>) {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: kitKey(id.value) });
     const path = (tail: string): string => `/personas/${encodeURIComponent(id.value)}${tail}`;
 
-    // The same client, handed over rather than injected — see the header. `useMutation` resolves it through the
+    // The same client, handed over rather than injected, see the header. `useMutation` resolves it through the
     // injection context too, so passing it is what lets this component be rendered outside a plugin-installed app.
     const savePrompt = useMutation(
         { mutationFn: (prompt: string) => sandboxJson(path(`/prompt`), jsonBody(`POST`, { id: id.value, prompt })), onSuccess: invalidate },
@@ -56,7 +56,7 @@ export function usePersonaKit(personaId: MaybeRefOrGetter<string>) {
 
     return {
         kit: computed<PersonaKit>(() => query.data.value ?? { prompt: ``, skills: [] }),
-        // The body of one skill, fetched only when somebody opens it — a group of one-line rows must not cost
+        // The body of one skill, fetched only when somebody opens it, a group of one-line rows must not cost
         // the sum of its instructions to draw (the same split the sandbox's own skills list makes).
         readSkill: (name: string) => sandboxJson(path(`/skills/read?name=${encodeURIComponent(name)}`)),
         error,

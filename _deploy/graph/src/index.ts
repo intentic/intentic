@@ -25,7 +25,7 @@ export const linearize = (graph: DesiredStateGraph): string[] => {
     return topoSort(ids, dependsOn);
 };
 
-// The dependency closure of `targets`: each target plus everything it transitively dependsOn — the graph
+// The dependency closure of `targets`: each target plus everything it transitively dependsOn, the graph
 // slice a targeted plan/apply runs against. Node order (and so linearization) is preserved. Throws on an
 // id the graph does not declare.
 export const subgraph = (graph: DesiredStateGraph, targets: readonly string[]): DesiredStateGraph => {

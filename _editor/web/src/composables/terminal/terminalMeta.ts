@@ -3,7 +3,7 @@ import { ref, watch } from "vue";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* Per-terminal cosmetic overrides (VSCode's Rename / Change Color / Change Icon): a display label, a pill
- * color, and a pill icon, keyed by tmux session name. Pure client-side view state — the tmux session name is
+ * color, and a pill icon, keyed by tmux session name. Pure client-side view state, the tmux session name is
  * the daemon's identity for the socket and kill routes and never changes, so this is a per-browser preference,
  * persisted per sandbox in localStorage. Stable names (a colored `panel-app` dev server) keep their look
  * across restarts; dead web-* entries are pruned on relist since their random names never return. */
@@ -14,7 +14,7 @@ export interface TerminalMeta {
     readonly icon?: IconName;
 }
 
-// What each KIND looks like when the user hasn't overridden it — the strip's pills and the Recent-work rows
+// What each KIND looks like when the user hasn't overridden it, the strip's pills and the Recent-work rows
 // read from the same table, so a glyph means the same thing wherever it appears.
 export const KIND_ICONS = {
     agent: `sparkles`,
@@ -37,7 +37,7 @@ export const TERMINAL_COLORS = {
 } as const;
 export type TerminalColor = keyof typeof TERMINAL_COLORS;
 
-// The icon picker's choices — a curated slice of the app's icon vocabulary that reads at pill size.
+// The icon picker's choices, a curated slice of the app's icon vocabulary that reads at pill size.
 export const TERMINAL_ICONS: readonly IconName[] = [
     `desktop`,
     `code`,

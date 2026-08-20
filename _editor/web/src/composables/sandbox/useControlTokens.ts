@@ -8,7 +8,7 @@ import { useSandbox } from "./useSandbox";
  * Mint shows the raw token ONCE (the daemon stores only its hash); the list supports per-token revocation.
  * The trust model is the sync pairing's (the browser is already the owner), made durable + revocable.
  *
- * The SCOPE is the caller's, not this composable's — a card mints for the thing it is a card for, and the
+ * The SCOPE is the caller's, not this composable's, a card mints for the thing it is a card for, and the
  * daemon refuses a mint that names no scope. The list is deliberately unfiltered: every token against this
  * sandbox shows up on whichever card you have open, because a revoke surface that only shows you the tokens
  * you happened to mint from this card is how a leaked one stays live. */
@@ -27,7 +27,7 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
     const { active } = useSandbox();
 
     const tokens = ref<readonly ControlToken[]>([]);
-    // The last mint's RAW token — shown once, gone on navigation/sandbox switch, never refetchable.
+    // The last mint's RAW token, shown once, gone on navigation/sandbox switch, never refetchable.
     const minted = ref<{ readonly token: string; readonly label: string } | undefined>(undefined);
     const { busy: minting, notice, run } = useAsyncAction();
     const label = ref(``);
@@ -62,7 +62,7 @@ export function useControlTokens(scope: ControlScope, defaultLabel: string) {
             await refresh();
         }, `Minting failed.`);
 
-    // Deliberately not through `run` — revoking must not flash the mint button's busy state.
+    // Deliberately not through `run`, revoking must not flash the mint button's busy state.
     const revoke = async (id: string): Promise<void> => {
         try {
             await sandboxJson(`/system/control/tokens/${encodeURIComponent(id)}`, { method: `DELETE` });

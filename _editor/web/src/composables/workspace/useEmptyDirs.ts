@@ -2,21 +2,21 @@ import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
 import { type BarrenChain, barrenChainOf, barrenDirs, barrenRoots, branchDirPaths, settleBarren } from "../../pages/workspace/emptyDirs";
 
-/* THE EXPLORER'S VIEW OF BARREN BRANCHES — the reactive shell around emptyDirs.ts' arithmetic. The pure module
+/* THE EXPLORER'S VIEW OF BARREN BRANCHES, the reactive shell around emptyDirs.ts' arithmetic. The pure module
  * owns what "empty" means; this one owns WHEN the explorer is allowed to say it, which is a question about
  * time and about who made the folder:
  *
  *   - Agents create a folder and write into it a beat later, and the daemon's file watcher refetches the tree
- *     on every write — a marker tracking the raw set would strobe while an agent scaffolds. So the explorer
+ *     on every write, a marker tracking the raw set would strobe while an agent scaffolds. So the explorer
  *     only ever renders the SETTLED set: barren continuously for SETTLE_MS. The timer below re-evaluates when
  *     the youngest unsettled path comes of age; between tree changes nothing ticks.
  *
  *   - A folder the user just created by hand is empty BY DEFINITION, and flagging it three seconds after they
  *     made it is hostile. Creation marks it exempt; the exemption lifts when the folder stops being barren
- *     (it gained content, or was deleted) — after which an agent emptying it again flags like anything else.
+ *     (it gained content, or was deleted), after which an agent emptying it again flags like anything else.
  *
  * Module-level state, like the clipboard and the expanded set (useWorkspaceTree): the tree component unmounts
- * whenever the sidebar flips, and settle clocks or exemptions that died with it would restart the wait — or
+ * whenever the sidebar flips, and settle clocks or exemptions that died with it would restart the wait, or
  * re-flag the folder the user made a minute ago. */
 
 const SETTLE_MS = 10_000;
@@ -52,7 +52,7 @@ export function useEmptyDirs(tree: () => readonly WorkspaceTreeEntry[], lazy: ()
     const evaluate = (): void => {
         const now = Date.now();
         const barren = raw.value;
-        // An exemption lifts the moment its folder stops being barren — gained content or got deleted. Only a
+        // An exemption lifts the moment its folder stops being barren, gained content or got deleted. Only a
         // path that WAS in the set can leave it, so a just-created folder isn't unexempted before the tree
         // refetch even lists it.
         const lifted = [...exempt.value].filter((path) => prevBarren.has(path) && !barren.has(path));
@@ -81,7 +81,7 @@ export function useEmptyDirs(tree: () => readonly WorkspaceTreeEntry[], lazy: ()
     };
     watch(raw, evaluate, { immediate: true });
 
-    // What the rows consult: barren AND settled — the only form of "empty" the explorer ever shows.
+    // What the rows consult: barren AND settled, the only form of "empty" the explorer ever shows.
     const isBarren = (path: string): boolean => settled.value.has(path);
     // The sweep's units: the top of each settled branch, in tree order.
     const roots = computed<readonly WorkspaceTreeEntry[]>(() => barrenRoots(tree(), lazy(), settled.value));

@@ -1,9 +1,9 @@
 import { inject, type InjectionKey } from "vue";
 
-/* WHAT A TOOL CARD CAN REACH BEYOND ITSELF — and the reason there is exactly one card renderer.
+/* WHAT A TOOL CARD CAN REACH BEYOND ITSELF, and the reason there is exactly one card renderer.
  *
  * A card draws a RECORD: a path that was read, a command that ran, a picture that was taken. Where that record
- * can be FOLLOWED is not a property of the record — it is a property of who is looking at it. In the app a path
+ * can be FOLLOWED is not a property of the record, it is a property of who is looking at it. In the app a path
  * opens the workspace, a running command has a shell to attach to, and a delegation has a transcript page. On a
  * conversation published to the public there is no workspace behind the page, nothing to attach to and nowhere
  * to navigate; the same card has to draw the same record with nothing to click.
@@ -14,7 +14,7 @@ import { inject, type InjectionKey } from "vue";
  * app is a shared conversation nobody trusts is really what they saw.
  *
  * An absent surface offers nothing rather than throwing, which is also what makes a card mountable outside the
- * chat — a subagent's transcript page renders the same cards and is not inside a pane. */
+ * chat, a subagent's transcript page renders the same cards and is not inside a pane. */
 export interface ChatSurface {
     // A workspace path as something an <img> can show, or undefined while there is nothing to show. The one
     // capability every surface has some answer for, hence not optional: the app re-mints a thumbnail from the
@@ -32,7 +32,7 @@ export interface ChatSurface {
      *
      * A route STRING plus `navigate`, rather than a <RouterLink> in the card, because the card must render
      * where there is no router at all. A compiled template resolves every component it mentions when the
-     * render function runs — `v-if="false"` does not save it — so naming RouterLink here would put vue-router
+     * render function runs, `v-if="false"` does not save it, so naming RouterLink here would put vue-router
      * into a published page's bundle to satisfy an element that page never draws. The href is real either way,
      * which is what keeps middle-click and "copy link address" working in the app. */
     readonly subagentRoute?: (toolId: string) => string;

@@ -6,8 +6,8 @@ import { present } from "./toolPresentation";
  * ChatToolRun.vue).
  *
  * The mark says two things and no more: HOW MANY calls the turn made, and WHAT the most notable of them was.
- * Both are answers to the question somebody skimming actually has — "did anything happen between these two
- * paragraphs, and was any of it consequential?" — and neither requires reading a single row.
+ * Both are answers to the question somebody skimming actually has, "did anything happen between these two
+ * paragraphs, and was any of it consequential?", and neither requires reading a single row.
  *
  * The count is of top-level calls, which is exactly what opening the mark reveals. A sub-agent's own calls stay
  * counted as the one delegation that spawned them, because that is how they render: nested under it. */
@@ -56,7 +56,7 @@ const notability = (tool: ChatTool): number => {
     return 5;
 };
 
-/* The run's most notable call — the FIRST of the highest-scoring ones, so a mark doesn't change its face as
+/* The run's most notable call, the FIRST of the highest-scoring ones, so a mark doesn't change its face as
  * later calls of equal weight land while the turn is still going. */
 const mostNotable = (tools: readonly ChatTool[]): ChatTool | undefined => {
     let best: ChatTool | undefined;

@@ -7,11 +7,11 @@ import { cloudflareApi } from "./cloudflare-api.js";
 const cloudflareSchema = z.object({ apiToken: z.string(), zone: z.string() });
 const parse = (inputs: ResolvedInputs): z.infer<typeof cloudflareSchema> => parseInputs(cloudflareSchema, inputs, "cloudflare");
 
-// The Cloudflare zone is OWNED — the provider RESOLVES the zone name to its zone id (and the account that
+// The Cloudflare zone is OWNED, the provider RESOLVES the zone name to its zone id (and the account that
 // owns it) over the API; it never creates a zone. read returns the mapping if the zone exists, undefined
 // (logged) if not, so a plan surfaces a misconfigured zone without aborting. diff is always noop (an owned,
 // immutable name->id mapping has no managed drift). apply is reached only when read found nothing; it
-// re-resolves and raises the hard error on a persistent not-found — an owned zone is not created here.
+// re-resolves and raises the hard error on a persistent not-found, an owned zone is not created here.
 export const createCloudflareProvider = (api: CloudflareApi = cloudflareApi): Provider => ({
     read: async (inputs, ctx) => {
         const { apiToken, zone } = parse(inputs);
@@ -31,7 +31,7 @@ export const createCloudflareProvider = (api: CloudflareApi = cloudflareApi): Pr
         }
         return { zoneId: found.id, accountId: found.accountId };
     },
-    // The zone is OWNED — intentic never deletes it. Logged no-op so prune treats it as handled.
+    // The zone is OWNED, intentic never deletes it. Logged no-op so prune treats it as handled.
     delete: async (_inputs, ctx) => {
         ctx.log(`cloudflare "${ctx.id}" removed from desired state — the owned zone is never deleted`);
     },

@@ -27,7 +27,7 @@ type ForgejoInputs = z.infer<typeof forgejoSchema>;
 const parse = (inputs: ResolvedInputs): ForgejoInputs => parseInputs(forgejoSchema, inputs, "forgejo");
 
 const CONTAINER = "intentic-forgejo";
-// The fixed host port Forgejo publishes — the port every engine-side Forgejo consumer forwards to over SSH.
+// The fixed host port Forgejo publishes, the port every engine-side Forgejo consumer forwards to over SSH.
 export const FORGEJO_HTTP_PORT = 3000;
 // The runner registration token + a scoped git access token + a packages access token are minted once and
 // persisted on the host, then read back every run, so they are STABLE outputs (re-minting would rotate them,
@@ -84,7 +84,7 @@ const waitHealthy = async (session: SshSession): Promise<void> => {
 // lives in a named volume that survives container recreation, and the admin/token bootstraps are guarded.
 export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;
@@ -207,7 +207,7 @@ export const createForgejoProvider = (executor: SshExecutor = sshExecutor): Prov
     delete: async (inputs) => {
         const session = await executor.connect(sshTarget(parseInputs(sshSchema, inputs, "forgejo")));
         try {
-            // Remove the container, its SQLite data volume, and the host-side token state — a full teardown.
+            // Remove the container, its SQLite data volume, and the host-side token state, a full teardown.
             await session.exec(`docker rm -f ${CONTAINER} 2>/dev/null || true`);
             await session.exec(`docker volume rm ${CONTAINER}-data 2>/dev/null || true`);
             await session.exec(`rm -rf ${STATE_DIR}`);

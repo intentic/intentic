@@ -7,17 +7,17 @@ import { useSandbox } from "./useSandbox";
 
 /* Drives the Desktop sync card. "Enable" mints a short-lived, single-use pairing token from the daemon; the
  * copy-paste one-liner carries it, and the agent redeems it once to enroll its SSH key. We poll /system/sync
- * for `enrolled` — the "enabled" signal. No Google sign-in on the laptop.
+ * for `enrolled`, the "enabled" signal. No Google sign-in on the laptop.
  *
  * Pairings carry a MODE: "sync" (file sync + port mirroring, single holder) or "mirror" (ports only, unlimited
- * machines). The daemon grants per role — an owner gets what they ask for, a member is always downgraded to
- * "mirror" — so pairMode reflects the daemon's ANSWER, and the one-liner/copy follow it, never the request. */
+ * machines). The daemon grants per role, an owner gets what they ask for, a member is always downgraded to
+ * "mirror", so pairMode reflects the daemon's ANSWER, and the one-liner/copy follow it, never the request. */
 
 type SyncMode = `sync` | `mirror`;
 
 /* How long since the holder's last poll before its sync counts as STOPPED. The daemon refreshes seenAt at most
  * once a minute while the agent is polling (every 5s), so a live holder is always well inside this; anything older
- * means the agent stopped polling — the machine is asleep or offline, or its pairing was taken over by another
+ * means the agent stopped polling, the machine is asleep or offline, or its pairing was taken over by another
  * sandbox's setup on the same computer. Enrollment alone used to be the signal, so the card claimed "Syncing from
  * X" for as long as the record existed, whether or not anything was syncing. */
 const SYNC_STALE_MS = 5 * 60 * 1000;
@@ -32,38 +32,38 @@ export function useDesktopSync() {
 
     // Whether the signed-in user owns the active sandbox. Members get the mirror-only experience (the daemon
     // enforces it; this just keeps the card honest up front). Defaults to the owner rendering until the list
-    // loads — the same assumption the card always made, and the daemon corrects a wrong guess at mint time.
+    // loads, the same assumption the card always made, and the daemon corrects a wrong guess at mint time.
     const isOwner = computed(() => (active.value?.role ?? `owner`) === `owner`);
 
     const enrolled = ref(false);
-    // The machine currently holding sync (the enrolled key's comment), or undefined when none — for the
+    // The machine currently holding sync (the enrolled key's comment), or undefined when none, for the
     // "Syncing from X" line and the takeover prompt.
     const syncingFrom = ref<string | undefined>(undefined);
     // When that machine last used its enrollment; undefined for one that never has. The agent's ports poll is the
     // heartbeat behind it (the daemon stamps it on verify).
     const syncSeenAt = ref<number | undefined>(undefined);
-    /* WHICH FOLDER ON THAT MACHINE IS THIS SANDBOX'S /work — the one thing "Syncing from radarsu-rog" never said,
+    /* WHICH FOLDER ON THAT MACHINE IS THIS SANDBOX'S /work, the one thing "Syncing from radarsu-rog" never said,
      * and the first thing anyone asks of it. The daemon cannot derive it: SYNC_DIR is the agent's own local state,
      * so it arrives only inside the machine's report, and only on a "sync" pairing (a mirror enrollment carries no
-     * folder at all — see scopedReport's disclosure rule). At most one machine holds sync, so the first reported
+     * folder at all, see scopedReport's disclosure rule). At most one machine holds sync, so the first reported
      * localDir IS the holder's folder. Undefined while an enrolled machine has yet to post a report, which the
      * card says out loud rather than filling in with the default path it would have guessed. */
     const syncingPath = ref<string | undefined>(undefined);
-    // Machines with a mirror-only enrollment (collaborators forwarding ports to their own localhost) — shown so
+    // Machines with a mirror-only enrollment (collaborators forwarding ports to their own localhost), shown so
     // an active localhost mirror is never invisible in the card.
     const mirroredBy = ref<readonly string[]>([]);
     // Set when the owner just clicked Disable: names the machine that was cut off so the card can point at the
-    // local cleanup — revoking stops the agent's ACCESS (its mirror watcher tears itself down within a few
+    // local cleanup, revoking stops the agent's ACCESS (its mirror watcher tears itself down within a few
     // polls), not its installation.
     const revokedFrom = ref<string | undefined>(undefined);
     // Whether this sandbox can do desktop sync at all. The daemon carries the transport on its own HTTPS
-    // surface now, so a sandbox that answers this read can also sync — it used to depend on whether that
+    // surface now, so a sandbox that answers this read can also sync, it used to depend on whether that
     // sandbox's reachability could carry TCP, which the platform's own path cannot. Still read rather than
     // assumed: it is the daemon's answer, and a daemon too old to give one is a card that should stay quiet.
     const available = ref(false);
     // The one-time pairing token from the last "Enable" click; undefined until minted (or after it's used up).
     const pairToken = ref<string | undefined>(undefined);
-    // The mode the daemon GRANTED for that token — what the revealed one-liner will actually enroll.
+    // The mode the daemon GRANTED for that token, what the revealed one-liner will actually enroll.
     const pairMode = ref<SyncMode | undefined>(undefined);
     const minting = ref(false);
     // When set, the generated one-liner carries TAKEOVER=1 so the agent moves sync here, revoking the other
@@ -71,7 +71,7 @@ export function useDesktopSync() {
     const takeover = ref(false);
 
     // Whether the holder has gone quiet: enrolled, but its agent hasn't polled in long enough that nothing is
-    // reaching the folder any more. An enrollment that has NEVER been used (no seenAt) counts as stopped too —
+    // reaching the folder any more. An enrollment that has NEVER been used (no seenAt) counts as stopped too,
     // that is a setup that didn't finish.
     const syncStopped = computed(
         () => syncingFrom.value !== undefined && (syncSeenAt.value === undefined || Date.now() - syncSeenAt.value > SYNC_STALE_MS),
@@ -95,7 +95,7 @@ export function useDesktopSync() {
 
     const url = computed(() => daemonUrl.value ?? ``);
     // A mirror-only one-liner carries no SYNC_DIR (nothing to sync) and never TAKEOVER (mirror enrollments
-    // don't contend — the daemon accepts any number).
+    // don't contend, the daemon accepts any number).
     const linuxCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
@@ -121,7 +121,7 @@ export function useDesktopSync() {
     );
 
     // Mint (or re-mint) a pairing token so the card can reveal the one-liner. Authorized by the browser's Google
-    // session — sandboxRequest attaches it. The token is single-use and expires (~10 min) server-side. The
+    // session, sandboxRequest attaches it. The token is single-use and expires (~10 min) server-side. The
     // daemon answers with the mode it actually granted (a member's "sync" request comes back "mirror").
     const enable = async (mode: SyncMode): Promise<void> => {
         minting.value = true;
@@ -162,12 +162,12 @@ export function useDesktopSync() {
                 .flatMap((machine) => machine.pairings)
                 .find((pairing) => pairing.localDir !== undefined)?.localDir;
         } catch {
-            // Sandbox not reachable yet — leave the last known state.
+            // Sandbox not reachable yet, leave the last known state.
         }
     };
-    // Poll every 3s ONLY while a pairing one-liner is live (Enable clicked — fresh enroll OR takeover): that's the
+    // Poll every 3s ONLY while a pairing one-liner is live (Enable clicked, fresh enroll OR takeover): that's the
     // only window where enrolled/syncingFrom flip out-of-band as the agent redeems the token, so the card must
-    // catch up fast. Just viewing the card (no pairToken — the common /sandbox case) polls zero times; mount does
+    // catch up fast. Just viewing the card (no pairToken, the common /sandbox case) polls zero times; mount does
     // a single refresh for the current state. Replaces the unconditional 3s poll that ran the whole time the card
     // was open. disable() clears pairToken, so it also stops the poll.
     watch(pairToken, (token) => {
@@ -181,7 +181,7 @@ export function useDesktopSync() {
         void refresh();
     };
 
-    // Disable: revoke EVERY enrollment on the daemon (the owner kill switch) — Mutagen's SSH transport dies and
+    // Disable: revoke EVERY enrollment on the daemon (the owner kill switch). Mutagen's SSH transport dies and
     // each machine's mirror watcher notices the rejected token and tears itself down. The installed agent stays
     // until `intentic-sync uninstall` runs there; revokedFrom lets the card say so.
     const disable = async (): Promise<void> => {

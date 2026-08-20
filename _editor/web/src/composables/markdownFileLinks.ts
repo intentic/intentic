@@ -1,18 +1,18 @@
 import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "./workspace/fileRefs";
 
 /* File mentions inside rendered markdown become clickable, VS Code style: when the agent writes
- * `src/foo.ts:42` in its answer — as a markdown link, in backticks, or as bare prose — clicking it opens that
+ * `src/foo.ts:42` in its answer, as a markdown link, in backticks, or as bare prose, clicking it opens that
  * file in the Workspace main view at that line, shown as `foo.ts:42` (see linkLabel).
  *
- * Both halves of that — where the link goes and what it reads as — are decided HERE rather than asked of the
+ * Both halves of that, where the link goes and what it reads as, are decided HERE rather than asked of the
  * model. A path in an answer is written for a human: abbreviated once the area is established, in whatever
  * line notation the last tool used. Prompting for a stricter form would spend context on every turn, bind the
  * result to one provider, and still leave every transcript already written broken. So the reference is matched
  * back onto the real file (resolveInTree, then the daemon on click) and displayed by its filename.
  *
  * This runs on the SANITIZED DOM (see renderMarkdown), not on the markdown source and not on an HTML string.
- * Rewriting a string with a regex would have to distinguish text from markup by hand — one path mentioned
- * inside an attribute value and the output is corrupt — whereas a text-node walk can only ever touch text.
+ * Rewriting a string with a regex would have to distinguish text from markup by hand, one path mentioned
+ * inside an attribute value and the output is corrupt, whereas a text-node walk can only ever touch text.
  * Only the markup is produced here; the click that acts on it lives in openFileRef, which the prose surfaces
  * bind as one delegated listener (the anchors are injected via v-html, so they can hold no component).
  *
@@ -20,7 +20,7 @@ import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "./workspace/
  * the rewritten href survive as written. Nothing untrusted rides along: the href is built from a path the
  * reference grammar already constrained, and the link text is set as a text node. */
 
-// The global twin of the shared grammar — a text node is scanned for EVERY reference in it, while xterm's link
+// The global twin of the shared grammar, a text node is scanned for EVERY reference in it, while xterm's link
 // addon wants a single-match regex. One pattern, two flag needs.
 const FILE_REF_ALL = new RegExp(FILE_REF.source, `g`);
 
@@ -28,11 +28,11 @@ const FILE_REF_ALL = new RegExp(FILE_REF.source, `g`);
 // else is a path, and so a candidate file reference.
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
-/* A LINK THAT POINTS BACK AT US, written out in full — `https://localhost:47145/workspace/docs/plan.md`.
+/* A LINK THAT POINTS BACK AT US, written out in full, `https://localhost:47145/workspace/docs/plan.md`.
  *
  * Models write these. Given any glimpse of the app's own address they will reach for the complete URL rather
  * than the path, and read literally it is an EXTERNAL link: it opened a second browser tab, reloaded the whole
- * app in it, dropped the line number the fragment carried, and — because a full URL carries no conversation —
+ * app in it, dropped the line number the fragment carried, and, because a full URL carries no conversation,
  * landed on the shared tree's version of a file that may only exist in the agent's own. Every one of this
  * module's rules was skipped, for a link that was pointing at this very view.
  *
@@ -50,7 +50,7 @@ const ownWorkspaceRef = (href: string): string | undefined => {
     return path === `` ? undefined : `${path}${url.hash}`;
 };
 
-/* The workspace route for a file (`/workspace/src/foo.ts` — see router/index.ts). A real, shareable URL rather
+/* The workspace route for a file (`/workspace/src/foo.ts`, see router/index.ts). A real, shareable URL rather
  * than a dead `href="#"`, so the link keeps every gesture an anchor normally has: middle-click and ⌘-click open
  * the file in a new browser tab, "Copy link address" yields something that works, and the status bar shows
  * where the click leads.
@@ -63,7 +63,7 @@ const workspaceHref = (path: string, agent: string | undefined): string => {
     return agent === undefined ? route : `${route}?agent=${encodeURIComponent(agent)}`;
 };
 
-/* Resolve a relative reference against the directory the document lives in — markdown's own rule, and the one
+/* Resolve a relative reference against the directory the document lives in, markdown's own rule, and the one
  * a doc tree depends on (`docs/a.md` linking `./b.md` means `docs/b.md`, not `b.md`). `dir` is empty for a
  * root-level document and undefined for agent and tool output, which names files from the workspace root. */
 const resolveIn = (dir: string | undefined, path: string): string => {
@@ -90,7 +90,7 @@ const resolveIn = (dir: string | undefined, path: string): string => {
  *
  * The result is then matched against the workspace tree, because a path the model wrote is often only the tail
  * of the real one (`pages/workspace/Foo.vue` for a file under `_editor/web/src`). A reference the client's copy
- * of the tree can't place is marked up as written and matched again — daemon-side, against the full sweep —
+ * of the tree can't place is marked up as written and matched again, daemon-side, against the full sweep,
  * when it is actually clicked (openWorkspaceRef), so a link is never withheld waiting on a request. */
 const linkTarget = (rawPath: string, dir: string | undefined): string | undefined => {
     const target = toWorkspacePath(rawPath);
@@ -101,11 +101,11 @@ const linkTarget = (rawPath: string, dir: string | undefined): string | undefine
     return resolveInTree(named) ?? named;
 };
 
-/* What a scanned reference READS as once it is a link: the filename and, where one was given, the line —
+/* What a scanned reference READS as once it is a link: the filename and, where one was given, the line,
  * `WorkspaceDesktop.vue:640` for a path six directories deep, in whichever notation it arrived in.
  *
  * The path a model writes is addressing, not prose: a sentence broken by forty characters of directory is
- * harder to read, and the part that identifies the file is the tail. Nothing is lost by dropping the rest —
+ * harder to read, and the part that identifies the file is the tail. Nothing is lost by dropping the rest,
  * the full path is the href, the tooltip, and the tab that opens. Deliberately NOT applied to a link markdown
  * itself authored (`[the config](src/foo.ts)`), whose text is the author's own words.
  *
@@ -118,7 +118,7 @@ const linkLabel = (rawPath: string, line: number | undefined): string => {
 
 // Turn an anchor into a workspace file link. The line rides in a data attribute rather than the URL because the
 // route has nowhere to put it; a plain click reads it back, a new-tab click loses it and lands on line 1. The
-// scope does NOT ride a data attribute — it is in the href, which is what makes a new-tab click land in the
+// scope does NOT ride a data attribute, it is in the href, which is what makes a new-tab click land in the
 // right tree instead of on the shared one's namesake.
 const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | undefined, agent: string | undefined): void => {
     anchor.classList.add(`md-file-link`);
@@ -134,8 +134,8 @@ const markFileLink = (anchor: HTMLAnchorElement, path: string, line: number | un
     anchor.title = line === undefined ? path : `${path}:${line}`;
 };
 
-/* An anchor markdown itself produced. A relative target is a file reference — a model reaching for the
- * `[label](path#L42)` form IDE surfaces ask for lands here — and left alone it would be a browser navigation
+/* An anchor markdown itself produced. A relative target is a file reference, a model reaching for the
+ * `[label](path#L42)` form IDE surfaces ask for lands here, and left alone it would be a browser navigation
  * to a URL this app has no route for. An outbound one is sent to its own tab: the chat's state IS the
  * conversation, and following a link in place tears the running session's view down. */
 const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent: string | undefined): void => {
@@ -143,7 +143,7 @@ const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent
     if (href === null || href === `` || href.startsWith(`#`)) {
         return;
     }
-    // Our own address written out in full is a file reference, not an outbound link — checked BEFORE the
+    // Our own address written out in full is a file reference, not an outbound link, checked BEFORE the
     // external test, which is what used to claim it (see ownWorkspaceRef).
     const own = EXTERNAL.test(href) ? ownWorkspaceRef(href) : undefined;
     if (own === undefined && EXTERNAL.test(href)) {
@@ -159,7 +159,7 @@ const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent
     markFileLink(anchor, target, line, agent);
 };
 
-// Split one text node around every file reference in it. Untouched — and so left as the single original node —
+// Split one text node around every file reference in it. Untouched, and so left as the single original node,
 // when it holds no reference that maps into the workspace.
 const linkifyText = (node: Text, dir: string | undefined, agent: string | undefined): void => {
     const text = node.data;
@@ -189,11 +189,11 @@ const linkifyText = (node: Text, dir: string | undefined, agent: string | undefi
 };
 
 /* Linkify every file reference in a sanitized markdown fragment, in place. `dir` is the directory a relative
- * reference is resolved against — the previewed document's own, or undefined for agent and tool output, which
+ * reference is resolved against, the previewed document's own, or undefined for agent and tool output, which
  * names files from the workspace root. `agent` is whose copy of the workspace the prose is about
  * (workspaceScope), undefined for the shared tree.
  *
- * Text inside an <a> is skipped — that anchor already owns its target — and so is text inside a <pre>, which at
+ * Text inside an <a> is skipped, that anchor already owns its target, and so is text inside a <pre>, which at
  * this point is the empty placeholder markdown/code.ts substitutes a real, separately-styled code block into later.
  * Inline <code> IS scanned: `src/foo.ts` in backticks is the form agents reach for most. */
 export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined, agent: string | undefined): void => {

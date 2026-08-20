@@ -1,14 +1,14 @@
 import { ref } from "vue";
 import type { Persona } from "@intentic/sandbox-contract";
 
-/* SEEING THE WORKSPACE AS ONE PERSONA SEES IT — the lens behind "Viewing as" in the explorer.
+/* SEEING THE WORKSPACE AS ONE PERSONA SEES IT, the lens behind "Viewing as" in the explorer.
  *
  * A persona's fence is the one setting on its card whose effect you cannot check by reading the card: `docs,
  * apps/web` tells you the words somebody typed, not whether they match anything, not what they leave out, and
  * not that `apps/web` was renamed last week and now refuses everything. The tree already knows the answer to
  * all three; it just was not being asked.
  *
- * A LENS, NOT A PERMISSION. Nothing here stops the person at the keyboard opening anything — they are not the
+ * A LENS, NOT A PERMISSION. Nothing here stops the person at the keyboard opening anything, they are not the
  * persona, and an explorer that refused its own user would be a bug wearing a feature's clothes. Dimmed means
  * "this persona's file tools would be refused here", which is a fact about a card, shown against the real tree.
  *
@@ -17,7 +17,7 @@ import type { Persona } from "@intentic/sandbox-contract";
  * refused, and a three-state dimming is a legend to learn rather than a thing to see. The fence is the whole of
  * what this shows, and the banner says so in those words.
  *
- * Mirrors persona-scope.ts, which is the daemon's enforcement of the same rule — deliberately, and the reason
+ * Mirrors persona-scope.ts, which is the daemon's enforcement of the same rule, deliberately, and the reason
  * the comparison here is by path segment rather than by string prefix: `apps/web2` is not inside `apps/web`. */
 
 // Which persona the explorer is being read as, or nobody. Module-level for the same reason `workspaceAgent` is:
@@ -57,7 +57,7 @@ export const reachOf = (persona: Persona): PersonaReach => {
     };
 };
 
-/* What the banner says, in a sentence rather than a field dump — and it opens with "Viewing as <name>" because
+/* What the banner says, in a sentence rather than a field dump, and it opens with "Viewing as <name>" because
  * that is the half a reader needs on the glance where they have forgotten why the tree looks odd. The dimming
  * is not explained here: it explains itself once you know whose eyes you are using, and a strip that has to be
  * read twice on a 256px sidebar is a strip that gets read never. */

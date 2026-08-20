@@ -11,10 +11,10 @@ export interface ConvergeResult {
 
 // Execute a desired-state artifact until state-reading shows it is true. Each iteration applies
 // the graph (which gates readiness on every node it touches) then plans it: convergence is when that plan
-// reads all-noop — the framework's own definition of "converged & idempotent". apply is idempotent, so a
+// reads all-noop, the framework's own definition of "converged & idempotent". apply is idempotent, so a
 // graph that needed several passes (e.g. a service that only becomes diff-clean once a dependency is live)
 // settles within a few iterations. Errors propagate, as everywhere else; the bound guards against a graph
-// that never settles. (The LLM-driven fix-operations seam — catching a failed apply to repair it — is a
+// that never settles. (The LLM-driven fix-operations seam, catching a failed apply to repair it, is a
 // later increment that wraps this loop.)
 export const reconcile = async (graph: DesiredStateGraph, config: EngineConfig, options: { maxIterations: number }): Promise<ConvergeResult> => {
     if (options.maxIterations < 1) {

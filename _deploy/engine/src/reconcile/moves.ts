@@ -7,7 +7,7 @@ import { makeContext, requireProvider } from "./reconcile.js";
 
 // Consume the graph's `moved` renames BEFORE reconcile: for each {from,to}, re-stamp the live resource from the
 // old id to the new one so the subsequent reconcile sees it as already-owned-and-current (a noop) instead of
-// orphaning the old id and creating the new one from scratch — which for a stateful resource destroys data.
+// orphaning the old id and creating the new one from scratch, which for a stateful resource destroys data.
 // Returns the moves that were actually applied in place (a type without `restamp` is logged and skipped, so its
 // rename degrades to prune-old + create-new). Inputs are resolved leniently: the new node's refs to other
 // nodes' not-yet-produced outputs are absent, but restamp needs only the resource's own coordinates (its SSH
@@ -52,7 +52,7 @@ export const applyMoves = async (graph: DesiredStateGraph, config: EngineConfig)
 // Rewrite a previous (last-applied) graph so each applied move's `from` id becomes its `to` id. Used to fix the
 // PRUNE baseline after a rename: prune deletes ids present in the previous graph but absent from the new one, so
 // without this it would delete the resource we just re-stamped. Renames the resource key, its `id` field, and
-// any `dependsOn` edges that pointed at a moved id. Only applied moves are passed in — a rename that fell back
+// any `dependsOn` edges that pointed at a moved id. Only applied moves are passed in, a rename that fell back
 // to recreate keeps its old id in the baseline so prune correctly tears the old resource down.
 export const rewriteGraphForMoves = (previous: DesiredStateGraph, moves: readonly Move[]): DesiredStateGraph => {
     if (moves.length === 0) {

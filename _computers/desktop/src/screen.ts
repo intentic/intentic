@@ -9,8 +9,8 @@ import { DesktopError, type ScreenFrame } from "./types.js";
  *
  * Every platform does this with a DIFFERENT program that may or may not be installed, so capture is a list of
  * candidates tried in order rather than one command. Windows is the easy case: .NET is always there, so a few
- * lines of PowerShell always work. Linux is the hard one — the right tool depends on whether the session is
- * Wayland or X11 and on which desktop shipped which utility — so a total failure names the one-line install for
+ * lines of PowerShell always work. Linux is the hard one, the right tool depends on whether the session is
+ * Wayland or X11 and on which desktop shipped which utility, so a total failure names the one-line install for
  * what is missing instead of reporting that nothing worked.
  *
  * PNG via a temp file rather than a pipe: several of these tools only write to a path, and a base64 payload of a
@@ -93,7 +93,7 @@ export const capture = async (): Promise<Buffer> => {
     }
 };
 
-/* A PNG's own dimensions, read from its IHDR — the header is fixed-layout, so this is two big-endian reads at
+/* A PNG's own dimensions, read from its IHDR, the header is fixed-layout, so this is two big-endian reads at
  * known offsets rather than a decoder. It is the fallback for the one case with no cheap way to ask the OS
  * (Wayland deliberately hides screen geometry from unprivileged clients), and it has the property the others
  * lack: it describes exactly the image the caller is looking at, which is the frame its coordinates are in. */
@@ -111,7 +111,7 @@ const WINDOWS_FRAME =
 
 export const frame = async (): Promise<ScreenFrame> => {
     if (process.platform === "win32") {
-        // Windows answers with the VIRTUAL desktop, which is what CopyFromScreen captured — including a negative
+        // Windows answers with the VIRTUAL desktop, which is what CopyFromScreen captured, including a negative
         // left edge when a second monitor sits to the left of the primary one.
         const out = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_FRAME]);
         const [width, height, left, top] = out.trim().split(/\s+/).map(Number);

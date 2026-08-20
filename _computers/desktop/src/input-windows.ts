@@ -5,10 +5,10 @@ import type { MouseButton, Point, ScrollDirection } from "./types.js";
 /* Windows input, through PowerShell into user32.dll. PowerShell is on every Windows and can P/Invoke, which is
  * the whole trick.
  *
- * WHY NOT nut.js, which does this properly in C — this was tried, not assumed. `bun build --compile` DOES embed
+ * WHY NOT nut.js, which does this properly in C, this was tried, not assumed. `bun build --compile` DOES embed
  * `.node` addons, and the cross-compile worked: bun bundled all three of libnut's platform packages and produced
  * both a Linux and a Windows binary. The binary then cannot load the addon at all. libnut finds its `.node`
- * through the `bindings` package, which walks up from __dirname looking for a package.json — and inside a
+ * through the `bindings` package, which walks up from __dirname looking for a package.json, and inside a
  * standalone binary __dirname is `/$bunfs/root/…`, a virtual filesystem with no package.json, so it throws
  * "Could not find module root" before it ever opens the addon. That is inside libnut's own index.js, so there is
  * nothing to configure around it.
@@ -22,12 +22,12 @@ import type { MouseButton, Point, ScrollDirection } from "./types.js";
  * cannot survive being compiled into one file, which is how this agent ships. Revisit only if that changes.
  *
  * ONE `Add-Type` per call is the cost. It compiles a few lines of C# in-process (~150ms), which is invisible next
- * to the round trip that delivered the request and irrelevant against a human-speed UI — and it buys a backend
+ * to the round trip that delivered the request and irrelevant against a human-speed UI, and it buys a backend
  * with no install step, no service, and nothing left running on the user's machine between actions.
  *
  * Mouse goes through SetCursorPos + mouse_event, keys through keybd_event, and only TEXT goes through SendKeys.
  * The split is not arbitrary: SendKeys is the only one of the three that handles arbitrary unicode text sensibly,
- * and the only one that cannot press the Windows key — so text uses it and chords do not. */
+ * and the only one that cannot press the Windows key, so text uses it and chords do not. */
 
 const SHIM = `
 Add-Type -Namespace IntenticDesktop -Name Native -MemberDefinition @'
@@ -66,7 +66,7 @@ const clickScript = (button: MouseButton): string =>
     `Start-Sleep -Milliseconds 20; ` +
     `[IntenticDesktop.Native]::mouse_event(${UP[button]}, 0, 0, 0, [System.IntPtr]::Zero);`;
 
-/* SendKeys reads these as syntax, so a literal one has to be wrapped in braces — a password containing `+` or a
+/* SendKeys reads these as syntax, so a literal one has to be wrapped in braces, a password containing `+` or a
  * path containing `(` would otherwise be typed as a modifier or a group. */
 const escapeText = (text: string): string => text.replace(/[+^%~(){}[\]]/g, (character) => `{${character}}`);
 
@@ -81,7 +81,7 @@ export const windowsInput = {
             `${moveScript(at, origin)} Start-Sleep -Milliseconds 20; ${clickScript("left")} Start-Sleep -Milliseconds 40; ${clickScript("left")}`,
         ),
 
-    // Press, move, release — with the pointer settling between each, because a drag delivered as three
+    // Press, move, release, with the pointer settling between each, because a drag delivered as three
     // instantaneous events is one many applications never see as a drag at all.
     drag: async (from: Point, to: Point, origin: Point): Promise<void> =>
         await powershell(
@@ -112,7 +112,7 @@ export const windowsInput = {
         const chord = windowsChord(combo);
         const press = (code: number, up: boolean): string =>
             `[IntenticDesktop.Native]::keybd_event(${code}, 0, ${up ? KEYUP : 0}, [System.IntPtr]::Zero);`;
-        // Modifiers down, key, modifiers up in reverse — the order a real keyboard produces, and the one
+        // Modifiers down, key, modifiers up in reverse, the order a real keyboard produces, and the one
         // applications watching for chords expect.
         await powershell(
             [

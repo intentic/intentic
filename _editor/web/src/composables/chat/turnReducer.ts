@@ -15,12 +15,12 @@ import {
     type TerminalHelpStatus,
 } from "./transcript";
 
-/* One agent frame applied to the transcript — as a PURE function.
+/* One agent frame applied to the transcript, as a PURE function.
  *
  * This is the part of a chat that is genuinely intricate: which bubble a delta lands in, when a block of prose
  * is retired so the tools it introduced appear below it rather than above, where a sub-agent's calls nest,
  * which bubble a plan card attaches to and which one the post-approval continuation opens. Those rules are the
- * product — get them wrong and the transcript reads as a jumble — and they used to be spread across a class
+ * product, get them wrong and the transcript reads as a jumble, and they used to be spread across a class
  * that also owned the network, the abort controllers, the typewriter's timers, and a dozen Vue refs, which
  * meant the only way to exercise them was to drive a whole conversation.
  *
@@ -29,7 +29,7 @@ import {
  * module keeps the rules.
  *
  * The typewriter is part of the state, not an escape hatch. Accepted-but-not-yet-revealed text lives in
- * `pending`, so "does this bubble hold any prose yet" — the question the text_end split turns on — is
+ * `pending`, so "does this bubble hold any prose yet", the question the text_end split turns on, is
  * answerable without asking an animation what it has drawn. `revealPending`/`flushPending` are the same kind
  * of pure transition, driven by the caller's animation frame. */
 
@@ -46,31 +46,31 @@ export interface TurnState {
     // by every boundary that must push what follows BELOW what came before (a finished block of prose, a plan
     // card, the end of a turn).
     readonly bubbleId: number | null;
-    // Monotonic message-id allocator. In the state because allocating an id IS a transition — a reducer that
+    // Monotonic message-id allocator. In the state because allocating an id IS a transition, a reducer that
     // reached for a counter on `this` would not be replayable.
     readonly nextId: number;
     readonly pending: PendingText | undefined;
     /* The run whose frames are being applied, stamped onto every row they append (ChatMessage.run). Held for
-     * the length of a fold AND the effects it raises — a failure notice is written by an effect, and a replay
-     * of the frame behind it raises that effect again — then cleared, so a write on the user's own clock is
+     * the length of a fold AND the effects it raises, a failure notice is written by an effect, and a replay
+     * of the frame behind it raises that effect again, then cleared, so a write on the user's own clock is
      * never mistaken for something a replay would bring back. */
     readonly run?: string;
 }
 
 // What the frame needs to know about the turn it belongs to, and which the transcript cannot tell it.
 export interface TurnContext {
-    // The user bubble this turn answers — where a checkpoint id anchors its "restore to before this" affordance.
+    // The user bubble this turn answers, where a checkpoint id anchors its "restore to before this" affordance.
     readonly userMessageId: number;
 }
 
-/** Everything a frame does that is not a change to the transcript. The caller owns each of these — they are
- *  conversation-level refs, cross-conversation stores, or genuine side effects — and applying them is a flat
+/** Everything a frame does that is not a change to the transcript. The caller owns each of these, they are
+ *  conversation-level refs, cross-conversation stores, or genuine side effects, and applying them is a flat
  *  switch with no logic in it, which is exactly the point: the logic is above, and it is pure. */
 export type TurnEffect =
     // The session the next matching turn resumes. The caller stamps it with the turn's provider/account/harness.
     | { readonly kind: "session"; readonly sessionId: string }
     | { readonly kind: "worktree"; readonly branch: string; readonly base: string; readonly unenforced?: boolean }
-    // The posture the RUNNING turn is in — the agent's own EnterPlanMode, or where a plan approval landed.
+    // The posture the RUNNING turn is in, the agent's own EnterPlanMode, or where a plan approval landed.
     | { readonly kind: "liveMode"; readonly mode: PermissionMode }
     | { readonly kind: "commands"; readonly items: readonly AgentCommand[] }
     | { readonly kind: "activeModel"; readonly model: string }
@@ -88,14 +88,14 @@ export type TurnEffect =
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
     // business reading (the account's usage windows, the provider's account list) to phrase themselves.
     // rate_limit failures carry when the spent window reopens; provider-outage failures carry the daemon's
-    // resume verdict — armed ("scheduled") or merely on offer behind the setting ("available").
+    // resume verdict, armed ("scheduled") or merely on offer behind the setting ("available").
     | {
           readonly kind: "error";
           readonly message: string;
           readonly code: Extract<AgentEvent, { kind: "error" }>["code"];
           readonly resetsAt: number | undefined;
           readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
-          // provider-outage only: when the next attempt is due and how many are left — see events.ts.
+          // provider-outage only: when the next attempt is due and how many are left, see events.ts.
           readonly outage: Extract<AgentEvent, { kind: "error" }>["outage"];
       }
     // The turn is alive and waiting on the provider. Not a transcript write at all: the caller renders it where
@@ -114,7 +114,7 @@ export const emptyTurnState: TurnState = { messages: [], bubbleId: null, nextId:
 
 const step = (state: TurnState, ...effects: readonly TurnEffect[]): TurnStep => ({ state, effects });
 
-// A daemon NEWER than this browser can emit a frame kind this build has never heard of — that is a supported
+// A daemon NEWER than this browser can emit a frame kind this build has never heard of, that is a supported
 // state (a released app plane serves whatever image each user last pulled), so it must be a no-op rather than a
 // crash. The `never` parameter is what keeps the switch below exhaustive at the same time: a kind the contract
 // declares and this module forgets fails to compile here.
@@ -137,7 +137,7 @@ export const appendMessage = (state: TurnState, message: Omit<ChatMessage, "id">
 export const appendNotice = (state: TurnState, text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "notes">): TurnState =>
     appendMessage(state, { role: `notice`, text, ...extra });
 
-/* What a landed delta did to the workspace's dependencies, as a clause the landed notice ends with — or nothing
+/* What a landed delta did to the workspace's dependencies, as a clause the landed notice ends with, or nothing
  * at all, which is what almost every turn produces and what the reader should therefore never have to skip past.
  *
  * Written as a REPORT of something already done, not a request. The daemon started the install the moment the
@@ -155,12 +155,12 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
         : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
-/** A notice that belongs to the turn's OPENING rather than its running commentary — placed directly ABOVE the
+/** A notice that belongs to the turn's OPENING rather than its running commentary, placed directly ABOVE the
  *  bubble this turn is writing into, which is to say directly under the message that asked for it.
  *
  *  Everything else a frame writes describes something that happened mid-answer, so appending files it correctly.
  *  This one describes the ground the turn started from, and by the time any frame arrives the turn's first
- *  assistant bubble already exists — Conversation.openBubble opens it up front so the typing indicator shows
+ *  assistant bubble already exists. Conversation.openBubble opens it up front so the typing indicator shows
  *  from the first moment. Appending would therefore print a line about the turn's starting conditions BELOW the
  *  answer it preceded, which reads as though the branch moved mid-thought.
  *
@@ -179,24 +179,24 @@ const prependTurnNotice = (state: TurnState, text: string, extra?: Pick<ChatMess
     };
 };
 
-/* WHY THIS AGENT'S BRANCH JUST MOVED — the human's half of the rebase (daemon: agents/sync.ts).
+/* WHY THIS AGENT'S BRANCH JUST MOVED, the human's half of the rebase (daemon: agents/sync.ts).
  *
  * A conversation goes stale while its user commits around it, so the daemon rebases the branch onto the
  * current workspace. It is told, not asked: at the moment someone is answering their agent they have nothing
  * to decide this with, and the alternative to rebasing is not "stay safe", it is a land conflict half an hour
- * later. So this is one muted line with no button on it — the same weight as "Context compacted", and for the
+ * later. So this is one muted line with no button on it, the same weight as "Context compacted", and for the
  * same reason.
  *
  * TWO MOMENTS, and the line reads the same at both because it says the same thing: before the turn starts, and
  * again after the user answers a question or approves a plan, where the wait was minutes long and the main
- * line does not stop for it. Its PLACEMENT sorts itself out — prependTurnNotice puts the opening one above the
+ * line does not stop for it. Its PLACEMENT sorts itself out, prependTurnNotice puts the opening one above the
  * bubble the turn is about to write into, and finds no open bubble at the second (a card clears it), so that
  * one appends where it happened, under the answer that triggered it. Hence no "before this turn" here: the
  * sentence has to be true at both.
  *
  * The blocked half is the line that earns its keep: a rebase that would not apply was rolled back, the agent is
  * working from the older base, and the conflict report at the end of the turn is now EXPECTED rather than a
- * surprise. Naming the repo, not the paths — the review lists those, with the fix that fits each one. */
+ * surprise. Naming the repo, not the paths, the review lists those, with the fix that fits each one. */
 const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
     const moved =
         sync.commits > 0
@@ -217,7 +217,7 @@ const mapMessage = (state: TurnState, id: number, fn: (message: ChatMessage) => 
 // Rewrite the tool with `id` wherever it lives across the transcript's bubbles, leaving every other bubble's
 // object identity intact (mapTool returns the same array when the id is absent). The one seam both
 // tool_call_update and a sub-agent's thinking delta write through. Reports whether it FOUND the tool, because
-// two callers act on the answer — an update with no matching call is dropped, and a nested append whose parent
+// two callers act on the answer, an update with no matching call is dropped, and a nested append whose parent
 // card is missing falls back to a top-level one.
 const mapToolAnywhere = (state: TurnState, id: string, fn: (tool: ChatTool) => ChatTool): { state: TurnState; matched: boolean } => {
     let matched = false;
@@ -235,7 +235,7 @@ const mapToolAnywhere = (state: TurnState, id: string, fn: (tool: ChatTool) => C
     return { state: matched ? { ...state, messages } : state, matched };
 };
 
-// Whether the turn's current bubble holds any of the agent's prose — COUNTING text still buffered in the
+// Whether the turn's current bubble holds any of the agent's prose. COUNTING text still buffered in the
 // typewriter, which hasn't reached the message yet. Guards the text_end split: a block that wrote nothing (the
 // empty text block a model can open before going straight to a tool) has no bubble to close, and retiring one
 // there would strand it empty in the transcript for the rest of the turn.
@@ -277,7 +277,7 @@ export const revealPending = (state: TurnState): TurnState => {
     };
 };
 
-/** Reveal the WHOLE buffer at once — a turn ended, was stopped, or a card took the bubble over, so no text may
+/** Reveal the WHOLE buffer at once, a turn ended, was stopped, or a card took the bubble over, so no text may
  *  be left mid-type. */
 export const flushPending = (state: TurnState): TurnState => {
     const pending = state.pending;
@@ -311,23 +311,23 @@ const appendTool = (state: TurnState, bubbleId: number, event: Extract<AgentEven
     };
     const parentId = event.parentToolUseId;
     if (parentId !== undefined) {
-        // A sub-agent's own calls carry the id of the Agent tool that spawned them — nest those under that
+        // A sub-agent's own calls carry the id of the Agent tool that spawned them, nest those under that
         // card, wherever it lives, so the delegation reads as one unit rather than a flat run of siblings with
         // a lone spinner stranded above them.
         const nested = mapToolAnywhere(state, parentId, (parent) => ({ ...parent, children: [...(parent.children ?? []), tool] }));
         if (nested.matched) {
             return nested.state;
         }
-        // Its Agent card wasn't found (a malformed stream) — fall through to a top-level append rather than
+        // Its Agent card wasn't found (a malformed stream), fall through to a top-level append rather than
         // dropping the call.
     }
     return mapMessage(state, bubbleId, (message) => ({ ...message, tools: [...(message.tools ?? []), tool] }));
 };
 
-// The frozen status each card takes from the reply that settled it — the same mapping the answering client
+// The frozen status each card takes from the reply that settled it, the same mapping the answering client
 // applies locally (see Conversation.decidePlan / answerQuestion / decidePermission), applied here to the card
 // the frame names. No reply means the turn ended with the card still parked (Stop, a lost daemon), which is
-// nobody's decision — 'cancelled' for all three. A reply of the wrong kind cannot reach a card of another,
+// nobody's decision, 'cancelled' for all three. A reply of the wrong kind cannot reach a card of another,
 // since the requestId is what matched it; it reads as unanswered rather than inventing a decision.
 const planStatusOf = (reply: AgentReply | undefined): PlanStatus => (reply?.kind !== `plan` ? `cancelled` : reply.approve ? `approved` : `rejected`);
 const questionStatusOf = (reply: AgentReply | undefined): QuestionStatus =>
@@ -354,7 +354,7 @@ const paymentOfferStatusOf = (reply: AgentReply | undefined): PaymentOfferStatus
 
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
-// did NOT answer — a replay after a reload, or a second window watching the same run.
+// did NOT answer, a replay after a reload, or a second window watching the same run.
 const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resolved" }>): TurnState => ({
     ...state,
     messages: state.messages.map((message): ChatMessage => {
@@ -404,21 +404,21 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 return step(state);
             }
             // A sub-agent's prose streams tagged with its Agent tool id. Its final form lands as that tool's
-            // result content (tool_call_update), so the live delta is dropped rather than duplicated there —
-            // and, crucially, never typed into the PARENT bubble as if the main agent had said it.
+            // result content (tool_call_update), so the live delta is dropped rather than duplicated there,
+            // and never typed into the PARENT bubble as if the main agent had said it.
             if (event.parentToolUseId !== undefined) {
                 return step(state);
             }
             const opened = withBubble(state);
             return step(enqueueText(opened.state, opened.id, event.text));
         }
-        /* THE USER SPOKE WHILE THE TURN RAN — their words, at the point in the stream the daemon took them.
+        /* THE USER SPOKE WHILE THE TURN RAN, their words, at the point in the stream the daemon took them.
          *
          * A bubble of their own AND a boundary, and the boundary is the whole bug this frame exists for. The
          * harness absorbs a steer between tool calls and the model keeps writing with no `result` in between, so
          * nothing else in the stream retires the open bubble: what the agent says NEXT is its answer to this
          * message, and left in the bubble above it the answer printed over the question. Retiring here is the
-         * same move `text_end` and `usage` make, for the same reason — everything after these words belongs
+         * same move `text_end` and `usage` make, for the same reason, everything after these words belongs
          * below them.
          *
          * NOT flushed, exactly like text_end: the typewriter keeps draining into the retired bubble by id, so
@@ -435,7 +435,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `text_end`:
             // The agent finished a block of prose. Retire the bubble it was writing into so whatever comes next
-            // — the tool calls that block introduced, or the next block after they return — opens a fresh one
+            //, the tool calls that block introduced, or the next block after they return, opens a fresh one
             // below it. That is what restores Claude Code's interleaving (says what it's about to do → the tool
             // cards → what it found → more cards → the summary); with one bubble per turn the whole narration
             // glued into a single paragraph run with every tool card hoisted above it. A subagent's blocks are
@@ -443,8 +443,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             //
             // Deliberately NOT flushed: the typewriter keeps draining into the retired bubble by id, and the
             // next delta flushes the remainder there before typing into the new one (see enqueueText). A flush
-            // here would snap the whole tail of every block — including the closing summary, whose block ends
-            // the moment the model stops writing — into place with no typing at all.
+            // here would snap the whole tail of every block, including the closing summary, whose block ends
+            // the moment the model stops writing, into place with no typing at all.
             if (event.parentToolUseId === undefined && hasProse(state, state.bubbleId)) {
                 return step({ ...state, bubbleId: null });
             }
@@ -469,7 +469,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `tool_call_update`:
             // Merge the update into the call that produced it (matched by id); present fields REPLACE the prior
-            // value (snapshot semantics — Codex streams a command's growing output as whole snapshots), absent
+            // value (snapshot semantics. Codex streams a command's growing output as whole snapshots), absent
             // fields leave it unchanged. An update with no matching tool is dropped rather than shown loose.
             return step(
                 mapToolAnywhere(state, event.id, (tool) => ({
@@ -480,7 +480,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 })).state,
             );
         case `subagent`: {
-            /* The call just started an AGENT — an Agent/Task subagent, or a Codex/Grok CLI it drove from its own
+            /* The call just started an AGENT, an Agent/Task subagent, or a Codex/Grok CLI it drove from its own
              * Bash. The frame's id IS the spawning call's, so it lands on that card through the same lookup a
              * sub-agent's nested calls already use. A card that isn't there yet cannot happen in practice (the
              * tool_call is streamed first), and if it did the frame is dropped rather than opening a card of its
@@ -489,7 +489,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(mapToolAnywhere(state, id, (tool) => ({ ...tool, subagent: { ...rest, kind: subagentKind, status: `running` } })).state);
         }
         case `subagent_update`:
-            // Present fields REPLACE, absent ones leave the child alone — the same snapshot semantics
+            // Present fields REPLACE, absent ones leave the child alone, the same snapshot semantics
             // tool_call_update has, and for the same reason: progress arrives many times and says only what moved.
             return step(
                 mapToolAnywhere(state, event.id, (tool) => {
@@ -505,7 +505,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(mapMessage(opened.state, opened.id, (message) => ({ ...message, todos: event.items })));
         }
         case `checkpoint`:
-            // The pre-turn workspace state's id, plus where this turn sits in the daemon's transcript — both
+            // The pre-turn workspace state's id, plus where this turn sits in the daemon's transcript, both
             // anchored on the turn's user bubble, which is what the rewind affordance addresses it by.
             return step(
                 mapMessage(state, context.userMessageId, (message) => ({
@@ -515,7 +515,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 })),
             );
         case `usage`: {
-            // End-of-turn accounting — and the turn BOUNDARY: a steered conversation's stream can carry several
+            // End-of-turn accounting, and the turn BOUNDARY: a steered conversation's stream can carry several
             // turns (a queued message the running turn couldn't absorb runs as its own turn after this one
             // settles), so retire the current bubble and let the next turn's frames open a fresh one below the
             // steered user message.
@@ -567,7 +567,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `service_offer`: {
             // Same flow as the other cards. The asking `services run` sits inside a tool call of this same
-            // turn, so the run's answer lands in that tool's own output — the card carries the decision and,
+            // turn, so the run's answer lands in that tool's own output, the card carries the decision and,
             // via the receipt frame below, how the spend ended.
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({
@@ -578,7 +578,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `capability_offer`: {
             // Same flow as the service offer above: the asking `capabilities request` sits inside a tool call
-            // of this same turn, so the ask's answer lands in that tool's own output — the card carries the
+            // of this same turn, so the ask's answer lands in that tool's own output, the card carries the
             // decision and, via the outcome frame below, how the setup ended.
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({
@@ -589,7 +589,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `payment_offer`: {
             // Same flow as the service offer above: the asking `wallet fetch` sits inside a tool call of this
-            // same turn, so the endpoint's answer lands in that tool's own output — the card carries the
+            // same turn, so the endpoint's answer lands in that tool's own output, the card carries the
             // decision and, via the receipt frame below, whether the money actually moved.
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({
@@ -600,7 +600,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `payment_receipt`:
             // How the approved payment ended, patched onto the card the requestId names: settled (with its
-            // onchain transaction), or failed — in which case the authorization expired unused and the card
+            // onchain transaction), or failed, in which case the authorization expired unused and the card
             // can honestly say nothing was spent.
             return step({
                 ...state,
@@ -622,7 +622,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 ),
             });
         case `capability_outcome`:
-            // How an accepted ask's setup ended, patched onto the card the requestId names — what settles the
+            // How an accepted ask's setup ended, patched onto the card the requestId names, what settles the
             // "waiting for you to finish setup" state, here and on every replaying surface.
             return step({
                 ...state,
@@ -639,7 +639,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 ),
             });
         case `service_event`:
-            // One event off the approved run's stream, appended to the card the requestId names — the run
+            // One event off the approved run's stream, appended to the card the requestId names, the run
             // showing itself living. The card renders the latest status line while the receipt is pending.
             return step({
                 ...state,
@@ -651,7 +651,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             });
         case `service_receipt`:
             // The approved run's outcome, patched onto the card the requestId names: served-and-charged,
-            // refunded (the service failed to answer — nothing charged), or refused after the click.
+            // refunded (the service failed to answer, nothing charged), or refused after the click.
             return step({
                 ...state,
                 messages: state.messages.map((message): ChatMessage =>
@@ -673,15 +673,15 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `resolved`:
             // The card above was released, and the frame says how. The surface that ANSWERED already froze its
             // own card (decidePlan / answerQuestion / decidePermission), so this is a no-op there; it earns its
-            // keep on every other surface — a transcript replayed after a reload, or a second window watching
-            // the same run — which would otherwise leave the card pending and offer buttons on a requestId
+            // keep on every other surface, a transcript replayed after a reload, or a second window watching
+            // the same run, which would otherwise leave the card pending and offer buttons on a requestId
             // nothing holds any more. (The daemon's fleet registry reads the same frame for how long the turn
             // was parked; see agents-registry.ts.)
             return step(resolveCard(state, event));
         case `preamble`:
             /* WHAT THE DAEMON PUT IN FRONT OF THE MODEL, as one collapsed row carrying the exact words.
              *
-             * It went in front of the message the user typed, so it belongs TO that message — hung off the user
+             * It went in front of the message the user typed, so it belongs TO that message, hung off the user
              * bubble, where someone re-reading their own prompt finds it, and where the daemon's record keeps it
              * for a tab that reopens tomorrow. There is no second placement: nothing is injected into a running
              * turn any more (the mid-turn rebase was the only one, and it is silent now).
@@ -698,7 +698,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted changes
             // (review = the Changes panel), was HELD on the branch because auto-land is off, or conflicted and
             // stayed safely in the worktree. A landed delta that changed what the workspace depends on carries
-            // its reconcile too (dependencyLine) — the one consequence of this turn the Changes panel cannot
+            // its reconcile too (dependencyLine), the one consequence of this turn the Changes panel cannot
             // show, because it happened outside the diff.
             if (event.held === true) {
                 return step(appendNotice(state, `Finished — the work is on this agent's branch, ready to land from its review.`));
@@ -721,7 +721,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                     // outage banner): the automatic behaviour just fired, and "stop doing that" is
                     // worth one press exactly now. The renderer hides it once the agent already holds.
                     // An install that STARTED takes the slot instead: for as long as it runs, the one press
-                    // worth offering is the terminal it is running in — the land is already reviewable, the
+                    // worth offering is the terminal it is running in, the land is already reviewable, the
                     // install is the thing still happening.
                     event.landed ? { noticeAction: (event.deps?.started.length ?? 0) > 0 ? `depsInstall` : `landHold` } : undefined,
                 ),

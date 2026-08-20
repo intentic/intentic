@@ -8,8 +8,8 @@ import { apiClient } from "../useApi";
  * (apiClient.sandbox.zones drops it); everything else here is local UI state. Bindings mirror what the
  * consumers render: cfToken/cfTokenValid, the discovered zones + selectedZone, and loading/error flags. */
 
-/* The .env key the token lands under in the sandbox. Exported because three files named it independently —
- * this module's dev-autofill slot, the connect step that writes it, and the field that collects it — and a
+/* The .env key the token lands under in the sandbox. Exported because three files named it independently,
+ * this module's dev-autofill slot, the connect step that writes it, and the field that collects it, and a
  * secret whose name is spelled in three places is one that gets written under two of them. */
 export const CF_TOKEN_KEY = `CLOUDFLARE_API_TOKEN`;
 
@@ -63,7 +63,7 @@ export function useCloudflareZones() {
             zonesLoading.value = false;
             return;
         }
-        // Dev autofill persist (inert in prod) — Setup's ride-the-command flow never hits a secrets mutation,
+        // Dev autofill persist (inert in prod). Setup's ride-the-command flow never hits a secrets mutation,
         // so a valid token is remembered here, under the same key CloudflareConnect saves it as.
         devFillSet(`secret.${CF_TOKEN_KEY}`, cfToken.value.trim());
         zonesLoading.value = true;

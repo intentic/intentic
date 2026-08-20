@@ -15,7 +15,7 @@ export interface ForgejoSsh {
 }
 
 // The Forgejo node carries the public git domain + admin identity the control plane authenticates with, and
-// the CP host's SSH block — how `adopt` reaches Forgejo (an SSH port-forward, never the public route).
+// the CP host's SSH block, how `adopt` reaches Forgejo (an SSH port-forward, never the public route).
 // Shared by `adopt` (the one-shot push) and the post-adopt resolve sync (this file).
 export const forgejoIdentity = (
     graph: DesiredStateGraph,
@@ -63,15 +63,15 @@ export const forgejoIdentity = (
 // Keep Forgejo the live secret store after `adopt`: when a resolve in the control-plane pipeline introduces a
 // secret the previous artifact did not have, push the new GENERATED ones into Forgejo and regenerate apply.yaml
 // so the apply pipeline injects the full current set. "New" is decided by diffing the previous artifact (the
-// one already in the cloned desired-state repo) against the freshly resolved graph — never by env presence — so
+// one already in the cloned desired-state repo) against the freshly resolved graph, never by env presence, so
 // secrets that already exist in Forgejo are never re-minted or overwritten (e.g. the Forgejo admin password,
 // which a stale value would rotate and lock everyone out of). New `env` (user-supplied) secrets cannot be
-// valued here; they are returned for the caller to warn about — apply then fails loudly until they are set.
+// valued here; they are returned for the caller to warn about, apply then fails loudly until they are set.
 export const syncControlPlaneSecrets = async (args: {
     readonly previousGraph: DesiredStateGraph | undefined;
     readonly newGraph: DesiredStateGraph;
     readonly env: Readonly<Record<string, string | undefined>>;
-    // The desired-state repo checkout root — apply.yaml is regenerated under <dir>/.forgejo/workflows/.
+    // The desired-state repo checkout root, apply.yaml is regenerated under <dir>/.forgejo/workflows/.
     readonly dir: string;
     // The Forgejo admin password the secret PUTs authenticate with (HTTP Basic, same as `adopt`).
     readonly password: string;
@@ -81,7 +81,7 @@ export const syncControlPlaneSecrets = async (args: {
     readonly api?: ForgejoApi;
 }): Promise<{ readonly pushed: readonly string[]; readonly newEnv: readonly string[] }> => {
     // Without a previous artifact every key looks new and we would overwrite the correct Forgejo values with
-    // freshly-minted ones. `adopt` always commits the artifact, so this only guards misuse — skip safely.
+    // freshly-minted ones. `adopt` always commits the artifact, so this only guards misuse, skip safely.
     if (args.previousGraph === undefined) {
         args.log("sync-control-plane: no previous artifact to diff against — skipping secret sync");
         return { pushed: [], newEnv: [] };

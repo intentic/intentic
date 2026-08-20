@@ -20,7 +20,7 @@ export const GIT_TOKEN_ENV = "GIT_TOKEN";
 // own version so the pipeline runs the same intentic the operator bootstrapped with.
 const CLI_PACKAGE = "@intentic/cli";
 // The git ref the apply pipeline force-moves onto each SUCCESSFULLY-applied commit. The next apply diffs the
-// new artifact against the artifact at this tag (the last good state) to decide what to prune — so a failed
+// new artifact against the artifact at this tag (the last good state) to decide what to prune, so a failed
 // apply, which never reaches the tag step, never corrupts the prune baseline.
 const APPLIED_TAG = "intentic-applied";
 
@@ -38,7 +38,7 @@ export const forgejoSecretName = (key: string): string =>
 export interface PipelineInputs {
     // The adopting CLI's version, baked into `pnpm dlx @intentic/cli@<version>` in both pipelines.
     readonly cliVersion: string;
-    // The Forgejo admin user — the repo owner and the git-push identity.
+    // The Forgejo admin user, the repo owner and the git-push identity.
     readonly user: string;
     // The public git domain (git.<zone>); the REST + clone-url authority.
     readonly domain: string;
@@ -48,7 +48,7 @@ export interface PipelineInputs {
     // The repo names under the admin owner.
     readonly intentRepo: string;
     readonly desiredStateRepo: string;
-    // Every secret key the apply pipeline injects into the job env (the graph's env + generated secrets) —
+    // Every secret key the apply pipeline injects into the job env (the graph's env + generated secrets),
     // `apply` resolves each from process.env, and the generated ones win over `.secrets.json` (env-first).
     readonly applySecretKeys: readonly string[];
     // The generated secret key holding the Forgejo admin password; the apply pipeline pushes the applied-tag
@@ -91,7 +91,7 @@ export const applyWorkflowYaml = (inputs: PipelineInputs): string =>
     });
 
 // Write a workflow file into a local repo dir (creating .forgejo/workflows/), so `adopt`'s normal add/commit/
-// push carries it — no API commit, no extra trigger.
+// push carries it, no API commit, no extra trigger.
 export const writeWorkflow = async (repoDir: string, workflowPath: string, content: string): Promise<void> => {
     const full = join(repoDir, workflowPath);
     await mkdir(dirname(full), { recursive: true });
@@ -105,7 +105,7 @@ export const writeControlPlaneWorkflows = async (intentDir: string, targetDir: s
 };
 
 // Resolve the VALUES behind the graph's secrets, for pushing into Forgejo Actions: env keys from the loaded
-// process.env, generated keys from the .secrets.json map. A declared key with no value yet is simply absent —
+// process.env, generated keys from the .secrets.json map. A declared key with no value yet is simply absent,
 // the caller pushes what exists and `apply` fails loudly on the rest. Shared by `adopt` and `secrets push`.
 export const collectSecretValues = (
     graph: DesiredStateGraph,

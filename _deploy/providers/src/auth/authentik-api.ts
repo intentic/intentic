@@ -46,7 +46,7 @@ const call = async (method: string, baseUrl: string, token: string, path: string
 
 const get = async (baseUrl: string, token: string, path: string): Promise<unknown> => (await call("GET", baseUrl, token, path)).json();
 
-// The pk of the default flow with this slug — Authentik ships authorization + invalidation flows out of the box.
+// The pk of the default flow with this slug. Authentik ships authorization + invalidation flows out of the box.
 const flowPk = async (baseUrl: string, token: string, slug: string): Promise<string | number> => {
     const result = parseResponse(
         z.object({ pk: z.union([z.number(), z.string()]) }),

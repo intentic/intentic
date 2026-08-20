@@ -1,4 +1,4 @@
-/* WHAT A FAILING AGENT SAYS TO THE PERSON RUNNING IT — a sentence, not a stack.
+/* WHAT A FAILING AGENT SAYS TO THE PERSON RUNNING IT, a sentence, not a stack.
  *
  * The CLI framework reports a thrown Error as `exc.stack`, and these agents ship as COMPILED SINGLE-FILE
  * BINARIES. So the frames a user sees name a virtual path inside the executable, with no source map behind it:
@@ -8,12 +8,12 @@
  *       at async runCommand (B:/~BUN/root/intentic-sync-windows-amd64.exe:951:46)
  *       ...
  *
- * Five lines that locate nothing — not for the user, who cannot act on them, and not for us, who cannot map
+ * Five lines that locate nothing, not for the user, who cannot act on them, and not for us, who cannot map
  * them back to a line of source. Worse, they arrive DURING an install: the desktop app streams this straight
  * onto its setup screen, where a wall of frames under a one-line problem reads as a crash rather than as the
  * one step that did not finish.
  *
- * Every throw in these CLIs is a sentence written for the person reading it — an expired pairing, a sandbox
+ * Every throw in these CLIs is a sentence written for the person reading it, an expired pairing, a sandbox
  * that cannot do sync, a background loop that died naming its own log. That sentence is the whole of what is
  * worth showing, so that is what is shown.
  *

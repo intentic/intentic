@@ -25,7 +25,7 @@ import { exposeRoute } from "./route.js";
 
 // Which forge sources the app. The Forgejo stack carries its platform refs (self-hosted git + CI); the
 // hosted forges carry their inventory node + PAT. The forge selects the repo/CI node types and the registry
-// the image lives in; the Komodo deployment + route emission below is identical across all three — CI only
+// the image lives in; the Komodo deployment + route emission below is identical across all three. CI only
 // builds and pushes, Komodo rolls out.
 export type AppForge =
     | { readonly kind: "forgejo"; readonly platform: PlatformRefs }
@@ -44,7 +44,7 @@ export const forgeRegistry = (forge: AppForge, zone: string): string => {
     }
 };
 
-// The app resolver: everything shipping an app beyond the shared deploy orchestrator — a repo, and per
+// The app resolver: everything shipping an app beyond the shared deploy orchestrator, a repo, and per
 // environment a CI node (commits the build-and-push workflow + repo secrets), a Komodo deployment pointed at
 // the registry image, and its Cloudflare route. intentic does NOT build or deploy: the CI workflow builds +
 // pushes the image on a developer push and Komodo rolls it out (auto_update polling, plus the workflow's
@@ -68,14 +68,14 @@ export const resolveApp = (
 ): { nodes: ResolvedNode[]; ingress: IngressPair[] } => {
     const repo = repoId(intent.id);
     const cpSsh = sshOf(cpHost);
-    // The PUBLIC Komodo url — content for the hosted forges' CI only (their notify step runs on a hosted
+    // The PUBLIC Komodo url, content for the hosted forges' CI only (their notify step runs on a hosted
     // runner, off the host); the engine itself never dials it.
     const komodoUrl = makeRef<string>(deploy.deploy, "url");
     const komodoAdmin = { adminUser: adminUsername, adminPassword: generated("KOMODO_ADMIN_PASSWORD") };
     const registry = forgeRegistry(forge, zone);
 
     // The repo + registry namespace. Forgejo: the first team grant's org owns the app, falling back to the
-    // single admin owner (the admin still authenticates every call — it owns the org). Hosted forges: the
+    // single admin owner (the admin still authenticates every call, it owns the org). Hosted forges: the
     // forge account's owner output (teams are a Forgejo-stack concept; emit rejects them on hosted stacks).
     // Komodo pulls with the admin's packages token (Forgejo) or the forge PAT (its [[docker_registry]]
     // account is keyed by the same owner).
@@ -99,7 +99,7 @@ export const resolveApp = (
     // Backing wiring: for each capability the app uses, emit a per-app binding node that mints the app's
     // isolated credentials on the instance, inject its connection env vars (DATABASE_URL, VALKEY_URL, …) into
     // every deployment, and gate each deployment on the binding so the credentials exist before it registers.
-    // The app's public domains across environments — the auth binding whitelists OIDC redirects under them.
+    // The app's public domains across environments, the auth binding whitelists OIDC redirects under them.
     const appDomains = Object.values(intent.environments).map((environment) => environment.domain);
     const bindingNodes: ResolvedNode[] = [];
     const bound: Record<string, Ref<string>> = {};
@@ -202,7 +202,7 @@ export const resolveApp = (
                     tag: name,
                     packagesToken: makeRef<string>(forge.platform.forgejo, "packagesToken"),
                     // The workflow's notify step runs ON the host (runner is --network host), so it reaches
-                    // Komodo at its internal url directly — the public url would hairpin through the tunnel.
+                    // Komodo at its internal url directly, the public url would hairpin through the tunnel.
                     komodoUrl: makeRef<string>(deploy.deploy, "internalUrl"),
                     deployment: id,
                 },
@@ -253,9 +253,9 @@ export const resolveApp = (
                 ...(env !== undefined ? { env } : {}),
             },
             // Depends on ci so the workflow + secrets exist first; on Komodo being up (registered over the CP
-            // host's SSH — no public route in the path); and on each backing binding so the app's credentials
+            // host's SSH, no public route in the path); and on each backing binding so the app's credentials
             // exist before it registers. No default readyWhen: apply only registers the deployment (it does
-            // not go live until CI pushes an image), so an httpOk gate would hang forever — honour only an
+            // not go live until CI pushes an image), so an httpOk gate would hang forever, honour only an
             // author-supplied one.
             explicitDependsOn: [ciDep, deploy.deploy, ...(intent.observe !== undefined ? [intent.observe] : []), ...bindingDeps],
             ...(environment.readyWhen !== undefined ? { readyWhen: environment.readyWhen } : {}),
@@ -266,7 +266,7 @@ export const resolveApp = (
     }
 
     // CI/CD notifications: when the app wires a Discord handle (notify: discord), derive a Komodo alerter
-    // scoped to this app's deployments on deploy results (CD) — all stacks — and a Forgejo repo webhook on
+    // scoped to this app's deployments on deploy results (CD), all stacks, and a Forgejo repo webhook on
     // build results (CI) on the Forgejo stack (the hosted forges own their build notifications).
     if (intent.notify !== undefined) {
         const webhook = makeRef<string>(intent.notify, `appWebhook:${intent.id}`);

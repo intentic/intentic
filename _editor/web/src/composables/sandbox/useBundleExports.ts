@@ -6,7 +6,7 @@ import { useEndpoint } from "./useEndpoint";
 import { BUNDLE_EXPORTS } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* THE EXPORTS THAT EXIST — read off the daemon's export directory, never remembered in a component.
+/* THE EXPORTS THAT EXIST, read off the daemon's export directory, never remembered in a component.
  *
  * This is the whole fix for "I started an export, switched view, and the button forgot". Packing a real
  * workspace takes minutes; a `busy` ref inside a card cannot survive that, because the card does not. So the
@@ -33,12 +33,12 @@ export function useBundleExports() {
     });
 
     const exports = computed(() => query.data.value?.exports ?? []);
-    // What the card gates its start button on — and what makes a refresh mid-pack land on "still packing"
+    // What the card gates its start button on, and what makes a refresh mid-pack land on "still packing"
     // rather than on a button that looks untouched.
     const packing = computed(() => exports.value.find((entry) => entry.status === `packing`));
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: BUNDLE_EXPORTS_KEY });
 
-    // Kick one off. Answers as soon as the daemon has NAMED it, not when it finishes — the row appears
+    // Kick one off. Answers as soon as the daemon has NAMED it, not when it finishes, the row appears
     // immediately and fills in as the bytes land.
     const start = async (secrets: boolean): Promise<void> => {
         await sandboxJson(`/bundles${secrets ? `?secrets=1` : ``}`, { method: `POST` });
@@ -57,7 +57,7 @@ export function useBundleExports() {
  * instead of through the tab's memory. Same trick as mediaUrl and for the same reason: a navigation cannot
  * carry a bearer, so the credential becomes a short-lived ticket scoped to this one bundle.
  *
- * Outside the composable because it needs nothing from it — a bundle's name is all there is to know. */
+ * Outside the composable because it needs nothing from it, a bundle's name is all there is to know. */
 export const bundleDownloadUrl = async (name: string): Promise<string> => {
     const { ticket } = await sandboxJson<{ ticket: string }>(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: `POST` });
     const base = useEndpoint().daemonBase.value;

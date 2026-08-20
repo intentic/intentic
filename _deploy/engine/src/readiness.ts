@@ -12,7 +12,7 @@ export const parseDuration = (text: string): number => {
 };
 
 export const httpProbe: ReadinessProbe = async (url, expectedStatus) => {
-    // A connection refused/reset/timeout during warm-up means "not ready yet", not a fatal error — return
+    // A connection refused/reset/timeout during warm-up means "not ready yet", not a fatal error, return
     // false so waitReady keeps polling until the deadline rather than throwing on the first failed connect.
     // Bound each probe (a host that accepts the socket but never sends headers would otherwise stall on
     // undici's ~5-min default, silently overshooting waitReady's own deadline); an aborted probe is a caught
@@ -38,12 +38,12 @@ export class ReadinessTimeoutError extends Error {
     }
 }
 
-/* THE ONE WAITING LOOP. Every "is it up yet" in the engine and the providers is the same three lines — probe,
- * give up at a deadline, sleep between tries — and each of the ten used to spell them out again, which is how
+/* THE ONE WAITING LOOP. Every "is it up yet" in the engine and the providers is the same three lines, probe,
+ * give up at a deadline, sleep between tries, and each of the ten used to spell them out again, which is how
  * they drifted apart on the edges (one gave up at `>` its deadline where the rest used `>=`).
  *
  * Always probes once before consulting the clock, so a wait is never skipped by a deadline that has already
- * passed. Answers whether `ready` passed and leaves what a failure MEANS to the caller — most throw with a
+ * passed. Answers whether `ready` passed and leaves what a failure MEANS to the caller, most throw with a
  * message naming the thing they were waiting for, but a DNS wait is allowed to shrug and carry on. `onRetry`
  * runs only when another attempt is coming, so a caller that narrates the wait says nothing extra on the last
  * one. A probe that throws propagates: some waits (a forwarder whose process already exited) must fail fast

@@ -1,5 +1,5 @@
 /* "Import memory from other AI providers": the user runs IMPORT_PROMPT in their old assistant, pastes the
- * exported markdown back, and we merge it into the workspace's per-agent memory files. Cross-agentic — Claude
+ * exported markdown back, and we merge it into the workspace's per-agent memory files. Cross-agentic. Claude
  * reads /work/CLAUDE.md (settingSources project memory), Codex/GPT reads /work/AGENTS.md (its working-dir doc);
  * both live at the workspace root, so the same block goes into each. Pure module (no Vue) so mergeMemory is
  * unit-tested directly; the dialog does the daemon I/O via useWorkspaceTree. */
@@ -26,7 +26,7 @@ Output only the Markdown — no preamble or closing remarks.`;
 const START = `<!-- intentic:imported-memory:start -->`;
 const END = `<!-- intentic:imported-memory:end -->`;
 
-// Replace the managed block if present, else append it — so re-importing overwrites rather than duplicates,
+// Replace the managed block if present, else append it, so re-importing overwrites rather than duplicates,
 // and hand-written memory around the block is preserved.
 export const mergeMemory = (existing: string, imported: string): string => {
     const block = `${START}\n## Imported memory\n\n${imported.trim()}\n${END}`;

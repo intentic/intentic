@@ -10,7 +10,7 @@ import { GIT_CHANGES, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
- * restore markers — hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace
+ * restore markers, hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace
  * tree. The list is vue-query cached; diff/fileDiff stay imperative (the panel loads them on demand). Restore
  * rewrites /work on the daemon, so it refreshes the snapshots, the tree, and drops stale edit buffers. */
 
@@ -22,14 +22,14 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
         `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
     );
 
-/* WHAT EVERY SURFACE HAS TO DO ONCE /work HAS BEEN REWRITTEN UNDER IT — shared because there is now more than
+/* WHAT EVERY SURFACE HAS TO DO ONCE /work HAS BEEN REWRITTEN UNDER IT, shared because there is now more than
  * one thing that rewrites it: the timeline's restore below, and the chat bubble's rewind, which restores
  * daemon-side as one step of a larger operation and so cannot go through the POST above.
  *
- * `.every` for the tree — its keys carry the focused scope before the appended sandbox id, so `.of()` would
+ * `.every` for the tree, its keys carry the focused scope before the appended sandbox id, so `.of()` would
  * NOT prefix-match them (see queryKeys). Snapshots and changes have no such variant, so the sandbox-scoped
  * `.of()` is the right reach there. A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS
- * the new review set. Disjoint caches — refetch concurrently. */
+ * the new review set. Disjoint caches, refetch concurrently. */
 export const invalidateWorkspace = async (queryClient: QueryClient): Promise<void> => {
     // Stale buffers would silently resurrect post-restore files on save.
     resetEditBuffers();
@@ -40,14 +40,14 @@ export const invalidateWorkspace = async (queryClient: QueryClient): Promise<voi
     ]);
 };
 
-// The restore action, standalone so surfaces without their own useHistory() can share it — the caller supplies
+// The restore action, standalone so surfaces without their own useHistory() can share it, the caller supplies
 // the setup-scoped queryClient.
 const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
     run(async () => {
         await sandboxJson(`/history/restore`, jsonBody(`POST`, { id }));
         await invalidateWorkspace(queryClient);
         /* AND TELL THE CHATS THAT WERE WATCHING. This restore rewrote /work, which is the workspace every
-         * main-tree conversation is reasoning about — their contexts now describe files that changed underneath
+         * main-tree conversation is reasoning about, their contexts now describe files that changed underneath
          * them, and until this line the only evidence was the next turn behaving oddly. The timeline and the
          * transcript are two views of one history, so a move made in either has to be visible from the other.
          *

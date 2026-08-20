@@ -13,17 +13,17 @@ export interface SshResult {
 
 export interface SshSession {
     // `onOutput` taps stdout+stderr chunks as they arrive (a long `docker compose up` streams its pull
-    // progress live) — the full collected result still resolves as before.
+    // progress live), the full collected result still resolves as before.
     readonly exec: (command: string, onOutput?: (chunk: string) => void) => Promise<SshResult>;
     readonly dispose: () => Promise<void>;
-    // Streamed binary file transfer over SFTP — the real executor only; test fakes may omit. Used to relay a
+    // Streamed binary file transfer over SFTP, the real executor only; test fakes may omit. Used to relay a
     // restic-repo tarball between two hosts THROUGH the CLI during a host migration, where neither host can
     // reach the other directly (a NAT'd local host opens no inbound ports). Streamed to/from a file, so a
     // multi-GB repo never buffers in memory the way `exec`'s string-collected stdout would.
     readonly download?: (remotePath: string, localPath: string) => Promise<void>;
     readonly upload?: (localPath: string, remotePath: string) => Promise<void>;
     // A local loopback listener whose every connection is piped to remoteHost:remotePort dialed FROM the
-    // host (ssh2 direct-tcpip) — how the engine reaches the control-plane HTTP services (Forgejo :3000,
+    // host (ssh2 direct-tcpip), how the engine reaches the control-plane HTTP services (Forgejo :3000,
     // Komodo :9120) without touching their public Cloudflare routes. Real executor only; fakes may omit.
     readonly forward?: (remoteHost: string, remotePort: number) => Promise<{ readonly port: number; readonly close: () => Promise<void> }>;
 }
@@ -47,7 +47,7 @@ export interface SshExecutor {
     readonly dispose?: () => Promise<void>;
 }
 
-// Persists the public key each host presented, keyed by address:port — the trust store behind host-key
+// Persists the public key each host presented, keyed by address:port, the trust store behind host-key
 // verification. The CLI backs this with a committed `.known-hosts.json`; an embedded control plane injects
 // its own per-tenant (DB/vault) implementation. Keys are the host's public key as base64.
 export interface HostKeyStore {
@@ -72,7 +72,7 @@ export const inMemoryHostKeyStore = (): HostKeyStore => {
 };
 
 // Trust-on-first-use + pinning. An unseen host's key is recorded and trusted; a seen host must present the
-// exact same key, or it is a mismatch (a possible MITM, or the host was rebuilt). Pure but for the store —
+// exact same key, or it is a mismatch (a possible MITM, or the host was rebuilt). Pure but for the store,
 // unit-testable without a live SSH server.
 export const verifyHostKey = async (store: HostKeyStore, host: string, port: number, presented: string): Promise<"ok" | "mismatch"> => {
     const known = await store.get(host, port);
@@ -98,7 +98,7 @@ interface CloudflaredForwarder {
     readonly port: number;
     readonly child: ChildProcess;
     // A bounded tail of cloudflared's stderr. cloudflared logs per-connection origin failures (e.g. the tunnel
-    // hostname could not be resolved/reached) here for the forwarder's whole lifetime — surfaced when an ssh
+    // hostname could not be resolved/reached) here for the forwarder's whole lifetime, surfaced when an ssh
     // connect through this forwarder fails, so a bare `read ECONNRESET` becomes an actionable cause.
     readonly stderr: () => string;
 }
@@ -130,7 +130,7 @@ const tcpProbe = (port: number): Promise<boolean> =>
         });
     });
 
-// Poll a loopback port until it accepts; fail fast if cloudflared exited first (reported via `failure`) —
+// Poll a loopback port until it accepts; fail fast if cloudflared exited first (reported via `failure`),
 // the probe throws, which ends the wait then and there rather than after the whole deadline.
 const waitForPort = async (port: number, failure: () => string | undefined, timeoutMs = 20000): Promise<void> => {
     const up = await pollUntil(
@@ -156,7 +156,7 @@ const startCloudflaredForwarder = async (hostname: string): Promise<CloudflaredF
     const child = spawn("cloudflared", ["access", "tcp", "--hostname", hostname, "--url", `127.0.0.1:${port}`], {
         stdio: ["ignore", "ignore", "pipe"],
     });
-    // Keep only the tail — cloudflared is chatty over a long apply; the last couple KB carry the relevant error.
+    // Keep only the tail, cloudflared is chatty over a long apply; the last couple KB carry the relevant error.
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
         stderr = (stderr + chunk.toString("utf8")).slice(-2000);
@@ -178,17 +178,17 @@ const startCloudflaredForwarder = async (hostname: string): Promise<CloudflaredF
 };
 
 // How long to keep retrying a connect that fails on tunnel warm-up, and how often. A host reached over a
-// freshly-minted cloudflared tunnel is not reachable the instant its DNS is created — the record must propagate
+// freshly-minted cloudflared tunnel is not reachable the instant its DNS is created, the record must propagate
 // and the connector must join Cloudflare's edge, during which the dial fails (NXDOMAIN → ECONNRESET).
 const REACHABLE_TIMEOUT_MS = 60_000;
 const REACHABLE_INTERVAL_MS = 3_000;
 
 // Transport liveness + command ceilings. A connect (TCP + handshake + auth) is bounded by readyTimeout; once
 // connected, keepalive probes every 5s and gives up after 3 misses, so a transport that dies mid-command (the
-// host's tunnel connector restarting, a dropped link) fails the session in ~15s instead of hanging forever —
+// host's tunnel connector restarting, a dropped link) fails the session in ~15s instead of hanging forever,
 // this exact hang wedged `intentic deploy plan` for 8+ minutes when a host tunnel restarted mid-read. The per-exec
 // ceiling is deliberately generous: image pulls and restic backups legitimately run for many minutes, and
-// nothing in a single exec should outlive the 30-minute apply lock — it exists to bound a genuinely wedged
+// nothing in a single exec should outlive the 30-minute apply lock, it exists to bound a genuinely wedged
 // remote command (a stuck dockerd), not to police slow-but-alive work (keepalive already proves liveness).
 const READY_TIMEOUT_MS = 20_000;
 const KEEPALIVE_INTERVAL_MS = 5_000;
@@ -197,7 +197,7 @@ const EXEC_TIMEOUT_MS = 30 * 60_000;
 
 // Connect over SSH, waiting out a transient warm-up failure. Retry until a session opens or the deadline
 // elapses; on timeout the last connect error propagates UNCHANGED (the actionable `cloudflared tunnel …` one).
-// Only for the connect that precedes a MUTATION — read/probe connects stay single-shot so `plan` never blocks
+// Only for the connect that precedes a MUTATION, read/probe connects stay single-shot so `plan` never blocks
 // on an unreachable host. Reuses the executor's memoized forwarder across attempts (a failed SSH connect keeps
 // the forwarder cached, and cloudflared re-resolves DNS per connection, so a reused forwarder succeeds once the
 // record propagates).
@@ -240,7 +240,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
         if (forwarder === undefined) {
             forwarder = startCloudflaredForwarder(target.address);
             forwarders.set(target.address, forwarder);
-            // A failed start must not poison the cache — drop it so a later connect can retry.
+            // A failed start must not poison the cache, drop it so a later connect can retry.
             forwarder.catch(() => forwarders.delete(target.address));
         }
         const resolved = await forwarder;
@@ -253,8 +253,8 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
             return new Promise<SshSession>((resolve, reject) => {
                 const client = new Client();
                 // Connect/auth failures surface here; removed once ready so a later disconnect can't reject twice.
-                // For a cloudflared target the transport error (e.g. ECONNRESET) hides the real cause — cloudflared
-                // could not resolve/reach the tunnel origin — which is only in its stderr. Append that tail so the
+                // For a cloudflared target the transport error (e.g. ECONNRESET) hides the real cause, cloudflared
+                // could not resolve/reach the tunnel origin, which is only in its stderr. Append that tail so the
                 // failure is actionable. A short flush delay lets cloudflared log the origin failure it just hit
                 // before we read the tail (the ssh error and cloudflared's log line race on the event loop).
                 const onError = (error: Error): void => {
@@ -278,7 +278,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                     // from crashing the process as an unhandled Client error event.
                     const inflight = new Set<(error: Error) => void>();
                     const failInflight = (error: Error): void => {
-                        // Each failer removes only itself from the set — safe during direct Set iteration.
+                        // Each failer removes only itself from the set, safe during direct Set iteration.
                         for (const failExec of inflight) {
                             failExec(error);
                         }
@@ -428,7 +428,7 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                     try {
                         (await forwarder).child.kill();
                     } catch {
-                        // Forwarder failed to start or already exited — nothing to tear down.
+                        // Forwarder failed to start or already exited, nothing to tear down.
                     }
                 }),
             );

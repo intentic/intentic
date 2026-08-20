@@ -31,7 +31,7 @@ const REMOVE: Reading = { live: `To remove`, plan: `Remove`, variant: `danger`, 
 
 // An action nothing here recognises. Named rather than neutral: `unknown` is the daemon SAYING it could not
 // read the resource, which is worth its own muted treatment, while an action we simply have no row for is
-// still a change of some sort — so it keeps the info colouring and only its wording gives up.
+// still a change of some sort, so it keeps the info colouring and only its wording gives up.
 const UNREADABLE: Reading = { live: `Unknown`, plan: `Unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `Working` };
 const UNRECOGNISED: Reading = { live: `Unknown`, plan: `Unknown`, variant: `info`, dot: `bg-info`, gerund: `Working` };
 
@@ -51,7 +51,7 @@ export const statusLabel = (status: string, context: ReconcileContext = `live`):
 
 export const statusVariant = (status: string): StatusVariant => readingOf(status).variant;
 
-// The reconcile status as a dot color — the same semantics as statusVariant's DOT palette.
+// The reconcile status as a dot color, the same semantics as statusVariant's DOT palette.
 export const statusDot = (status: string): string => readingOf(status).dot;
 
 export const statusGerund = (status: string): string => readingOf(status).gerund;
@@ -63,7 +63,7 @@ export interface PlanStep {
     readonly reason?: string;
 }
 
-// A live resource that exists but is absent from the desired graph (the plan `result` frame's orphan list) —
+// A live resource that exists but is absent from the desired graph (the plan `result` frame's orphan list),
 // what a subsequent `apply --yes` would remove.
 export interface PlanOrphan {
     readonly id: string;
@@ -89,9 +89,9 @@ const readOrphans = (value: unknown): PlanOrphan[] => {
 };
 
 // Live narration from a running plan: which node is being read (its kind:"node" state:"start" event) or the
-// last provider log line (the orphan scan narrates per provider; connect failures land here too) — what a
+// last provider log line (the orphan scan narrates per provider; connect failures land here too), what a
 // consumer shows instead of a blank spinner, and what a stall watchdog re-arms on. `terminal` is the tmux
-// session the run executes in visibly (the stream's first frame) — the caller surfaces its tab.
+// session the run executes in visibly (the stream's first frame), the caller surfaces its tab.
 export interface PlanProgress {
     readonly node?: string;
     readonly log?: string;

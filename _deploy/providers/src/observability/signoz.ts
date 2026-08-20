@@ -230,7 +230,7 @@ const customFunctionXml = (): string =>
 const opampConfig = (): string => "server_endpoint: ws://signoz:4320/v1/opamp\n";
 
 // The OTel collector pipeline config, verbatim from SigNoz's v0.129 reference (deploy/docker/
-// otel-collector-config.yaml) — the exporters/connectors the v0.144 collector + the SigNoz server expect.
+// otel-collector-config.yaml), the exporters/connectors the v0.144 collector + the SigNoz server expect.
 const otelCollectorConfig = (): string =>
     [
         "connectors:",
@@ -352,7 +352,7 @@ const otelCollectorConfig = (): string =>
     ].join("\n");
 
 // Write the compose + the config files (always) and a once-written .env carrying the JWT signing secret (it
-// must survive restarts — re-keying would invalidate every session). The secret is generated host-side.
+// must survive restarts, re-keying would invalidate every session). The secret is generated host-side.
 const ensureFiles = async (session: SshSession, parsed: SignozInputs, id: string, hash: string): Promise<void> => {
     await session.exec(`mkdir -p ${STATE_DIR}`);
     await session.exec(`cat > ${STATE_DIR}/compose.yaml <<'COMPOSE_EOF'\n${composeYaml(parsed, id, hash)}COMPOSE_EOF`);
@@ -399,7 +399,7 @@ const seedAdmin = async (session: SshSession, parsed: SignozInputs, log: (messag
 // the named volumes persist, and the admin seed tolerates an existing account.
 export const createSignozProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

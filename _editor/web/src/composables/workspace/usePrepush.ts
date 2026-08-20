@@ -4,10 +4,10 @@ import { computed, ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
-/* THE PRE-PUSH CHECK, browser-side — start it, watch it, stop it.
+/* THE PRE-PUSH CHECK, browser-side, start it, watch it, stop it.
  *
  * THE OUTPUT IS NOT HERE, and that is the point. The daemon runs the suite as a tmux window and names the session
- * in the run's `session`; this opens the terminals panel on it, and what the user watches is a terminal — colour,
+ * in the run's `session`; this opens the terminals panel on it, and what the user watches is a terminal, colour,
  * a runner rewriting its own progress line, the wheel scrolling back through the part that already went past.
  * A dialog re-printing a captured tail into a <pre> could be none of those things, and the escape codes it could
  * not interpret arrived as `[39m[22m` litter across the failure the user was trying to read.
@@ -21,7 +21,7 @@ import { useTerminalPanel } from "../terminal/useTerminalPanel";
  * refetchable resource, and this is a one-shot the dialog owns for as long as it is open. The state is module
  * scope (there is one check, and one push flow at a time) so a re-render of the dialog never restarts a run. */
 
-// The wait between "is it done yet" questions — short enough that the dialog's answer follows the terminal's last
+// The wait between "is it done yet" questions, short enough that the dialog's answer follows the terminal's last
 // line rather than trailing it, and cheap: the daemon answers from memory, and only while a push is waiting.
 const POLL_MS = 700;
 
@@ -30,7 +30,7 @@ const IDLE: PrepushRun = { status: `idle`, command: ``, output: `` };
 const run = ref<PrepushRun>(IDLE);
 const error = ref<string | undefined>(undefined);
 let timer: ReturnType<typeof setInterval> | undefined;
-// Whether this run's terminal has already been put on screen — the reveal is ONCE per run, at the moment the
+// Whether this run's terminal has already been put on screen, the reveal is ONCE per run, at the moment the
 // daemon first names a session. After that the panel is the user's: they may close it, or switch tabs, and a
 // poll must not drag them back.
 let shown = false;
@@ -40,7 +40,7 @@ const stopPolling = (): void => {
     timer = undefined;
 };
 
-/* Put the check's terminal on screen, saying WHAT is starting — the panel cannot know. The session is called
+/* Put the check's terminal on screen, saying WHAT is starting, the panel cannot know. The session is called
  * `job-checks` inside the sandbox, and a panel waiting on a tab could only offer that name back, which is not
  * an answer to "why has this opened" for anyone who met it mid-push.
  *
@@ -58,7 +58,7 @@ const poll = async (): Promise<void> => {
         run.value = await sandboxJson<PrepushRun>(`/prepush/state`);
         error.value = undefined;
         /* THE REVEAL, at the first state that carries a terminal. The daemon names the session only once the
-         * command is actually in it (prepush/prepush.ts), so this is the moment there is something to watch —
+         * command is actually in it (prepush/prepush.ts), so this is the moment there is something to watch,
          * and opening the panel any earlier is how it came to sit on a spinner over a session tmux had not
          * created yet. Not in `start`, because that moment is now usually one poll too early. */
         if (!shown && run.value.session !== undefined) {
@@ -67,7 +67,7 @@ const poll = async (): Promise<void> => {
         }
     } catch (cause) {
         // A dropped poll is not a failed check: the suite is still going on the daemon. Report it and keep
-        // polling — the next tick usually reconnects, and killing the poll here would strand the dialog on a
+        // polling, the next tick usually reconnects, and killing the poll here would strand the dialog on a
         // "running" it can never leave.
         error.value = errorMessage(cause, `Lost contact with the checks.`);
         return;
@@ -79,11 +79,11 @@ const poll = async (): Promise<void> => {
 
 export function usePrepush() {
     // The button beside a running check. The automatic reveal is `poll`'s, once per run; this is the user
-    // asking again — after closing the panel, or from another view.
+    // asking again, after closing the panel, or from another view.
     const showTerminal = (): void => reveal(run.value);
 
     /* Start a run and follow it to a terminal state. Resolves with the settled run, which is what makes the
-     * push flow readable as one sentence at the call site — start the checks, then decide.
+     * push flow readable as one sentence at the call site, start the checks, then decide.
      *
      * The daemon is the arbiter of "one at a time" (a second /prepush/run while one is going does nothing), so
      * this can be called without checking first: a dialog reopened over a check that is still going joins it
@@ -110,7 +110,7 @@ export function usePrepush() {
         return await new Promise<PrepushRun>((resolve) => {
             timer = setInterval(() => {
                 void poll().then(() => {
-                    // `poll` clears the timer the moment the run settles, so this is that settle — and the only
+                    // `poll` clears the timer the moment the run settles, so this is that settle, and the only
                     // value it can resolve with is the one the dialog is already showing.
                     if (timer === undefined) {
                         resolve(run.value);
@@ -120,7 +120,7 @@ export function usePrepush() {
         });
     };
 
-    // Stop the suite. The daemon settles the run as `cancelled`, which the poll picks up — so the dialog's
+    // Stop the suite. The daemon settles the run as `cancelled`, which the poll picks up, so the dialog's
     // wording comes from the same place every other outcome's does.
     const cancel = async (): Promise<void> => {
         try {
@@ -130,7 +130,7 @@ export function usePrepush() {
         }
     };
 
-    // Drop the run from view without touching the daemon — what closing the dialog does. A check still running
+    // Drop the run from view without touching the daemon, what closing the dialog does. A check still running
     // when the user pushes anyway keeps running, in the terminal it was already running in; it just has nobody
     // waiting on the verdict. The terminal tab is not closed either: it is the record of what ran.
     const forget = (): void => {
@@ -143,7 +143,7 @@ export function usePrepush() {
         run: computed(() => run.value),
         error: computed(() => error.value),
         running: computed(() => run.value.status === `running`),
-        // Whether there is a terminal to send the user to at all — what the dialog's button is drawn on.
+        // Whether there is a terminal to send the user to at all, what the dialog's button is drawn on.
         terminal: computed(() => run.value.session),
         start,
         cancel,

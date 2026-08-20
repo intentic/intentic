@@ -1,5 +1,5 @@
 /* The pure audio half of composer voice input: resampling, WAV framing, and the silence segmenter that turns a
- * continuous microphone stream into discrete utterances. No DOM and no refs — useVoiceInput.ts is the browser
+ * continuous microphone stream into discrete utterances. No DOM and no refs, useVoiceInput.ts is the browser
  * glue over this, and these run under the node test environment as plain functions.
  *
  * Everything downstream (the daemon's whisper-cli, see _sandbox/sandbox/src/speech/transcribe.ts) speaks
@@ -8,7 +8,7 @@
 
 export const TARGET_RATE = 16_000;
 
-// Linear-interpolation resample to 16kHz. Naive (no low-pass) — fine for speech, same trade the Discord voice
+// Linear-interpolation resample to 16kHz. Naive (no low-pass), fine for speech, same trade the Discord voice
 // path makes; swap in a real resampler if quality nags.
 export const resampleTo16k = (samples: Float32Array, inputRate: number): Float32Array => {
     if (inputRate === TARGET_RATE) {
@@ -26,7 +26,7 @@ export const resampleTo16k = (samples: Float32Array, inputRate: number): Float32
     return out;
 };
 
-// Minimal RIFF/WAVE framing of 16kHz mono float samples as s16le — byte-for-byte what whisper-cli expects
+// Minimal RIFF/WAVE framing of 16kHz mono float samples as s16le, byte-for-byte what whisper-cli expects
 // (the daemon never decodes audio; the page ships the exact wire format). Floats clamp to [-1, 1] first: a
 // hot microphone overshoots, and integer wraparound turns clipping into crackle.
 export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
@@ -57,7 +57,7 @@ export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
     return bytes;
 };
 
-/* THE SEGMENTER — the state machine that decides where one spoken message ends. Hands-free sending hangs
+/* THE SEGMENTER, the state machine that decides where one spoken message ends. Hands-free sending hangs
  * entirely off this boundary: ~1.5s of quiet is the "I'm done" gesture, so the constants are UX, not tuning
  * trivia.
  *
@@ -65,7 +65,7 @@ export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
  *    segment, but a quiet word mid-sentence must not close one.
  *  - Pre-roll (300ms ring while idle): the first syllable is what TRIPS the threshold, so without it every
  *    utterance arrives beheaded.
- *  - Minimum speech (300ms): sub-blip segments (a cough, a key click) only feed whisper hallucinations —
+ *  - Minimum speech (300ms): sub-blip segments (a cough, a key click) only feed whisper hallucinations,
  *    same rationale as Discord voice's MIN_UTTERANCE_BYTES.
  *  - Trailing-silence trim (250ms kept): the 1.5s pause that CLOSED the segment is not part of the message,
  *    and whisper time is paid per second of audio.
@@ -73,7 +73,7 @@ export const wavOf16k = (samples: Float32Array): ArrayBuffer => {
  *    than grown until the route refuses it. One minute rather than two because the daemon transcribes with
  *    whisper's turbo model at ~1.3× realtime: a full-cap utterance must come back inside Cloudflare's ~100s
  *    origin cap (the same ceiling uploadChunking.ts chunks around) or the tunnel kills the request and the
- *    words are lost. Cutting a monologue costs nothing — the pieces transcribe in order into the same draft. */
+ *    words are lost. Cutting a monologue costs nothing, the pieces transcribe in order into the same draft. */
 export interface SegmenterTuning {
     readonly startThreshold: number;
     readonly sustainThreshold: number;
@@ -97,7 +97,7 @@ const SEGMENTER_DEFAULTS: SegmenterTuning = {
 export interface Segmenter {
     /** Feed one frame of 16kHz mono samples; returns the frame's RMS level (0..1) for the meter. */
     readonly push: (frame: Float32Array) => number;
-    /** Drop whatever is in flight — the mic was turned off, and a segment nobody finished is not a message. */
+    /** Drop whatever is in flight, the mic was turned off, and a segment nobody finished is not a message. */
     readonly discard: () => void;
 }
 
@@ -141,7 +141,7 @@ export const createSegmenter = (onUtterance: (samples: Float32Array) => void, tu
     };
 
     const close = (): void => {
-        // The pause that closed the segment is not part of the message — trim it down to a natural beat.
+        // The pause that closed the segment is not part of the message, trim it down to a natural beat.
         const dropMs = Math.max(0, silenceTailMs - config.keptTailMs);
         const keep = Math.max(1, Math.round(((framesMs - dropMs) / 1000) * TARGET_RATE));
         const samples = concat(frames).slice(0, keep);

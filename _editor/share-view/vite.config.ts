@@ -13,7 +13,7 @@ import { SHARE_VIEWER_BASE } from "../../_sandbox/sandbox-contract/src/share-pat
  *
  * It compiles the APP's OWN chat components (the alias below reaches straight into the web package's source),
  * which is the whole point: a recipient sees the transcript the owner saw, drawn by the same code, and there is
- * no second renderer to drift. What it does not compile is the app — the page's entry pulls a tool card and the
+ * no second renderer to drift. What it does not compile is the app, the page's entry pulls a tool card and the
  * markdown engine, not a router, a daemon client or a store, so nothing in the bundle can reach for a sandbox
  * that a recipient has no business reaching.
  *
@@ -21,7 +21,7 @@ import { SHARE_VIEWER_BASE } from "../../_sandbox/sandbox-contract/src/share-pat
  * `/conversations/_viewer/`, so opening a second shared link costs nothing and the daemon copies the assets in
  * once rather than per share.
  *
- * It builds like the widget does, into a `dist/` this package ships as its only files — the daemon depends on
+ * It builds like the widget does, into a `dist/` this package ships as its only files, the daemon depends on
  * the package and copies that directory into the outbox on the first share. */
 
 const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path);
@@ -35,7 +35,7 @@ export default defineConfig({
             // the workspace aliases for the same reason source-aliases.ts orders its own subpaths: a string
             // alias also matches `<key>/…`.
             "@intentic-app/web": fromRoot("_editor/web/src"),
-            // The design system by FILE rather than through its barrel — see boot.ts for why this page cannot
+            // The design system by FILE rather than through its barrel, see boot.ts for why this page cannot
             // use the barrel's own entry point. Ordered before `@intentic/ui` (which sourceAliases maps to the
             // barrel file) so the deeper key wins.
             "@intentic/ui/src": fromRoot("_editor/ui/src"),
@@ -54,17 +54,17 @@ export default defineConfig({
         // The floor for what the page uses unguarded, and generous about who can read a shared link: a
         // recipient's browser is not one we chose.
         target: "es2022",
-        /* Grammars and the highlighter load on demand — a conversation with no code in it should not pay for
+        /* Grammars and the highlighter load on demand, a conversation with no code in it should not pay for
          * shiki at all. Chunks are fine here (unlike the widget, which must be one file): the daemon copies the
          * whole directory, and every asset URL is absolute under `base`.
          *
          * THE GRAPH CANVAS IS CUT OUT BY HAND, because nothing else can cut it. A transcript can contain a `dag`
-         * figure, so the prose surface reaches DagGraph — and DagGraph is Vue Flow, dagre and a stylesheet, a
+         * figure, so the prose surface reaches DagGraph, and DagGraph is Vue Flow, dagre and a stylesheet, a
          * fifth of a megabyte. MarkdownFigure already imports it lazily (DagFigure.vue), which is enough in the
          * app but not here: the design system's barrel ALSO imports it statically, the shared tool card pulls
          * that barrel in for a highlighter and a diff stat, and a module with any static importer in the graph is
          * bundled where the static importer lives. Named as a group, it becomes the chunk the lazy import already
-         * wanted it to be — fetched by the rare shared conversation that draws a graph, downloaded by nobody
+         * wanted it to be, fetched by the rare shared conversation that draws a graph, downloaded by nobody
          * else. */
         rollupOptions: { output: { advancedChunks: { groups: [{ name: `dag-graph`, test: /DagGraph\.vue|@vue-flow|@dagrejs/ }] } } },
     },

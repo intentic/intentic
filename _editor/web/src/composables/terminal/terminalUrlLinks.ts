@@ -2,15 +2,15 @@ import type { ILink, Terminal } from "@xterm/xterm";
 
 /* Plain-text URLs in terminal output, rejoined when they wrap across rows.
  *
- * xterm's own web-links addon only rejoins SOFT wraps — the ones the terminal itself made at its width, which
+ * xterm's own web-links addon only rejoins SOFT wraps, the ones the terminal itself made at its width, which
  * mark the continuation row `isWrapped`. A program that wraps text to its OWN narrower panel emits real
  * newlines instead, and every fragment after the first is then invisible to that addon: `claude`'s login panel
- * does exactly this, so Ctrl+clicking its OAuth URL opened a truncated, dead link — the one link in the whole
+ * does exactly this, so Ctrl+clicking its OAuth URL opened a truncated, dead link, the one link in the whole
  * app a user cannot work around, because it is what they need to sign the agent in.
  *
  * Both kinds of wrap share one shape: the URL runs to the end of its row, and the next row is a single solid
  * run of URL-safe characters. Stitching on THAT makes `isWrapped` and the terminal's width irrelevant, and
- * prose is never swallowed — a line of prose always has an interior space, so it ends the run.
+ * prose is never swallowed, a line of prose always has an interior space, so it ends the run.
  *
  * The scan is pure and buffer-agnostic (it reads rows through a `rowAt` accessor) so the stitching rules can be
  * pinned by tests without a terminal; registerUrlLinks is the only part that touches xterm. */
@@ -20,7 +20,7 @@ import type { ILink, Terminal } from "@xterm/xterm";
 // a row edge can end in any of those, so trailing punctuation is trimmed once, after the fragments are joined.
 const URL_PATTERN = /https?:\/\/[^\s"'<>`]+/gi;
 
-// A continuation fragment is an ENTIRE row of URL-safe characters — no interior whitespace anywhere. The prose
+// A continuation fragment is an ENTIRE row of URL-safe characters, no interior whitespace anywhere. The prose
 // that follows a URL ("Paste code here >", "Waiting for authentication…") always has a space, so it can never
 // be mistaken for the URL's tail, and a blank row ends the run.
 const SOLID_RUN = /^[^\s"'<>`]+$/;
@@ -35,7 +35,7 @@ const MAX_URL_CHARS = 4096;
 const MAX_RUN_ROWS = 64;
 
 // Where one URL sits in the buffer: the rows it spans and, within each end row's text, the string index of its
-// first and last character. Indices — not columns — because the scan never sees cells.
+// first and last character. Indices, not columns, because the scan never sees cells.
 export interface UrlSpan {
     readonly url: string;
     readonly startRow: number;
@@ -48,7 +48,7 @@ export interface UrlSpan {
 export type RowAt = (row: number) => string | undefined;
 
 // Only offer a link the browser will open as typed. `new URL` silently repairs some inputs, so the parse has to
-// round-trip the origin the row actually shows — a link that opens somewhere other than what the user read is
+// round-trip the origin the row actually shows, a link that opens somewhere other than what the user read is
 // precisely the confusion a linkifier over arbitrary program output must not create. (The userinfo forms are
 // spelled out because `origin` drops them.)
 const isOpenable = (url: string): boolean => {
@@ -73,7 +73,7 @@ const stitch = (rowAt: RowAt, startRow: number, startIndex: number, head: string
     let endRow = startRow;
     let endIndex = startIndex + head.length - 1;
     let endText = rowAt(startRow) ?? ``;
-    // The URL reaching the end of its (right-trimmed) row is what says it may continue — which is true of a soft
+    // The URL reaching the end of its (right-trimmed) row is what says it may continue, which is true of a soft
     // wrap and of a panel's hard wrap alike, and false for a URL with anything after it on the row.
     while (endIndex === endText.length - 1 && url.length < MAX_URL_CHARS && endRow - startRow < MAX_RUN_ROWS) {
         const next = rowAt(endRow + 1);
@@ -100,7 +100,7 @@ const stitch = (rowAt: RowAt, startRow: number, startIndex: number, head: string
     return isOpenable(url) ? { url, startRow, startIndex, endRow, endIndex } : undefined;
 };
 
-// Every URL that BEGINS on a row in [firstRow, lastRow], stitched through however many rows it wraps onto — so a
+// Every URL that BEGINS on a row in [firstRow, lastRow], stitched through however many rows it wraps onto, so a
 // span can end well below lastRow. Callers pair this with runStart to cover the URLs that reach a given row from
 // above.
 export const findUrls = (rowAt: RowAt, firstRow: number, lastRow: number): UrlSpan[] => {
@@ -116,7 +116,7 @@ export const findUrls = (rowAt: RowAt, firstRow: number, lastRow: number): UrlSp
                 continue;
             }
             spans.push(span);
-            // Skip the fragments this URL consumed — they are its tail, not rows another URL can start on. Only
+            // Skip the fragments this URL consumed, they are its tail, not rows another URL can start on. Only
             // a row's LAST match can stitch (an earlier one doesn't reach the row's end), so this always lands
             // on the final pass of the inner loop.
             row = span.endRow;
@@ -126,8 +126,8 @@ export const findUrls = (rowAt: RowAt, firstRow: number, lastRow: number): UrlSp
 };
 
 // The first row of the wrapped run `row` belongs to: walk up while each row is a bare continuation fragment
-// sitting under a row with content to continue from. It stops on the row a URL could START on — prose, the top
-// of the buffer, or a blank line — which is where findUrls then begins scanning.
+// sitting under a row with content to continue from. It stops on the row a URL could START on, prose, the top
+// of the buffer, or a blank line, which is where findUrls then begins scanning.
 export const runStart = (rowAt: RowAt, row: number): number => {
     let first = row;
     while (first > 0 && row - first < MAX_RUN_ROWS) {
@@ -145,8 +145,8 @@ export const runStart = (rowAt: RowAt, row: number): number => {
 };
 
 // One buffer row read cell by cell: the right-trimmed text plus the 0-based buffer column each of its characters
-// starts at and ends on. Both are needed because xterm collapses a wide (2-cell) glyph — and any combining marks
-// riding on a base character — into a single cell, so a string index is not a column.
+// starts at and ends on. Both are needed because xterm collapses a wide (2-cell) glyph, and any combining marks
+// riding on a base character, into a single cell, so a string index is not a column.
 interface RowCells {
     readonly text: string;
     readonly firstColumns: readonly number[];
@@ -166,7 +166,7 @@ const readRow = (term: Terminal, row: number): RowCells | undefined => {
         line.getCell(column, cell);
         const width = cell.getWidth();
         if (width === 0) {
-            // The trailing half of a wide glyph — it holds no characters of its own.
+            // The trailing half of a wide glyph, it holds no characters of its own.
             continue;
         }
         // An empty cell reads as a space, matching translateToString.
@@ -183,7 +183,7 @@ const readRow = (term: Terminal, row: number): RowCells | undefined => {
 };
 
 /* Every URL link covering one buffer row (1-based, as xterm addresses rows), with its range in buffer cells.
- * This is the whole buffer-side step — reading rows, stitching, and mapping back onto cells — so it can be
+ * This is the whole buffer-side step, reading rows, stitching, and mapping back onto cells, so it can be
  * exercised against a real terminal buffer without a DOM. */
 export const urlLinksAt = (term: Terminal, bufferLineNumber: number, activate: (event: MouseEvent, uri: string) => void): ILink[] => {
     // Read each row at most once per call: runStart, findUrls, and the column mapping all walk the same handful
@@ -223,7 +223,7 @@ export const urlLinksAt = (term: Terminal, bufferLineNumber: number, activate: (
     });
 };
 
-/* Register the URL linkifier on one terminal. Replaces @xterm/addon-web-links for URLs — its provider would
+/* Register the URL linkifier on one terminal. Replaces @xterm/addon-web-links for URLs, its provider would
  * shadow this one for the first fragment of every wrapped link, and its stitching is the thing being fixed. */
 export const registerUrlLinks = (term: Terminal, activate: (event: MouseEvent, uri: string) => void): void => {
     term.registerLinkProvider({

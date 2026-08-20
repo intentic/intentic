@@ -8,13 +8,13 @@ import { useSyncHealth } from "./useComputers";
 import { useEnvironment } from "./useEnvironment";
 import { useSandboxVersion } from "./useSandboxVersion";
 
-/* WHAT THE ACTIVE SANDBOX NEEDS FROM ITS OWNER, AND WHAT IS MERELY TRUE OF IT — one list, split by `kind`, read
+/* WHAT THE ACTIVE SANDBOX NEEDS FROM ITS OWNER, AND WHAT IS MERELY TRUE OF IT, one list, split by `kind`, read
  * by the rail's sandbox chip and the mobile menu, so both say the same things in the same order.
  *
  * Two of these used to be full-width bars above every view, and a bar is the wrong instrument for any of them:
  * none is urgent enough to interrupt, each is a standing CONDITION rather than an event, and a bar carrying a
  * dismiss × while its condition still holds teaches the reader to dismiss the next one unread. They are
- * ambient status, so they live where ambient status lives — a badge on the thing they are about (the sandbox),
+ * ambient status, so they live where ambient status lives, a badge on the thing they are about (the sandbox),
  * with the sentences one click into the popover that badge sits on.
  *
  * The chip has to be the one to carry them because the /sandbox hub owns every one of them and has no rail
@@ -23,12 +23,12 @@ import { useSandboxVersion } from "./useSandboxVersion";
  *
  * The account item arrived here from the Overview tab's "at a glance" directory, which stated it as a row that
  * said "Ready" on every healthy sandbox. A condition is worth a permanent row only if its nominal state is
- * worth reading, and "nothing is wrong" never is — so it states itself the way the other four do, by being
+ * worth reading, and "nothing is wrong" never is, so it states itself the way the other four do, by being
  * absent until it holds. */
 
 // Whether ANYTHING here can run a turn: a daemon-stored provider account, one of the bundled translator's own
 // subscriptions, or an installed ACP agent (which is its own credential store). Read from the leaf modules
-// rather than useChat — the rail must not pull the whole chat in, which is why they are leaves
+// rather than useChat, the rail must not pull the whole chat in, which is why they are leaves
 // (providerAccounts.ts). Silent until the daemon has answered: "you have no account" and "we haven't asked"
 // are the same empty list, and this one badges the rail, where a claim retracted a second later is worst.
 const noAccountConnected = computed(
@@ -40,18 +40,18 @@ const noAccountConnected = computed(
 );
 
 export interface SandboxAttentionItem {
-    // The glyph for this item's popover row — and, for the top item, for the chip's badge. Both env items wear
+    // The glyph for this item's popover row, and, for the top item, for the chip's badge. Both env items wear
     // the warning triangle their bars wore: the two are one errand on one tab, and their rows say which.
     readonly icon: IconName;
     // `warning` is something the user is carrying that will bite (a half-applied capability, a failing deploy);
-    // `info` is optional. Nothing here is ever `danger` — none of it means BROKEN, it means UNFINISHED.
+    // `info` is optional. Nothing here is ever `danger`, none of it means BROKEN, it means UNFINISHED.
     readonly tone: "warning" | "info";
     /* WHETHER THIS IS A DEBT OR A FACT, which decides whether it may badge the chip.
      *
      * They shipped as one list under one heading that says "Needs you", and a `note` does not need you: the
      * contended port is the sandbox and the machine both working correctly while one number went to whoever
      * asked first. It cannot be dismissed, it cannot be resolved from the popover, and on a machine running two
-     * sandboxes it is true every day — so it sat on the chip as a "1" that never cleared, which is the exact
+     * sandboxes it is true every day, so it sat on the chip as a "1" that never cleared, which is the exact
      * shape that teaches a reader to stop looking at the chip. The next badge to appear there would have been
      * the one that mattered.
      *
@@ -62,7 +62,7 @@ export interface SandboxAttentionItem {
     // The whole fact, phrased to stand alone in a popover row AND to read as a clause when the chip's tooltip
     // joins several of them after the sandbox name. No trailing period, like every other badge tooltip.
     readonly message: string;
-    // The tab that resolves it. Several items can share one (both env items do) — the tab sorts them out.
+    // The tab that resolves it. Several items can share one (both env items do), the tab sorts them out.
     readonly to: string;
     // Set only where the amount is the message: how many secrets are missing decides how long the errand is.
     // The others are one click each, so a number beside them would be read in the unit this one established.
@@ -82,7 +82,7 @@ export function useSandboxAttention() {
      * without.
      *
      * The account item is about the SANDBOX ("nothing here can run a turn"), which is why it can sit on the
-     * chip. Its narrower cousin — this conversation's provider has no credential, while another provider does —
+     * chip. Its narrower cousin, this conversation's provider has no credential, while another provider does,
      * stays with the composer's connect gate (ChatAccountPanel), where the choice that caused it was made. */
     const items = computed<readonly SandboxAttentionItem[]>(() => [
         ...(noAccountConnected.value
@@ -146,7 +146,7 @@ export function useSandboxAttention() {
               ]),
         /* THE TWO NOTES, and the line they sit under is the point of `kind`.
          *
-         * A contended port is not a fault: the sandbox is fine and so is the machine — one number went to
+         * A contended port is not a fault: the sandbox is fine and so is the machine, one number went to
          * whichever sandbox asked for it first. Worth saying, because the symptom (a dev server missing from
          * localhost) otherwise sends people hunting a process that does not exist. Not worth a counter on the
          * chip, because on any machine running two sandboxes it is true every day, and it is the Computers row
@@ -181,14 +181,14 @@ export function useSandboxAttention() {
             : []),
     ]);
 
-    /* THE TWO LISTS THE SURFACES ACTUALLY RENDER. `items` stays the declaration — one place, worst-first — and
+    /* THE TWO LISTS THE SURFACES ACTUALLY RENDER. `items` stays the declaration, one place, worst-first, and
      * these are the two halves of it, so a new item is filed by writing its `kind` rather than by remembering
      * to add it to a second array. */
     const needs = computed<readonly SandboxAttentionItem[]>(() => items.value.filter((item) => item.kind === `needs`));
     const notes = computed<readonly SandboxAttentionItem[]>(() => items.value.filter((item) => item.kind === `note`));
 
-    /* ONE chip states ONE thing (see ViewBadge): the head DEBT's shape — its count where the amount is the
-     * message, its glyph otherwise — and every debt's sentence in the tooltip, which is the only place a second
+    /* ONE chip states ONE thing (see ViewBadge): the head DEBT's shape, its count where the amount is the
+     * message, its glyph otherwise, and every debt's sentence in the tooltip, which is the only place a second
      * pending item is sayable without a second badge.
      *
      * Read off `needs`, not `items`, so the chip cannot wear a number for something nobody owes. The notes are

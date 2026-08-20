@@ -17,7 +17,7 @@ import {
 
 // A host whose node id is unchanged but whose `address` changed: the same logical host now lives on a
 // different machine. `address` is a plain literal in the artifact (only sshKey is a secret), so a move is a
-// direct string compare — no secret resolution needed to detect it.
+// direct string compare, no secret resolution needed to detect it.
 export interface HostMove {
     readonly id: string;
     readonly oldNode: ResourceNode;
@@ -27,7 +27,7 @@ export interface HostMove {
 }
 
 // Detect hosts that moved between the last-applied graph and the one being applied: same id, different address.
-// A new host id (no match in `previous`) is a fresh create, and a removed id is a prune — neither is a move.
+// A new host id (no match in `previous`) is a fresh create, and a removed id is a prune, neither is a move.
 export const detectHostMoves = (previous: DesiredStateGraph, next: DesiredStateGraph): HostMove[] => {
     const moves: HostMove[] = [];
     for (const [id, newNode] of Object.entries(next.resources)) {
@@ -60,7 +60,7 @@ interface MigrateArgs {
 }
 
 // The backup destination for a moved host: the control-plane backup node on that host (matched by its new
-// address — there is one per control-plane host). Its resolved inputs carry the repo/password/image the
+// address, there is one per control-plane host). Its resolved inputs carry the repo/password/image the
 // snapshot was taken with, which restore reads back. undefined when the moved host runs no control plane.
 const backupFor = (
     move: HostMove,
@@ -88,7 +88,7 @@ const backupFor = (
 };
 
 // Migrate one host that moved machines: snapshot the old host, stream its restic repo to the new host (for the
-// on-host default repo — a remote repo is reachable from both, so no stream), and restore onto the new host.
+// on-host default repo, a remote repo is reachable from both, so no stream), and restore onto the new host.
 // The caller's reconcile then brings the services up on the new host atop the restored data. The old host is
 // left quiesced (writers stopped, tunnel connectors removed → it serves nothing) with its data volumes intact,
 // so the operator can verify the new host before reclaiming the old machine.

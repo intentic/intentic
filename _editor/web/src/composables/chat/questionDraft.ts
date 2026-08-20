@@ -1,10 +1,10 @@
 /* THE QUESTION CARD'S PICKS, OUTLIVING ITS COMPONENT. An AskUserQuestion card parks the turn until the user
- * answers, and answering is often the slow part — the user goes to read the code the question is about, or the
+ * answers, and answering is often the slow part, the user goes to read the code the question is about, or the
  * tab reloads under them. The run itself is daemon-side, so the card comes back pending on reattach; only the
  * half-made choice living in ChatMessageView's refs died with the page. Clicking the same three options over
  * again is exactly the kind of work nobody agreed to redo.
  *
- * Keyed by requestId — the daemon's UUID for the parked card (see agent-requests.ts), which is what the replayed
+ * Keyed by requestId, the daemon's UUID for the parked card (see agent-requests.ts), which is what the replayed
  * frame carries too, so the draft finds its way back to the same card and to no other. localStorage rather than
  * the daemon: this is a client-side picking convenience, and it belongs to the window doing the picking, not to
  * the run. Drafts are dropped the moment the card stops being pending (answered, dismissed, or the turn stopped
@@ -48,8 +48,8 @@ const key = (requestId: string): string => `${PREFIX}${requestId}`;
 /* A draft is replayed into a LIVE card, so it may only carry picks that card would still accept. Two things put
  * stored picks out of step with the question they came from: a build whose card had different rules (before
  * "Other" was an option, a listed pick and a typed answer could be held at the same time), and a single-select
- * question holding more than the one pick it allows. Both resolve the same way — keep the first pick that is
- * still legal, drop the rest — so a reopened card can never show a combination the user could not have reached
+ * question holding more than the one pick it allows. Both resolve the same way, keep the first pick that is
+ * still legal, drop the rest, so a reopened card can never show a combination the user could not have reached
  * by clicking. Typed text always survives: it is the Other row's payload rather than a pick of its own, and
  * nothing is won by throwing away words the user wrote. */
 const normalize = (draft: QuestionDraft, questions: readonly DraftQuestionShape[]): QuestionDraft => {
@@ -94,7 +94,7 @@ export const clearQuestionDraft = (requestId: string): void => {
     try {
         localStorage.removeItem(key(requestId));
     } catch {
-        // Nothing to do — an unwritable bucket has nothing to clear either.
+        // Nothing to do, an unwritable bucket has nothing to clear either.
     }
 };
 

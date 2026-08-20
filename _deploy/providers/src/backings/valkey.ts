@@ -51,7 +51,7 @@ const composeYaml = (id: string, hash: string, parsed: ValkeyInputs): string =>
 const valkeyConf = (parsed: ValkeyInputs): string => [`requirepass ${parsed.adminPassword}`, "appendonly yes", ""].join("\n");
 
 // Write compose + valkey.conf (both always). requirepass is a stable generated secret (same value every
-// apply), so rewriting the conf is idempotent — no re-key risk, and the binding users + data (appendonly)
+// apply), so rewriting the conf is idempotent, no re-key risk, and the binding users + data (appendonly)
 // persist across recreates.
 const ensureFiles = async (session: SshSession, id: string, hash: string, parsed: ValkeyInputs): Promise<void> => {
     const dir = stateDir(KIND, id);
@@ -69,7 +69,7 @@ const readyProbe = (id: string, parsed: ValkeyInputs): string =>
 // are the binding provider's job.
 export const createValkeyProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
+        // A dependency of these $ref inputs is still a pending create (plan resolves leniently),
         // the resource cannot be introspected yet; parsing would crash on the PENDING symbol.
         if (hasPendingRef(inputs, "internalIp")) {
             return undefined;

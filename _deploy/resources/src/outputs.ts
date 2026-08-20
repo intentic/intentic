@@ -4,7 +4,7 @@ import type { ResourceType } from "./resource-types.js";
 // the closed ResourceType union (a missing type is a compile error). Values mirror the Ref<string>
 // output props declared on the handle interfaces in @intentic/sdk; the core outputs test asserts
 // the two never drift. The engine reads this to know which produced/observed values to expose as
-// {$ref:"id.output"} targets — providers never declare their own outputs.
+// {$ref:"id.output"} targets, providers never declare their own outputs.
 export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object.freeze({
     host: ["internalIp", "publicIp"],
     cloudflare: ["zoneId", "accountId"],
@@ -12,7 +12,7 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     // dynamic (one per app that wires notify: discord), declared as a prefix pattern "appWebhook:".
     discord: ["guildId", "reconcileWebhook", "appWebhook:"],
     // An external SaaS integration (e.g. Stripe). A pure sink in v1: the provider validates the API key on
-    // read/apply but exposes no refs — the apiKey is injected into consuming apps as a $secret env, not a $ref.
+    // read/apply but exposes no refs, the apiKey is injected into consuming apps as a $secret env, not a $ref.
     stripe: [],
     "cf-route": ["url"],
     tunnel: ["tunnelId", "cname"],
@@ -26,9 +26,9 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     "control-repo": ["cloneUrl", "sshUrl"],
     "forgejo-runner": [],
     komodo: ["url", "internalUrl"],
-    // Komodo Periphery deployed on a worker host (outbound to Core) — a pure side-effect like the runner.
+    // Komodo Periphery deployed on a worker host (outbound to Core), a pure side-effect like the runner.
     "komodo-periphery": [],
-    // A worker host registered as a Komodo Server — exposes the server name the deployment provider targets.
+    // A worker host registered as a Komodo Server, exposes the server name the deployment provider targets.
     "komodo-server": ["serverName"],
     "komodo-user": [],
     ci: [],
@@ -37,7 +37,7 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     "komodo-notify": [],
     signoz: ["url", "internalUrl", "otlpEndpoint"],
     // Self-hosted catalog services: one compose stack on the host + a Cloudflare route, like signoz but
-    // without an ingest endpoint apps ref — so just the two URL outputs.
+    // without an ingest endpoint apps ref, so just the two URL outputs.
     outline: ["url", "internalUrl"],
     paperless: ["url", "internalUrl"],
     openproject: ["url", "internalUrl"],
@@ -46,7 +46,7 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     // The per-host workspace sandbox: its host-internal daemon url, the daemon's /health url for readiness,
     // and the `<zone>` base its dev-server previews sit under.
     workspace: ["internalUrl", "healthUrl", "previewBase"],
-    // A scheduled backup job — a pure sink (nothing refs an output off it), like ci/forgejo-runner.
+    // A scheduled backup job, a pure sink (nothing refs an output off it), like ci/forgejo-runner.
     backup: [],
     // Backing instances: the host-internal coordinates a consuming app's binding node connects with. The
     // per-app credentials live on the binding node below, not here (apps never ref the instance directly).
@@ -62,16 +62,16 @@ export const OUTPUTS: Readonly<Record<ResourceType, readonly string[]>> = Object
     "authentik-client": ["issuer", "clientId", "clientSecret"],
     garage: ["internalEndpoint", "endpoint"],
     "garage-bucket": ["endpoint", "accessKey", "secretKey", "bucket"],
-    // GitHub inventory node — resolves the PAT's owner (user or org).
+    // GitHub inventory node, resolves the PAT's owner (user or org).
     github: ["owner"],
-    // GitHub repo — same output shape as the Forgejo "repo" type.
+    // GitHub repo, same output shape as the Forgejo "repo" type.
     "gh-repo": ["cloneUrl", "sshUrl"],
-    // GitHub Actions workflow + repo secrets — a pure sink, like "ci".
+    // GitHub Actions workflow + repo secrets, a pure sink, like "ci".
     "gh-ci": [],
-    // GitLab inventory node — resolves the PAT's owner (user or group).
+    // GitLab inventory node, resolves the PAT's owner (user or group).
     gitlab: ["owner"],
-    // GitLab project — same output shape as the Forgejo "repo" type.
+    // GitLab project, same output shape as the Forgejo "repo" type.
     "gl-repo": ["cloneUrl", "sshUrl"],
-    // GitLab CI (.gitlab-ci.yml) + CI/CD variables — a pure sink, like "ci".
+    // GitLab CI (.gitlab-ci.yml) + CI/CD variables, a pure sink, like "ci".
     "gl-ci": [],
 });

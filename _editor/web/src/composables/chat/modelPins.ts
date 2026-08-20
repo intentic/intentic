@@ -2,7 +2,7 @@ import { parsePinned, type QuickModelChoice } from "@intentic/sandbox-contract";
 import { providerReady } from "./access";
 import { modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
 
-/* NAMING A STORED `${provider}:${model}` PIN — shared by the two settings rows that keep one (Quick model and
+/* NAMING A STORED `${provider}:${model}` PIN, shared by the two settings rows that keep one (Quick model and
  * Agent runs), because both draw the list THE USER WROTE rather than the one that survived resolution and both
  * have to say the same thing about the same key.
  *
@@ -10,7 +10,7 @@ import { modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
  * the chain the daemon walks, but stays on screen greyed, because a setting that vanished from view looks like
  * the app ate it. So the rows need a describer that answers for a pin the resolver has already discarded. */
 
-// The model's published label, falling back to the raw id — a pinned id the catalog has not caught up with (the
+// The model's published label, falling back to the raw id, a pinned id the catalog has not caught up with (the
 // picker's custom-model escape hatch) has no label to show, and showing the id is more honest than showing
 // nothing.
 const modelPinLabel = (choice: QuickModelChoice): string =>

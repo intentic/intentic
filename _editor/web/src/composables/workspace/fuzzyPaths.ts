@@ -1,4 +1,4 @@
-/* fzf-style subsequence scoring over workspace paths — the client half of quick-open. Deliberately the same
+/* fzf-style subsequence scoring over workspace paths, the client half of quick-open. Deliberately the same
  * ranking model as the sandbox's iq `files` engine (_search/iq-engine/src/engines/files.ts), kept in sync by
  * copy rather than import: iq is a dependency island nothing may import (see ARCHITECTURE.md). */
 
@@ -47,7 +47,7 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
 export const rankPaths = (query: string, paths: readonly string[], limit: number): string[] => {
     const scored: { path: string; score: number }[] = [];
     /* ONE ROW PER PATH, whatever the candidate list handed over. A repeated path scores the same twice and so
-     * lands twice, adjacent — and the second one is not merely noise, it takes the slot the query's next-best
+     * lands twice, adjacent, and the second one is not merely noise, it takes the slot the query's next-best
      * match should have had, under a cap that is usually binding. The tree this reads today holds each path
      * once, but that is a property of today's caller rather than of the argument. */
     const seen = new Set<string>();

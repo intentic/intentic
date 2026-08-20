@@ -10,7 +10,7 @@ import { exposeRoute, routeId } from "./route.js";
 
 // The backing catalog: each abstract capability mapped to the concrete resource its provider deploys, the
 // per-app binding resource that provisions an app's isolated credentials on it, the pinned image, and
-// whether instances of it route publicly. Adding a capability is one entry here plus a provider — the
+// whether instances of it route publicly. Adding a capability is one entry here plus a provider, the
 // authoring surface (i.want.database / cache) is unchanged. Auth / object-storage land in Phase 2.
 interface BackingSpec {
     readonly type: ResourceType;
@@ -85,7 +85,7 @@ const instanceExtra = (intent: BackingIntent): Record<string, unknown> => {
         case "object-storage":
             // The Garage CLI (the binding mints buckets/keys with it) talks to the local node over RPC, whose
             // secret the provider generates host-side once (it needs 32 bytes / 64 hex, longer than a generated()
-            // value) — so no admin token/RPC secret is threaded here. region is fixed; domain only when exposed.
+            // value), so no admin token/RPC secret is threaded here. region is fixed; domain only when exposed.
             return {
                 region: "garage",
                 ...(intent.domain !== undefined ? { domain: intent.domain } : {}),
@@ -109,7 +109,7 @@ export const resolveBacking = (intent: BackingIntent, host: HostInput, apiToken:
             // The host port the instance publishes on; named distinctly from the SSH `port` in the ssh block.
             publishPort: backingPort(intent.id),
             image: spec.image,
-            // Stateful data lives here — protected from pruning unless the author opts out.
+            // Stateful data lives here, protected from pruning unless the author opts out.
             protect: intent.protect ?? true,
             ...instanceExtra(intent),
         },

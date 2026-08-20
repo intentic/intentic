@@ -29,7 +29,7 @@ const garage = async (session: SshSession, cid: string, args: string): Promise<s
 };
 
 // The access key id + secret of the named key, read back from `garage key info --show-secret` (Garage owns
-// them — it generates the pair on `key create`; the binding never sets them). Returns "" for a field not found.
+// them, it generates the pair on `key create`; the binding never sets them). Returns "" for a field not found.
 const readKey = async (session: SshSession, cid: string, keyName: string): Promise<{ accessKey: string; secretKey: string }> => {
     const info = (await session.exec(`docker exec ${cid} ${BIN} key info --show-secret ${keyName}`)).stdout;
     const field = (label: string): string => info.match(new RegExp(`${label}:\\s*(\\S+)`))?.[1] ?? "";

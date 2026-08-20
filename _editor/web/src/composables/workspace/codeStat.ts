@@ -1,7 +1,7 @@
 import { highlightLangFor } from "../../pages/workspace/fileType";
 import { requestCodeAnalysis } from "./codeAnalysisClient";
 
-/* HOW BIG A CHANGE IS ONCE THE COMMENTS ARE OUT OF IT — the +/− a review shows while its diffs are showing code
+/* HOW BIG A CHANGE IS ONCE THE COMMENTS ARE OUT OF IT, the +/− a review shows while its diffs are showing code
  * alone, which (useLayout.showComments being off by default) is what a reader sees before they touch anything.
  *
  * Git counts every line it changed, prose included, so on the default view every number in a review described a
@@ -19,7 +19,7 @@ export interface LineStat {
     readonly deletions: number;
 }
 
-/* The table budget, past which the count is abandoned instead of paid for — the caller then shows git's numbers,
+/* The table budget, past which the count is abandoned instead of paid for, the caller then shows git's numbers,
  * the same fallback a file with no grammar to strip takes. Only the differing MIDDLE of the two sides reaches the
  * table (the matching head and tail are trimmed off first), so an ordinary edit costs a few thousand cells and
  * this only ever fires on two large files with nothing in common. */
@@ -30,7 +30,7 @@ const splitLines = (text: string): string[] => (text === `` ? [] : text.split(`\
 /* The LENGTH of the longest common subsequence: every line not on it is one a minimal diff reports, so this one
  * number yields both counts. The chat card's row builder (chatToolDiff) computes the same subsequence but has to
  * know WHICH lines pair up, and keeps a full table and a walk back through it to find out. Nothing here needs the
- * alignment, so the table is two rolling rows and there is no walk — which is what makes it affordable to run
+ * alignment, so the table is two rolling rows and there is no walk, which is what makes it affordable to run
  * over every file in a review rather than one card. */
 const commonLength = (before: readonly string[], after: readonly string[]): number => {
     let previous = new Uint32Array(after.length + 1);
@@ -73,7 +73,7 @@ export const lineStat = (before: string, after: string): LineStat | undefined =>
 
 /** The same counts with every comment stripped from both sides, or undefined when this file cannot be stripped. */
 export const codeLineStat = async (before: string, after: string, path: string): Promise<LineStat | undefined> => {
-    // The grammar the diff surface would tokenize this file with, resolved exactly as it resolves it — over the
+    // The grammar the diff surface would tokenize this file with, resolved exactly as it resolves it, over the
     // highlight cap there is none, and the pane shows the file whole.
     const lang = highlightLangFor(path, Math.max(before.length, after.length), after === `` ? before : after);
     const [old, now] = await Promise.all([requestCodeAnalysis(before, lang), requestCodeAnalysis(after, lang)]);

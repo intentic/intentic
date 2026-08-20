@@ -1,4 +1,4 @@
-// The agent build, reported in the hello frame and surfaced per machine on the sandbox's card — so a computer
+// The agent build, reported in the hello frame and surfaced per machine on the sandbox's card, so a computer
 // running an old binary is visible there rather than mysteriously missing a tool. Stamped at COMPILE time by
 // build-agent-binaries.sh (bun's --define), because the shipped artifact is a single compiled binary with no
 // package.json beside it to read. See @intentic/sync's version.ts for why the hand-written literal this replaces

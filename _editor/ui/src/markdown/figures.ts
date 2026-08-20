@@ -1,4 +1,4 @@
-/* FIGURES IN PROSE — typed fenced blocks the markdown surface renders as real components.
+/* FIGURES IN PROSE, typed fenced blocks the markdown surface renders as real components.
  *
  * A generated document explains a codebase, and the explanation is half prose and half picture: "here is the
  * request path" wants its diagram at that sentence, not in a sidecar JSON array the reader has to reassemble.
@@ -11,7 +11,7 @@
  * WHY A FENCE AND NOT A SCHEMA FIELD. The alternative is a `flows: [{ steps: [...] }]` field on a sidecar
  * document model, which forces every explanation into one predeclared shape and throws away the reading order
  * the author already had. A fence keeps the document the unit of authorship and lets each figure be the kind
- * that fits — while still being DATA, so the app owns layout, theming and dark mode. That is the whole trade:
+ * that fits, while still being DATA, so the app owns layout, theming and dark mode. That is the whole trade:
  * the model says what the nodes mean, dagre says where they go.
  *
  * WHY IT DEGRADES INSTEAD OF FAILING. A fence whose body does not parse is left exactly where it is, so it
@@ -22,29 +22,29 @@
  * module cannot read, so it is passed through whole and judged by mermaid's own parser at render time. See
  * MermaidFigure below for why a hand-written notation belongs beside the generated ones.
  *
- * This module is pure TypeScript with no Vue and no DOM — it ships on the `@intentic/ui/markdown` subpath
+ * This module is pure TypeScript with no Vue and no DOM, it ships on the `@intentic/ui/markdown` subpath
  * and is unit-tested without mounting anything. MarkdownFigure.vue owns the component switch. */
 
 // The five categorical slots the design system's chart palette exposes (semantic-colors.css), plus its
 // fold-to bucket. An author assigns a slot to an ENTITY and keeps it there; slots are never handed out by
 // rank, which is why this is an authored field and not a position in the array. Past five groups, fold to
-// `neutral` rather than inventing a sixth hue — the same contract the palette itself documents.
+// `neutral` rather than inventing a sixth hue, the same contract the palette itself documents.
 export const FIGURE_ACCENTS = [`1`, `2`, `3`, `4`, `5`, `neutral`] as const;
 export type FigureAccent = (typeof FIGURE_ACCENTS)[number];
 
 export interface DagFigureNode {
     readonly id: string;
     readonly label: string;
-    // One short line under the label — what this box IS, not a second sentence about it.
+    // One short line under the label, what this box IS, not a second sentence about it.
     readonly note?: string;
     readonly accent?: FigureAccent;
 }
 
 /* An arrow between two declared nodes. There is deliberately NO edge label: the renderer (DagGraph) draws
- * paths, not text on paths, and a schema field the renderer silently ignores is a declaration with no effect —
+ * paths, not text on paths, and a schema field the renderer silently ignores is a declaration with no effect,
  * the author would write it, see nothing, and have no way to find out why. `dashed` is here instead because it
  * is a distinction DagGraph really can draw, and it covers the one an explanation usually needs: a weaker or
- * optional relationship beside a load-bearing one. */
+ * optional relationship beside a required one. */
 export interface DagFigureEdge {
     readonly from: string;
     readonly to: string;
@@ -70,7 +70,7 @@ export interface BarsFigureItem {
     readonly accent?: FigureAccent;
 }
 
-// Magnitude across a handful of named things — package sizes, churn, test counts. One measure only: two
+// Magnitude across a handful of named things, package sizes, churn, test counts. One measure only: two
 // measures of different scale are two figures, never one chart with two axes.
 export interface BarsFigure {
     readonly kind: "bars";
@@ -87,7 +87,7 @@ export interface StatsFigureItem {
     readonly note?: string;
 }
 
-// The orientation strip at the top of a page — counts a reader wants before any prose. Not a chart: per the
+// The orientation strip at the top of a page, counts a reader wants before any prose. Not a chart: per the
 // form heuristic, a handful of standalone numbers is a stat row, and drawing them as a bar chart of unrelated
 // measures would be the dual-axis mistake in another costume.
 export interface StatsFigure {
@@ -97,13 +97,13 @@ export interface StatsFigure {
 
 /* A mermaid diagram, carried as the fence body VERBATIM.
  *
- * Every other figure here is data this module can judge — it reads the JSON and answers with a value or with
+ * Every other figure here is data this module can judge, it reads the JSON and answers with a value or with
  * "leave it as a code block". Mermaid is a language, and the only thing that can say whether a body is valid
  * mermaid is mermaid's own parser, which is a megabyte of diagram grammars behind a lazy import. So the
  * judgement moves to render time: MermaidDiagram.vue asks the parser, and falls back to the code block itself
  * when the answer is no. The degrade-instead-of-fail contract is the same one, kept in a different place.
  *
- * WHY MERMAID AT ALL, next to `dag`. The two answer different questions. `dag` is what a document GENERATES —
+ * WHY MERMAID AT ALL, next to `dag`. The two answer different questions. `dag` is what a document GENERATES,
  * data the app lays out, themes and keeps consistent across a doc set. Mermaid is what a repository already
  * HAS: READMEs, architecture notes and design docs written long before this app opened them, and it is the
  * notation people reach for when they write a diagram by hand. Refusing to draw those would mean the file
@@ -115,7 +115,7 @@ export interface MermaidFigure {
 
 export type Figure = DagFigure | BarsFigure | StatsFigure | MermaidFigure;
 
-/* The fence languages whose body is JSON — the figure kinds this module parses into data. Named apart from
+/* The fence languages whose body is JSON, the figure kinds this module parses into data. Named apart from
  * mermaid because code.ts colours exactly these as JSON when one of them degrades to a code block, and
  * colouring a mermaid fence as JSON would be a lie about what the reader is looking at. */
 export const JSON_FIGURE_LANGS: readonly string[] = [`dag`, `bars`, `stats`];
@@ -129,7 +129,7 @@ export const FIGURE_LANGS: readonly string[] = [...JSON_FIGURE_LANGS, MERMAID_LA
 
 /* Hand-rolled rather than zod: this package is the design system, and a figure's shape is small enough that a
  * schema dependency would cost the whole app a package to validate three record types. Every reader below is
- * total — it answers `undefined` for anything unexpected and never throws — because the caller's contract is
+ * total, it answers `undefined` for anything unexpected and never throws, because the caller's contract is
  * "unparseable figures render as code blocks", and an exception would take the page with it. */
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === `object` && value !== null && !Array.isArray(value);
@@ -157,7 +157,7 @@ const dagNode = (value: unknown): DagFigureNode | undefined => {
     if (id === undefined) {
         return undefined;
     }
-    // A node with no label is labelled by its id — the id is authored and readable, and dropping the node
+    // A node with no label is labelled by its id, the id is authored and readable, and dropping the node
     // would silently break the edges that point at it.
     return { id, label: text(value[`label`]) ?? id, note: text(value[`note`]), accent: accent(value[`accent`]) };
 };
@@ -169,7 +169,7 @@ const dagEdge = (value: unknown, ids: ReadonlySet<string>): DagFigureEdge | unde
     const from = text(value[`from`]);
     const to = text(value[`to`]);
     /* An edge to a node that isn't there is DROPPED, not fatal. dagre would otherwise lay out a phantom node
-     * with no label — a blank box the reader cannot interpret and the author cannot see the cause of. Dropping
+     * with no label, a blank box the reader cannot interpret and the author cannot see the cause of. Dropping
      * loses one arrow from an otherwise correct diagram, which is the smaller loss. */
     if (from === undefined || to === undefined || !ids.has(from) || !ids.has(to)) {
         return undefined;
@@ -216,7 +216,7 @@ const barsFigure = (body: Record<string, unknown>): BarsFigure | undefined => {
         const label = text(item[`label`]);
         const value = finite(item[`value`]);
         // A negative bar has no meaning in a magnitude comparison drawn from a single baseline, so it is not
-        // clamped to zero (which would show a bar that isn't there) — the item is dropped.
+        // clamped to zero (which would show a bar that isn't there), the item is dropped.
         if (label === undefined || value === undefined || value < 0) {
             return [];
         }
@@ -282,7 +282,7 @@ export type MarkdownSegment = { readonly kind: "prose"; readonly text: string } 
 const FENCE_OPEN = /^(`{3,}|~{3,})([^\s`]*)\s*$/;
 
 // Only column 0. A fence indented under a list item belongs to that item's content, and cutting the document
-// there would split the list in half — so an indented figure fence renders as a code block instead. Authors
+// there would split the list in half, so an indented figure fence renders as a code block instead. Authors
 // put figures at the top level, which is where a figure belongs anyway.
 const closes = (line: string, marker: string): boolean => {
     const match = /^(`{3,}|~{3,})\s*$/.exec(line);
@@ -292,18 +292,18 @@ const closes = (line: string, marker: string): boolean => {
 /* Split a document at its top-level figure fences.
  *
  * WHY SPLIT BEFORE PARSING rather than substituting placeholders into rendered HTML: a figure is a Vue
- * component, and the engine's output is an HTML string bound with v-html — there is nowhere in a string to put
+ * component, and the engine's output is an HTML string bound with v-html, there is nowhere in a string to put
  * a component. The alternative is mounting into `[data-md-figure]` elements after render, which means DOM
  * surgery that has to be redone every time the source changes. Splitting keeps the whole thing declarative:
  * each prose run is rendered by the one markdown engine exactly as before, and the figures sit between them.
  *
  * The cost is that markdown constructs do not span a figure: a reference-style link defined in one prose run
  * is not visible to the next. Figures sit at block level between paragraphs, where nothing legitimately spans
- * them, and authored documents use inline links — so this has no effect in practice. It is the reason
+ * them, and authored documents use inline links, so this has no effect in practice. It is the reason
  * splitting is done on FENCE BOUNDARIES ONLY, never on blank lines. */
 export const splitFigureSegments = (source: string): readonly MarkdownSegment[] => {
     const whole = typeof source === `string` ? source : String(source ?? ``);
-    /* The overwhelmingly common case — prose with no fences at all — costs two indexOf scans and allocates one
+    /* The overwhelmingly common case, prose with no fences at all, costs two indexOf scans and allocates one
      * segment, so every existing markdown surface pays effectively nothing for this feature.
      *
      * The test is for a FENCE, not for a figure language: `includes("dag")` would have to be case-insensitive
@@ -333,7 +333,7 @@ export const splitFigureSegments = (source: string): readonly MarkdownSegment[] 
             prose.push(line);
             continue;
         }
-        // Find this fence's closer so a non-figure fence is copied through whole — scanning its body for
+        // Find this fence's closer so a non-figure fence is copied through whole, scanning its body for
         // fences would treat the code inside it as markup.
         let end = lines.length;
         let closed = false;
@@ -346,7 +346,7 @@ export const splitFigureSegments = (source: string): readonly MarkdownSegment[] 
         }
         const body = lines.slice(index + 1, end).join(`\n`);
         /* An UNCLOSED fence is never a figure, even when its body happens to be valid JSON. The fence is what
-         * delimits the figure, so without a closer the content is by definition still arriving — and rendering
+         * delimits the figure, so without a closer the content is by definition still arriving, and rendering
          * a diagram from a half-written body is how a streamed document flickers between two wrong pictures.
          * It stays prose, whole, and becomes a figure the moment the closing fence lands. */
         const figure = closed && FIGURE_LANGS.includes(lang) ? parseFigure(lang, body) : undefined;
@@ -364,6 +364,6 @@ export const splitFigureSegments = (source: string): readonly MarkdownSegment[] 
     }
     flushProse();
     // A document that is nothing but one figure still needs to render, and a caller that gets an empty array
-    // would render nothing at all — so an empty split answers with the (empty) prose it was given.
+    // would render nothing at all, so an empty split answers with the (empty) prose it was given.
     return segments.length === 0 ? [{ kind: `prose`, text: whole }] : segments;
 };

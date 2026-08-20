@@ -5,16 +5,16 @@ import type { SshExecutor, SshResult, SshTarget } from "@intentic/providers";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // A host-side advisory lock that serializes `apply` (and the `prune` that follows it) against a host, so two
-// concurrent runs — a laptop and CI, or two operators — cannot interleave mutations and corrupt infra. The
+// concurrent runs, a laptop and CI, or two operators, cannot interleave mutations and corrupt infra. The
 // lock lives ON the contended resource (the host), reachable even at cold bootstrap; it is NOT a state file.
 //
 // Safety model: acquisition is an atomic `mkdir` of the lock dir (test-and-set). The lock carries a random
 // `nonce`; `verify` re-checks our nonce is still in place before destructive steps. `expiresAt` is only a
-// hint telling OTHER runs when an abandoned lock may be taken over — it never self-invalidates a live holder
+// hint telling OTHER runs when an abandoned lock may be taken over, it never self-invalidates a live holder
 // (verify checks the nonce, not the clock). So a stale-TTL takeover does not silently create two writers:
 // the run whose nonce was overwritten fails its next `verify` and aborts. This is "no blind TTL takeover".
 const LOCK_DIR = `${HOST_STATE_ROOT}/apply.lock.d`;
-// Generous — an apply can pull images or run a restic restore for minutes. Crash-recovery only.
+// Generous, an apply can pull images or run a restic restore for minutes. Crash-recovery only.
 const DEFAULT_TTL_SECONDS = 30 * 60;
 
 export interface ApplyLock {

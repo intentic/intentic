@@ -6,7 +6,7 @@ import { sshExecutor } from "../core/ssh.js";
 import { createComposeServiceProvider, SERVICE_LOGGING, serviceSchema } from "./compose-service.js";
 
 const infisicalSchema = serviceSchema.extend({
-    // Infisical has no env-based admin seeding — its first completed signup becomes the instance admin,
+    // Infisical has no env-based admin seeding, its first completed signup becomes the instance admin,
     // which on a routed public domain is an ownership race. The seed hook below claims the instance for the
     // intentic admin identity through Infisical's one-shot bootstrap API instead.
     adminUser: z.string(),
@@ -75,7 +75,7 @@ export const createInfisicalProvider = (executor: SshExecutor = sshExecutor): Pr
             healthPath: "/api/status",
             files: (parsed, id, hash) => ({ "compose.yaml": composeYaml(parsed, id, hash) }),
             env: () => [
-                // Infisical validates ENCRYPTION_KEY as 16-byte hex and AUTH_SECRET as 32-byte base64 —
+                // Infisical validates ENCRYPTION_KEY as 16-byte hex and AUTH_SECRET as 32-byte base64,
                 // neither matches the host-side hex-32 generator, so both are minted here (the write-once
                 // guard keeps the first apply's values).
                 { key: "ENCRYPTION_KEY", value: randomBytes(16).toString("hex") },

@@ -5,7 +5,7 @@ import { readIntenticLines } from "../intenticStream";
 import { COMPUTERS, SYNC_HEALTH } from "../queryKeys";
 import { useSandboxQuery } from "./useSandboxQuery";
 
-/* THE COMPUTERS ON THE OTHER END OF THIS SANDBOX — every machine the daemon can see, however it can see it
+/* THE COMPUTERS ON THE OTHER END OF THIS SANDBOX, every machine the daemon can see, however it can see it
  * (hosts/machine-reports.ts merges the two doors).
  *
  * This is the read that made the Desktop sync card's claims checkable. That card could say a machine was enrolled
@@ -32,7 +32,7 @@ export function useComputers(): {
     return {
         computers: computed(() => query.data.value?.computers ?? []),
         error,
-        // The FIRST read only — a poll every ten seconds must never blank the list it is refreshing. An empty
+        // The FIRST read only, a poll every ten seconds must never blank the list it is refreshing. An empty
         // `computers` is "no machine is paired" once this is false, and says nothing at all while it is true.
         isLoading: query.isLoading,
         refetch: () => void query.refetch(),
@@ -41,8 +41,8 @@ export function useComputers(): {
 
 /* One action on one machine's sandbox, and every one of them takes this door.
  *
- * They differ enormously underneath — three are a docker call that returns in a second, three run a flow that
- * pulls an image for minutes, one deletes — and not at all to the person clicking. So there is one call, and it
+ * They differ enormously underneath, three are a docker call that returns in a second, three run a flow that
+ * pulls an image for minutes, one deletes, and not at all to the person clicking. So there is one call, and it
  * STREAMS: `onLine` is handed each line the machine prints while it prints it, which is the difference between a
  * button that shows an update happening and one that spins in silence for four minutes.
  *
@@ -62,7 +62,7 @@ export async function manageMachineSandbox(
     if (!response.ok || !response.body) {
         throw await sandboxError(response, { method: `POST`, path: `/system/computers/{id}/sandboxes/{slug}` });
     }
-    // The terminal frame is the answer. A stream that ends without one means the connection dropped mid-flight —
+    // The terminal frame is the answer. A stream that ends without one means the connection dropped mid-flight,
     // which does NOT mean the operation stopped: it is running on the machine, and the fleet re-read that follows
     // is what tells the truth about it.
     let outcome: string | undefined;
@@ -84,11 +84,11 @@ export async function manageMachineSandbox(
     return outcome;
 }
 
-/* THE CONNECTED COMPUTER THAT RUNS A GIVEN SANDBOX, when there is one — the fact that turns "paste this command
+/* THE CONNECTED COMPUTER THAT RUNS A GIVEN SANDBOX, when there is one, the fact that turns "paste this command
  * on the machine that runs your sandbox" into a button.
  *
  * Only a connected computer qualifies, and only while it is online: the sync agent never reports containers, so a
- * machine reachable through that door alone cannot be asked to recreate one. Offered rather than assumed — a
+ * machine reachable through that door alone cannot be asked to recreate one. Offered rather than assumed, a
  * button that fails when taken is worse than the command it replaced, and this one would fail at the moment
  * somebody's sandbox is already unhappy.
  *
@@ -108,8 +108,8 @@ export function useHostRunning(slug: () => string | undefined): ComputedRef<stri
 }
 
 /* How stale a machine's own reading may be before the view stops presenting it as now. The sync agent reports
- * every ~15s and the daemon re-pulls every 10s, so anything past a minute means the machine stopped talking —
- * its lid closed, its agent died — and the rows below it describe a computer that has moved on.
+ * every ~15s and the daemon re-pulls every 10s, so anything past a minute means the machine stopped talking,
+ * its lid closed, its agent died, and the rows below it describe a computer that has moved on.
  *
  * The same argument as the sync card's heartbeat: a report shown as current when its machine went quiet an hour
  * ago is precisely the lie that let a lost pairing go unnoticed for days. */
@@ -118,13 +118,13 @@ const REPORT_STALE_MS = 60_000;
 export const reportStale = (computer: Computer, now: number): boolean =>
     computer.report !== undefined && now - computer.report.capturedAt > REPORT_STALE_MS;
 
-/* The rail's ambient read of the same subject — and deliberately NOT /system/computers.
+/* The rail's ambient read of the same subject, and deliberately NOT /system/computers.
  *
  * That route asks every connected computer a question over its WebSocket. Behind the Computers tab that is
  * exactly right: someone is looking. Behind the rail chip it would mean this sandbox pokes the user's laptop
  * every few seconds for as long as any page is open, forever, to decide whether to draw a badge.
  *
- * /system/sync costs the daemon nothing — the volunteered reports are already in its memory — and it carries the
+ * /system/sync costs the daemon nothing, the volunteered reports are already in its memory, and it carries the
  * two facts a badge can act on. So the ambient half is free, and reaching out to a machine stays a thing that
  * happens because a person opened the view that shows it. */
 const HEALTH_POLL_MS = 60_000;

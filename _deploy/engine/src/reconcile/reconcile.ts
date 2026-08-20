@@ -30,7 +30,7 @@ export const makeContext = (
 // How often a still-running provider read narrates itself.
 const READ_NARRATE_INTERVAL_MS = 15_000;
 
-// Await a provider read, narrating every 15s while it runs — shared by plan and apply. A slow or hung read
+// Await a provider read, narrating every 15s while it runs, shared by plan and apply. A slow or hung read
 // must name itself in the event stream: the narration feeds the UI's activity line, timestamps the stall in
 // the persisted run log, and (because an interval only fires on a live event loop) proves in a postmortem
 // whether a silent stretch was a pending promise or a blocked loop.
@@ -52,7 +52,7 @@ export const narratedRead = async (
 };
 
 // The engine-level drift check, shared by plan and apply: a resource whose stamped inputs hash no longer
-// matches the node's serialized inputs is an update regardless of what the provider's diff would say —
+// matches the node's serialized inputs is an update regardless of what the provider's diff would say,
 // authored config changed since the last stamped apply. Falls through to the provider's own diff (live
 // drift: image pins etc.) when no hash is stamped or it matches.
 export const decideDiff = (provider: Provider, node: ResourceNode, inputs: ResolvedInputs, observed: Observed): DiffResult =>

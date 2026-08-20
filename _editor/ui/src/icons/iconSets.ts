@@ -1,8 +1,8 @@
 // The app's icon vocabulary and how each name resolves. Keys are the stable semantic names (the old PrimeIcons
 // suffixes, verbatim); values are Iconify ids from Remix.
 //
-// ONE SET, and the id column is the only place a glyph is chosen. There used to be five complete sets here —
-// Phosphor, Solar, Remix, HugeIcons and PrimeIcons — behind a Settings control that let them be compared live in
+// ONE SET, and the id column is the only place a glyph is chosen. There used to be five complete sets here,
+// Phosphor, Solar, Remix, HugeIcons and PrimeIcons, behind a Settings control that let them be compared live in
 // the running app. That control had done its job: Remix was picked, and what was left was 530 lines of mappings
 // nobody read and a bundled SVG payload five times the size of the icons the app can actually draw. Comparing a
 // candidate set again is a branch, not a shipped feature.
@@ -155,7 +155,7 @@ export const ICONS: Record<IconName, string> = {
     "cloud-upload": "ri:upload-cloud-line",
     code: "ri:code-line",
     cog: "ri:settings-3-line",
-    // Was a Phosphor borrow (`ph:arrows-in-line-vertical`) while five sets shipped — Remix's own converging-
+    // Was a Phosphor borrow (`ph:arrows-in-line-vertical`) while five sets shipped. Remix's own converging-
     // arrows glyph is the same idea and keeps the whole table on one prefix.
     "collapse-all": "ri:collapse-vertical-line",
     comments: "ri:chat-2-line",
@@ -176,14 +176,14 @@ export const ICONS: Record<IconName, string> = {
     file: "ri:file-line",
     "file-edit": "ri:file-edit-line",
     "file-pdf": "ri:file-pdf-line",
-    /* The Workspace area's glyph, and deliberately NOT `folder` — see `robot` below for the pair's whole story.
+    /* The Workspace area's glyph, and deliberately NOT `folder`, see `robot` below for the pair's whole story.
      * A branching tree is also the truer picture of that view: it opens on a file tree, not on one directory. */
     "file-tree": "ri:node-tree",
     filter: "ri:filter-3-line",
     folder: "ri:folder-line",
     "folder-open": "ri:folder-open-line",
     /* Forking a CONVERSATION, which is why it is the branch glyph and not `ri:git-fork-line`: git's fork icon
-     * means a copy of somebody else's repository, where this means one line of talk splitting into two — the
+     * means a copy of somebody else's repository, where this means one line of talk splitting into two, the
      * picture the cut line in the transcript is already drawing. */
     fork: "ri:git-branch-line",
     forward: "ri:forward-end-line",
@@ -192,18 +192,18 @@ export const ICONS: Record<IconName, string> = {
     globe: "ri:global-line",
     google: "ri:google-line",
     /* What a run DID, as opposed to what it said: the tool calls under a message. A hammer is the plainest
-     * picture of work being done with something, and it stays legible at the size the composer strip draws it —
+     * picture of work being done with something, and it stays legible at the size the composer strip draws it,
      * `wrench` at that size is a thin diagonal smudge, and it is already spoken for by settings-ish surfaces. */
     hammer: "ri:hammer-line",
     history: "ri:history-line",
     image: "ri:image-line",
     "info-circle": "ri:information-line",
     key: "ri:key-2-line",
-    // A panel docked at a frame's left edge — the chat's "dock to rail" verb (the rail is the app's left
+    // A panel docked at a frame's left edge, the chat's "dock to rail" verb (the rail is the app's left
     // column). Not `expand`: that glyph promises fullscreen, and the action is a docking, not a maximise.
     "layout-left": "ri:layout-left-line",
     link: "ri:link",
-    // A symlink whose target isn't there (or isn't reachable) — the chain, drawn snapped.
+    // A symlink whose target isn't there (or isn't reachable), the chain, drawn snapped.
     "link-broken": "ri:link-unlink",
     "list-check": "ri:list-check",
     lock: "ri:lock-2-line",
@@ -232,7 +232,7 @@ export const ICONS: Record<IconName, string> = {
      * tiles the app is used from were the two nobody could tell apart. `desktop` (Browsers) is a third box.
      *
      * The fix is to leave the family rather than redraw the bump: a round-ish head with eyes reads as a face at
-     * any size, and Workspace's `file-tree` reads as branching. Not a people glyph (`users`/`team`) — Subagents
+     * any size, and Workspace's `file-tree` reads as branching. Not a people glyph (`users`/`team`). Subagents
      * already wears `users`, and that only moves the collision down the rail. Not a filled variant of the same
      * shape either: it separates them, but a solid tile in an all-outline set reads as "unread". */
     robot: "ri:robot-2-line",
@@ -244,7 +244,7 @@ export const ICONS: Record<IconName, string> = {
     "sign-in": "ri:login-box-line",
     "sign-out": "ri:logout-box-line",
     sitemap: "ri:organization-chart",
-    // One of the few brands the icon CDN cannot serve at all — it holds no Slack mark, so the card that wants
+    // One of the few brands the icon CDN cannot serve at all, it holds no Slack mark, so the card that wants
     // one has to find it here or fall to a generic speech bubble, which is what it did.
     slack: "ri:slack-line",
     "sliders-h": "ri:equalizer-line",
@@ -274,10 +274,10 @@ export const ICONS: Record<IconName, string> = {
 
 /* Is this string a name the app can actually draw?
  *
- * Every icon name that arrives from OUTSIDE the app is an open string — `Activation.icon`, a manifest's `icon`,
- * a capability card's, a document offer's — because a third-party extension is written against a build that
+ * Every icon name that arrives from OUTSIDE the app is an open string, `Activation.icon`, a manifest's `icon`,
+ * a capability card's, a document offer's, because a third-party extension is written against a build that
  * has not shipped yet and must install anyway. <Icon> takes the closed `IconName`, so the cast has to be
  * checked somewhere, and an UNchecked one is not a loud failure: `ICONS[name]` is undefined, Iconify renders
  * nothing, and the tile comes up blank (which shipped once, as `book`). Asking here lets a renderer fall to its
- * next tier — a glyph, then initials — instead of to a hole. */
+ * next tier, a glyph, then initials, instead of to a hole. */
 export const isIconName = (name: string): name is IconName => name in ICONS;

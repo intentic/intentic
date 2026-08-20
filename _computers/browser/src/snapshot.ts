@@ -2,20 +2,20 @@ import type { PageElement, PageState } from "./types.js";
 
 /* What the page is showing, as a list of things that can be acted on.
  *
- * THIS IS THE POINT OF THE PACKAGE. A screenshot tells a model where pixels are; this tells it what they MEAN —
+ * THIS IS THE POINT OF THE PACKAGE. A screenshot tells a model where pixels are; this tells it what they MEAN,
  * that the grey rectangle is a button called "Send", that the box under it is a textbox currently holding
  * "invoice". Acting by reference then survives everything that breaks coordinates: a scroll, a resize, a
  * re-render, a different machine with a different screen.
  *
  * The refs are deliberately short-lived. They index an array parked on the page, and the next snapshot replaces
- * it — so a ref taken before a click that navigated cannot silently address whatever now sits in that slot. A
+ * it, so a ref taken before a click that navigated cannot silently address whatever now sits in that slot. A
  * stale ref fails loudly, which is the behaviour worth having.
  *
  * The script below runs in the page, so it is written in plain ES5-ish JavaScript with no template literals: it
  * is embedded in a template literal here, and nesting them is how this kind of code acquires bugs that only
  * appear on somebody else's website. */
 
-// Beyond this the list is more noise than help — a search-results page can hold thousands of links, and a model
+// Beyond this the list is more noise than help, a search-results page can hold thousands of links, and a model
 // reading two hundred of them has already lost the thread. Truncation is reported so it is never silent.
 const MAX_ELEMENTS = 150;
 
@@ -97,7 +97,7 @@ export const SNAPSHOT_SCRIPT = `(function () {
 })()`;
 
 /* The agent-facing rendering. One line per element, the ref first because that is what gets passed back, then
- * what it is and what it says — the shape a person scanning for "the Send button" reads fastest.
+ * what it is and what it says, the shape a person scanning for "the Send button" reads fastest.
  *
  * Pure, and therefore the part of this package that can be tested without a browser. */
 export const renderPage = (page: PageState, truncated = false): string => {

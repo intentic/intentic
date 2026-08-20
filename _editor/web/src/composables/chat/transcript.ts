@@ -17,13 +17,13 @@ import type {
 import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "./errands";
 
-/* The transcript VOCABULARY — what a chat is made of, with no notion of how it is produced.
+/* The transcript VOCABULARY, what a chat is made of, with no notion of how it is produced.
  *
  * Split out of conversation.ts so the frame reducer (turnReducer.ts) and the conversation runtime can both
  * speak it without one importing the other. Everything here is a plain value type or a pure function over
  * them; nothing reaches for a ref, the network, or the daemon. */
 
-// 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved / stopped) —
+// 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved / stopped),
 // it keeps the user informed about control actions, Claude Code style.
 export type ChatRole = "user" | "assistant" | "notice";
 
@@ -52,7 +52,7 @@ export interface QuestionRequest {
 
 // A tool call awaiting the user's approval (the daemon's canUseTool gate). 'pending' shows the buttons; the
 // answer then freezes into the transcript so the turn reads back as a record of what was allowed. 'cancelled'
-// is the user stopping the turn instead of answering — the tool never ran, and nobody denied it either.
+// is the user stopping the turn instead of answering, the tool never ran, and nobody denied it either.
 export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "cancelled";
 
 export interface PermissionRequest extends PermissionAsk {
@@ -61,7 +61,7 @@ export interface PermissionRequest extends PermissionAsk {
 }
 
 // The agent's browser parked on something only a person can clear (a captcha, a stored password nobody holds).
-// 'pending' renders the card with its way THERE — the Browsers view, where the live stage and Take control are,
+// 'pending' renders the card with its way THERE, the Browsers view, where the live stage and Take control are,
 // and where "hand back" resolves it; 'helped'/'declined' freeze how it ended (mostly via the resolved frame,
 // since the answering surface is usually not this card). 'cancelled' is the turn ending under it.
 export type BrowserHelpStatus = "pending" | "helped" | "declined" | "cancelled";
@@ -76,22 +76,22 @@ export interface BrowserHelpRequest {
 }
 
 // The agent's TERMINAL parked at a prompt only a person can answer (a one-time password, a security-key touch).
-// The same four states as the browser's above, and for the same reasons — including that the answering surface
+// The same four states as the browser's above, and for the same reasons, including that the answering surface
 // is usually not this card but the terminal panel, where the live prompt is.
 export type TerminalHelpStatus = BrowserHelpStatus;
 
 export interface TerminalHelpRequest {
     readonly requestId: string;
-    // The tmux session the terminal panel opens on — the agent's own, where the waiting command sits.
+    // The tmux session the terminal panel opens on, the agent's own, where the waiting command sits.
     readonly session: string;
     readonly message: string;
     readonly status: TerminalHelpStatus;
 }
 
-// A priced service run awaiting the owner's click — the daemon's spend gate (platform/service-offer.ts).
+// A priced service run awaiting the owner's click, the daemon's spend gate (platform/service-offer.ts).
 // 'pending' shows Run/Skip with the platform's own numbers; 'approved'/'skipped' freeze the decision.
-// 'cancelled' is nobody answering — the turn stopped under the card, the asking command died, or the offer
-// expired — every one of which charged nothing.
+// 'cancelled' is nobody answering, the turn stopped under the card, the asking command died, or the offer
+// expired, every one of which charged nothing.
 export type ServiceOfferStatus = "pending" | "approved" | "skipped" | "cancelled";
 
 export interface ServiceOfferRequest {
@@ -99,7 +99,7 @@ export interface ServiceOfferRequest {
     readonly offer: ServiceOffer;
     readonly status: ServiceOfferStatus;
     /* The approved run's stream so far (the service_event frames): what the provider is doing right now,
-     * rendered as the card's live activity. Status lines accumulate in order — the card shows the last one
+     * rendered as the card's live activity. Status lines accumulate in order, the card shows the last one
      * while the run lives and can show the trail once it settles. Carried as the contract's whole event
      * union so richer event kinds render here without reshaping the transcript. */
     readonly events?: readonly ServiceStreamEvent[];
@@ -108,10 +108,10 @@ export interface ServiceOfferRequest {
     readonly receipt?: { readonly outcome: "ok" | "refunded" | "refused"; readonly credits: number; readonly remaining?: number };
 }
 
-/* A USDC payment awaiting the owner's click — the daemon's payment gate (wallet/payment-offer.ts).
+/* A USDC payment awaiting the owner's click, the daemon's payment gate (wallet/payment-offer.ts).
  * 'pending' shows Pay/Skip with the endpoint's own price and the wallet's meter; 'approved'/'skipped' freeze
- * the decision. 'cancelled' is nobody answering — the turn stopped under the card, the asking command died,
- * or the offer expired — every one of which spent nothing. */
+ * the decision. 'cancelled' is nobody answering, the turn stopped under the card, the asking command died,
+ * or the offer expired, every one of which spent nothing. */
 export type PaymentOfferStatus = ServiceOfferStatus;
 
 export interface PaymentOfferRequest {
@@ -119,15 +119,15 @@ export interface PaymentOfferRequest {
     readonly offer: PaymentOffer;
     readonly status: PaymentOfferStatus;
     // How an approved payment ended (the payment_receipt frame): settled (with its onchain transaction hash
-    // when the endpoint stated one), or failed — in which case the signed authorization expired unused and
+    // when the endpoint stated one), or failed, in which case the signed authorization expired unused and
     // nothing left the wallet.
     readonly receipt?: { readonly outcome: "paid" | "failed"; readonly amountUsd: string; readonly transaction?: string; readonly network?: string };
 }
 
-/* A missing capability asking for the owner's setup — the daemon's setup gate (capabilities/
+/* A missing capability asking for the owner's setup, the daemon's setup gate (capabilities/
  * capability-offer.ts). 'pending' shows Connect/Not-now with the catalog's own title; 'connecting' is the
  * owner's yes with the setup still underway (the agent stays parked, waiting for the connection to come
- * live), settled by the outcome below; 'skipped' freezes the no. 'cancelled' is nobody answering — the turn
+ * live), settled by the outcome below; 'skipped' freezes the no. 'cancelled' is nobody answering, the turn
  * stopped under the card, the asking command died, or the ask expired. */
 export type CapabilityOfferStatus = "pending" | "connecting" | "skipped" | "cancelled";
 
@@ -141,7 +141,7 @@ export interface CapabilityOfferRequest {
 }
 
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
-// every later tool_call_update (status transitions, fresh content/locations — snapshots, not appends).
+// every later tool_call_update (status transitions, fresh content/locations, snapshots, not appends).
 export interface ChatTool {
     readonly id: string;
     readonly name: string;
@@ -158,7 +158,7 @@ export interface ChatTool {
     // thinking block. Absent for an ordinary tool call.
     readonly thinking?: string;
     /* THE CHILD THIS CALL STARTED, as the daemon's registry sees it (SubagentSessionSchema). Set on the card whose
-     * id the `subagent`/`subagent_update` frames name — which is this call's own id, so no correlation is needed:
+     * id the `subagent`/`subagent_update` frames name, which is this call's own id, so no correlation is needed:
      * an Agent card wears its subagent's live state, and a Bash card that turned out to be a `codex exec` wears
      * its delegate's.
      *
@@ -175,12 +175,12 @@ export interface ChatTool {
         readonly summary?: string;
         readonly error?: string;
         readonly background?: boolean;
-        // A delegation's tmux session — the live view a subagent has no equivalent of.
+        // A delegation's tmux session, the live view a subagent has no equivalent of.
         readonly terminal?: string;
     };
 }
 
-// Apply `fn` to the tool with `id` anywhere in a bubble's tool tree — a sub-agent's calls live nested under its
+// Apply `fn` to the tool with `id` anywhere in a bubble's tool tree, a sub-agent's calls live nested under its
 // Agent card, so a tool_call_update or a sub-agent thinking delta has to reach into the children too. Returns
 // the SAME array when the id isn't present, so an unrelated bubble keeps its identity (and re-renders nothing).
 export const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatTool) => ChatTool): readonly ChatTool[] => {
@@ -203,7 +203,7 @@ export const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatT
 };
 
 // A file the user attached to a turn, already uploaded to the workspace before send. `previewUrl` is an
-// object URL for image thumbnails — client-session only, gone on reload (restored history shows text).
+// object URL for image thumbnails, client-session only, gone on reload (restored history shows text).
 export interface ChatAttachment {
     readonly name: string;
     // Workspace-relative upload destination (.intentic/records/artifacts/attachments/<uuid>/<name>), sent on the turn.
@@ -224,17 +224,17 @@ export interface ChatMessage {
     readonly id: number;
     readonly role: ChatRole;
     readonly text: string;
-    /* WHEN THIS MESSAGE WAS SENT, in epoch milliseconds (user bubbles only) — what the bubble shows on hover.
+    /* WHEN THIS MESSAGE WAS SENT, in epoch milliseconds (user bubbles only), what the bubble shows on hover.
      *
      * Stamped as the bubble is appended for a turn this tab sent, and read off the daemon's record
      * (RestoredMessage.sentAt) for one it reopens, so the same message reads the same hour or a week later. Only
      * the user's own rows carry one: the daemon knows when a turn was sent and nothing anywhere knows when a
      * given assistant block was written, and a bubble stamped with a time it has no claim to is worse than one
-     * that says nothing. Absent on rows recorded before this existed — the bubble simply shows nothing. */
+     * that says nothing. Absent on rows recorded before this existed, the bubble simply shows nothing. */
     readonly sentAt?: number;
     /* A one-press follow-up a notice line can carry (notices only): the landed notice's "keep future work on the
      * branch" offer, the outage notice's "stop resuming these by itself", and the terminal a dependency install
-     * the daemon just started is running in. A KIND, not a callback — the transcript is rebuilt from replayed
+     * the daemon just started is running in. A KIND, not a callback, the transcript is rebuilt from replayed
      * frames, so the renderer owns what the press does and whether the offer is still standing (ChatMessageView
      * reads the CURRENT posture and hides a stale offer).
      *
@@ -242,11 +242,11 @@ export interface ChatMessage {
      * right to be on by default: the moment the automatic behaviour fires is the moment "don't do that" is worth
      * exactly one press, so the opt-out is offered there rather than only in a settings page nobody is looking at.
      *
-     * `depsInstall` is the other half of the same bargain — an automation that ran without asking owes the reader
+     * `depsInstall` is the other half of the same bargain, an automation that ran without asking owes the reader
      * a way to SEE it, not just a way to stop it. The install is a real attachable tmux job, so the press is a
      * reveal rather than a dialog: whoever wants the output gets the terminal it is already scrolling in. */
     readonly noticeAction?: "landHold" | "outageOptOut" | "depsInstall";
-    /* Set on a notice describing something that has not finished yet (notices only) — rendered with a spinner in
+    /* Set on a notice describing something that has not finished yet (notices only), rendered with a spinner in
      * place of its info icon while the wait is on, and as an ordinary settled line once it is over.
      *
      * A KIND rather than a boolean, for the same reason noticeAction is: whether the wait is STILL running is a
@@ -254,29 +254,29 @@ export interface ChatMessage {
      * pairs the kind with the live state that answers it (credentialRenewal), so a transcript replayed an hour
      * later shows the line settled instead of spinning forever over a turn that came back long ago. */
     readonly noticeWait?: "credentialRenewal";
-    /* Set on a notice that came out of the DAEMON'S RECORD rather than being drawn here (notices only) — a turn
+    /* Set on a notice that came out of the DAEMON'S RECORD rather than being drawn here (notices only), a turn
      * the provider refused, a turn the daemon resumed by itself. It is the one thing that tells the two kinds
      * apart once they are side by side in the same list, and what it decides is arithmetic: a recorded notice
      * occupies a row of the record and a local one does not, so a fork that counts them the same way cuts the
      * copied prefix in the wrong place (see recordedRows). */
     readonly recorded?: boolean;
-    /* THE USER WROTE THIS BUBBLE WEARING THE AGENT'S VOICE (assistant bubbles only) — the composer's "as agent"
+    /* THE USER WROTE THIS BUBBLE WEARING THE AGENT'S VOICE (assistant bubbles only), the composer's "as agent"
      * mode, placed straight into the daemon's record with no turn behind it. The bubble renders as the agent's
      * with a quiet mark, because the mark's one audience is the HUMAN re-reading the chat: months later, an
-     * unmarked planted line fools its own author. The agent never sees the flag — the daemon's handoff renders
+     * unmarked planted line fools its own author. The agent never sees the flag, the daemon's handoff renders
      * placed rows exactly like spoken ones (that indistinguishability is the feature's contract). */
     readonly placed?: boolean;
-    /* THE DAEMON-SIDE RUN THIS ROW CAME OUT OF — carried by everything a turn's frames drew (and by the notices
+    /* THE DAEMON-SIDE RUN THIS ROW CAME OUT OF, carried by everything a turn's frames drew (and by the notices
      * their effects raised), absent on everything else: a restored record, a fork's inherited turns, and every
      * write on the user's own clock.
      *
      * Attaching to a run replays it FROM ITS FIRST FRAME, so a window that has already rendered one draws the
-     * whole answer a second time the moment it attaches again — which is what a dropped stream and a sandbox
+     * whole answer a second time the moment it attaches again, which is what a dropped stream and a sandbox
      * restart both lead to. This is what lets that window take its own copy back out first (dropRun): rows
-     * carrying the run being attached to are the ones about to arrive again, and the rows above them — an
-     * interrupted run's work, the notice explaining it — are the ones nothing will ever redraw. */
+     * carrying the run being attached to are the ones about to arrive again, and the rows above them, an
+     * interrupted run's work, the notice explaining it, are the ones nothing will ever redraw. */
     readonly run?: string;
-    /* WHAT THE DAEMON TOLD THIS TURN and the user did not — each note with the title its row is drawn as and the
+    /* WHAT THE DAEMON TOLD THIS TURN and the user did not, each note with the title its row is drawn as and the
      * text that opening it reveals.
      *
      * A turn's prompt is not only what was typed: a rebase that moved the branch out from under the agent,
@@ -286,20 +286,20 @@ export interface ChatMessage {
      * line until it is opened, and always there to open.
      *
      * On the USER bubble for the ordinary case, because that is what the notes were added to and it is how they
-     * survive a reopen (the daemon stores them on that row). On a NOTICE for the mid-turn case — a rebase taken
+     * survive a reopen (the daemon stores them on that row). On a NOTICE for the mid-turn case, a rebase taken
      * while a card was parked went in front of no message of theirs, so it reads where it happened. */
     readonly notes?: readonly TurnNote[];
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
-    // only) — powers the hover "go back to before this message" affordance.
+    // only), powers the hover "go back to before this message" affordance.
     readonly checkpointId?: string;
     /* This message's position in the DAEMON's transcript, which is how the rewind route addresses it (user
      * bubbles only). Deliberately not the bubble's own index: the two diverge the moment a local `notice` line
      * is drawn, and a rewind aimed one message off restores the wrong turn and drops the wrong messages.
      *
      * Set from the daemon's `checkpoint` frame while a turn streams, and from the transcript's own ordering
-     * when a tab reopens — the record holds exactly the user/assistant rows this index counts. */
+     * when a tab reopens, the record holds exactly the user/assistant rows this index counts. */
     readonly rewindIndex?: number;
     // Accumulated extended-thinking text for assistant turns (empty when none / thinking off).
     readonly thinking?: string;
@@ -331,8 +331,8 @@ export interface ChatMessage {
     readonly usage?: ChatUsage;
 }
 
-/* THE INTERACTIVE CARDS a turn can park on. They differ in what they ask — a plan to approve, questions to
- * answer, a tool to permit — and in nothing else: each carries a `requestId` the daemon un-parks on, each is
+/* THE INTERACTIVE CARDS a turn can park on. They differ in what they ask, a plan to approve, questions to
+ * answer, a tool to permit, and in nothing else: each carries a `requestId` the daemon un-parks on, each is
  * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
  * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
  * rather than a hunt through the three places that used to spell them out. */
@@ -351,7 +351,7 @@ export type CardKind = (typeof CARD_KINDS)[number];
 // Whether a bubble is holding the turn open on a card the user hasn't answered.
 export const isAwaitingDecision = (message: ChatMessage): boolean => CARD_KINDS.some((kind) => message[kind]?.status === `pending`);
 
-/* Freeze whatever cards a bubble is parked on as `cancelled` — the user stopped the turn out from under the
+/* Freeze whatever cards a bubble is parked on as `cancelled`, the user stopped the turn out from under the
  * question instead of answering it. Returns the SAME message when it holds none, so a Stop mid-transcript
  * re-renders only the bubbles it actually changed. */
 export const withCancelledCards = (message: ChatMessage): ChatMessage => {
@@ -373,24 +373,24 @@ export const withCancelledCards = (message: ChatMessage): ChatMessage => {
 
 // One exchange: the user's prompt and everything the agent produced in reply, up to the next prompt. The
 // transcript renders a group per turn so the prompt can pin to the top of the scroller while its answer scrolls
-// beneath it — the group is what bounds the pin, so the next prompt pushes this one out instead of stacking on
+// beneath it, the group is what bounds the pin, so the next prompt pushes this one out instead of stacking on
 // it. Identified by its opening message, which is stable for the group's life.
 export interface ChatTurn {
     readonly id: number;
     readonly messages: ChatMessage[];
-    /* What turnsOf folded into this turn — every user message after the opener, whether the user's own nudge
+    /* What turnsOf folded into this turn, every user message after the opener, whether the user's own nudge
      * or an errand the app sent (see foldsIntoTurn). Rendered by the opener's bubble as its "↳ … ×N" trailer,
      * so a pinned prompt still admits what has happened to it since.
      *
      * Derived here rather than per render, because the transcript reads it for the head bubble of EVERY turn
      * on every paint of a streaming answer, and a freshly filtered array each time is a changed prop: it
      * defeated Vue's identity bailout and re-rendered one bubble per turn per frame to hand it the same
-     * messages back. Turns that folded nothing — nearly all of them — share NOTHING_FOLDED, so the prop holds
+     * messages back. Turns that folded nothing, nearly all of them, share NOTHING_FOLDED, so the prop holds
      * still across the rebuild `turnsOf` does on each frame. */
     readonly folded: readonly ChatMessage[];
 }
 
-/* HOW MANY ROWS THE DAEMON'S RECORD HOLDS FOR THESE BUBBLES — the one place the two numberings are converted,
+/* HOW MANY ROWS THE DAEMON'S RECORD HOLDS FOR THESE BUBBLES, the one place the two numberings are converted,
  * and the count a fork hands the daemon so it can copy that prefix of the source conversation.
  *
  * The record and the bubble list are deliberately not the same list: a bubble that produced nothing at all is
@@ -398,14 +398,14 @@ export interface ChatTurn {
  * nothing behind them in the record. Everything else is 1:1, because both sides fold a turn the same way (one
  * user row, then one assistant row per prose block with its cards beneath it).
  *
- * The notices that DO count are the ones the daemon wrote down — a refused turn, a turn it resumed by itself —
+ * The notices that DO count are the ones the daemon wrote down, a refused turn, a turn it resumed by itself,
  * which arrive here only through a restore and say so (ChatMessage.recorded). Counting those out was silently
  * wrong for every conversation that had ever seen a provider error: the fork asked for fewer rows than it meant
  * and lost the tail of the transcript it was copying.
  *
  * The assistant guard below MIRRORS the daemon's own (`flush` in sessions/turn-transcript.ts): text, thinking or
- * tools makes a row, and nothing makes none. The two have to agree — a fork that counts one row too many
- * inherits a turn the user cut, one too few drops a turn they kept — so change them together. */
+ * tools makes a row, and nothing makes none. The two have to agree, a fork that counts one row too many
+ * inherits a turn the user cut, one too few drops a turn they kept, so change them together. */
 export const recordedRows = (messages: readonly ChatMessage[]): number =>
     messages.filter((message) => {
         if (message.role === `notice`) {
@@ -417,11 +417,11 @@ export const recordedRows = (messages: readonly ChatMessage[]): number =>
         return message.text.length > 0 || (message.thinking?.length ?? 0) > 0 || (message.tools?.length ?? 0) > 0;
     }).length;
 
-/* WHAT PRESSING CONTINUE ACTUALLY SAYS — one sentence, picked from two by continuationFor below.
+/* WHAT PRESSING CONTINUE ACTUALLY SAYS, one sentence, picked from two by continuationFor below.
  *
  * "Continue" alone is ambiguous at exactly the moment it gets used most. The commonest way a turn ends early is
  * a tool the user refused: the agent is told to stop and wait, and the next thing it hears is the word
- * "continue" — which reads as "go on then, run it", so the refused command is the first thing it reaches for
+ * "continue", which reads as "go on then, run it", so the refused command is the first thing it reaches for
  * again. That is the failure mode of typing the word by hand, and naming the refusal is what fixes it.
  *
  * Plain words, and short, because this lands in the transcript as the user's own message: pressing the button IS
@@ -433,7 +433,7 @@ export const CONTINUATIONS = {
 } as const;
 
 // A message reduced to what the lexicon below is written in: lower case, one space between words, and trailing
-// sentence punctuation gone ("Continue.", "ok!") — but never "?", since "continue?" asks rather than consents.
+// sentence punctuation gone ("Continue.", "ok!"), but never "?", since "continue?" asks rather than consents.
 const bareText = (text: string): string =>
     text
         .trim()
@@ -443,13 +443,13 @@ const bareText = (text: string): string =>
         .replace(/\s+/gu, ` `);
 
 /* Messages whose ENTIRE content is "keep going". Such a message points at the previous prompt instead of
- * carrying intent of its own — so opening a turn on it would pin "Continue" to the top of the panel while the
+ * carrying intent of its own, so opening a turn on it would pin "Continue" to the top of the panel while the
  * question it defers to scrolls away. Matched against the whole message, deliberately: "continue, but skip
  * the tests" carries a new instruction and must pin like any prompt.
  *
  * THE APP'S OWN CONTINUATIONS ARE IN HERE, derived rather than spelled out a second time. They are the same
- * contentless nudge the typed ones are — longer only because they are precise about a refusal the model would
- * otherwise re-attempt — so a chat where the user pressed the button must fold exactly like one where they
+ * contentless nudge the typed ones are, longer only because they are precise about a refusal the model would
+ * otherwise re-attempt, so a chat where the user pressed the button must fold exactly like one where they
  * typed the word, and rewording a sentence up there must never quietly turn it into a message that pins. */
 const ACKNOWLEDGMENTS = new Set([
     ...Object.values(CONTINUATIONS).map(bareText),
@@ -483,7 +483,7 @@ const ACKNOWLEDGMENTS = new Set([
     `👍`,
 ]);
 
-// An attachment makes any text substantive — "continue" plus a screenshot is new material, not a nudge.
+// An attachment makes any text substantive, "continue" plus a screenshot is new material, not a nudge.
 export const isAcknowledgment = (message: ChatMessage): boolean => {
     if (message.role !== `user` || (message.attachments?.length ?? 0) > 0) {
         return false;
@@ -504,13 +504,13 @@ export const continuationFor = (messages: readonly ChatMessage[]): string =>
  *
  * Two populations, deferring for two different reasons, and the split is worth stating because only one of
  * them is about the user at all: a bare acknowledgment is their own contentless "keep going", while an errand
- * is a prompt the APP composed and sent on their behalf (errands.ts) — a rebase, a review, a test pass. Both
+ * is a prompt the APP composed and sent on their behalf (errands.ts), a rebase, a review, a test pass. Both
  * point at the prompt above rather than carrying intent of their own, and pinning either would cover the
  * question it defers to. */
 export const foldsIntoTurn = (message: ChatMessage): boolean => isAcknowledgment(message) || errandOf(message) !== undefined;
 
-// A conversation can open with frames that answer no prompt of this session — a restored history's assistant
-// text, a provider-switch notice — so the first group may have no user message to pin.
+// A conversation can open with frames that answer no prompt of this session, a restored history's assistant
+// text, a provider-switch notice, so the first group may have no user message to pin.
 // Shared by every turn that folded nothing, so the overwhelmingly common case hands the renderer the same
 // array on each rebuild rather than an equal one (see ChatTurn.folded).
 const NOTHING_FOLDED: readonly ChatMessage[] = [];
@@ -533,10 +533,10 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
     return turns;
 };
 
-/* WHERE THE CONVERSATION CAN BE CUT — one boundary per turn, keyed by the turn it hangs off (ChatForkCut).
+/* WHERE THE CONVERSATION CAN BE CUT, one boundary per turn, keyed by the turn it hangs off (ChatForkCut).
  *
  * A cut is a boundary, and a boundary can be named from either side: "redo this prompt differently" and "carry
- * on from that answer another way" are the same line. Which side it HANGS OFF is not a detail though — it is
+ * on from that answer another way" are the same line. Which side it HANGS OFF is not a detail though, it is
  * where the user goes looking for it. The mark used to belong to the turn BELOW the line, level with the prompt
  * the cut ran above, which put every mark one turn away from the answer that prompted the thought and left the
  * first answer in a chat with no mark at all (there is nothing above it to keep). Nobody reads a transcript
@@ -544,7 +544,7 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
  * belongs to that turn: every answer in the chat has a mark of its own, beside the end of what it said.
  *
  * The value is the count of messages a fork there inherits, which is also the index of the message below the
- * line — the next turn's prompt, and therefore the checkpoint a rewind restores. Past the LAST turn there is no
+ * line, the next turn's prompt, and therefore the checkpoint a rewind restores. Past the LAST turn there is no
  * message below and no state filed under it, so that cut is the whole conversation carried on elsewhere: the
  * one offer that promises nothing about old files. */
 export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
@@ -557,11 +557,11 @@ export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
     return cuts;
 };
 
-/* WHICH DAY A TURN WAS SENT ON, for the turns where that day is not the one already on screen — keyed by turn
+/* WHICH DAY A TURN WAS SENT ON, for the turns where that day is not the one already on screen, keyed by turn
  * id, absent for every other turn. The transcript draws one marker row per entry (ChatPane), and that row is
  * the chat's date: it is what lets each prompt's own hover stamp shrink to the clock alone.
  *
- * The day comes off the turn's first STAMPED message, which is its opening prompt — the only row that carries a
+ * The day comes off the turn's first STAMPED message, which is its opening prompt, the only row that carries a
  * time (see ChatMessage.sentAt). A turn with no stamp anywhere (a restored history's opening frames, rows
  * recorded before stamps existed) contributes no marker, and does not break the run either: the next dated turn
  * is compared against the last day actually marked.

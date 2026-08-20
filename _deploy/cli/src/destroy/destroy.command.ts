@@ -25,7 +25,7 @@ interface DestroyFlags {
 // Teardown = prune against the empty graph: every resource the artifact declares is deleted in reverse
 // dependency order using its own inputs (the store is seeded by reading the still-live graph, so an
 // API-backed delete reaches its platform's creds before that platform is torn down). Owned inventory
-// (host, cloudflare zone) is never touched — their deletes are logged no-ops.
+// (host, cloudflare zone) is never touched, their deletes are logged no-ops.
 export const destroy = buildCommand<DestroyFlags>({
     docs: { brief: "Tear down every resource the artifact declares (requires --yes)" },
     parameters: {
@@ -74,7 +74,7 @@ export const destroy = buildCommand<DestroyFlags>({
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
             redactor.add(collectSecretUsage(graph).map((usage) => process.env[usage.key]));
             const pruned = await prune(graph, EMPTY, { providers: createProviders({ ssh }), log: out.log, onEvent: out.onEvent, env: process.env });
-            // Nothing is applied anymore — a later apply must not prune against this stale baseline.
+            // Nothing is applied anymore, a later apply must not prune against this stale baseline.
             await rm(join(dir, LAST_APPLIED_FILE), { force: true });
             out.text(`destroyed ${pruned.deleted.length} resource(s)${pruned.skipped.length > 0 ? `, ${pruned.skipped.length} left in place` : ""}`);
             out.result({ ...pruned, executed: true });
@@ -82,7 +82,7 @@ export const destroy = buildCommand<DestroyFlags>({
             process.removeListener("SIGINT", onSignal);
             process.removeListener("SIGTERM", onSignal);
             // Write back whatever the redactor is still holding as a possible secret prefix, or the
-            // command's last line goes missing. Runs on the error path too — a throw must not eat output.
+            // command's last line goes missing. Runs on the error path too, a throw must not eat output.
             redactor.flush();
             await lock.release();
             await ssh.dispose?.();

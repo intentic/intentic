@@ -50,7 +50,7 @@ const inOrder = (graph: DesiredStateGraph): ResourceNode[] =>
 //
 // The store is seeded by reading the kept graph AND the removed nodes (still live at this point): a removed
 // node's inputs may reference kept platform nodes (cloudflare.zoneId, komodo.internalUrl, ...) or OTHER
-// removed nodes (deleting a whole stack — or everything, when `current` is empty). Reverse dependency order
+// removed nodes (deleting a whole stack, or everything, when `current` is empty). Reverse dependency order
 // guarantees a delete's referenced dependencies are still alive when it runs.
 export const prune = async (previous: DesiredStateGraph, current: DesiredStateGraph, config: EngineConfig): Promise<PruneOutcome> => {
     const env = config.env ?? process.env;
@@ -77,7 +77,7 @@ export const prune = async (previous: DesiredStateGraph, current: DesiredStateGr
         }
         const type = node.type as ResourceType;
         const provider = requireProvider(config.providers, type, id);
-        // The protect convention: a node carrying a literal `protect: true` input is never pruned — the
+        // The protect convention: a node carrying a literal `protect: true` input is never pruned, the
         // author must flip it off (a reviewed config change) before removal deletes the data it guards.
         if (node.inputs["protect"] === true) {
             emit({ kind: "prune", state: "skipped", id, type, reason: "protected" });
@@ -98,8 +98,8 @@ export const prune = async (previous: DesiredStateGraph, current: DesiredStateGr
     return { deleted, skipped };
 };
 
-// The collection-oriented prune: tear down every discovered orphan (collectOrphans entries — live stamped
-// resources absent from the desired graph) using each ListedResource's own inputs — no last-applied
+// The collection-oriented prune: tear down every discovered orphan (collectOrphans entries, live stamped
+// resources absent from the desired graph) using each ListedResource's own inputs, no last-applied
 // baseline needed. Takes the entries rather than re-scanning, so a caller can preview them (a --yes gate)
 // and then delete exactly what it showed. An orphan whose provider has no `delete`, or one carrying the
 // intentic.protect stamp, is left in place. Orphans have no dependency edges (they are outside every

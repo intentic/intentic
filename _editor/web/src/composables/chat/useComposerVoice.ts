@@ -4,25 +4,25 @@ import { useVoiceInput, type VoiceError, type VoiceState } from "./useVoiceInput
 /* HANDS-FREE VOICE, AS THE COMPOSER MEANS IT. One mic tap arms it; from there the gesture is speech itself:
  * talk, and the pause is the send.
  *
- * The capture and the transcription are useVoiceInput's (sandbox-side whisper — every browser, and audio never
+ * The capture and the transcription are useVoiceInput's (sandbox-side whisper, every browser, and audio never
  * leaves the user's infrastructure). What lives HERE is the half that is about a composer rather than a
  * microphone: what "send" means, the glance-window before it happens, the words for each state, and the rule
  * that the mic never records where nobody is looking.
  *
- * The mode STAYS ON between turns, because a conversation is the point of hands-free — until the mic is tapped
+ * The mode STAYS ON between turns, because a conversation is the point of hands-free, until the mic is tapped
  * again, the user starts typing, or the pane stops being the one they are working in. The pane owns that last
  * one (its conversation and its focus both move under it) and says so by calling `quit`; leaving the page at all
  * is handled here, because a mic outliving its composer is never right. */
 
 export interface ComposerVoice {
     readonly state: Ref<VoiceState>;
-    /** 0…1 microphone level — the listening icon breathes with it. */
+    /** 0…1 microphone level, the listening icon breathes with it. */
     readonly level: Ref<number>;
     /** The mic is armed: capturing, or warming up to. */
     readonly on: ComputedRef<boolean>;
-    /** An utterance is counting down to send — the glance window, catchable with Escape. */
+    /** An utterance is counting down to send, the glance window, catchable with Escape. */
     readonly armed: Ref<boolean>;
-    /** Either of the two — what Escape claims, and what typing ends. */
+    /** Either of the two, what Escape claims, and what typing ends. */
     readonly live: ComputedRef<boolean>;
     /** The mic button's tooltip. */
     readonly buttonHint: ComputedRef<string>;
@@ -62,7 +62,7 @@ const ERROR_LINE: Record<VoiceError, string> = {
 };
 
 export const useComposerVoice = (composer: {
-    /** The box the words land in — an utterance joins whatever is already there. */
+    /** The box the words land in, an utterance joins whatever is already there. */
     readonly draft: Ref<string>;
     /** No daemon, no transcription: the tap does nothing rather than failing halfway. */
     readonly reachable: Ref<boolean>;
@@ -82,7 +82,7 @@ export const useComposerVoice = (composer: {
     };
 
     // An utterance's words join whatever the box already holds (a typed half-sentence stays the user's), then
-    // the countdown re-arms — a second utterance inside the glance window extends the message rather than
+    // the countdown re-arms, a second utterance inside the glance window extends the message rather than
     // racing it.
     const heard = (text: string): void => {
         disarm();
