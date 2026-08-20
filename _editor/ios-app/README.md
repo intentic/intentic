@@ -5,7 +5,7 @@ The App Store shell: the hosted web app in a native iOS frame, with real push no
 ## What it is — and is not
 
 The same decision the desktop app made, made again for the phone: **one product codebase, thin wrappers.** The
-shell is a Capacitor project whose webview loads `https://app.intentic.dev` directly (`capacitor.config.ts`
+shell is a Capacitor project whose webview loads `https://app.intentic.dev` directly (`capacitor.config.js`
 `server.url`), so every product change ships the moment the web deploy does — no App Store release for UI
 work, no second UI codebase, no bundle aging on someone's phone. The web app already speaks every daemon
 surface; nothing here duplicates any of it.
@@ -32,11 +32,12 @@ Play app (`_editor/android-app`) is a Trusted Web Activity, real Chrome, ordinar
 **Nothing native is committed and no Mac is required to ship.** The native project is generated from the
 config on every build (`cap add ios`), CI compiles it, and the release pipeline signs in Apple's cloud —
 certificates and profiles are minted on demand by the App Store Connect API key, so no signing material lives
-anywhere but Apple's console. The push entitlement rides in as [native/App.entitlements](native/App.entitlements)
-(wired into the app target by [scripts/prepare-native.mjs](scripts/prepare-native.mjs) right after
-generation — never onto the Pods, which a global build flag would also hit), and the same script fails the
-build if a Capacitor upgrade ever ships a template that cannot register for push — the one product-breaking
-regression a green compile would hide.
+anywhere but Apple's console. [scripts/prepare-native.mjs](scripts/prepare-native.mjs) finishes the generated
+project right after generation: it writes the two AppDelegate methods that hand the APNs device token to the
+push plugin (Capacitor's template leaves those to the app, and without them an install waits forever for a
+token), and points the App target — never the Pods, which a global build flag would also hit — at
+[native/App.entitlements](native/App.entitlements). Both edits assert their anchor, so a Capacitor upgrade that
+reshapes the template stops the build instead of shipping an app that cannot receive a notification.
 
 - **Validation** — `.github/workflows/mobile.yml`: on any change here, generates the project and compiles it
   (simulator, unsigned).
@@ -64,8 +65,8 @@ entitlement, shipping without the offline page — is an App Store risk, not a c
 
 ## Key files
 
-- [capacitor.config.ts](capacitor.config.ts) — the whole shell: app id, the hosted URL the webview loads, the dev override.
-- [native/App.entitlements](native/App.entitlements) — the push entitlement prepare-native.mjs wires into the app target.
-- [scripts/prepare-native.mjs](scripts/prepare-native.mjs) — finishes a generated project: push-wiring assertion + entitlements.
+- [capacitor.config.js](capacitor.config.js) — the whole shell: app id, the hosted URL the webview loads, the dev override.
+- [native/App.entitlements](native/App.entitlements) — the push entitlement prepare-native.mjs wires into the App target.
+- [scripts/prepare-native.mjs](scripts/prepare-native.mjs) — finishes a generated project: APNs wiring + entitlements, each anchored.
 - [assets/logo.png](assets/logo.png) — the 1024px mark the pipeline turns into icons and splash screens.
 - [www/index.html](www/index.html) — the offline fallback, the only page the app itself carries.

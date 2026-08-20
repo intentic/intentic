@@ -10,8 +10,8 @@
 #   android  the Play manifest still generates a project Bubblewrap can assemble and sign end-to-end —
 #            the same command sequence the release runs, minus the store upload.
 #   ios      the Capacitor config still generates a project that compiles, and prepare-native.mjs can still
-#            finish it — the push-wiring assertion there is the one product invariant a successful compile
-#            would not catch.
+#            finish it — that script WRITES the push wiring the Capacitor template leaves out, and stops on a
+#            template whose shape moved, which is the one product invariant a successful compile would hide.
 name: Mobile
 
 on:
@@ -20,11 +20,13 @@ on:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
+      - "_tools/scripts/mobile-android-sdk.sh"
       - ".github/workflows/mobile.yml"
   pull_request:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
+      - "_tools/scripts/mobile-android-sdk.sh"
       - ".github/workflows/mobile.yml"
   workflow_dispatch:
 
@@ -45,16 +47,15 @@ jobs:
         working-directory: _editor/android-app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
-      # Bubblewrap wants its own toolchain answers up front; pointing it at the runner's JDK and the
-      # preinstalled Android SDK is what makes `update`/`build` run without a prompt.
       - name: Point Bubblewrap at the runner's toolchains
-        run: |
-          mkdir -p ~/.bubblewrap
-          printf '{"jdkPath": "%s", "androidSdkPath": "%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
+        working-directory: .
+        run: bash _tools/scripts/mobile-android-sdk.sh
       # A validation build must sign with SOMETHING (the manifest names a keystore), and it must never be the
       # real one: a key minted inside the run proves the signing path works and can leak nothing.
       - name: Mint a throwaway signing key
@@ -83,6 +84,13 @@ jobs:
         working-directory: _editor/ios-app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The repository's one Node version, not whatever the macOS image happens to carry this month — a store
+      # build has no business drifting with an image bump.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: package.json
       # Standalone on purpose — this folder is outside the pnpm workspace (pnpm-workspace.yaml says why), so
       # plain npm against its own exact-pinned manifest is the whole install.
       - name: Install shell dependencies

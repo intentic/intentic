@@ -65,14 +65,15 @@ jobs:
         working-directory: _editor/android-app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
       - name: Point Bubblewrap at the runner's toolchains
-        run: |
-          mkdir -p ~/.bubblewrap
-          printf '{"jdkPath": "%s", "androidSdkPath": "%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
+        working-directory: .
+        run: bash _tools/scripts/mobile-android-sdk.sh
       - name: Restore the upload keystore
         run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > ./android.keystore
         env:
@@ -80,8 +81,11 @@ jobs:
       # The manifest in git keeps placeholder numbers; the truth for a shipped build is stamped here — the
       # dispatched marketing version, and the run number as versionCode (Play refuses a repeat or a decrease).
       - name: Stamp the release version
+        env:
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          jq --arg name "${{ inputs.version }}" --argjson code "${{ github.run_number }}" \
+          jq --arg name "$VERSION" --argjson code "$BUILD_NUMBER" \
             '.appVersionName = $name | .appVersionCode = $code' twa-manifest.json > stamped.json
           mv stamped.json twa-manifest.json
       - name: Generate the Android project from the manifest
@@ -116,6 +120,13 @@ jobs:
         working-directory: _editor/ios-app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The repository's one Node version, not whatever the macOS image happens to carry this month — a store
+      # build has no business drifting with an image bump.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: package.json
       - name: Install shell dependencies
         run: npm install --no-audit --no-fund
       - name: Generate the iOS project from the config
@@ -130,30 +141,40 @@ jobs:
             --iconBackgroundColor '#141210' --iconBackgroundColorDark '#141210' \
             --splashBackgroundColor '#141210' --splashBackgroundColorDark '#141210'
       - name: Restore the App Store Connect API key
-        run: |
-          mkdir -p "$RUNNER_TEMP/asc"
-          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
         env:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
       # Cloud signing end to end: automatic signing + the API key lets xcodebuild mint the distribution
       # certificate and profile itself, and register the push capability the entitlements file asks for —
       # no .p12, no profile secret, nothing that expires outside Apple's own console.
       - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" \
-            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
-            MARKETING_VERSION="${{ inputs.version }}" \
-            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
       # `destination: upload` makes xcodebuild itself hand the build to App Store Connect — the export step
       # IS the upload, with no separate transporter invocation to keep in step with it.
       - name: Export and upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           cat > "$RUNNER_TEMP/exportOptions.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -172,6 +193,6 @@ jobs:
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/exportOptions.plist" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${{ secrets.ASC_KEY_ID }}.p8" \
-            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

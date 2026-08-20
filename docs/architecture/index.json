@@ -2067,9 +2067,9 @@
       "loc": 0,
       "name": "@intentic/android-app",
       "oneLiner": "The Play Store shell: the hosted web app as a Trusted Web Activity — real Chrome, near-zero upkeep.",
-      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
+      "readmeRev": "ada3853483314181c9d96b2817b6194333670ec3",
       "stale": false,
-      "updatedAt": 1787224057000
+      "updatedAt": 1787229035000
     },
     {
       "anchors": [],
@@ -2143,20 +2143,20 @@
     {
       "anchors": [
         {
-          "path": "_editor/ios-app/capacitor.config.ts",
+          "path": "_editor/ios-app/capacitor.config.js",
           "what": "the whole shell: app id, the hosted URL the webview loads, the dev override."
         },
         {
           "path": "_editor/ios-app/native/App.entitlements",
-          "what": "the push entitlement, passed to the build as a setting."
+          "what": "the push entitlement prepare-native.mjs wires into the App target."
         },
         {
-          "path": "_editor/ios-app/scripts/assert-push-wiring.mjs",
-          "what": "CI's proof the generated project can register for push."
+          "path": "_editor/ios-app/scripts/prepare-native.mjs",
+          "what": "finishes a generated project: APNs wiring + entitlements, each anchored."
         },
         {
-          "path": "_editor/ios-app/assets/icon.png",
-          "what": "the 1024px store icon the pipeline stamps over Capacitor's placeholder."
+          "path": "_editor/ios-app/assets/logo.png",
+          "what": "the 1024px mark the pipeline turns into icons and splash screens."
         },
         {
           "path": "_editor/ios-app/www/index.html",
@@ -2167,12 +2167,12 @@
       "dir": "_editor/ios-app",
       "files": 2,
       "hasTests": false,
-      "loc": 56,
+      "loc": 109,
       "name": "@intentic/ios-app",
       "oneLiner": "The App Store shell: the hosted web app in a native iOS frame, with real push notifications.",
-      "readmeRev": "89dc76c3b6e049ee6335634d662e0acac0750d8f",
+      "readmeRev": "ada3853483314181c9d96b2817b6194333670ec3",
       "stale": false,
-      "updatedAt": 1787224057000
+      "updatedAt": 1787229035000
     },
     {
       "anchors": [
@@ -4265,12 +4265,12 @@
           "what": "where the build-time integrations are wired in."
         }
       ],
-      "behind": 2,
+      "behind": 4,
       "component": "site",
       "dir": "_site/site",
       "files": 15,
       "hasTests": false,
-      "loc": 3051,
+      "loc": 3139,
       "name": "@intentic-dev/site",
       "oneLiner": "The public website at intentic.dev — an Astro build, all copy imported rather than written in the markup.",
       "readmeRev": "e9fefcd54a70b0bbe642f68f21aa83d1eda48713",
@@ -4796,7 +4796,7 @@
       "updatedAt": 1785938026000
     }
   ],
-  "generatedAt": 1787228761106,
+  "generatedAt": 1787231140141,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

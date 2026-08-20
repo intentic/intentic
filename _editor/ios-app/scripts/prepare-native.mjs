@@ -5,16 +5,21 @@
  *
  * Two jobs:
  *
- * 1. ASSERT the template still forwards APNs registration to the plugin layer. Capacitor's app template does
- *    this today; the day an upgrade ships one that does not, every build would still succeed — and every
- *    install would time out asking for a device token, surfaced in the web app as "the push service did not
- *    answer", pointing everywhere but here. A red build naming the fix beats that silence.
+ * 1. WIRE APNs registration into the AppDelegate. Capacitor's app template does NOT do this — the two methods
+ *    below are a manual step in @capacitor/push-notifications' own iOS instructions, and the plugin listens for
+ *    exactly the two notifications they post. Without them the app registers, iOS hands the device token to the
+ *    app delegate, nobody is listening, and the plugin's `registration` event never fires: every install hangs
+ *    on "the push service did not answer", pointing everywhere but here. UIKit delivers these callbacks to the
+ *    APP delegate and not to the scene's, so this file is the only place they can live.
  *
  * 2. WIRE the push entitlement into the App target alone. The obvious shortcut — CODE_SIGN_ENTITLEMENTS as an
  *    xcodebuild command-line override — applies to every target the workspace builds, Pods frameworks
  *    included, which is exactly where an entitlements file does not belong. So the file is copied beside the
  *    app sources and the setting written into the app project's two build configurations, recognized by the
- *    bundle-identifier line that only the App target carries. */
+ *    bundle-identifier line that only the App target carries.
+ *
+ * Both edits assert their anchor. A Capacitor upgrade that reshapes the template stops the build here, naming
+ * what moved — the alternative is a build that succeeds and an app that cannot receive a notification. */
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const APP_DELEGATE = "ios/App/App/AppDelegate.swift";
@@ -22,18 +27,35 @@ const PBXPROJ = "ios/App/App.xcodeproj/project.pbxproj";
 const ENTITLEMENTS_SOURCE = "native/App.entitlements";
 const ENTITLEMENTS_TARGET = "ios/App/App/App.entitlements";
 
-// 1. Push wiring.
+// Verbatim from @capacitor/push-notifications' README, indented into the class body.
+const REGISTRATION = `    // Added by scripts/prepare-native.mjs: @capacitor/push-notifications' documented iOS step, which the
+    // Capacitor template leaves to the app. The plugin observes these two notifications and resolves its
+    // \`registration\` / \`registrationError\` events from them.
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+`;
+
+// 1. Push wiring. The class body's end is the anchor: the template is one class per file, so the file's only
+// unindented closing brace is that class's. Two of them would mean the template grew a second declaration and
+// the insertion point is no longer obvious — worth stopping over rather than guessing.
 const delegate = readFileSync(APP_DELEGATE, "utf8");
-const missing = ["capacitorDidRegisterForRemoteNotifications", "capacitorDidFailToRegisterForRemoteNotifications"].filter(
-    (marker) => !delegate.includes(marker),
-);
-if (missing.length > 0) {
-    console.error(
-        `${APP_DELEGATE} no longer forwards APNs registration to Capacitor (missing: ${missing.join(", ")}).\n` +
-            `The generated template changed. Teach this script to add the two application(...) methods from ` +
-            `the @capacitor/push-notifications iOS docs, or this app can never obtain a device token.`,
-    );
-    process.exit(1);
+if (delegate.includes("capacitorDidRegisterForRemoteNotifications")) {
+    console.log("push wiring already present; leaving the AppDelegate alone");
+} else {
+    const classEnds = delegate.match(/^\}$/gm) ?? [];
+    if (classEnds.length !== 1) {
+        console.error(
+            `${APP_DELEGATE}: expected exactly one top-level closing brace to insert before, found ${classEnds.length} — ` +
+                `the generated template's shape changed; re-derive the anchor, or this app can never obtain a device token.`,
+        );
+        process.exit(1);
+    }
+    writeFileSync(APP_DELEGATE, delegate.replace(/^\}$/m, `${REGISTRATION}}`));
 }
 
 // 2. Entitlements, into the App target's Debug and Release configurations — and exactly those two. Any other
@@ -52,4 +74,4 @@ if (insertions !== 2) {
     process.exit(1);
 }
 writeFileSync(PBXPROJ, wired);
-console.log("push wiring asserted; entitlements wired into the App target");
+console.log("push registration wired into the AppDelegate; entitlements wired into the App target");

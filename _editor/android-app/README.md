@@ -24,7 +24,10 @@ manifest and assembles it with a throwaway key on every change here; **release**
 the bundle straight to the chosen Play track. Versioning needs no maintenance: the dispatched marketing
 version and the workflow run number are stamped over the manifest's placeholders at build time, so every
 upload's `versionCode` is monotonic by construction. The secrets the release needs and the one-time Play
-setup are in that workflow's header comment.
+setup are in that workflow's header comment. Both jobs start by running
+[`_tools/scripts/mobile-android-sdk.sh`](../../_tools/scripts/mobile-android-sdk.sh), which answers on a
+runner what `bubblewrap init` asks a human once — and works around Bubblewrap still expecting the SDK layout
+that moved in 2020; that script carries the argument.
 
 The same flow by hand, for a local device build (needs a JDK + Android SDK, which Bubblewrap offers to
 install itself):
