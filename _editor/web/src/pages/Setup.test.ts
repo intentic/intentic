@@ -24,7 +24,14 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 const mobileDevice = ref(false);
 vi.mock(import(`@intentic/ui`), async (importOriginal) => {
     const actual = await importOriginal();
-    return { ...actual, useDevice: (() => ({ ...actual.useDevice(), mobile: mobileDevice })) as typeof actual.useDevice };
+    return {
+        ...actual,
+        useDevice: (() => ({ ...actual.useDevice(), mobile: mobileDevice })) as typeof actual.useDevice,
+        // The command block, minus its highlighter. Shiki loads grammars asynchronously and none of the tests
+        // below are about syntax colouring — they are about whether the command is on screen at all, which a
+        // <pre> answers exactly as well and in one tick.
+        Code: defineComponent({ props: { code: String }, render: () => null }) as unknown as typeof actual.Code,
+    };
 });
 
 // The sandbox registry, as the page sees it. `sandboxes` is what the auto-name counts against, `list` is the
@@ -58,7 +65,8 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
 // The mint never settles, so step 3 stays locked and these tests stay about step 1 — no command, no highlighter.
 // The hosted offer answers "not on this platform" unless a test says otherwise — the classic lanes' tests must
 // keep describing the world without the hosted rung.
-const setupCode = vi.fn(() => new Promise<never>(() => {}));
+type Minted = { code: string; hostname: string; expiresAt: string };
+const setupCode = vi.fn<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
 const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
 // The platform hands out addresses unless a test says otherwise — that is the world every lane below assumes,
 // and the one where a mint that never settles is a WAIT rather than a promise that was never on offer.
@@ -85,8 +93,13 @@ vi.mock(`../composables/extensions/useCloudflareZones`, () => ({
         zonesError: ref(undefined),
     }),
 }));
+// Which installer this reader's machine can run decides whether the own-computer lane leads with a download or
+// with the command, so it is a knob every test below can turn. Undefined by default — the Mac-shaped world,
+// where the command is still the path, which is what most of these tests were written against.
+const desktopInstaller = vi.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 vi.mock(`../environments/desktop`, () => ({
     DESKTOP_DOWNLOADS: [],
+    desktopInstaller: () => desktopInstaller(),
     desktopSetupLink: () => ``,
     desktopVersion: () => undefined,
     openDesktopLink: vi.fn(),
@@ -95,6 +108,7 @@ vi.mock(`../environments/desktop`, () => ({
 vi.mock(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`./SetupSyncOption.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../components/CloudflareTokenField.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Setup } = await import("./Setup.vue");
@@ -147,6 +161,11 @@ const mount = async (): Promise<HTMLElement> => {
 const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === text);
 
+// The same question for a button that is an <a> — a download is a navigation, so the installer offer is a link
+// wearing a button's clothes, and asking for a <button> would answer "no such control" about one on screen.
+const linkLabelled = (text: string): HTMLAnchorElement | undefined =>
+    [...document.querySelectorAll(`a`)].find((link) => link.textContent?.trim() === text);
+
 // The rename affordances are icons now, so they are found the way a screen reader finds them.
 const renamePencil = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Rename sandbox"]`)!;
 const saveName = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Save name"]`)!;
@@ -163,8 +182,24 @@ const nameRow = (): string => {
     return node?.textContent ?? ``;
 };
 
+// The card that reports the sandbox itself: climbed to from the pencil, because it is the one card on the page
+// with no heading to find it by. What is IN it is the subject of the address test below.
+const factsCard = (): HTMLElement => {
+    let node: HTMLElement | null = renamePencil();
+    while (node !== null && node.tagName !== `SECTION`) {
+        node = node.parentElement;
+    }
+    return node!;
+};
+
+// A settled mint, so the run card gets past its lock and renders the thing the reader came for. The tests that
+// predate this one deliberately leave the mint hanging, which is what keeps them about step 1.
+const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.dev`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+
 beforeEach(() => {
     mobileDevice.value = false;
+    desktopInstaller.mockReset().mockReturnValue(undefined);
+    setupCode.mockReset().mockImplementation(() => new Promise<Minted>(() => {}));
     sandboxes.value = [];
     list.mockReset().mockResolvedValue([]);
     refresh.mockReset().mockResolvedValue([]);
@@ -374,6 +409,55 @@ it(`defaults a phone to the hosted rung when one is offered`, async () => {
     expect(buttonLabelled(`Start my machine`)).toBeDefined();
     // No credential ask on a phone's first frame — the cloud rung is one tap away, never the opener.
     expect(el.textContent).not.toContain(`Private key`);
+});
+
+/* THE HOSTNAME IS NOT THE FIRST THING A STRANGER READS. It used to be the second line of the card that opens
+ * the page — a hex address nobody typed, nobody can parse and nobody is deciding, with an advanced escape
+ * hatch ("Use a different address") beside it, above the only choice on the page. It is a consequence of the
+ * rung, so it reports itself on the card the rung chose, next to the command that carries it. */
+it(`reports the address on the run card rather than above the choice`, async () => {
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    // The card that opens the page has the name and nothing else to skip past.
+    expect(factsCard().textContent).toContain(`workspace`);
+    expect(factsCard().textContent).not.toContain(MINTED.hostname);
+    expect(factsCard().textContent).not.toContain(`Use a different address`);
+    // …and the run card, which is where somebody who has already picked a rung is reading.
+    expect(el.textContent).toContain(`Use a different address`);
+});
+
+/* THE OWN-COMPUTER LANE LEADS WITH AN INSTALLER wherever we ship a build for the machine reading the page.
+ * `curl … | sudo sh` was this lane's opening move, preselected and above the fold — which exposes the reader
+ * who is scared of it and protects the one who isn't. The command is a labelled click away, and the reader who
+ * wants it is the one reader guaranteed to recognise the link. */
+it(`offers the app first on a machine we ship a build for, with the command one click away`, async () => {
+    desktopInstaller.mockReturnValue({ platform: `windows`, label: `Windows`, href: `https://intentic.dev/desktop/windows` });
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(linkLabelled(`Download for Windows`)).toBeDefined());
+    expect(linkLabelled(`Download for Windows`)!.getAttribute(`href`)).toBe(`https://intentic.dev/desktop/windows`);
+    // Nothing about a terminal on the first frame — not the paste instruction, not the `sudo` switch.
+    expect(el.textContent).not.toContain(`Paste it into a terminal`);
+    expect(el.textContent).not.toContain(`I already have Docker`);
+    // …and the wait under it names the move it is actually waiting on.
+    expect(el.textContent).toContain(`Nothing runs until you install the app above`);
+
+    const disclosure = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Prefer a terminal?`));
+    disclosure!.click();
+    await nextTick();
+    expect(el.textContent).toContain(`Paste it into a terminal`);
+});
+
+// …and where there is none — macOS today — the command stays the path. A button pointing at a downloads page
+// with nothing on it for you is worse than the pipe it would displace.
+it(`keeps the command first where there is no build for the reader's machine`, async () => {
+    setupCode.mockResolvedValue(MINTED);
+    const el = await mount();
+    await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
+    expect(linkLabelled(`Download for Windows`)).toBeUndefined();
+    expect(linkLabelled(`Download for Linux`)).toBeUndefined();
+    expect(el.textContent).not.toContain(`Prefer a terminal?`);
 });
 
 /* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first

@@ -29,7 +29,7 @@ import CloudflareTokenField from "../components/CloudflareTokenField.vue";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
+import { desktopInstaller, desktopSetupLink, desktopVersion, openDesktopLink } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../environments/scriptCommand";
 import SetupCloud from "./SetupCloud.vue";
@@ -48,12 +48,15 @@ import type { HostedStatus } from "@intentic-app/api-contract";
 
 /* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
  * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
- * address is provisioned right behind it, so step 1 opens already done and reports two facts — the name, with a
- * pencil, and the address — one line each. They were two cards until they were two one-liners between them:
- * a numbered card whose whole body was a rename link, above a numbered card whose whole body was a hostname,
- * is a spine that counts to three to say the machine is ready to be started.
+ * address is provisioned right behind it, so step 1 opens already done and reports one fact — the name, with a
+ * pencil. It was two cards before it was one line: a numbered card whose whole body was a rename link, above a
+ * numbered card whose whole body was a hostname, is a spine that counts to three to say the machine is ready
+ * to be started.
  *
- * The address line is where the two reachability paths part:
+ * THE ADDRESS IS REPORTED BY STEP 2 rather than by step 1, because it is a consequence of the rung rather than
+ * a fact about the sandbox — and because a hex hostname in the page's first position is three lines a stranger
+ * has to skip to reach the only choice on the page. It leads the run card, above the command that carries it.
+ * It is also where the two reachability paths part:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
  *     Cloudflare of their own. The subdomain is fixed (server-derived from the connection token), so this path IS
  *     the one-liner and the escape hatch shares its row.
@@ -73,10 +76,11 @@ import type { HostedStatus } from "@intentic-app/api-contract";
  * around one sentence, and the sentence belongs under the command whose result it is reporting.
  *
  * Step 2 is also where the flow is most often abandoned — not because a pasted command does more than an .msi
- * would, but because it shows up without any of an installer's affordances. So the card states what will be
- * created, what it writes outside Docker and how to remove all of it, and offers the one switch that reshapes
- * the command instead of leaving the reader to abandon it: `hasDocker` (drop the `sudo`, which is only ever there
- * to install Docker).
+ * would, but because it shows up without any of an installer's affordances. So where we ship a build for the
+ * machine reading the page, step 2 IS the .msi (`appFirst`) and the command folds behind one link; where we
+ * don't, the card states what will be created, what it writes outside Docker and how to remove all of it, and
+ * offers the one switch that reshapes the command instead of leaving the reader to abandon it: `hasDocker`
+ * (drop the `sudo`, which is only ever there to install Docker).
  *
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
@@ -277,15 +281,31 @@ const hasDocker = ref(false);
  * A browser that is NOT the app still gets the link (the OS routes it to an installed app) plus somewhere to
  * download one; the pasted command stays the primary path there, because it is the one that always works. */
 const desktop = computed(() => desktopVersion() !== undefined);
-/* THE COMMAND IS FOLDED AWAY ON THE TWO DEVICES WHERE IT IS NOT THE PATH, behind the same one-line disclosure
- * on both: in the app the button above already runs it (a server is still an ordinary place to want the
- * sandbox, and the app cannot run it there), and on a phone there is no shell to paste into — the handoff is
- * the step there, and the command under it was six controls of scenery around a clipboard write that leads
- * nowhere. Neither reader is shut out: a phone driving a server over SSH is one tap from the same command,
- * and the tap is labelled for exactly that person. Everywhere else the command IS the step, and there is
- * nothing to unfold. */
+
+/* …AND THE APP AS THE FRONT DOOR OF THE OWN-COMPUTER LANE, for a browser on a machine we ship a build for.
+ *
+ * `curl -fsSL … | sudo sh` is the most alarm-raising string this product puts in front of anybody, and it was
+ * the DEFAULT rung's first screen: preselected, above the fold, before a stranger had seen the product. The
+ * people who are comfortable with it are exactly the people who would find it behind one click without a
+ * flinch — so the default exposed the timid and protected the confident, which is the wrong way round. The
+ * installer is the same handoff wearing an installer's affordances (a publisher, a file, an uninstaller),
+ * which is the whole of what the two switches under the command were groping for.
+ *
+ * The command is one labelled click away and loses nothing: it is the same disclosure the app and the phone
+ * already fold it behind, and the reader who wants a terminal is the one reader guaranteed to recognise the
+ * link. Where there is no build — macOS today — this is `undefined` and the command stays the path, because a
+ * button pointing at a downloads page that has nothing for you is worse than the pipe it replaced. */
+const installer = computed(() => (desktop.value || mobile.value ? undefined : desktopInstaller()));
+const appFirst = computed(() => installer.value !== undefined);
+
+/* THE COMMAND IS FOLDED AWAY WHEREVER IT IS NOT THE PATH, behind the same one-line disclosure everywhere: in
+ * the app the button above already runs it (a server is still an ordinary place to want the sandbox, and the
+ * app cannot run it there), on a phone there is no shell to paste into — the handoff is the step there, and
+ * the command under it was six controls of scenery around a clipboard write that leads nowhere — and in a
+ * browser with an installer to offer, the installer is the step. No reader is shut out: a phone driving a
+ * server over SSH is one tap from the same command, and the tap is labelled for exactly that person. */
 const showCommand = ref(false);
-const commandVisible = computed(() => (desktop.value || mobile.value ? showCommand.value : true));
+const commandVisible = computed(() => (desktop.value || mobile.value || appFirst.value ? showCommand.value : true));
 // Compose declares its own env, so neither switch under the command applies to it — but "no tab is on screen
 // at all" is a different thing from "the compose tab is", and only the second one hides the sync option.
 const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
@@ -706,7 +726,13 @@ const hostedWait = computed(() =>
 // A cloud machine's fuse is the longest: its first boot legitimately spends minutes on cloud-init + a Docker
 // install + the image pull before anything can claim, and a nudge inside that window would accuse a machine
 // that is doing exactly what it should.
-const nudgeAfterMs = computed(() => (cloudMachine.value !== null ? 6 * 60_000 : composeShown.value || mobile.value ? 3 * 60_000 : 40_000));
+// Downloading an installer, running it and signing in again is minutes of work this page cannot see any of,
+// so the own-computer lane borrows the phone's long fuse while the app is the path. It drops back to forty
+// seconds the moment the command is unfolded, because from then on the wait IS about a clipboard again.
+const installing = computed(() => appFirst.value && !commandVisible.value);
+const nudgeAfterMs = computed(() =>
+    cloudMachine.value !== null ? 6 * 60_000 : composeShown.value || mobile.value || installing.value ? 3 * 60_000 : 40_000,
+);
 // And when it stops assuming the command was never run, and starts helping the person whose terminal errored.
 const STALLED_MS = 3 * 60_000;
 // A claimed code with no daemon behind it yet: the first image pull is genuinely slow, so this waits much
@@ -733,6 +759,11 @@ const nudgeVariant = computed(() => {
     }
     if (commandVisible.value) {
         return `terminal` as const;
+    }
+    // A browser that was offered an installer: nothing has been pasted because nothing was meant to be, and
+    // "press the button above" would name a button that is in the app this reader has not installed yet.
+    if (installing.value) {
+        return `install` as const;
     }
     if (mobile.value) {
         return `phone` as const;
@@ -1835,14 +1866,20 @@ watch(commandReady, (ready) => {
                         </button>
                     </StepSection>
 
-                    <!-- THE SANDBOX, AS FACTS RATHER THAN A STEP: what it is called, and where it will answer.
-                         Both are already true when the card renders — created on arrival, address provisioned
-                         right behind it — so it asks for nothing, and a card that asks for nothing has no
-                         business wearing a step number or a heading. "Your sandbox" above a row labelled "Name"
-                         and a row labelled "Address" was a title that only restated the two labels under it.
+                    <!-- THE SANDBOX, AS A FACT RATHER THAN A STEP: what it is called. Already true when the card
+                         renders — created on arrival — so it asks for nothing, and a card that asks for nothing
+                         has no business wearing a step number or a heading. "Your sandbox" above a row labelled
+                         "Name" was a title that only restated the label under it.
+                         THE ADDRESS USED TO SIT HERE TOO, and moving it is what this card is now short for. A
+                         hostname nobody typed, nobody can parse and nobody is deciding held the page's most
+                         valuable position — first thing a stranger reads, above the only choice on the page —
+                         and its escape hatch ("Use a different address") put an advanced path there with it.
+                         It is a CONSEQUENCE of the rung, so it now reports itself on the run card, above the
+                         command whose hostname it is. What is left here is the one line that is genuinely
+                         about the sandbox rather than about the machine under it.
                          The card chrome is StepSection's own, spelled out here because this is the one card on
                          the page that is deliberately not a step — and it is deliberately SHALLOWER than one:
-                         two facts on a line do not need a step's padding around them, and every pixel this card
+                         a fact on a line does not need a step's padding around it, and every pixel this card
                          spends is pushing the only decision on the page further down it. -->
                     <section v-else class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 md:px-5 md:py-4">
                         <!-- BEFORE THE MOUNT READ HAS ANSWERED there is no story to tell yet, and telling the
@@ -1897,10 +1934,9 @@ watch(commandReady, (ready) => {
                                     Use a new sandbox instead</button
                                 >.
                             </p>
-                            <!-- TWO STABLE ROWS. Putting both facts in one wrapping row made the loading address fit
-                                 beside the name, then drop below it when the real hostname and escape hatch arrived.
-                                 Both rows share the same label column, so their values begin on the same vertical
-                                 line; anything long in the address row wraps inside that value column. -->
+                            <!-- A LABEL COLUMN FOR ONE ROW, kept because the address row on the run card wears the
+                                 same one: the two facts are read minutes apart now, and a label that changes width
+                                 between them makes the second read as a different kind of thing from the first. -->
                             <div class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
                                 <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
                                  it is also where it is changed — and the change is a pencil, not a sentence: the
@@ -1988,144 +2024,7 @@ watch(commandReady, (ready) => {
                                     </div>
                                 </div>
 
-                                <!-- THE ADDRESS, UNDER THE NAME — the second fact this card reports.
-                                     No padlock: the tunnel is https by construction, so the icon marked every
-                                     address this page can ever show and therefore distinguished none of them — it
-                                     was decoration sitting where a reader looks for the value.
-                                     ONE GROUP IN EVERY STATE (announced, minted, still minting, failed, or never
-                                     offered) so the escape hatch beside it is reachable in all of them. It used to
-                                     hang off the success branch alone, which left a reader whose mint had just
-                                     errored with no way to choose a different address at all.
-                                     The own-zone case is the one that is missing here, because it is the one that
-                                     is not a fact: it is a form, and it keeps its own block under this row. -->
-                                <template v-if="addressFact !== `own`">
-                                    <span :class="factLabel">Address</span>
-                                    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                        <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
-                                         escape hatches: the machine is born holding its tunnel, and the page
-                                         redirects the moment this turns real.
-                                         KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing that rung starts
-                                         nothing, there is a stretch with the hosted lane selected and no machine
-                                         behind it — and read off the machine, this fell through to the mint's
-                                         spinner and promised a domain that lane never asks for. A spinner before
-                                         the button is pressed is the same lie the addressless platform used to
-                                         tell. -->
-                                        <template v-if="addressFact === `hosted`">
-                                            <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
-                                            <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
-                                                <Icon name="spinner" spin /> Assigned as your machine starts…
-                                            </span>
-                                            <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
-                                        </template>
-                                        <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
-                                         spinner nor the escape hatch (both ways off the default address mint a code
-                                         too, so both are the same dead end here). -->
-                                        <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
-                                            This platform doesn't set one up
-                                        </span>
-                                        <template v-else>
-                                            <!-- `.title` — this is a NoticeModel, and interpolating the object itself
-                                             put its JSON on the card. -->
-                                            <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
-                                            <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
-                                            <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
-                                                <Icon name="spinner" spin /> Preparing your intentic domain…
-                                            </span>
-                                            <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
-                                             "Already reachable at a domain? Connect it" were two links, in two
-                                             places, asking the same question — how should this be reached — and the
-                                             reader had to know the difference between provisioning under their zone
-                                             and attaching an address that already answers BEFORE they could tell
-                                             which link was theirs. Now one link opens both, each stating what it
-                                             does rather than what it is called. -->
-                                            <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
-                                                {{ reaching ? `Keep this address` : `Use a different address` }}
-                                            </button>
-                                        </template>
-                                    </div>
-                                </template>
                             </div>
-
-                            <!-- What the two facts could not say on their own line, under the row rather than in
-                                 it: this platform hands out no addresses, so here is the one thing that does work
-                                 — and the two ways off the default one, opened by the link above. They were rows
-                                 in a bordered inset with a caption each: a second frame, inside a card, to hold
-                                 two choices that fit on one line. The labels carry the distinction, which is the
-                                 only thing the captions were for. -->
-                            <p v-if="addressFact === `none`" class="text-xs text-muted">
-                                Sandboxes here are reached at an address you already have. Already running one?
-                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                    Connect the domain it answers on</button
-                                >.
-                            </p>
-                            <p v-else-if="addressFact === `intentic` && reaching" class="text-xs text-muted">
-                                Use
-                                <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
-                                    your own Cloudflare zone</button
-                                >, or connect
-                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
-                                    a domain it already answers on</button
-                                >.
-                            </p>
-
-                            <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
-                                 the (i) that explains the token, which is the corner the step header used to keep
-                                 it in — this card has no header to hang it off any more. -->
-                            <template v-if="addressFact === `own`">
-                                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                    <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
-                                        ← Use intentic's domain
-                                    </button>
-                                    <InfoHint label="Why the Cloudflare API token is required">
-                                        <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
-                                        <p class="mb-3 text-xs leading-relaxed text-muted">
-                                            intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.
-                                        </p>
-                                        <ul class="flex flex-col gap-2 text-xs text-muted">
-                                            <li class="flex items-start gap-2">
-                                                <Icon name="bolt" class="mt-0.5 text-link" />
-                                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
-                                            </li>
-                                            <li class="flex items-start gap-2">
-                                                <Icon name="lock" class="mt-0.5 text-success" />
-                                                <span
-                                                    ><span class="text-content">Never stored by intentic</span>: used once to list zones, then rides
-                                                    the command</span
-                                                >
-                                            </li>
-                                        </ul>
-                                    </InfoHint>
-                                </div>
-                                <CloudflareTokenField
-                                    :cf="cf"
-                                    storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox, never stored by intentic."
-                                />
-
-                                <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps
-                                     to its own line rather than stealing width from the one part that is editable — an
-                                     account's zone can be long, and on a phone the two together left no field to type
-                                     in. -->
-                                <label v-if="selectedZone" class="ui-field">
-                                    <span class="ui-field-label">Domain</span>
-                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <input
-                                            :value="subdomain"
-                                            @input="subdomain = ($event.target as HTMLInputElement).value"
-                                            autocomplete="off"
-                                            autocapitalize="off"
-                                            spellcheck="false"
-                                            placeholder="sandbox"
-                                            :class="ui.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
-                                        />
-                                        <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
-                                    </div>
-                                    <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
-                                    <span v-else class="text-xs text-success"
-                                        >✓ Your sandbox will be reachable at <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
-                                        >.</span
-                                    >
-                                </label>
-                            </template>
 
                             <Notice v-if="error" :of="error" />
                         </template>
@@ -2227,6 +2126,152 @@ watch(commandReady, (ready) => {
                     </div>
 
                     <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
+                        <!-- WHERE THIS MACHINE WILL ANSWER — the rung's consequence, reported by the card the rung
+                             chose. It spent a release as the second line of the sandbox card, which put a hex
+                             hostname above the only decision on the page and made a stranger skip it to reach the
+                             choice. Down here it is read by somebody who has already picked, next to the command
+                             that carries it, and each rung's answer is the one that belongs to that rung: a hosted
+                             machine announces its own, this platform may hand out none, the default is minted from
+                             the connect token, and the last is a Cloudflare zone of the reader's — the only one
+                             that is a FORM rather than a fact, which is why it takes the whole block instead of a
+                             row in it.
+                             It leads the card in every lane, so "the token above", "the address above" and the
+                             lock's "Preparing your intentic domain…" all point at something on screen. -->
+                        <div class="flex flex-col gap-2 border-b border-line pb-3">
+                            <!-- The same label column the name row wears, so the two facts line up down the page.
+                                 ONE GROUP IN EVERY STATE (announced, minted, still minting, failed, or never
+                                 offered) so the escape hatch beside it is reachable in all of them. It used to
+                                 hang off the success branch alone, which left a reader whose mint had just
+                                 errored with no way to choose a different address at all. -->
+                            <div v-if="addressFact !== `own`" class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
+                                <span :class="factLabel">Address</span>
+                                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                    <!-- A hosted sandbox's address is the daemon's own announce — no mint, no
+                                         escape hatches: the machine is born holding its tunnel, and the page
+                                         redirects the moment this turns real.
+                                         KEYED ON THE RUNG, NOT ON THE MACHINE. Now that choosing that rung starts
+                                         nothing, there is a stretch with the hosted lane selected and no machine
+                                         behind it — and read off the machine, this fell through to the mint's
+                                         spinner and promised a domain that lane never asks for. A spinner before
+                                         the button is pressed is the same lie the addressless platform used to
+                                         tell. -->
+                                    <template v-if="addressFact === `hosted`">
+                                        <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
+                                        <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
+                                            <Icon name="spinner" spin /> Assigned as your machine starts…
+                                        </span>
+                                        <span v-else :class="`${factSlot} text-xs text-muted`">Assigned when your machine starts</span>
+                                    </template>
+                                    <!-- THE PLATFORM MINTS NO ADDRESSES: a fact, not a wait, so it gets neither a
+                                         spinner nor the escape hatch (both ways off the default address mint a code
+                                         too, so both are the same dead end here). -->
+                                    <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
+                                        This platform doesn't set one up
+                                    </span>
+                                    <template v-else>
+                                        <!-- `.title` — this is a NoticeModel, and interpolating the object itself
+                                             put its JSON on the card. -->
+                                        <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
+                                        <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
+                                        <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
+                                            <Icon name="spinner" spin /> Preparing your intentic domain…
+                                        </span>
+                                        <!-- ONE ESCAPE HATCH, NOT TWO. "Use my own Cloudflare zone instead" and
+                                             "Already reachable at a domain? Connect it" were two links, in two
+                                             places, asking the same question — how should this be reached — and the
+                                             reader had to know the difference between provisioning under their zone
+                                             and attaching an address that already answers BEFORE they could tell
+                                             which link was theirs. Now one link opens both, each stating what it
+                                             does rather than what it is called. -->
+                                        <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
+                                            {{ reaching ? `Keep this address` : `Use a different address` }}
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- What the row could not say on its own line, under it rather than in it: this
+                                 platform hands out no addresses, so here is the one thing that does work — and the
+                                 two ways off the default one, opened by the link above. They were rows in a
+                                 bordered inset with a caption each: a second frame, inside a card, to hold two
+                                 choices that fit on one line. The labels carry the distinction, which is the only
+                                 thing the captions were for. -->
+                            <p v-if="addressFact === `none`" class="text-xs text-muted">
+                                Sandboxes here are reached at an address you already have. Already running one?
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                    Connect the domain it answers on</button
+                                >.
+                            </p>
+                            <p v-else-if="addressFact === `intentic` && reaching" class="text-xs text-muted">
+                                Use
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="chooseOwnZone">
+                                    your own Cloudflare zone</button
+                                >, or connect
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
+                                    a domain it already answers on</button
+                                >.
+                            </p>
+
+                            <!-- Own Cloudflare: token + zone + editable subdomain. The way back sits on a row with
+                                 the (i) that explains the token, which is the corner the step header used to keep
+                                 it in — this card has no header to hang it off any more. -->
+                            <template v-if="addressFact === `own`">
+                                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                    <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
+                                        ← Use intentic's domain
+                                    </button>
+                                    <InfoHint label="Why the Cloudflare API token is required">
+                                        <p class="mb-1 text-sm font-medium text-content">Why this token?</p>
+                                        <p class="mb-3 text-xs leading-relaxed text-muted">
+                                            intentic reaches your sandbox over a private Cloudflare tunnel, with no open inbound ports.
+                                        </p>
+                                        <ul class="flex flex-col gap-2 text-xs text-muted">
+                                            <li class="flex items-start gap-2">
+                                                <Icon name="bolt" class="mt-0.5 text-link" />
+                                                <span>Lets the install command <span class="text-content">create the tunnel</span></span>
+                                            </li>
+                                            <li class="flex items-start gap-2">
+                                                <Icon name="lock" class="mt-0.5 text-success" />
+                                                <span
+                                                    ><span class="text-content">Never stored by intentic</span>: used once to list zones, then rides
+                                                    the command</span
+                                                >
+                                            </li>
+                                        </ul>
+                                    </InfoHint>
+                                </div>
+                                <CloudflareTokenField
+                                    :cf="cf"
+                                    storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox, never stored by intentic."
+                                />
+
+                                <!-- Editable domain: the subdomain prefix under the chosen zone. The zone suffix wraps
+                                     to its own line rather than stealing width from the one part that is editable — an
+                                     account's zone can be long, and on a phone the two together left no field to type
+                                     in. -->
+                                <label v-if="selectedZone" class="ui-field">
+                                    <span class="ui-field-label">Domain</span>
+                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <input
+                                            :value="subdomain"
+                                            @input="subdomain = ($event.target as HTMLInputElement).value"
+                                            autocomplete="off"
+                                            autocapitalize="off"
+                                            spellcheck="false"
+                                            placeholder="sandbox"
+                                            :class="ui.input('w-full text-base md:w-auto md:min-w-0 md:flex-1 md:text-sm')"
+                                        />
+                                        <span class="text-sm break-words text-subtle">.{{ selectedZone }}</span>
+                                    </div>
+                                    <span v-if="!subdomainValid" class="text-xs text-warning">Use letters, numbers and hyphens only.</span>
+                                    <span v-else class="text-xs text-success"
+                                        >✓ Your sandbox will be reachable at <span class="break-words">{{ subdomain.trim() }}.{{ selectedZone }}</span
+                                        >.</span
+                                    >
+                                </label>
+                            </template>
+                        </div>
+
                         <!-- Whatever went wrong on THIS step, said on this step. The page-level notice belongs to
                              the sandbox card above and is cleared by every create, which is how a failed hosted
                              attempt used to bounce the reader into another lane with the reason already erased. -->
@@ -2382,6 +2427,22 @@ watch(commandReady, (ready) => {
                                     </Button>
                                 </template>
 
+                                <!-- …and in a browser, the same answer one install earlier: the app, for the
+                                     machine this reader is on. One button and nothing else — the sentence that
+                                     would sell it is the sentence the reader is already deciding without, and the
+                                     app's own first screen is the branch above, where the button finishes the job.
+                                     `secondary` is deliberately NOT used here: this is the step, and the only
+                                     other thing on the card is a muted link. -->
+                                <Button
+                                    v-if="appFirst && installer"
+                                    as="a"
+                                    :href="installer.href"
+                                    :label="`Download for ${installer.label}`"
+                                    class="self-start"
+                                >
+                                    <template #icon><Icon name="download" /></template>
+                                </Button>
+
                                 <!-- On a phone, the step's actual next move — see SetupHandoff.vue. It goes ABOVE the
                                  command because the command is the thing it is redirecting people away from, and a
                                  correction printed underneath what it corrects is read second or not at all. It is
@@ -2389,13 +2450,17 @@ watch(commandReady, (ready) => {
                                  command is the thing folded behind it. -->
                                 <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
 
-                                <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Both devices that don't run the command
-                                 here get the same offer, worded for the reader who takes it: a server the app can't
-                                 reach, or a shell app on the phone (Termius, Blink, a tmux session someone never
-                                 closed). Everything the command needs — its tabs, its options, its dev note — lives
-                                 inside the disclosure, so a phone that isn't driving a server never sees any of it. -->
+                                <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Every reader who doesn't run the command
+                                 here gets the same offer, worded for the one who takes it: a server the app can't
+                                 reach, a shell app on the phone (Termius, Blink, a tmux session someone never
+                                 closed), or simply somebody who would rather type than install. Everything the
+                                 command needs — its tabs, its options, its dev note — lives inside the disclosure,
+                                 so a phone that isn't driving a server never sees any of it.
+                                 The browser wording is the shortest of the three on purpose: the reader it is for
+                                 recognises "the command" from those two words, and anyone who doesn't is exactly
+                                 the reader the button above it is for. -->
                                 <button
-                                    v-if="desktop || mobile"
+                                    v-if="desktop || mobile || appFirst"
                                     type="button"
                                     :class="ui.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
                                     @click="showCommand = !showCommand"
@@ -2404,7 +2469,8 @@ watch(commandReady, (ready) => {
                                     <span class="min-w-0">
                                         <template v-if="showCommand">Hide the command</template>
                                         <template v-else-if="desktop">Running it on a server instead? Show the command</template>
-                                        <template v-else>Have a terminal here? Show the command</template>
+                                        <template v-else-if="mobile">Have a terminal here? Show the command</template>
+                                        <template v-else>Prefer a terminal? Show the command</template>
                                     </span>
                                     <Icon :name="showCommand ? `chevron-up` : `chevron-down`" class="shrink-0 text-subtle" />
                                 </button>
@@ -2601,6 +2667,12 @@ watch(commandReady, (ready) => {
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press “Set
                                         it up now” above.
                                     </template>
+                                    <!-- The same sentence for the browser that was offered an installer: naming the
+                                         app's button here would name one this reader hasn't got yet. -->
+                                    <template v-else-if="installing">
+                                        <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you install the
+                                        app above.
+                                    </template>
                                     <template v-else>
                                         <span class="font-medium text-content">Waiting for you to run the command.</span> We'll notice the moment your
                                         sandbox starts.
@@ -2679,7 +2751,7 @@ watch(commandReady, (ready) => {
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
                 >
                     <div class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
-                        <SetupRunDetails :cleanup="cleanupCommand" />
+                        <SetupRunDetails :cleanup="cleanupCommand" :downloads="!appFirst" />
                         <!-- Sync belongs with what the command DOES, not with the reader's path to running it:
                              it is on by default, and the only thing anyone needs from it here is to see that it
                              is on and where it mirrors to. Its twin under the command covers the widths where

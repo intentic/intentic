@@ -19,6 +19,7 @@ import { CopyButton, Notice } from "@intentic/ui";
  *   `emailed`  — a phone that mailed itself the link and hasn't opened it on the other computer
  *   `terminal` — the command is on screen and was, apparently, never pasted anywhere
  *   `phone`    — a phone with the command still folded away, which has not been told anything wrong yet
+ *   `install`  — a browser offered the desktop app, which hasn't been installed and opened yet
  *   `app`      — the desktop app was handed the setup and its own window has the log
  *   `button`   — in the app, with nothing pressed yet */
 const {
@@ -29,7 +30,7 @@ const {
     command = ``,
     copyable = false,
 } = defineProps<{
-    variant: "cloud" | "emailed" | "terminal" | "phone" | "app" | "button";
+    variant: "cloud" | "emailed" | "terminal" | "phone" | "install" | "app" | "button";
     cloudName?: string;
     cloudProvider?: string;
     // Past the long fuse: stop assuming the command was never run and start helping the person whose terminal
@@ -61,6 +62,9 @@ const emit = defineEmits<{ copied: [] }>();
             </span>
             <span v-else-if="variant === `phone`" class="min-w-0">
                 <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that will host your sandbox.
+            </span>
+            <span v-else-if="variant === `install`" class="min-w-0">
+                <span class="font-medium">Still nothing.</span> Nothing starts until you install the app above and open it.
             </span>
             <span v-else-if="variant === `app`" class="min-w-0">
                 <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.

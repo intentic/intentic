@@ -224,7 +224,30 @@ over-explaining. Rewording at similar length was approved and shipped:
 - A phone now defaults to the hosted rung whenever one is offered. The cloud rung had
   the phone default from before hosting existed, and it opens on a credential paste.
 
-Still open and untouched: demoting the hostname row, and making the desktop app the
-primary action of the own computer lane. Dropped on reflection: mounting with no rung
-preselected, because it hides each choice's consequences until after the pick, which
-is the wizard problem the one page layout exists to avoid.
+The two structural items shipped in the same session, after the wording:
+
+- **The hostname left the top card.** The address row, its "Use a different address"
+  escape hatch and the own-Cloudflare form all moved onto the run card, above the
+  command whose hostname they describe. The card that opens the page is now one line:
+  the name, with its pencil. First paint reads name, then the three rungs — the
+  decision is no longer third in line behind two things nobody typed. The move also
+  fixed a smaller lie: the lock under the command used to say "the token above" about a
+  field two cards up and off screen.
+- **The app is the front door of "My own computer"**, wherever a build exists for the
+  machine reading the page. A browser on Windows or Linux opens that rung on a download
+  button, with the command behind "Prefer a terminal? Show the command" — the same
+  disclosure the desktop app and phones already use. macOS has no build, so a Mac keeps
+  the command first: a button pointing at a downloads page with nothing on it for you is
+  worse than the pipe it would replace. Three things ride along so the page doesn't lie
+  once the command is folded — the wait line names the install rather than a paste, the
+  stuck-wait nudge gets a reader of its own, and the reference column drops its now
+  duplicate download buttons.
+
+The Linux half is the one to watch. An AppImage asks more of a reader than an `.exe`
+does, and a Linux desktop user is likelier than most to have wanted the terminal anyway.
+If the funnel shows that rung converting worse on Linux than on Windows, narrow the
+installer-first default to Windows and leave Linux on the command — one condition.
+
+Dropped on reflection: mounting with no rung preselected, because it hides each choice's
+consequences until after the pick, which is the wizard problem the one page layout exists
+to avoid.

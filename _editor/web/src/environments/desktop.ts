@@ -124,3 +124,31 @@ export const DESKTOP_DOWNLOADS = {
     linuxDeb: downloadUrl(DESKTOP_FILES.linuxDeb),
     linuxRpm: downloadUrl(DESKTOP_FILES.linuxRpm),
 } as const;
+
+/* THE ONE INSTALLER THIS BROWSER'S MACHINE CAN ACTUALLY RUN, or undefined where none of them can.
+ *
+ * Setup asks this to decide which of the two ways onto your own computer leads — an installer, or a pasted
+ * `curl … | sudo sh`. A grid of every build we ship cannot answer that: it is a download page, and a reader
+ * who is on the fence about a terminal is not helped by being asked which package format they want. So the
+ * question here is narrower than DESKTOP_DOWNLOADS', and it is allowed to answer "none": macOS has no build
+ * yet, and a button pointing at nothing is worse than the command it would displace.
+ *
+ * `userAgentData.platform` where the browser has it, `navigator.platform` otherwise — the same pair
+ * useOsPreference reads, and the same `startsWith` rather than a /win/ match, since "Darwin" contains "win".
+ * Android is excluded by hand: it reports "Linux armv8l" through both, and the AppImage is not for it. */
+export const desktopInstaller = (): { platform: "windows" | "linux"; label: string; href: string } | undefined => {
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    if (/android/i.test(nav.userAgent)) {
+        return undefined;
+    }
+    const platform = (nav.userAgentData?.platform ?? nav.platform ?? ``).toLowerCase();
+    if (platform.startsWith(`win`)) {
+        return { platform: `windows`, label: `Windows`, href: DESKTOP_DOWNLOADS.windows };
+    }
+    // The AppImage, because it runs across distributions without making this the moment somebody picks a
+    // package format. Deb and rpm stay on the downloads page for the reader who wants one.
+    if (platform.includes(`linux`)) {
+        return { platform: `linux`, label: `Linux`, href: DESKTOP_DOWNLOADS.linuxAppImage };
+    }
+    return undefined;
+};
